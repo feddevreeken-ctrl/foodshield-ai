@@ -3766,12 +3766,12 @@ body {
       <div class="page-header">
         <div class="page-eyebrow">Real-Time Intelligence</div>
         <div class="page-title">Live Market Data</div>
-        <div class="page-sub">Global food security indicators updated from public data sources. Last refreshed: <span id="live-last-updated">—</span></div>
+        <div class="page-sub">Global food security indicators updated from public data sources. <span id="live-last-updated" style="opacity:.6;"></span></div>
       </div>
-      <div style="margin-bottom:16px;">
-        <button onclick="refreshLiveData()" style="padding:8px 18px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--accent);cursor:pointer;font-size:13px;">↻ Refresh Data</button>
+      <div style="margin-bottom:20px;">
+        <button class="live-refresh-btn" onclick="refreshLiveData()">↻ Refresh</button>
       </div>
-      <div id="live-data-body" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;"></div>
+      <div id="live-data-body"></div>
     </div>
   </div>
 
@@ -10687,6 +10687,22 @@ const INSTRUCTIONS = [
     body: 'The <b>Forecast 2030</b> tab projects FDRS trajectories to 2030 using trend extrapolation across production, climate and geopolitical data. Compare countries and identify which are on a worsening path before conditions deteriorate.'
   },
   {
+    icon: '🏢', title: 'Company Risk Tracker',
+    body: 'The <b>Companies</b> tab lets you search any food company or supplier by name. Each company gets an <b>Exposure Score</b> — a weighted average of the FDRS scores across every country it sources from. Drill into a company to see a full breakdown: which countries, which commodities, and what risk tier each represents.'
+  },
+  {
+    icon: '📊', title: 'Live Market Data',
+    body: 'The <b>Live Data</b> tab shows real-time global food security indicators — commodity prices (wheat, corn, rice, palm oil…), the FAO Food Price Index, risk distribution across all tracked countries, and a live ranking of the most vulnerable nations. Hit <b>Refresh</b> to pull the latest figures.'
+  },
+  {
+    icon: '📉', title: 'FDRS History 2018–2025',
+    body: 'Every country profile now includes a <b>Historical FDRS</b> chart tracing the risk score from 2018 to today. Key global shock years are annotated — 2020 COVID-19, 2022 Ukraine war, 2023 El Niño — so you can see exactly how each event moved a country\'s score.'
+  },
+  {
+    icon: '🤖', title: 'AI Risk Narratives',
+    body: 'Each country profile includes an <b>AI-generated risk brief</b> summarising the key drivers, historical trend and 2030 outlook. Narratives are generated from the country\'s actual FDRS data. For live AI responses powered by Llama 3.1, add an OpenRouter API key to the source.'
+  },
+  {
     icon: '🔬', title: 'Methodology',
     body: 'The <b>Methodology</b> tab explains exactly how the FDRS is computed — formula, component weights, data sources and validation approach. Accessible from the nav bar or the bottom bar at any time.'
   },
@@ -11522,12 +11538,34 @@ function renderMethodologyTab() {
       </div>
     </div>
 
+    <!-- v14 Features -->
+    <div class="card" style="grid-column:1/-1">
+      <div class="card-title"><span class="card-marker"></span> v14 Feature Additions</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px;">
+        ${[
+          {icon:'📉',title:'FDRS Historical Tracking (2018–2025)',
+           body:'Every country profile now shows an 8-year FDRS timeline back-projected from the current score using trend direction, production data, and known global shock overlays (2020 COVID, 2022 Ukraine war, 2023 El Niño). Computed with <code style="font-size:10px;background:var(--bg1);padding:1px 4px;border-radius:3px;">getFDRSHistory()</code>.'},
+          {icon:'🤖',title:'AI Risk Narratives via OpenRouter',
+           body:'Country profiles include an AI-generated brief synthesising FDRS components, historical trend and 2030 outlook. Template-based by default (no API key needed). Connect <a href="https://openrouter.ai" target="_blank" style="color:var(--accent)">OpenRouter</a> + set <code style="font-size:10px;background:var(--bg1);padding:1px 4px;border-radius:3px;">OPENROUTER_KEY</code> for live Llama 3.1 8B responses.'},
+          {icon:'📊',title:'Live Market Data Tab',
+           body:'Real-time global food security dashboard: commodity spot prices (CBOT wheat, corn, ICE sugar, BMD palm oil), FAO Food Price Index, risk distribution doughnut, high-alert country watch list, and live ranking of the 10 most vulnerable countries. Pulls from World Bank public API where available.'},
+          {icon:'🏢',title:'Company Supply Chain Risk Tracker',
+           body:'Search any food company or agri-commodity supplier. The system builds a reverse index mapping companies to every country and commodity they trade in, then computes a weighted exposure score. Useful for procurement risk assessments and ESG supply chain due diligence.'},
+        ].map(c=>`
+          <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:8px;padding:14px 16px;">
+            <div style="font-size:12.5px;font-weight:600;color:var(--t1);margin-bottom:6px;">${c.icon} ${c.title}</div>
+            <div style="font-size:11.5px;color:var(--t3);line-height:1.6;">${c.body}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
     <!-- Version info -->
     <div class="card" style="grid-column:1/-1">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
         <div>
           <div style="font-size:12px;color:var(--t3);line-height:1.8;">
-            <b style="color:var(--t2)">FoodShield AI v7</b> · Built May 2026 ·
+            <b style="color:var(--t2)">FoodShield AI v14</b> · Built May 2026 ·
             ${COUNTRIES.filter(c=>!c.iso.startsWith('US-')).length} countries + 50 US states ·
             Data vintage: FAO 2022–2024, USDA Oct 2024, ND-GAIN 2023, ACLED 2023, World Bank 2023
           </div>
@@ -11537,7 +11575,7 @@ function renderMethodologyTab() {
           </div>
         </div>
         <div style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--accent);background:var(--accent)18;border-radius:6px;padding:8px 14px;white-space:nowrap;">
-          v7.0 · May 2026
+          v14.0 · May 2026
         </div>
       </div>
     </div>
