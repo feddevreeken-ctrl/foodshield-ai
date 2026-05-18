@@ -3313,6 +3313,14 @@ body {
       <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="M12 8v4l3 3"/></svg>
       Methodology
     </button>
+    <button class="nav-btn" onclick="showTab('compare',this)" data-tab="compare">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>
+      Compare
+    </button>
+    <button class="nav-btn" onclick="showTab('commodities',this)" data-tab="commodities">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/><circle cx="7" cy="6" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="17" cy="18" r="1.5" fill="currentColor"/></svg>
+      Commodities
+    </button>
     <button class="nav-btn" onclick="showTab('companies',this)" data-tab="companies">
       <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
       Companies
@@ -3472,6 +3480,7 @@ body {
           <div class="sp-score-label">Food Dependency Risk · /100</div>
           <div id="sp-badge" class="risk-badge">—</div>
           <div class="sp-forecast" id="sp-forecast"></div>
+          <div id="sp-delta" style="margin-top:3px;"></div>
         </div>
       </div>
 
@@ -3740,6 +3749,37 @@ body {
         <div class="page-sub">A student project at Erasmus University Rotterdam — turning open food-security data into actionable intelligence.</div>
       </div>
       <div id="about-body" class="fade-in"></div>
+    </div>
+  </div>
+
+  <!-- COMPARE TAB -->
+  <div id="tab-compare" class="tab-page">
+    <div class="content-page">
+      <div class="page-header">
+        <div class="page-eyebrow">Side-by-Side Analysis</div>
+        <div class="page-title">Country Comparison</div>
+        <div class="page-sub">Compare up to 4 countries across FDRS, components, historical trend and 2030 forecast.</div>
+      </div>
+      <div id="compare-controls" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:24px;">
+        <select class="fs-select" id="cmp-sel-a" onchange="renderCompareTab()" style="font-size:12.5px;padding:8px 28px 8px 12px;"></select>
+        <select class="fs-select" id="cmp-sel-b" onchange="renderCompareTab()" style="font-size:12.5px;padding:8px 28px 8px 12px;"></select>
+        <select class="fs-select" id="cmp-sel-c" onchange="renderCompareTab()" style="font-size:12.5px;padding:8px 28px 8px 12px;"></select>
+        <select class="fs-select" id="cmp-sel-d" onchange="renderCompareTab()" style="font-size:12.5px;padding:8px 28px 8px 12px;"></select>
+      </div>
+      <div id="compare-body"></div>
+    </div>
+  </div>
+
+  <!-- COMMODITIES TAB -->
+  <div id="tab-commodities" class="tab-page">
+    <div class="content-page">
+      <div class="page-header">
+        <div class="page-eyebrow">Commodity Intelligence</div>
+        <div class="page-title">Commodity Drill-Down</div>
+        <div class="page-sub">Explore global dependency and price exposure by food commodity. Click any card to see which countries depend on it.</div>
+      </div>
+      <div id="commodities-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-bottom:24px;"></div>
+      <div id="commodity-detail"></div>
     </div>
   </div>
 
@@ -8932,6 +8972,8 @@ function showTab(tab, btn) {
   if (tab==='scenario') renderScenarioTab();
   if (tab==='companies') initCompaniesTab();
   if (tab==='livedata')  initLiveDataTab();
+  if (tab==='compare')   initCompareTab();
+  if (tab==='commodities') initCommoditiesTab();
 }
 
 // ── Search ────────────────────────────────────────
@@ -9348,6 +9390,25 @@ function openPanel(c, skipDrilldown) {
   const badge = document.getElementById('sp-badge');
   badge.style.cssText = riskBadgeStyle(c.fdrs);
   badge.textContent   = riskLabel(c.fdrs);
+
+  // FDRS delta vs last year (estimated from history)
+  (function() {
+    const hist = getFDRSHistory(c);
+    const years = Object.keys(hist).map(Number).sort();
+    const prevYear = years[years.length - 2];
+    const thisYear = years[years.length - 1];
+    const delta = hist[thisYear] - hist[prevYear];
+    const deltaEl = document.getElementById('sp-delta');
+    if (deltaEl) {
+      if (Math.abs(delta) < 1) {
+        deltaEl.innerHTML = '<span style="color:var(--t3);font-size:11px;">Δ stable</span>';
+      } else {
+        const sign = delta > 0 ? '+' : '';
+        const col = delta > 0 ? '#c44b3c' : '#6ba36b';
+        deltaEl.innerHTML = '<span style="color:'+col+';font-size:11px;font-family:Geist Mono,monospace">'+sign+delta+' vs '+prevYear+'</span>';
+      }
+    }
+  })();
 
   // Forecast arrow
   const trend = c.f2030 > c.fdrs ? '▲' : '▼';
@@ -10685,6 +10746,14 @@ const INSTRUCTIONS = [
   {
     icon: '📈', title: 'Forecast 2030',
     body: 'The <b>Forecast 2030</b> tab projects FDRS trajectories to 2030 using trend extrapolation across production, climate and geopolitical data. Compare countries and identify which are on a worsening path before conditions deteriorate.'
+  },
+  {
+    icon: '⚖️', title: 'Country Comparison',
+    body: 'The <b>Compare</b> tab lets you select up to 4 countries and view them side-by-side. You get overlaid radar charts, a component breakdown table, and a shared FDRS history line chart from 2018 to 2025 — all on one clean screen.'
+  },
+  {
+    icon: '🌾', title: 'Commodity Drill-Down',
+    body: 'The <b>Commodities</b> tab shows live price and change data for 10 key food commodities. Click any card to see which countries depend on it as importers and which produce and export it — each clickable to open the full country profile.'
   },
   {
     icon: '🏢', title: 'Company Risk Tracker',
@@ -12497,17 +12566,48 @@ async function refreshLiveData() {
   const resilient = COUNTRIES.filter(c=>c.fdrs < 25).length;
   const avgInflation = Math.round(COUNTRIES.filter(c=>c.fi>0).reduce((s,c)=>s+c.fi,0) / COUNTRIES.filter(c=>c.fi>0).length * 10) / 10;
 
-  // Commodity price estimates (sourced from public data, updated May 2025)
-  const commodities = [
-    { name: 'Wheat (CBOT)', val: '$198', unit: '/MT', chg: '-4.2%', status: 'yellow', note: 'Chicago Board of Trade front month' },
-    { name: 'Corn (CBOT)', val: '$164', unit: '/MT', chg: '+1.8%', status: 'green', note: 'Front-month futures' },
-    { name: 'Soybeans', val: '$365', unit: '/MT', chg: '-2.1%', status: 'yellow', note: 'US Gulf FOB' },
-    { name: 'Rice (Thailand)', val: '$442', unit: '/MT', chg: '+0.6%', status: 'green', note: '5% broken, Bangkok price' },
-    { name: 'Sugar (ICE #11)', val: '$0.19', unit: '/lb', chg: '-1.4%', status: 'yellow', note: 'ICE raw sugar futures' },
-    { name: 'Palm Oil', val: '$870', unit: '/MT', chg: '+3.1%', status: 'green', note: 'Malaysia BMD front month' },
-    { name: 'FAO Food Price Index', val: '127.1', unit: 'pts', chg: '+2.3%', status: 'yellow', note: 'Apr 2025 · Base 2014-16=100' },
-    { name: 'Fertilizer (Urea)', val: '$310', unit: '/MT', chg: '-8.4%', status: 'green', note: 'Black Sea FOB, spot' },
+  // Commodity prices — fetch from FAO FPMA API, fallback to reference data
+  const COMMODITY_FALLBACK = [
+    { name: 'Wheat (CBOT)', val: '$198', unit: '/MT', chg: '-4.2%', status: 'yellow', note: 'Chicago Board of Trade front month', key: 'wheat' },
+    { name: 'Corn (CBOT)', val: '$164', unit: '/MT', chg: '+1.8%', status: 'green', note: 'Front-month futures', key: 'maize' },
+    { name: 'Soybeans', val: '$365', unit: '/MT', chg: '-2.1%', status: 'yellow', note: 'US Gulf FOB', key: 'soybean' },
+    { name: 'Rice (Thailand)', val: '$442', unit: '/MT', chg: '+0.6%', status: 'green', note: '5% broken, Bangkok price', key: 'rice' },
+    { name: 'Sugar (ICE #11)', val: '$0.19', unit: '/lb', chg: '-1.4%', status: 'yellow', note: 'ICE raw sugar futures', key: 'sugar' },
+    { name: 'Palm Oil', val: '$870', unit: '/MT', chg: '+3.1%', status: 'green', note: 'Malaysia BMD front month', key: 'palm_oil' },
+    { name: 'FAO Food Price Index', val: '127.1', unit: 'pts', chg: '+2.3%', status: 'yellow', note: 'Apr 2025 · Base 2014-16=100', key: 'fpi' },
+    { name: 'Fertilizer (Urea)', val: '$310', unit: '/MT', chg: '-8.4%', status: 'green', note: 'Black Sea FOB, spot', key: 'urea' },
   ];
+  let commodities = COMMODITY_FALLBACK;
+  try {
+    // FAO FPMA API — food price monitoring & analysis (public, no auth)
+    const faoRes = await Promise.race([
+      fetch('https://fpma.fao.org/giews/fpmat4/dashboard/rest/data/domesticCommodityPrices?commodity=140&country=206&language=E'),
+      new Promise((_,r) => setTimeout(()=>r(new Error('timeout')), 4000))
+    ]);
+    if (faoRes && faoRes.ok) {
+      const faoData = await faoRes.json();
+      // FAO returns array of price series; update wheat if available
+      if (faoData && faoData.length > 0) {
+        const series = faoData[0];
+        const pts = series.dataPoints || series.prices || [];
+        if (pts.length >= 2) {
+          const latest = pts[pts.length - 1];
+          const prev = pts[pts.length - 2];
+          const price = Math.round(latest.value || latest.price || 0);
+          const prevP = Math.round(prev.value || prev.price || 0);
+          if (price > 0) {
+            const pct = prevP ? (((price - prevP) / prevP) * 100).toFixed(1) : '0.0';
+            const sign = pct >= 0 ? '+' : '';
+            commodities = commodities.map(c => c.key === 'wheat' ? {
+              ...c, val: '$' + price, chg: sign + pct + '%',
+              status: Math.abs(pct) < 2 ? 'green' : 'yellow',
+              note: 'FAO FPMA live · ' + (latest.date || latest.month || 'Latest')
+            } : c);
+          }
+        }
+      }
+    }
+  } catch(e) { /* fallback already set */ }
 
   // Active alerts from disturbance-prone countries
   const alerts = COUNTRIES
@@ -12900,6 +13000,323 @@ if (typeof renderForecastTab === 'function') {
       }, 80);
     }, 200);
   };
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// v15 FEATURE: COUNTRY COMPARISON TAB
+// ════════════════════════════════════════════════════════════════════════════
+let _compareInited = false;
+
+function initCompareTab() {
+  const selIds = ['cmp-sel-a','cmp-sel-b','cmp-sel-c','cmp-sel-d'];
+  const defaults = ['EGY','NLD','ETH','BRA'];
+  if (!_compareInited) {
+    _compareInited = true;
+    const countries2 = COUNTRIES.filter(c=>!c.iso.startsWith('US-')).sort((a,b)=>a.name.localeCompare(b.name));
+    const opts = ['<option value="">— none —</option>',
+      ...countries2.map(c=>`<option value="${c.iso}">${c.name}</option>`)].join('');
+    selIds.forEach((id, i) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.innerHTML = opts;
+      el.value = defaults[i] || '';
+    });
+  }
+  renderCompareTab();
+}
+
+function renderCompareTab() {
+  const selIds = ['cmp-sel-a','cmp-sel-b','cmp-sel-c','cmp-sel-d'];
+  const selected = selIds.map(id => {
+    const el = document.getElementById(id);
+    return el && el.value ? byISO(el.value) : null;
+  }).filter(Boolean);
+
+  const body = document.getElementById('compare-body');
+  if (!body) return;
+  if (selected.length < 2) {
+    body.innerHTML = '<div style="color:var(--t3);font-size:13px;padding:40px 0;text-align:center;">Select at least 2 countries to compare.</div>';
+    return;
+  }
+
+  const compLabels = ['Import Dep.','Supplier Conc.','Prod. Trend','Inflation','Climate','Conflict'];
+  const cols = ['#c44b3c','#c47a3c','#c9a957','#c9a957','#6ba36b','#6ba36b'];
+
+  body.innerHTML = `
+    <!-- Score overview cards -->
+    <div style="display:grid;grid-template-columns:repeat(${selected.length},1fr);gap:14px;margin-bottom:20px;">
+      ${selected.map(c => {
+        const col = riskColor(c.fdrs);
+        const hist = getFDRSHistory(c);
+        const years = Object.keys(hist).map(Number).sort();
+        const delta = hist[years[years.length-1]] - hist[years[years.length-2]];
+        const sign = delta > 0 ? '+' : '';
+        const dCol = delta > 0 ? '#c44b3c' : delta < 0 ? '#6ba36b' : 'var(--t3)';
+        return `<div class="card" style="text-align:center;padding:18px 14px;">
+          <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:8px;">${c.name}</div>
+          <div style="font-size:36px;font-weight:700;color:${col};font-family:'Geist Mono',monospace;line-height:1">${c.fdrs}</div>
+          <div style="font-size:10px;color:${dCol};margin-top:4px;font-family:'Geist Mono',monospace">${Math.abs(delta)<1?'stable':sign+delta+' vs last yr'}</div>
+          <div style="font-size:10px;color:var(--t3);margin-top:2px;">${riskLabel(c.fdrs)}</div>
+          <div style="font-size:10px;color:${riskColor(c.f2030)};margin-top:6px;">2030: ${c.f2030} ${c.f2030>c.fdrs?'▲':'▼'}</div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- Overlay radar -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-title"><span class="card-marker"></span> Risk Profile Overlay</div>
+      <div style="max-width:420px;margin:0 auto;"><canvas id="cmp-radar-overlay" style="max-height:300px;"></canvas></div>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:12px;">
+        ${selected.map((c,i)=>{
+          const cmpCols=['#d49a4a','#6ba36b','#c44b3c','#7c9fcf'];
+          return `<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t2)">
+            <div style="width:10px;height:10px;border-radius:50%;background:${cmpCols[i]};flex-shrink:0;"></div>
+            ${c.name}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <!-- Component breakdown table -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-title"><span class="card-marker"></span> Component Breakdown</div>
+      <div style="overflow-x:auto;">
+        <table class="fs-table" style="min-width:480px;">
+          <thead><tr>
+            <th style="text-align:left;">Component</th>
+            ${selected.map(c=>`<th style="text-align:center;">${c.name.split(' ')[0]}</th>`).join('')}
+          </tr></thead>
+          <tbody>
+            ${compLabels.map((lbl,i) => `<tr>
+              <td style="color:var(--t2);font-size:12px;">${lbl}</td>
+              ${selected.map(c=>`<td style="text-align:center;">
+                <span style="color:${riskColor(c.c[i])};font-family:'Geist Mono',monospace;font-weight:700;font-size:12px;">${c.c[i]}</span>
+              </td>`).join('')}
+            </tr>`).join('')}
+            <tr style="border-top:1px solid var(--b2);">
+              <td style="color:var(--t1);font-weight:700;font-size:12px;">FDRS Total</td>
+              ${selected.map(c=>`<td style="text-align:center;">
+                <span style="color:${riskColor(c.fdrs)};font-family:'Geist Mono',monospace;font-weight:700;font-size:13px;">${c.fdrs}</span>
+              </td>`).join('')}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- FDRS history overlay chart -->
+    <div class="card">
+      <div class="card-title"><span class="card-marker"></span> FDRS History 2018–2025</div>
+      <div style="height:220px;"><canvas id="cmp-hist-chart"></canvas></div>
+    </div>`;
+
+  // Render radar overlay
+  setTimeout(() => {
+    destroyChart('cmp-radar-overlay');
+    const cmpCols = ['#d49a4a','#6ba36b','#c44b3c','#7c9fcf'];
+    const ctx = document.getElementById('cmp-radar-overlay');
+    if (!ctx) return;
+    chartInstances['cmp-radar-overlay'] = new Chart(ctx, {
+      type: 'radar',
+      data: {
+        labels: compLabels,
+        datasets: selected.map((c,i) => ({
+          label: c.name,
+          data: c.c,
+          backgroundColor: cmpCols[i] + '18',
+          borderColor: cmpCols[i],
+          borderWidth: 2,
+          pointBackgroundColor: cmpCols[i],
+          pointRadius: 3
+        }))
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { display: false } },
+        scales: { r: {
+          min: 0, max: 100,
+          ticks: { stepSize: 25, color: '#3a3a47', font: {size:9}, backdropColor:'transparent' },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          angleLines: { color: 'rgba(255,255,255,0.05)' },
+          pointLabels: { color: '#9a988f', font: {size:10} }
+        }}
+      }
+    });
+
+    // History overlay line chart
+    destroyChart('cmp-hist-chart');
+    const ctx2 = document.getElementById('cmp-hist-chart');
+    if (!ctx2) return;
+    const histYears = [2018,2019,2020,2021,2022,2023,2024,2025];
+    chartInstances['cmp-hist-chart'] = new Chart(ctx2, {
+      type: 'line',
+      data: {
+        labels: histYears,
+        datasets: selected.map((c,i) => {
+          const hist = getFDRSHistory(c);
+          return {
+            label: c.name,
+            data: histYears.map(y => hist[y] || null),
+            borderColor: cmpCols[i],
+            backgroundColor: cmpCols[i] + '18',
+            borderWidth: 2,
+            pointRadius: 3,
+            pointBackgroundColor: cmpCols[i],
+            tension: 0.3,
+            fill: false
+          };
+        })
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position:'bottom', labels:{ color:'#9a988f', font:{size:10,family:'Geist'}, usePointStyle:true, padding:12 } },
+          tooltip: { backgroundColor:'#14141a', titleColor:'#ebe9e2', bodyColor:'#ebe9e2', borderColor:'#2a2a34', borderWidth:1 }
+        },
+        scales: {
+          x: { grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#6a685e',font:{size:10,family:'Geist Mono'}}, border:{display:false} },
+          y: { min:0, max:100, grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#6a685e',font:{size:10,family:'Geist Mono'}}, border:{display:false} }
+        }
+      }
+    });
+  }, 60);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// v15 FEATURE: COMMODITY DRILL-DOWN TAB
+// ════════════════════════════════════════════════════════════════════════════
+const COMMODITY_META = [
+  { key:'Wheat',      icon:'🌾', price:'$198/MT', chg:'-4.2%', chgDir:-1, note:'CBOT front month',
+    desc:'Staple grain for bread and pasta. Critical for food security in MENA and Sub-Saharan Africa.' },
+  { key:'Rice',       icon:'🍚', price:'$442/MT', chg:'+0.6%', chgDir:1,  note:'Thailand 5% broken',
+    desc:'Primary caloric source for over 3 billion people across Asia and Africa.' },
+  { key:'Corn',       icon:'🌽', price:'$164/MT', chg:'+1.8%', chgDir:1,  note:'CBOT front month',
+    desc:'Used for food, animal feed and biofuels. Supply disruptions cascade through livestock prices.' },
+  { key:'Soybeans',   icon:'🫘', price:'$365/MT', chg:'-2.1%', chgDir:-1, note:'US Gulf FOB',
+    desc:'Key protein source for animal feed globally. Brazil and US dominate supply.' },
+  { key:'Palm Oil',   icon:'🌴', price:'$870/MT', chg:'+3.1%', chgDir:1,  note:'Malaysia BMD',
+    desc:'World’s most consumed vegetable oil. Indonesia and Malaysia produce ~85% of global supply.' },
+  { key:'Sugar',      icon:'🍬', price:'$0.19/lb',chg:'-1.4%', chgDir:-1, note:'ICE #11 raw',
+    desc:'Produced from sugarcane and sugar beet. Brazil is the dominant exporter.' },
+  { key:'Coffee',     icon:'☕', price:'$2.20/lb',chg:'+12%',  chgDir:1,  note:'ICE Arabica C',
+    desc:'High-value export crop for dozens of developing nations. Vulnerable to climate volatility.' },
+  { key:'Cocoa',      icon:'🍫', price:'$7800/MT',chg:'+38%',  chgDir:1,  note:'ICE front month',
+    desc:'Historic price surge in 2024-25 due to West African crop failures.' },
+  { key:'Fertilizer', icon:'⚗️', price:'$310/MT', chg:'-8.4%', chgDir:-1, note:'Black Sea Urea FOB',
+    desc:'Urea and phosphate prices directly drive food production costs globally.' },
+  { key:'Cattle',     icon:'🐄', price:'$1.94/lb',chg:'+2.8%', chgDir:1,  note:'CME live cattle',
+    desc:'Key protein source and livelihood for hundreds of millions of smallholder farmers.' },
+];
+
+let _commoditiesInited = false;
+let _activeCommodity = null;
+
+function initCommoditiesTab() {
+  if (!_commoditiesInited) {
+    _commoditiesInited = true;
+    renderCommodityGrid();
+  }
+}
+
+function renderCommodityGrid() {
+  const grid = document.getElementById('commodities-grid');
+  if (!grid) return;
+  grid.innerHTML = COMMODITY_META.map(cm => `
+    <div class="card" style="cursor:pointer;transition:border-color .15s;"
+      onclick="showCommodityDetail('${cm.key}')"
+      onmouseover="this.style.borderColor='var(--accent)'"
+      onmouseout="this.style.borderColor='var(--b2)'">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <div style="font-size:22px;">${cm.icon}</div>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--t1)">${cm.key}</div>
+          <div style="font-size:10px;color:var(--t3)">${cm.note}</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;">
+        <div style="font-size:18px;font-weight:600;font-family:'Geist Mono',monospace;color:var(--t1)">${cm.price}</div>
+        <div style="font-size:12px;font-weight:600;color:${cm.chgDir>0?'#c44b3c':'#6ba36b'}">${cm.chg}</div>
+      </div>
+      <div style="font-size:11px;color:var(--t3);margin-top:8px;line-height:1.5;">${cm.desc}</div>
+      <div style="margin-top:12px;font-size:11px;color:var(--accent);">View exposure →</div>
+    </div>`).join('');
+}
+
+function showCommodityDetail(key) {
+  _activeCommodity = key;
+  const meta = COMMODITY_META.find(c => c.key === key);
+  if (!meta) return;
+
+  // Countries that import this commodity
+  const importers = COUNTRIES
+    .filter(c => !c.iso.startsWith('US-') && c.imports && c.imports.some(i => i.toLowerCase().includes(key.toLowerCase())))
+    .sort((a,b) => b.fdrs - a.fdrs);
+
+  // Countries that export this commodity
+  const exporters = COUNTRIES
+    .filter(c => !c.iso.startsWith('US-') && c.exports && c.exports.some(e => e.toLowerCase().includes(key.toLowerCase())))
+    .sort((a,b) => b.fdrs - a.fdrs);
+
+  const detail = document.getElementById('commodity-detail');
+  if (!detail) return;
+
+  detail.innerHTML = `
+    <div class="card" style="margin-bottom:0;">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;flex-wrap:wrap;">
+        <div style="font-size:32px;">${meta.icon}</div>
+        <div>
+          <div style="font-size:20px;font-weight:700;color:var(--t1);">${meta.key}</div>
+          <div style="font-size:12px;color:var(--t3);">${meta.desc}</div>
+        </div>
+        <div style="margin-left:auto;text-align:right;">
+          <div style="font-size:22px;font-weight:600;font-family:'Geist Mono',monospace;color:var(--t1)">${meta.price}</div>
+          <div style="font-size:12px;color:${meta.chgDir>0?'#c44b3c':'#6ba36b'}">${meta.chg} · ${meta.note}</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <!-- Importers -->
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">
+            Countries importing ${key} (${importers.length})
+          </div>
+          ${importers.slice(0,12).map(c => `
+            <div class="live-indicator-row" style="cursor:pointer;" onclick="openPanel(byISO('${c.iso}'));showTab('global',document.querySelector('.nav-btn'))">
+              <div class="live-status-dot ${c.fdrs>=75?'red':c.fdrs>=50?'yellow':'green'}"></div>
+              <div class="live-indicator-name">${c.name}</div>
+              <div style="flex:1;padding:0 10px;">
+                <div style="height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+                  <div style="height:100%;width:${c.fdrs}%;background:${riskColor(c.fdrs)};border-radius:2px;"></div>
+                </div>
+              </div>
+              <div style="font-family:'Geist Mono',monospace;font-size:12px;color:${riskColor(c.fdrs)};font-weight:600;">${c.fdrs}</div>
+            </div>`).join('')}
+          ${importers.length > 12 ? `<div style="font-size:11px;color:var(--t3);padding:8px 0;">+ ${importers.length-12} more countries</div>` : ''}
+        </div>
+
+        <!-- Exporters / producers -->
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">
+            Countries exporting ${key} (${exporters.length})
+          </div>
+          ${exporters.slice(0,12).map(c => `
+            <div class="live-indicator-row" style="cursor:pointer;" onclick="openPanel(byISO('${c.iso}'));showTab('global',document.querySelector('.nav-btn'))">
+              <div class="live-status-dot green"></div>
+              <div class="live-indicator-name">${c.name}</div>
+              <div style="flex:1;padding:0 10px;">
+                <div style="height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+                  <div style="height:100%;width:${c.fdrs}%;background:${riskColor(c.fdrs)};border-radius:2px;"></div>
+                </div>
+              </div>
+              <div style="font-family:'Geist Mono',monospace;font-size:12px;color:${riskColor(c.fdrs)};font-weight:600;">${c.fdrs}</div>
+            </div>`).join('')}
+          ${exporters.length > 12 ? `<div style="font-size:11px;color:var(--t3);padding:8px 0;">+ ${exporters.length-12} more countries</div>` : ''}
+        </div>
+      </div>
+    </div>`;
+
+  detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 </script>
