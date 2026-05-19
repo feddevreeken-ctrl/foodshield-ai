@@ -26,6 +26,7 @@ from _common import DATA_DIR, ROOT
 HTML_PATH = ROOT / "index.html"
 OUT_PATH = DATA_DIR / "countries.json"
 FBS_PATH = DATA_DIR / "country_caloric_shares.json"
+NET_TRADE_PATH = DATA_DIR / "net_food_trade.json"
 
 STRUCTURAL_FIELDS = [
     "fdrs",
@@ -86,6 +87,7 @@ def main():
     legacy_rows = _extract_legacy_rows()
     existing_meta, existing_rows = _load_existing_overlay()
     caloric_shares = _load_fbs_overlay()
+    net_trade = _load_net_trade_overlay()
 
     countries = {}
     for iso, fields in legacy_rows.items():
@@ -96,14 +98,16 @@ def main():
             row[field] = _legacy_field_meta(field, fields[field])
         countries[iso] = row
 
-    # Keep previously curated overrides, except that FAOSTAT caloric shares can
-    # replace the hand-entered w/r/m values if present.
+    # Keep previously curated overrides, except where a newer sourced overlay
+    # supersedes them (FBS for w/r/m; FAOSTAT TCL for net).
     for iso, row in existing_rows.items():
         if iso not in legacy_rows:
             continue
         target = countries.setdefault(iso, {})
         for field, meta in row.items():
             if field in {"w", "r", "m"} and iso in caloric_shares:
+                continue
+            if field == "net" and iso in net_trade:
                 continue
             target[field] = meta
 
@@ -113,6 +117,14 @@ def main():
         countries[iso]["w"] = _fbs_field_meta("w", payload)
         countries[iso]["r"] = _fbs_field_meta("r", payload)
         countries[iso]["m"] = _fbs_field_meta("m", payload)
+
+    # FAOSTAT TCL net food trade overlay — replaces legacy hand-curated `net`.
+    # Stored as integer millions USD to match the existing `c.net` integer shape,
+    # so the frontend math (c.net/1000).toFixed(0) keeps producing B-USD displays.
+    for iso, payload in net_trade.items():
+        if iso not in countries:
+            continue
+        countries[iso]["net"] = _net_field_meta(payload)
 
     ordered = {}
     for iso in sorted(countries):
@@ -131,15 +143,18 @@ def main():
         "fields": FIELD_DESCRIPTIONS,
         "source_priority": [
             "Existing non-legacy countries.json overrides",
-            "FAOSTAT Food Balance Sheets caloric shares (if available)",
+            "FAOSTAT Food Balance Sheets caloric shares (w/r/m) — when present",
+            "FAOSTAT Trade Crops & Livestock net food balance (net) — when present",
             "Embedded legacy fallback extracted from index.html",
         ],
         "coverage": {
             "countries": len(ordered),
             "fbs_countries": len(caloric_shares),
+            "net_trade_countries": len(net_trade),
         },
         "notes": [
-            "Trade-oriented fields remain legacy_curated until replaced with observed country/commodity trade sources.",
+            "Caloric shares (w/r/m) come from FAOSTAT FBS; net food trade from FAOSTAT TCL.",
+            "Per-commodity import/supplier lists (imports, exports, suppliers, supPct) remain legacy_curated.",
             "Food-only UI menus may be normalized at render time; canonical raw structural values remain stored here.",
             "The frontend supports both the historical top-level countries schema and this v20.6 envelope schema for safe rollout.",
         ],
@@ -246,6 +261,14 @@ def _load_fbs_overlay():
     return data if isinstance(data, dict) else {}
 
 
+def _load_net_trade_overlay():
+    if not NET_TRADE_PATH.exists():
+        return {}
+    obj = json.loads(NET_TRADE_PATH.read_text())
+    data = obj.get("data", {}) if isinstance(obj, dict) else {}
+    return data if isinstance(data, dict) else {}
+
+
 def _legacy_field_meta(field, value):
     # v20.7: w/r/m heritage values are import-dependency %, not caloric shares.
     # Tag them with a distinct quality flag so the UI does NOT mis-display them as caloric.
@@ -313,6 +336,42 @@ def _fbs_field_meta(field, payload):
         "note": (
             f"{label_map[field]} share derived from FAOSTAT Food Balance Sheets. "
             "Direct food calories only; indirect feed conversion is excluded."
+        ),
+    }
+
+
+def _net_field_meta(payload):
+    """FAOSTAT TCL net trade overlay → countries.json `net` field.
+
+    Stored as an integer in millions USD to match the existing legacy schema:
+    the frontend reads `(c.net / 1000).toFixed(0)` to produce a "B USD" display,
+    so we keep the same unit (musd) regardless of where the value came from.
+    """
+    musd = payload.get("value")
+    if musd is None:
+        raise RuntimeError("Missing 'value' in net_food_trade payload")
+    # Round to int — sub-million precision adds noise we don't want in the UI.
+    musd_int = int(round(float(musd)))
+    item_label = (
+        "Food, Total (FAOSTAT item 1842)"
+        if payload.get("item_used") == 1842
+        else "Agricultural Products, Total (FAOSTAT item 1841)"
+    )
+    return {
+        "value": musd_int,
+        "source": payload.get("source") or "FAOSTAT Trade Crops & Livestock",
+        "source_url": payload.get("source_url"),
+        "as_of": str(payload.get("year") or ""),
+        "method": payload.get("method") or (
+            "Net food trade = Export Value - Import Value (FAOSTAT TCL). Millions USD."
+        ),
+        "quality_flag": payload.get("quality_flag") or "sourced",
+        "note": (
+            f"Net agri-food trade balance from {item_label}. "
+            f"Positive = net exporter, negative = net importer. "
+            f"Source year: {payload.get('year')}. "
+            f"Exports: {payload.get('exports_musd')} M USD; "
+            f"Imports: {payload.get('imports_musd')} M USD."
         ),
     }
 

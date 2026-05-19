@@ -142,6 +142,13 @@ SOURCES = [
         "cadence": "daily fetch / quarterly upstream",
         "mode": "forecast",
     },
+    {
+        "key": "net_food_trade",
+        "file": "net_food_trade.json",
+        "label": "FAOSTAT TCL net food trade",
+        "cadence": "daily fetch / annual upstream",
+        "mode": "trade",
+    },
 ]
 
 
