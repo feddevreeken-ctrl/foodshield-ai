@@ -1,57 +1,50 @@
 """
 FAO Food Price Index (FFPI) — monthly global commodity price indices.
 
-Public CSV at fao.org/food-price-index. We fetch the latest XLSX/CSV release.
+Official landing page:
+  https://www.fao.org/worldfoodsituation/foodpricesindex/en/
 
-Output: data/fao_ffpi.json
-  {
-    "latest": {month: "YYYY-MM", value: 127.1, change_mom_pct: ...},
-    "series": [{month, fpi, meat, dairy, cereals, oils, sugar}, ...]  (last 24 months)
-  }
+FAO's current page links to a downloadable CSV that contains nominal monthly
+indices from 1990 onwards. We resolve the live CSV URL from the page first,
+then fall back to the legacy static location if needed.
 """
 import csv
+from datetime import datetime
+from html import unescape
 import io
+import re
 
 from _common import http_get, write_json
 
-# FAO publishes the index as XLSX at a stable URL; CSV mirror provided here.
-# If the CSV mirror changes, point this at https://www.fao.org/fileadmin/templates/worldfood/Reports_and_docs/Food_price_indices_data.csv
-URL = "https://www.fao.org/fileadmin/templates/worldfood/Reports_and_docs/Food_price_indices_data_dec25.csv"
+PAGE_URL = "https://www.fao.org/worldfoodsituation/foodpricesindex/en/"
+CSV_RE = re.compile(
+    r"https://www\.fao\.org/media/docs/worldfoodsituationlibraries/default-document-library/food_price_indices_data\.csv[^\"]*download=true",
+    re.I,
+)
+LEGACY_FALLBACK = "https://www.fao.org/fileadmin/templates/worldfood/Reports_and_docs/Food_price_indices_data.csv"
 
 
-def main():
-    # Try a couple of common URL patterns; FAO rotates the suffix monthly.
-    candidates = [
-        "https://www.fao.org/fileadmin/templates/worldfood/Reports_and_docs/Food_price_indices_data.csv",
-        "https://www.fao.org/fileadmin/templates/worldfood/Reports_and_docs/Food_price_indices_data_oct25.csv",
-        URL,
-    ]
-    text = None
-    used = None
-    for u in candidates:
-        try:
-            r = http_get(u, headers={"Accept": "text/csv,*/*"})
-            text = r.text
-            used = u
-            break
-        except Exception as e:
-            print(f"  miss {u}: {e}")
-    if not text:
-        raise RuntimeError("All FAO FFPI URLs failed")
+def resolve_csv_url():
+    page = http_get(PAGE_URL, headers={"Accept": "text/html,*/*"}, timeout=45).text
+    match = CSV_RE.search(page)
+    if match:
+        return unescape(match.group(0))
+    return LEGACY_FALLBACK
 
+
+def parse_series(text):
     rows = list(csv.reader(io.StringIO(text)))
-    # FAO format: header row + monthly rows: Date, Food Price Index, Meat, Dairy, Cereals, Oils, Sugar
     series = []
     for row in rows:
         if not row or len(row) < 7:
             continue
-        date = row[0].strip()
+        date = (row[0] or "").strip()
         try:
             fpi = float(row[1])
-        except ValueError:
+        except (TypeError, ValueError):
             continue
-        try:
-            series.append({
+        series.append(
+            {
                 "month": date,
                 "fpi": round(fpi, 2),
                 "meat": _num(row[2]),
@@ -59,23 +52,59 @@ def main():
                 "cereals": _num(row[4]),
                 "oils": _num(row[5]),
                 "sugar": _num(row[6]),
-            })
-        except (IndexError, ValueError):
-            continue
+            }
+        )
+    return series
 
-    series = series[-24:]  # last 24 months
-    latest = series[-1] if series else None
+
+def month_key(token):
+    try:
+        if re.fullmatch(r"\d{4}-\d{2}", token):
+            return datetime.strptime(token, "%Y-%m")
+        return datetime.strptime(token, "%b-%y")
+    except Exception:
+        return None
+
+
+def main():
+    candidates = [resolve_csv_url(), LEGACY_FALLBACK]
+    best = None
+    for u in candidates:
+        if not u:
+            continue
+        try:
+            r = http_get(u, headers={"Accept": "text/csv,*/*"}, timeout=45)
+            series = parse_series(r.text)
+            latest = series[-1]["month"] if series else None
+            latest_key = month_key(latest) if latest else None
+            if series and (best is None or (latest_key and latest_key > best["latest_key"])):
+                best = {"url": u, "series": series, "latest_key": latest_key}
+        except Exception as e:
+            print(f"  miss {u}: {e}")
+    if not best:
+        raise RuntimeError("All FAO FFPI URLs failed")
+    series = best["series"]
+    if not series:
+        raise RuntimeError("FAO FFPI parser returned zero rows")
+
+    series = series[-24:]
+    latest = series[-1]
     prev = series[-2] if len(series) > 1 else None
     payload = {
         "latest": latest,
         "change_mom_pct": (
             round((latest["fpi"] - prev["fpi"]) / prev["fpi"] * 100, 2)
-            if latest and prev and prev["fpi"]
+            if prev and prev["fpi"]
             else None
         ),
         "series": series,
     }
-    write_json("fao_ffpi.json", payload, source=f"FAO Food Price Index ({used})")
+    write_json(
+        "fao_ffpi.json",
+        payload,
+        source=f"FAO Food Price Index ({best['url']})",
+        notes="Freshest official monthly nominal FFPI CSV resolved from the FAO Food Price Index page; legacy fallback retained only if newer source is unavailable.",
+    )
 
 
 def _num(v):

@@ -13,6 +13,7 @@ from _common import safe_run
 import refresh_wfp
 import refresh_wfp_country
 import refresh_worldbank
+import refresh_worldbank_pink_sheet
 import refresh_fao_ffpi
 import refresh_reliefweb
 import refresh_ipc
@@ -27,12 +28,14 @@ import refresh_nasa_firms
 import refresh_eurostat
 import refresh_faostat
 import build_nowcast
+import build_source_manifest
 
 
 STEPS = [
     ("WFP HungerMap",       refresh_wfp.main),
     ("WFP per-country",     refresh_wfp_country.main),
     ("World Bank WDI",      refresh_worldbank.main),
+    ("World Bank Pink Sheet", refresh_worldbank_pink_sheet.main),
     ("FAO FFPI",            refresh_fao_ffpi.main),
     ("ReliefWeb",           refresh_reliefweb.main),
     ("IPC",                 refresh_ipc.main),
@@ -47,6 +50,7 @@ STEPS = [
     ("Eurostat food HICP",  refresh_eurostat.main),
     ("FAOSTAT food CPI",    refresh_faostat.main),
     ("Nowcast build",       build_nowcast.main),
+    ("Source manifest",     build_source_manifest.main),
 ]
 
 
