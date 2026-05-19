@@ -3000,6 +3000,48 @@ body {
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 10px;
 }
+/* v20: unified all-shocks grid with category-coded left rail */
+.scn-grid-all {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
+  gap: 10px;
+}
+.scn-card[data-cat="Commodity"]     { border-left: 3px solid #c9a957; }
+.scn-card[data-cat="Input"]         { border-left: 3px solid #c47a3c; }
+.scn-card[data-cat="Climate"]       { border-left: 3px solid #6ba36b; }
+.scn-card[data-cat="Logistics"]     { border-left: 3px solid #8aa6c4; }
+.scn-card[data-cat="Geopolitics"]   { border-left: 3px solid #c44b3c; }
+.scn-card[data-cat="Macro"]         { border-left: 3px solid #b08fc8; }
+.scn-cat-legend {
+  display: flex; flex-wrap: wrap; gap: 8px 18px;
+  font-family: 'Geist Mono', monospace; font-size: 10px;
+  color: var(--t3); margin-bottom: 14px;
+}
+.scn-cat-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.scn-cat-legend i {
+  width: 8px; height: 8px; border-radius: 2px; display: inline-block;
+}
+.scn-section-header {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; margin: 24px 0 10px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--b1);
+}
+.scn-section-header .scn-section-title {
+  font-size: 13px; font-weight: 600; color: var(--t1);
+  letter-spacing: -.005em;
+}
+.scn-section-header .scn-section-eyebrow {
+  font-family: 'Geist Mono', monospace; font-size: 10px;
+  color: var(--t3); text-transform: uppercase; letter-spacing: .14em;
+}
+.scn-action-bar {
+  position: sticky; bottom: 50px; z-index: 30;
+  display: flex; align-items: center; gap: 12px;
+  margin: 14px 0; padding: 10px 14px;
+  background: var(--bg1); border: 1px solid var(--b2);
+  border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(0,0,0,.4);
+}
 .scn-card {
   background: var(--bg2);
   border: 1px solid var(--b1);
@@ -8892,6 +8934,9 @@ async function loadLiveData() {
       c._f2030Adj = f2030Adj;
     }
     console.info(`[FoodShield] Nowcast applied to ${Object.keys(LIVE.nowcast).length} countries · loaded at ${LIVE.meta.loaded_at}`);
+    // v20: invalidate any caches that captured pre-nowcast c.fdrs / c.f2030
+    if (typeof _companyIndex !== 'undefined') _companyIndex = null;
+    if (typeof _commodityCache !== 'undefined') _commodityCache = null;
   }
 
   // ── US States — replace state FDRS with Feeding America MMG food-insecurity scaling ──
@@ -8952,6 +8997,86 @@ function fdrsDeltaSign(c) {
   const d = fdrsDelta(c);
   if (d == null || d === 0) return '';
   return d > 0 ? `+${d}` : `${d}`;
+}
+
+// ── v20: ISO3 → (lat, lng) for plotting disturbance points on the map ─────
+// Mirrors scripts/_common.py COUNTRY_COORDS. Coordinates are capital-city centroids.
+const COUNTRY_LL = {
+  AFG:[34.53,69.17],ALB:[41.33,19.82],DZA:[36.75,3.06],AGO:[-8.84,13.23],ARG:[-34.61,-58.38],
+  ARM:[40.18,44.51],AUS:[-35.28,149.13],AUT:[48.21,16.37],AZE:[40.41,49.87],BHR:[26.23,50.59],
+  BGD:[23.81,90.41],BLR:[53.90,27.57],BEL:[50.85,4.35],BEN:[6.50,2.60],BTN:[27.47,89.63],
+  BOL:[-16.50,-68.15],BIH:[43.86,18.41],BWA:[-24.65,25.91],BRA:[-15.79,-47.88],BGR:[42.70,23.32],
+  BFA:[12.37,-1.52],BDI:[-3.38,29.36],KHM:[11.56,104.92],CMR:[3.85,11.50],CAN:[45.42,-75.70],
+  CAF:[4.36,18.56],TCD:[12.13,15.04],CHL:[-33.45,-70.65],CHN:[39.90,116.41],COL:[4.71,-74.07],
+  COG:[-4.27,15.27],COD:[-4.32,15.31],CRI:[9.93,-84.08],CIV:[6.83,-5.28],HRV:[45.81,15.98],
+  CUB:[23.13,-82.38],CYP:[35.17,33.37],CZE:[50.08,14.44],DNK:[55.68,12.57],DJI:[11.59,43.15],
+  DOM:[18.49,-69.90],ECU:[-0.18,-78.47],EGY:[30.04,31.23],SLV:[13.69,-89.22],ERI:[15.32,38.93],
+  EST:[59.44,24.75],SWZ:[-26.31,31.13],ETH:[9.03,38.74],FJI:[-18.12,178.42],FIN:[60.17,24.94],
+  FRA:[48.85,2.35],GAB:[0.41,9.45],GMB:[13.45,-16.58],GEO:[41.72,44.78],DEU:[52.52,13.41],
+  GHA:[5.60,-0.19],GRC:[37.98,23.73],GTM:[14.63,-90.51],GIN:[9.51,-13.71],GNB:[11.86,-15.59],
+  GUY:[6.81,-58.16],HTI:[18.55,-72.34],HND:[14.07,-87.19],HUN:[47.50,19.04],ISL:[64.15,-21.94],
+  IND:[28.61,77.21],IDN:[-6.21,106.85],IRN:[35.69,51.39],IRQ:[33.31,44.37],IRL:[53.35,-6.26],
+  ISR:[31.78,35.22],ITA:[41.90,12.50],JAM:[17.97,-76.79],JPN:[35.68,139.69],JOR:[31.95,35.93],
+  KAZ:[51.16,71.47],KEN:[-1.29,36.82],KWT:[29.38,47.99],KGZ:[42.87,74.59],LAO:[17.97,102.60],
+  LVA:[56.95,24.11],LBN:[33.89,35.50],LSO:[-29.31,27.49],LBR:[6.30,-10.80],LBY:[32.89,13.19],
+  LTU:[54.69,25.28],LUX:[49.61,6.13],MDG:[-18.88,47.51],MWI:[-13.96,33.79],MYS:[3.14,101.69],
+  MLI:[12.64,-8.00],MRT:[18.07,-15.98],MEX:[19.43,-99.13],MDA:[47.01,28.84],MNG:[47.92,106.92],
+  MNE:[42.44,19.26],MAR:[34.02,-6.83],MOZ:[-25.97,32.58],MMR:[19.74,96.08],NAM:[-22.56,17.07],
+  NPL:[27.71,85.32],NLD:[52.37,4.89],NZL:[-41.29,174.78],NIC:[12.11,-86.27],NER:[13.51,2.11],
+  NGA:[9.06,7.49],PRK:[39.02,125.75],MKD:[41.99,21.43],NOR:[59.91,10.75],OMN:[23.59,58.41],
+  PAK:[33.69,73.05],PSE:[31.78,35.22],PAN:[8.98,-79.52],PNG:[-9.44,147.18],PRY:[-25.26,-57.58],
+  PER:[-12.05,-77.04],PHL:[14.60,120.98],POL:[52.23,21.01],PRT:[38.72,-9.14],QAT:[25.29,51.53],
+  ROU:[44.43,26.10],RUS:[55.75,37.62],RWA:[-1.94,30.06],SAU:[24.71,46.68],SEN:[14.69,-17.45],
+  SRB:[44.79,20.45],SLE:[8.46,-13.23],SGP:[1.35,103.82],SVK:[48.15,17.11],SVN:[46.06,14.51],
+  SOM:[2.04,45.34],ZAF:[-25.75,28.19],KOR:[37.57,126.98],SSD:[4.85,31.58],ESP:[40.42,-3.70],
+  LKA:[6.93,79.86],SDN:[15.50,32.56],SUR:[5.85,-55.20],SWE:[59.33,18.07],CHE:[46.95,7.45],
+  SYR:[33.51,36.28],TWN:[25.04,121.56],TJK:[38.56,68.79],TZA:[-6.79,39.21],THA:[13.75,100.50],
+  TLS:[-8.56,125.58],TGO:[6.13,1.22],TTO:[10.66,-61.52],TUN:[36.81,10.18],TUR:[39.92,32.85],
+  TKM:[37.95,58.38],UGA:[0.32,32.58],UKR:[50.45,30.52],ARE:[24.45,54.38],GBR:[51.51,-0.13],
+  USA:[38.91,-77.04],URY:[-34.90,-56.19],UZB:[41.30,69.24],VEN:[10.50,-66.92],VNM:[21.03,105.85],
+  YEM:[15.37,44.19],ZMB:[-15.42,28.28],ZWE:[-17.83,31.05],
+};
+
+// ── v20: live-adjusted component bars ──────────────────────────────────────
+// Returns { values: [...6], deltas: [...6] } where deltas[i] is the live bump
+// applied to component i. Used by the radar + the components bar list so the
+// visualisation matches the live shocks shown in the anchor block.
+//
+// Component indices: 0=Import Dep, 1=Supplier Conc, 2=Prod Trend,
+//                    3=Food Inflation, 4=Climate, 5=Conflict
+function liveAdjustedComponents(c) {
+  const base = (c && Array.isArray(c.c)) ? c.c.slice() : [0,0,0,0,0,0];
+  const deltas = [0,0,0,0,0,0];
+  if (!c) return { values: base, deltas };
+  const a = (typeof calibrationAnchors === 'function') ? calibrationAnchors(c) : {};
+  const ncRow = LIVE.nowcast?.[c.iso] || {};
+  const cmp = ncRow.components || {};
+
+  // Food Inflation (idx 3): FX shock + inflation shock both push food costs up
+  let d3 = 0;
+  if (a.fx_currency_shock && typeof a.fx_90d_change_pct === 'number') d3 += Math.min(15, Math.abs(a.fx_90d_change_pct + 10) * 0.6);
+  if (typeof a.food_inflation_pct === 'number' && a.food_inflation_pct > 15) d3 += Math.min(15, (a.food_inflation_pct - 15) * 0.5);
+  // Climate (idx 4): drought, heat, wet, river flood all stress here
+  let d4 = 0;
+  if (a.drought_flag) d4 += 10;
+  if (a.heat_flag) d4 += 6;
+  if (a.wet_flag)  d4 += 4;
+  if (a.flood_flag) d4 += 8;
+  if (a.fire_flag) d4 += 5;
+  if (a.us_flow_anomaly === 'low' || a.us_flow_anomaly === 'high') d4 += 4;
+  // Conflict / Logistics (idx 5): ACLED intensity already in structural; nowcast picks up
+  // *additional* recent activity. Bump slightly when ipc_pressure is high — humanitarian
+  // crisis usually correlates with logistic disruption even when ACLED is quiet.
+  let d5 = 0;
+  if ((cmp.conflict_kick || 0) > 2) d5 += Math.min(8, cmp.conflict_kick * 1.4);
+  if ((cmp.ipc_pressure || 0) > 6)  d5 += 3;
+
+  deltas[3] = Math.round(d3);
+  deltas[4] = Math.round(d4);
+  deltas[5] = Math.round(d5);
+
+  const values = base.map((v, i) => Math.max(0, Math.min(100, v + deltas[i])));
+  return { values, deltas };
 }
 
 // ── Calibration anchors ─────────────────────────────────────────────────────
@@ -10760,22 +10885,51 @@ function openPanel(c, skipDrilldown) {
   fill.style.background = col;
   fill.style.boxShadow  = `0 0 8px ${col}`;
 
-  // Radar
+  // Radar (live-adjusted: structural baseline + live shock overlay)
+  const liveComp = liveAdjustedComponents(c);
   destroyChart('sp-radar');
   const ctx = document.getElementById('sp-radar');
+  const hasLiveDelta = liveComp.deltas.some(d => d > 0);
   chartInstances['sp-radar'] = new Chart(ctx,{
     type:'radar',
     data:{
       labels:['Import Dep.','Supplier Conc.','Prod. Trend','Inflation','Climate','Conflict'],
-      datasets:[{
-        data:c.c,
-        backgroundColor:col+'22',borderColor:col,
-        borderWidth:2,pointBackgroundColor:col,pointRadius:3,pointHoverRadius:5
-      }]
+      datasets: hasLiveDelta ? [
+        {
+          label:'Structural',
+          data:c.c,
+          backgroundColor:'transparent',
+          borderColor:col+'88',
+          borderWidth:1.5,borderDash:[4,4],
+          pointBackgroundColor:col+'88',pointRadius:2,pointHoverRadius:3
+        },
+        {
+          label:'Live-adjusted',
+          data:liveComp.values,
+          backgroundColor:col+'22',borderColor:col,
+          borderWidth:2,pointBackgroundColor:col,pointRadius:3,pointHoverRadius:5
+        }
+      ] : [
+        {
+          data:c.c,
+          backgroundColor:col+'22',borderColor:col,
+          borderWidth:2,pointBackgroundColor:col,pointRadius:3,pointHoverRadius:5
+        }
+      ]
     },
     options:{
       responsive:true,maintainAspectRatio:true,
-      plugins:{legend:{display:false}},
+      plugins:{
+        legend:{display: hasLiveDelta, labels:{color:'#9a988f', font:{size:9}, boxWidth:10}},
+        tooltip:{callbacks:{
+          label: (ctx2) => {
+            const i = ctx2.dataIndex;
+            const v = ctx2.raw;
+            const d = liveComp.deltas[i] || 0;
+            return d > 0 ? `${ctx2.dataset.label || 'Score'}: ${v} (struct ${c.c[i]} +${d} live)` : `${ctx2.dataset.label || 'Score'}: ${v}`;
+          }
+        }}
+      },
       scales:{r:{
         min:0,max:100,
         ticks:{stepSize:25,color:'#6a685e',font:{size:8},backdropColor:'transparent'},
@@ -10785,16 +10939,30 @@ function openPanel(c, skipDrilldown) {
     }
   });
 
-  // Components
+  // Components — live-adjusted bars with structural reference tick + delta badge
   const compLabels = ['Staple Import Dep.','Supplier Concentration','Production Trend','Food Inflation','Climate Volatility','Conflict / Logistics'];
   const compWeights= ['30%','20%','15%','15%','10%','10%'];
-  document.getElementById('sp-comp-list').innerHTML = c.c.map((v,i)=>`
+  document.getElementById('sp-comp-list').innerHTML = liveComp.values.map((v,i)=>{
+    const structV = c.c[i];
+    const delta = liveComp.deltas[i];
+    const deltaBadge = delta > 0
+      ? `<span style="font-family:'Geist Mono',monospace;font-size:9.5px;color:var(--accent);background:var(--accent)18;padding:1px 5px;border-radius:3px;margin-left:6px;" title="Live shock overlay: structural ${structV} + ${delta} live">+${delta} live</span>`
+      : '';
+    // Structural reference notch on the track
+    const notch = (delta > 0)
+      ? `<div style="position:absolute;left:${structV}%;top:-2px;bottom:-2px;width:1px;background:var(--t3);opacity:.55;" title="Structural baseline ${structV}"></div>`
+      : '';
+    return `
     <div class="comp-row">
-      <div class="comp-label">${compLabels[i]}</div>
+      <div class="comp-label">${compLabels[i]}${deltaBadge}</div>
       <div class="comp-weight">${compWeights[i]}</div>
-      <div class="comp-track"><div class="comp-fill" style="width:${v}%;background:${riskColor(v)}"></div></div>
+      <div class="comp-track" style="position:relative;">
+        <div class="comp-fill" style="width:${v}%;background:${riskColor(v)}"></div>
+        ${notch}
+      </div>
       <div class="comp-val" style="color:${riskColor(v)}">${v}</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   // Metrics
   document.getElementById('sp-metrics').innerHTML = `
@@ -11763,6 +11931,12 @@ function renderScenarioTab() {
       <div class="scn-builder-sub">Pick one or more shocks below — each one carries the real historical calibration. Tune severity per shock. Layer 3+ to estimate a multi-shock world (Ukraine + drought + fertilizer-surge style stack).</div>
     </div>
 
+    <div class="scn-section-header" style="margin-top:0;">
+      <div>
+        <div class="scn-section-eyebrow">Step 1 · who's in scope</div>
+        <div class="scn-section-title">Mode &amp; scope</div>
+      </div>
+    </div>
     <div class="card" style="margin-bottom:14px;">
 
       <div class="scn-context-toolbar">
@@ -11796,40 +11970,61 @@ function renderScenarioTab() {
       </div>
     </div>
 
-    ${Object.entries(groups).map(([cat, items]) => `
-      <div style="margin-bottom:14px;">
-        <div class="page-eyebrow" style="margin-bottom:8px;">${cat} shocks</div>
-        <div class="scn-grid">
-          ${items.map(s => `
-            <div class="scn-card" id="sc-${s.id}" onclick="toggleScenarioCard('${s.id}')">
-              <div class="scn-card-check">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
-              </div>
-              <div class="scn-card-head">
-                <div class="scn-card-title">${s.label}</div>
-                <span class="scn-card-tag">${s.cat}</span>
-              </div>
-              <div class="scn-card-desc">${s.desc}</div>
-              <div class="scn-severity">
-                <span class="scn-severity-label">Severity</span>
-                <input type="range" min="${s.sevUnit==='×' ? 0.5 : 0.05}" max="${s.sevUnit==='×' ? 2 : 1}" step="${s.sevUnit==='×' ? 0.1 : 0.05}"
-                       value="${s.baseSev}" oninput="updateSeverity('${s.id}',this.value)" onclick="event.stopPropagation()">
-                <span class="scn-severity-val" id="sev-${s.id}">${formatSev(s.baseSev,s.sevUnit)}</span>
-              </div>
-            </div>`).join('')}
-        </div>
-      </div>`).join('')}
+    <!-- Step 2: pick shocks -->
+    <div class="scn-section-header">
+      <div>
+        <div class="scn-section-eyebrow">Step 2 · pick one or more</div>
+        <div class="scn-section-title">Available shocks · ${SCENARIOS.length} calibrated scenarios</div>
+      </div>
+      <div class="scn-cat-legend">
+        <span><i style="background:#c9a957"></i>Commodity</span>
+        <span><i style="background:#c47a3c"></i>Input</span>
+        <span><i style="background:#6ba36b"></i>Climate</span>
+        <span><i style="background:#8aa6c4"></i>Logistics</span>
+        <span><i style="background:#c44b3c"></i>Geopolitics</span>
+        <span><i style="background:#b08fc8"></i>Macro</span>
+      </div>
+    </div>
 
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+    <div class="scn-grid-all">
+      ${SCENARIOS.map(s => `
+        <div class="scn-card" data-cat="${s.cat}" id="sc-${s.id}" onclick="toggleScenarioCard('${s.id}')">
+          <div class="scn-card-check">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+          </div>
+          <div class="scn-card-head">
+            <div class="scn-card-title">${s.label}</div>
+            <span class="scn-card-tag">${s.cat}</span>
+          </div>
+          <div class="scn-card-desc">${s.desc}</div>
+          <div class="scn-severity">
+            <span class="scn-severity-label">Severity</span>
+            <input type="range" min="${s.sevUnit==='×' ? 0.5 : 0.05}" max="${s.sevUnit==='×' ? 2 : 1}" step="${s.sevUnit==='×' ? 0.1 : 0.05}"
+                   value="${s.baseSev}" oninput="updateSeverity('${s.id}',this.value)" onclick="event.stopPropagation()">
+            <span class="scn-severity-val" id="sev-${s.id}">${formatSev(s.baseSev,s.sevUnit)}</span>
+          </div>
+        </div>`).join('')}
+    </div>
+
+    <!-- Sticky action bar — always visible while scrolling shock list -->
+    <div class="scn-action-bar">
       <button class="run-btn" onclick="runScenarios()" style="min-width:200px;">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg>
         Run Scenario Analysis
       </button>
       <button class="filter-clear-btn" onclick="clearScenarios()" style="font-size:11px;padding:7px 14px;">Clear all</button>
       <span style="font-size:11px;color:var(--t3);" id="scn-selected-count">No scenarios selected</span>
+      <span style="margin-left:auto;font-size:10.5px;color:var(--t3);font-family:'Geist Mono',monospace;">⌥ Results appear below ↓</span>
     </div>
 
     <div id="scn-results" style="display:none;">
+      <div class="scn-section-header">
+        <div>
+          <div class="scn-section-eyebrow">Step 3 · scenario impact</div>
+          <div class="scn-section-title">Results · projected after-shock FDRS</div>
+        </div>
+        <div style="font-size:11px;color:var(--t3);">Live nowcast already applied · shock layered on top</div>
+      </div>
       <div class="grid-2" style="margin-bottom:14px;">
         <div class="card" id="scenario-summary">
           <div class="card-title">Impact Summary</div>
@@ -13621,10 +13816,112 @@ async function loadDisturbanceData() {
     updateSourceStatus('reliefweb', false, 0);
   }
 
+  // ── v20 daily-refresh feeds → disturbance events ─────────────────────────
+  // Each flag in the nowcast becomes a disturbance card on the live tab.
+  try {
+    // Open-Meteo: droughts, wet anomalies, heat extremes
+    for (const [iso, row] of Object.entries(LIVE.openmeteo || {})) {
+      const co = byISO(iso); if (!co) continue;
+      const ll = (typeof COUNTRY_LL !== 'undefined') ? (COUNTRY_LL[iso] || [0,0]) : [0,0];
+      if (row.drought_flag) {
+        events.push({
+          id: 'om_drought_' + iso, type: 'drought', severity: 'high',
+          title: `Drought signal — ${co.name}`, country: co.name, iso,
+          lat: ll[0], lng: ll[1],
+          detail: `7-day precipitation ${row.precip_anomaly_pct}% vs 30-day baseline; surface soil moisture ${row.soil_moisture_7d}. Crop stress likely if persistent.`,
+          source: 'Open-Meteo', date: new Date().toISOString().slice(0,10), live: true,
+          url: 'https://open-meteo.com/',
+        });
+      } else if (row.wet_flag) {
+        events.push({
+          id: 'om_wet_' + iso, type: 'flood', severity: 'medium',
+          title: `Heavy rainfall — ${co.name}`, country: co.name, iso,
+          lat: ll[0], lng: ll[1],
+          detail: `7-day precipitation +${row.precip_anomaly_pct}% vs 30-day baseline. Watch for flooding in low-lying agricultural areas.`,
+          source: 'Open-Meteo', date: new Date().toISOString().slice(0,10), live: true,
+        });
+      }
+      if (row.heat_flag) {
+        events.push({
+          id: 'om_heat_' + iso, type: 'drought', severity: 'medium',
+          title: `Heat anomaly — ${co.name}`, country: co.name, iso,
+          lat: ll[0], lng: ll[1],
+          detail: `7-day mean temperature +${row.temp_anomaly_c}°C vs 30-day baseline. Heat stress on crops and livestock.`,
+          source: 'Open-Meteo', date: new Date().toISOString().slice(0,10), live: true,
+        });
+      }
+    }
+    // Open-Meteo Flood — river discharge spikes
+    for (const [iso, row] of Object.entries(LIVE.openmeteo_flood || {})) {
+      if (!row.flood_flag) continue;
+      const co = byISO(iso); if (!co) continue;
+      const ll = (typeof COUNTRY_LL !== 'undefined') ? (COUNTRY_LL[iso] || [0,0]) : [0,0];
+      events.push({
+        id: 'omf_' + iso, type: 'flood', severity: 'high',
+        title: `River flood on ${row.river} — ${co.name}`,
+        country: co.name, iso, lat: ll[0], lng: ll[1],
+        detail: `${row.river} discharge +${row.discharge_anomaly_pct}% above 30-day baseline (${row.discharge_7d_m3s} m³/s). Low-lying farmland exposure.`,
+        source: 'Open-Meteo Flood', date: new Date().toISOString().slice(0,10), live: true,
+      });
+    }
+    // NASA FIRMS — fire spikes
+    for (const [iso, row] of Object.entries(LIVE.nasa_firms || {})) {
+      if (!row.fire_flag) continue;
+      const co = byISO(iso); if (!co) continue;
+      const ll = (typeof COUNTRY_LL !== 'undefined') ? (COUNTRY_LL[iso] || [0,0]) : [0,0];
+      events.push({
+        id: 'firms_' + iso, type: 'drought', severity: row.fires_7d > 5000 ? 'critical' : 'high',
+        title: `Fire activity spike — ${co.name}`, country: co.name, iso,
+        lat: ll[0], lng: ll[1],
+        detail: `${row.fires_7d} active fire detections in last 7 days (${row.fires_high_confidence} high-confidence) — well above country baseline. Cropland and rangeland at risk.`,
+        source: 'NASA FIRMS VIIRS', date: new Date().toISOString().slice(0,10), live: true,
+        url: 'https://firms.modaps.eosdis.nasa.gov/',
+      });
+    }
+    // WFP per-country: FX collapse and food inflation shocks
+    for (const [iso, row] of Object.entries(LIVE.wfp_country || {})) {
+      const co = byISO(iso); if (!co) continue;
+      const ll = (typeof COUNTRY_LL !== 'undefined') ? (COUNTRY_LL[iso] || [0,0]) : [0,0];
+      if (row.fx_currency_shock && typeof row.fx_90d_change_pct === 'number') {
+        events.push({
+          id: 'fx_' + iso, type: 'famine', severity: 'high',
+          title: `Currency shock — ${co.name}`, country: co.name, iso,
+          lat: ll[0], lng: ll[1],
+          detail: `${row.fx_currency || 'Local currency'} fell ${row.fx_90d_change_pct}% vs USD in last 90 days. Imported food becomes proportionally more expensive for households.`,
+          source: 'WFP HungerMap (FX)', date: new Date().toISOString().slice(0,10), live: true,
+        });
+      }
+      if (row.inflation_shock && typeof row.food_inflation_pct === 'number') {
+        events.push({
+          id: 'infl_' + iso, type: 'famine', severity: row.food_inflation_pct > 30 ? 'critical' : 'high',
+          title: `Food inflation ${row.food_inflation_pct}% — ${co.name}`,
+          country: co.name, iso, lat: ll[0], lng: ll[1],
+          detail: `Latest food CPI inflation reading is ${row.food_inflation_pct}% (threshold 15%). Erosion of household purchasing power.`,
+          source: 'WFP HungerMap (CPI)', date: new Date().toISOString().slice(0,10), live: true,
+        });
+      }
+    }
+    // USGS Water — US-state flow anomalies
+    for (const [iso, row] of Object.entries(LIVE.usgs_water || {})) {
+      if (!row.flow_anomaly || row.flow_anomaly === 'normal') continue;
+      const co = byISO(iso); if (!co) continue;
+      events.push({
+        id: 'usgs_' + iso, type: row.flow_anomaly === 'low' ? 'drought' : 'flood',
+        severity: 'medium',
+        title: `${row.flow_anomaly === 'low' ? 'Low' : 'High'} flow on ${row.river} — ${co.name}`,
+        country: co.name, iso, lat: co.lat || 39, lng: co.lng || -98,
+        detail: `7-day discharge change ${row.discharge_7d_change_pct}% (${row.discharge_cfs_latest} cfs latest). ${row.flow_anomaly === 'low' ? 'Irrigation withdrawal pressure rises.' : 'Low-lying cropland flood risk.'}`,
+        source: 'USGS Water Services', date: new Date().toISOString().slice(0,10), live: true,
+      });
+    }
+  } catch(e) {
+    console.warn('[FoodShield] v20 disturbances injection failed:', e);
+  }
+
   // Deduplicate by country+type for overlapping events
   const seen = new Set();
   events = events.filter(e => {
-    const key = `${e.iso}_${e.type}`;
+    const key = `${e.iso}_${e.type}_${e.source||''}`;
     if (seen.has(key) && !e.id.startsWith('b')) return false;
     seen.add(key);
     return true;
@@ -14159,14 +14456,29 @@ async function fetchAINarrative(iso, forceRefresh, targetElId) {
 
   const hist = getFDRSHistory(c);
   const histStr = Object.entries(hist).sort().map(([y,s])=>`${y}:${s}`).join(', ');
-  const prompt = `You are a food security analyst. Write a concise 3-sentence analysis (max 80 words) for ${c.name}:
-- Current FDRS score: ${c.fdrs}/100 (${riskLabel(c.fdrs)})
+  // v20: pull live shock anchors so the brief reflects current conditions
+  const a = (typeof calibrationAnchors === 'function') ? calibrationAnchors(c) : {};
+  const liveShocks = [];
+  if (a.drought_flag) liveShocks.push(`active drought (precip ${a.precip_anomaly_pct}% vs 30-day baseline)`);
+  if (a.wet_flag && !a.drought_flag) liveShocks.push(`unusually wet conditions (precip +${a.precip_anomaly_pct}%)`);
+  if (a.heat_flag) liveShocks.push(`heat anomaly (+${a.temp_anomaly_c}°C vs baseline)`);
+  if (a.flood_flag) liveShocks.push(`river flood event on ${a.flood_river} (+${a.flood_anomaly_pct}% discharge)`);
+  if (a.fire_flag) liveShocks.push(`elevated fire activity (${a.fires_7d} detections last 7d)`);
+  if (a.fx_currency_shock) liveShocks.push(`currency collapse (${a.fx_currency} ${a.fx_90d_change_pct}% vs USD in 90d)`);
+  if (a.food_inflation_pct != null && a.food_inflation_pct > 15) liveShocks.push(`food inflation ${a.food_inflation_pct}% (above 15% threshold)`);
+  if (a.pm25_flag) liveShocks.push(`PM2.5 ${a.pm25_latest} µg/m³ above WHO target`);
+  const liveShocksStr = liveShocks.length ? liveShocks.join('; ') : 'none currently flagged';
+  const adj = c._fdrsAdj || 0;
+  const adjStr = adj > 0 ? `+${adj}` : `${adj}`;
+  const prompt = `You are a food security analyst. Write a concise 3-sentence analysis (max 90 words) for ${c.name}:
+- Current FDRS score: ${c.fdrs}/100 (${riskLabel(c.fdrs)}) — structural ${c._fdrsStructural||c.fdrs} ${adjStr !== '0' ? `with live nowcast ${adjStr}` : ''}
 - 2030 forecast: ${c.f2030}/100
 - Historical scores 2018-2025: ${histStr}
 - Top imports: ${(c.imports||[]).slice(0,3).join(', ')}
 - Top suppliers: ${(c.suppliers||[]).slice(0,3).join(', ')}
 - Food inflation: ${c.fi}%/yr
-Focus on the most important trend and actionable insight. Be specific, not generic.`;
+- Active live shocks (May 2026): ${liveShocksStr}
+If active live shocks are listed, your analysis MUST acknowledge at least one of them. Focus on the most important trend and actionable insight. Be specific, not generic.`;
 
   try {
     let narrative = '';
@@ -14194,7 +14506,7 @@ Focus on the most important trend and actionable insight. Be specific, not gener
       }
     }
 
-    // Fallback: generate template narrative from data
+    // Fallback: generate template narrative from data (now live-shock aware)
     if (!narrative) {
       const trend = c.f2030 > c.fdrs ? 'deteriorating' : 'improving';
       const delta = Math.abs(c.f2030 - c.fdrs);
@@ -14207,7 +14519,13 @@ Focus on the most important trend and actionable insight. Be specific, not gener
                        c.c[4] > 60 ? 'climate vulnerability' :
                        c.c[3] > 50 ? 'persistent food inflation' : 'moderate composite risk';
       const suppliers = (c.suppliers||[]).slice(0,2).join(' and ');
-      narrative = `${c.name}'s food security trajectory is ${trend}, with FDRS projected to ${c.f2030 > c.fdrs ? 'rise to' : 'hold at'} ${c.f2030} by 2030 — a ${c.f2030 > c.fdrs ? '+' : ''}${c.f2030 - c.fdrs} point shift. The primary structural vulnerability is ${mainRisk}${suppliers ? `, with heavy reliance on ${suppliers}` : ''}. Peak vulnerability was observed in ${peakYear} (score: ${peak}), driven by global commodity shocks; the current reading of ${c.fdrs} reflects ${c.fdrs < peak ? 'partial stabilization' : 'ongoing stress'}.`;
+      // v20: live-shock sentence
+      let liveSentence = '';
+      if (liveShocks.length) {
+        const adjTxt = (c._fdrsAdj || 0) > 0 ? `lifting nowcast +${c._fdrsAdj} above structural` : '';
+        liveSentence = ` Active live signals (May 2026): ${liveShocks.slice(0, 2).join(' and ')}${adjTxt ? `, ${adjTxt}` : ''}.`;
+      }
+      narrative = `${c.name}'s food security trajectory is ${trend}, with FDRS projected to ${c.f2030 > c.fdrs ? 'rise to' : 'hold at'} ${c.f2030} by 2030 — a ${c.f2030 > c.fdrs ? '+' : ''}${c.f2030 - c.fdrs} point shift. The primary structural vulnerability is ${mainRisk}${suppliers ? `, with heavy reliance on ${suppliers}` : ''}.${liveSentence} Peak vulnerability was observed in ${peakYear} (score: ${peak}); the current reading of ${c.fdrs} reflects ${c.fdrs < peak ? 'partial stabilization' : 'ongoing stress'}.`;
     }
 
     _aiNarrativeCache[cacheKey] = narrative;
