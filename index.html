@@ -13612,15 +13612,20 @@ function _estimateVolume(country, commodity, supplierIdx){
     const row = (LIVE.comtrade[country.iso] || {})[obsKey];
     if (row && row.total_usd_m != null) {
       const supShare = ((row.top_suppliers || [])[supplierIdx] || {}).share_pct;
-      if (supShare != null && row.total_kt != null) {
+      if (supShare != null) {
         return {
           usdM: Math.round(row.total_usd_m * supShare / 100),
-          kt:   Math.round(row.total_kt * supShare / 100),
+          // v20.8: public Comtrade endpoint does not return netWgt; kt unavailable.
+          kt:   row.total_kt != null ? Math.round(row.total_kt * supShare / 100) : null,
           provenance: 'observed',
         };
       }
       // Total exists but no supplier-level breakdown — return aggregate without share
-      return { usdM: Math.round(row.total_usd_m), kt: Math.round(row.total_kt || 0), provenance: 'observed_aggregate' };
+      return {
+        usdM: Math.round(row.total_usd_m),
+        kt: row.total_kt != null ? Math.round(row.total_kt) : null,
+        provenance: 'observed_aggregate'
+      };
     }
   }
   // No observed data — return null so the UI knows to show "Observed bilateral trade unavailable"

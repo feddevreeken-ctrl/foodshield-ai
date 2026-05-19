@@ -1,15 +1,18 @@
 """
 UN Comtrade — bilateral trade in cereal staples (wheat, maize, rice, soy).
 
-REQUIRES API KEY (free): register at https://comtradeplus.un.org
-Set GitHub Actions secret: COMTRADE_API_KEY
+PUBLIC PREVIEW ENDPOINT (v20.8, May 2026) — no API key required.
 
-Free tier constraints (discovered May 2026):
-  - 500 calls/day
-  - max ~500 records per call
-  - reporterCode='all' is NOT allowed; must specify a single reporter per call
-  - To stay under quota we only fetch a curated list of ~25 priority countries
-    (the most exposed staple importers, where trade-arc accuracy matters most)
+Earlier versions used /data/v1/get/C/A/HS which requires a paid Comtrade subscription
+(the "Free APIs" subscription doesn't actually grant access; both header- and
+query-string auth modes returned HTTP 403). The free public preview endpoint
+/public/v1/preview/C/A/HS works without authentication for read access. Verified
+May 19 2026 against Egypt 2024 wheat (HS 1001) → 16 supplier rows returned.
+
+Endpoint: https://comtradeapi.un.org/public/v1/preview/C/A/HS
+
+Rate limits on the public endpoint appear less strict than the v1/get path, but
+we still throttle conservatively (~1 req/sec).
 
 Output: data/comtrade_staples.json
   {
@@ -34,7 +37,35 @@ from collections import defaultdict
 import requests
 from _common import env, write_json, UA
 
-URL = "https://comtradeapi.un.org/data/v1/get/C/A/HS"
+URL = "https://comtradeapi.un.org/public/v1/preview/C/A/HS"
+
+# M49 numeric → ISO3 — needed because the public preview endpoint returns
+# partnerCode (numeric) but partnerISO is null. Built from the PRIORITY_IMPORTERS
+# reverse plus the top global staple-trade partner countries we expect to see.
+M49_TO_ISO3 = {
+    4:"AFG",8:"ALB",12:"DZA",24:"AGO",32:"ARG",36:"AUS",40:"AUT",50:"BGD",
+    51:"ARM",56:"BEL",68:"BOL",70:"BIH",72:"BWA",76:"BRA",84:"BLZ",90:"SLB",
+    96:"BRN",100:"BGR",104:"MMR",108:"BDI",112:"BLR",116:"KHM",120:"CMR",124:"CAN",
+    132:"CPV",140:"CAF",144:"LKA",148:"TCD",152:"CHL",156:"CHN",158:"TWN",170:"COL",
+    178:"COG",180:"COD",188:"CRI",191:"HRV",192:"CUB",196:"CYP",203:"CZE",208:"DNK",
+    214:"DOM",218:"ECU",222:"SLV",226:"GNQ",231:"ETH",232:"ERI",233:"EST",242:"FJI",
+    246:"FIN",250:"FRA",262:"DJI",266:"GAB",268:"GEO",270:"GMB",276:"DEU",288:"GHA",
+    300:"GRC",320:"GTM",324:"GIN",328:"GUY",332:"HTI",340:"HND",344:"HKG",348:"HUN",
+    352:"ISL",356:"IND",360:"IDN",364:"IRN",368:"IRQ",372:"IRL",376:"ISR",380:"ITA",
+    384:"CIV",388:"JAM",392:"JPN",398:"KAZ",400:"JOR",404:"KEN",408:"PRK",410:"KOR",
+    414:"KWT",417:"KGZ",418:"LAO",422:"LBN",426:"LSO",428:"LVA",430:"LBR",434:"LBY",
+    440:"LTU",442:"LUX",446:"MAC",450:"MDG",454:"MWI",458:"MYS",462:"MDV",466:"MLI",
+    470:"MLT",478:"MRT",480:"MUS",484:"MEX",496:"MNG",498:"MDA",499:"MNE",504:"MAR",
+    508:"MOZ",512:"OMN",516:"NAM",524:"NPL",528:"NLD",548:"VUT",554:"NZL",558:"NIC",
+    562:"NER",566:"NGA",578:"NOR",586:"PAK",591:"PAN",598:"PNG",600:"PRY",604:"PER",
+    608:"PHL",616:"POL",620:"PRT",624:"GNB",626:"TLS",634:"QAT",642:"ROU",643:"RUS",
+    646:"RWA",682:"SAU",686:"SEN",688:"SRB",694:"SLE",702:"SGP",703:"SVK",704:"VNM",
+    705:"SVN",706:"SOM",710:"ZAF",716:"ZWE",724:"ESP",728:"SSD",729:"SDN",732:"ESH",
+    740:"SUR",748:"SWZ",752:"SWE",756:"CHE",760:"SYR",762:"TJK",764:"THA",768:"TGO",
+    780:"TTO",784:"ARE",788:"TUN",792:"TUR",795:"TKM",800:"UGA",804:"UKR",818:"EGY",
+    826:"GBR",834:"TZA",840:"USA",854:"BFA",858:"URY",860:"UZB",862:"VEN",882:"WSM",
+    887:"YEM",894:"ZMB",
+}
 COMMODITIES = {"1001": "wheat", "1005": "maize", "1006": "rice", "1201": "soybeans"}
 
 # Free tier rate limit: appears to be ~1 request per second.
@@ -79,10 +110,12 @@ PRIORITY_IMPORTERS = {
 
 
 def main():
-    key = env("COMTRADE_API_KEY", required=True)
-    if not key:
-        write_json("comtrade_staples.json", {}, source="Comtrade (not configured)", notes="Set COMTRADE_API_KEY secret to enable.")
-        return
+    # v20.8: public preview endpoint requires no auth. We still read COMTRADE_API_KEY
+    # for backward compat — if you later upgrade to a paid subscription, the key can
+    # be used to bump rate limits on the protected endpoint.
+    key = env("COMTRADE_API_KEY", required=False)
+    if key:
+        print("  [info] COMTRADE_API_KEY present but public endpoint used (no auth needed)")
 
     out = defaultdict(lambda: defaultdict(lambda: {"total_kt": 0, "total_usd_m": 0, "by_supplier": defaultdict(lambda: {"kt": 0, "usd_m": 0})}))
     year = 2024  # most recent full year for free tier as of May 2026
@@ -92,51 +125,23 @@ def main():
     session = requests.Session()
     session.headers.update({"User-Agent": UA, "Accept": "application/json"})
 
-    # v20.8 auth path probe — the "Free APIs" Comtrade product (active May 2026)
-    # rejects the query-string subscription-key with HTTP 403. The correct auth header
-    # for that product is "Ocp-Apim-Subscription-Key" (Azure API Management default).
-    # We try header first, fall back to query param, and log which one works once so
-    # the workflow log makes the auth mode obvious.
-    auth_mode = None   # 'header' | 'query' once discovered
-
-    def _call(reporter_code, cmd_code):
-        nonlocal auth_mode
-        base_params = {
-            "cmdCode": cmd_code,
-            "flowCode": "M",
-            "reporterCode": reporter_code,
-            "partnerCode": "",
-            "period": year,
-            "max": 500,
-        }
-        # If we already know which auth mode works, use it directly
-        if auth_mode == "header":
-            return session.get(URL, params=base_params, timeout=45,
-                               headers={"Ocp-Apim-Subscription-Key": key})
-        if auth_mode == "query":
-            return session.get(URL, params={**base_params, "subscription-key": key}, timeout=45)
-        # First call of the run — try header, then fall back to query
-        rh = session.get(URL, params=base_params, timeout=45,
-                         headers={"Ocp-Apim-Subscription-Key": key})
-        if rh.status_code == 200:
-            auth_mode = "header"
-            print("  [auth] Comtrade auth mode: Ocp-Apim-Subscription-Key header")
-            return rh
-        rq = session.get(URL, params={**base_params, "subscription-key": key}, timeout=45)
-        if rq.status_code == 200:
-            auth_mode = "query"
-            print("  [auth] Comtrade auth mode: subscription-key query param")
-            return rq
-        # Both failed — return the more informative response
-        print(f"  [auth] Both auth modes failed (header={rh.status_code}, query={rq.status_code})")
-        return rh if rh.status_code != 403 else rq
+    # v20.8: public preview endpoint, no auth needed.
+    # Note: omit partnerCode parameter entirely — leaving it blank returns 0 rows on the
+    # public endpoint; omitting it returns the full supplier breakdown.
 
     for reporter_code, importer_iso in PRIORITY_IMPORTERS.items():
         for cmd_code, cmd_name in COMMODITIES.items():
-            # Throttle to stay under free-tier rate limit (~1 req/sec).
+            # Throttle to stay polite to the public endpoint (~1 req/sec).
             time.sleep(THROTTLE_SECONDS)
+            params = {
+                "cmdCode": cmd_code,
+                "flowCode": "M",
+                "reporterCode": reporter_code,
+                "period": year,
+                "max": 500,
+            }
             try:
-                r = _call(reporter_code, cmd_code)
+                r = session.get(URL, params=params, timeout=45)
             except Exception as e:
                 print(f"    {importer_iso}/{cmd_name}: skipped (network: {e})")
                 skipped += 1
@@ -156,38 +161,52 @@ def main():
             rows = payload.get("data", []) or []
             succeeded += 1
             for row in rows:
-                sup = (row.get("partnerISO") or "").upper()
-                if not sup or sup == "WLD" or sup == "W00":
+                # Public preview endpoint returns partnerISO as null; only partnerCode
+                # (numeric M49) is populated. Resolve to ISO3 via the reverse lookup.
+                # netWgt is also null on the public endpoint — primaryValue (USD millions
+                # already, despite the legacy /1e6 divisor below) is the only volumetric
+                # signal. Treat primaryValue AS the USD-million value and skip the kt
+                # conversion that the paid endpoint supported.
+                p_code = row.get("partnerCode")
+                if not p_code or p_code == 0:
                     continue
-                kt = (row.get("netWgt") or 0) / 1000.0
-                usdm = (row.get("primaryValue") or 0) / 1_000_000.0
-                if kt <= 0:
+                sup = M49_TO_ISO3.get(int(p_code))
+                if not sup:
                     continue
+                usdm = row.get("primaryValue") or 0
+                if usdm <= 0:
+                    continue
+                # Public endpoint already returns USD millions directly, NOT raw USD.
+                # Verified May 19 2026: Egypt 2024 wheat from Turkey shows primaryValue=10.899
+                # which matches Egypt-Turkey wheat trade of $10.9M (Comtrade data viewer).
                 entry = out[importer_iso][cmd_name]
-                entry["total_kt"] += kt
                 entry["total_usd_m"] += usdm
+                # netWgt is null on public preview — we cannot compute kt. Set to 0
+                # so downstream code knows volumes aren't available; UI must label as
+                # "obs · aggregate (USD only)" rather than implying kt accuracy.
                 s = entry["by_supplier"][sup]
-                s["kt"] += kt
                 s["usd_m"] += usdm
 
     print(f"  Fetched {succeeded} commodity-importer combos; skipped {skipped}")
 
-    # Convert to top-5 suppliers per (importer, commodity)
+    # v20.8: public preview endpoint does not return netWgt — share_pct is USD-based.
+    # Top-5 suppliers per (importer, commodity), ranked by USD value.
     final = {}
     for imp, commodities in out.items():
         final[imp] = {}
         for cmd_name, e in commodities.items():
-            total_kt = e["total_kt"]
+            total_usd = e["total_usd_m"]
             suppliers = [
-                {"iso3": s, "kt": round(v["kt"], 2), "usd_m": round(v["usd_m"], 2),
-                 "share_pct": round(v["kt"] / total_kt * 100, 1) if total_kt else 0}
+                {"iso3": s, "usd_m": round(v["usd_m"], 2),
+                 "share_pct": round(v["usd_m"] / total_usd * 100, 1) if total_usd else 0}
                 for s, v in e["by_supplier"].items()
             ]
-            suppliers.sort(key=lambda x: -x["kt"])
+            suppliers.sort(key=lambda x: -x["usd_m"])
             final[imp][cmd_name] = {
-                "total_kt": round(total_kt, 2),
-                "total_usd_m": round(e["total_usd_m"], 2),
+                "total_kt": None,   # not available on public preview endpoint
+                "total_usd_m": round(total_usd, 2),
                 "top_suppliers": suppliers[:5],
+                "value_basis": "USD millions (primaryValue from Comtrade public preview)",
             }
 
     # Safety: if we got very little data this run (e.g. heavy rate-limiting),
