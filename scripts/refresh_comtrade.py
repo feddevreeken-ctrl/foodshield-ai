@@ -92,22 +92,51 @@ def main():
     session = requests.Session()
     session.headers.update({"User-Agent": UA, "Accept": "application/json"})
 
+    # v20.8 auth path probe — the "Free APIs" Comtrade product (active May 2026)
+    # rejects the query-string subscription-key with HTTP 403. The correct auth header
+    # for that product is "Ocp-Apim-Subscription-Key" (Azure API Management default).
+    # We try header first, fall back to query param, and log which one works once so
+    # the workflow log makes the auth mode obvious.
+    auth_mode = None   # 'header' | 'query' once discovered
+
+    def _call(reporter_code, cmd_code):
+        nonlocal auth_mode
+        base_params = {
+            "cmdCode": cmd_code,
+            "flowCode": "M",
+            "reporterCode": reporter_code,
+            "partnerCode": "",
+            "period": year,
+            "max": 500,
+        }
+        # If we already know which auth mode works, use it directly
+        if auth_mode == "header":
+            return session.get(URL, params=base_params, timeout=45,
+                               headers={"Ocp-Apim-Subscription-Key": key})
+        if auth_mode == "query":
+            return session.get(URL, params={**base_params, "subscription-key": key}, timeout=45)
+        # First call of the run — try header, then fall back to query
+        rh = session.get(URL, params=base_params, timeout=45,
+                         headers={"Ocp-Apim-Subscription-Key": key})
+        if rh.status_code == 200:
+            auth_mode = "header"
+            print("  [auth] Comtrade auth mode: Ocp-Apim-Subscription-Key header")
+            return rh
+        rq = session.get(URL, params={**base_params, "subscription-key": key}, timeout=45)
+        if rq.status_code == 200:
+            auth_mode = "query"
+            print("  [auth] Comtrade auth mode: subscription-key query param")
+            return rq
+        # Both failed — return the more informative response
+        print(f"  [auth] Both auth modes failed (header={rh.status_code}, query={rq.status_code})")
+        return rh if rh.status_code != 403 else rq
+
     for reporter_code, importer_iso in PRIORITY_IMPORTERS.items():
         for cmd_code, cmd_name in COMMODITIES.items():
             # Throttle to stay under free-tier rate limit (~1 req/sec).
             time.sleep(THROTTLE_SECONDS)
-            params = {
-                "subscription-key": key,
-                "cmdCode": cmd_code,
-                "flowCode": "M",
-                "reporterCode": reporter_code,
-                "partnerCode": "",
-                "period": year,
-                "max": 500,
-            }
-            # Single attempt; back off on 429 instead of retrying (retries waste calls)
             try:
-                r = session.get(URL, params=params, timeout=45)
+                r = _call(reporter_code, cmd_code)
             except Exception as e:
                 print(f"    {importer_iso}/{cmd_name}: skipped (network: {e})")
                 skipped += 1
