@@ -13387,23 +13387,93 @@ function scrubFoodData(){
     return !BLOCK.some(b => l.includes(b));
   };
 
-  // Sensible food fallbacks by region so empty arrays still read meaningfully.
-  const FALLBACK = {
-    Africa:        ['Cassava','Maize','Sorghum','Plantains','Groundnuts'],
-    Asia:          ['Rice','Wheat','Pulses','Vegetable oil','Tea'],
-    'Middle East': ['Wheat','Rice','Dates','Olive oil','Pulses'],
-    Europe:        ['Wheat','Dairy','Pork','Tomatoes','Wine'],
-    'Latin America':['Maize','Soybeans','Coffee','Sugar','Beef'],
-    'North America':['Maize','Wheat','Soybeans','Dairy','Beef'],
-    Oceania:       ['Wheat','Dairy','Beef','Lamb','Sugar']
+  // v20.3: structural food-import inferences per archetype. Curated arrays are biased
+  // toward "interesting" imports (cocoa, petroleum) and routinely omit staples every
+  // country in the archetype actually imports. We backfill to give the Trade Flow Atlas
+  // and panel a realistic commodity menu.
+  //
+  // Backfill is *additive* — we never remove curated entries, just add staples that are
+  // structurally certain to be imported but missing from the list. Deduplicated case-insensitively.
+  const REGION_DEFAULTS = {
+    Africa:         ['Wheat','Rice','Vegetable oil','Sugar','Dairy','Maize','Pulses'],
+    Asia:           ['Wheat','Rice','Vegetable oil','Pulses','Sugar','Dairy','Soybeans'],
+    'Middle East':  ['Wheat','Rice','Vegetable oil','Sugar','Dairy','Meat','Vegetables'],
+    Europe:         ['Cocoa beans','Coffee','Tea','Soybeans','Bananas','Citrus fruit','Fish','Vegetable oil'],
+    'Latin America':['Wheat','Dairy','Vegetable oil','Wine','Apples','Pears'],
+    'North America':['Coffee','Cocoa beans','Bananas','Tropical fruit','Fish'],
+    Oceania:        ['Coffee','Cocoa beans','Rice','Tropical fruit','Tea']
+  };
+
+  // Country-specific additions where we know the country's actual import patterns differ
+  // from regional defaults. Built from public trade-flow knowledge (OEC, FAO, Eurostat).
+  const COUNTRY_ADDITIONS = {
+    // European re-export / processing hubs (massive food trade even for own consumption)
+    NLD: ['Cocoa beans','Soybeans','Bananas','Wheat','Rice','Maize','Palm oil','Citrus fruit','Fish','Coffee','Avocados'],
+    BEL: ['Cocoa beans','Coffee','Soybeans','Wheat','Rice','Bananas','Citrus fruit','Fish','Palm oil'],
+    DEU: ['Coffee','Cocoa beans','Soybeans','Bananas','Citrus fruit','Fish','Wheat','Rice','Vegetable oil','Tropical fruit','Tea','Pork','Beef'],
+    FRA: ['Coffee','Cocoa beans','Soybeans','Bananas','Citrus fruit','Fish','Tropical fruit','Rice','Tea'],
+    ITA: ['Coffee','Cocoa beans','Soybeans','Wheat','Bananas','Fish','Beef','Tropical fruit'],
+    ESP: ['Coffee','Cocoa beans','Maize','Wheat','Soybeans','Fish','Tropical fruit','Beef'],
+    GBR: ['Wheat','Rice','Bananas','Citrus fruit','Cocoa beans','Coffee','Tea','Fish','Tropical fruit','Wine','Avocados'],
+    CHE: ['Coffee','Cocoa beans','Wheat','Rice','Bananas','Citrus fruit','Fish','Wine','Soybeans'],
+    AUT: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Fish','Tropical fruit','Soybeans'],
+    DNK: ['Coffee','Cocoa beans','Bananas','Soybeans','Fish','Wheat','Tropical fruit'],
+    SWE: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Fish','Tropical fruit','Wheat'],
+    FIN: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Fish','Wheat','Tropical fruit'],
+    NOR: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Wheat','Rice','Tropical fruit'],
+    POL: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Fish','Tropical fruit','Soybeans'],
+    IRL: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Wheat','Rice','Tropical fruit'],
+    PRT: ['Cocoa beans','Coffee','Wheat','Soybeans','Fish','Bananas','Beef','Tropical fruit'],
+    GRC: ['Coffee','Cocoa beans','Wheat','Soybeans','Maize','Tropical fruit','Bananas'],
+    CZE: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Tropical fruit','Soybeans','Rice'],
+    HUN: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Tropical fruit','Rice','Fish'],
+    ROU: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Tropical fruit','Soybeans','Sugar'],
+    // City-states + tiny territories
+    SGP: ['Rice','Wheat','Maize','Soybeans','Vegetable oil','Sugar','Dairy','Eggs','Pork','Beef','Poultry','Fish','Vegetables','Fruits','Cocoa beans','Coffee'],
+    HKG: ['Rice','Wheat','Vegetable oil','Sugar','Dairy','Pork','Beef','Vegetables','Fruits','Fish','Soybeans'],
+    LUX: ['Coffee','Cocoa beans','Bananas','Wheat','Fish','Soybeans','Citrus fruit'],
+    MLT: ['Wheat','Rice','Sugar','Vegetable oil','Dairy','Meat','Coffee','Tropical fruit'],
+    CYP: ['Wheat','Rice','Sugar','Soybeans','Dairy','Meat','Tropical fruit'],
+    // Major Gulf + MENA importers
+    SAU: ['Wheat','Rice','Sugar','Vegetable oil','Dairy','Tea','Coffee','Meat','Vegetables','Fruits','Soybeans'],
+    ARE: ['Rice','Wheat','Sugar','Vegetable oil','Dairy','Meat','Tea','Coffee','Vegetables','Fruits'],
+    KWT: ['Rice','Wheat','Sugar','Vegetable oil','Dairy','Meat','Tea','Vegetables'],
+    QAT: ['Rice','Wheat','Sugar','Dairy','Meat','Vegetables','Fruits','Vegetable oil'],
+    BHR: ['Rice','Wheat','Sugar','Vegetable oil','Dairy','Meat','Tea'],
+    OMN: ['Rice','Wheat','Sugar','Vegetable oil','Dairy','Meat','Tea','Vegetables'],
+    JPN: ['Wheat','Maize','Soybeans','Beef','Pork','Coffee','Cocoa beans','Bananas','Fish','Vegetable oil'],
+    KOR: ['Wheat','Maize','Soybeans','Beef','Pork','Coffee','Bananas','Vegetable oil','Sugar'],
+    // Other notable importers
+    USA: ['Coffee','Cocoa beans','Bananas','Avocados','Citrus fruit','Tropical fruit','Tea','Wine','Fish','Beef','Vegetables'],
+    CAN: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Fish','Tropical fruit','Wine','Vegetables','Rice'],
+    AUS: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Fish','Rice','Tropical fruit','Tea'],
+    NZL: ['Coffee','Cocoa beans','Sugar','Bananas','Rice','Tropical fruit','Tea'],
   };
 
   COUNTRIES.forEach(c => {
     if (Array.isArray(c.imports)) c.imports = c.imports.filter(isFood);
     if (Array.isArray(c.exports)) c.exports = c.exports.filter(isFood);
-    if (!c.imports || !c.imports.length) c.imports = (FALLBACK[c.region]||FALLBACK.Asia).slice(0,3);
+
+    // Build the full food-import set: curated + country-specific additions + region defaults
+    const curated = c.imports || [];
+    const additions = COUNTRY_ADDITIONS[c.iso] || [];
+    const regional = REGION_DEFAULTS[c.region] || REGION_DEFAULTS.Asia;
+    // Country-specific takes priority; region defaults fill gaps; cap at 10 items so UI stays clean
+    const merged = [];
+    const seen = new Set();
+    const push = (item) => {
+      if (!item) return;
+      const k = item.toLowerCase();
+      if (seen.has(k)) return;
+      seen.add(k);
+      merged.push(item);
+    };
+    curated.forEach(push);
+    additions.forEach(push);
+    regional.forEach(push);
+    c.imports = merged.slice(0, 10);
+
     if (!c.exports || !c.exports.length) {
-      // Countries with little/no food export → show what they DO ship food-wise, or a placeholder
       c.exports = ['Limited food exports'];
     }
   });
