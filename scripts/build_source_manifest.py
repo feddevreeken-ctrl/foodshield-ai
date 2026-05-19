@@ -149,6 +149,13 @@ SOURCES = [
         "cadence": "daily fetch / annual upstream",
         "mode": "trade",
     },
+    {
+        "key": "worldbank_bulk",
+        "file": "worldbank_bulk.json",
+        "label": "World Bank WDI bulk (20 indicators)",
+        "cadence": "6h fetch / quarterly upstream",
+        "mode": "reference",
+    },
 ]
 
 

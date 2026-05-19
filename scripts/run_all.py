@@ -30,6 +30,7 @@ import refresh_faostat
 import refresh_faostat_fbs
 import refresh_net_food_trade
 import refresh_wb_wfso
+import refresh_worldbank_bulk
 import build_countries_dataset
 import build_nowcast
 import build_source_manifest
@@ -55,6 +56,7 @@ STEPS = [
     ("FAOSTAT food CPI",    refresh_faostat.main),
     ("FAOSTAT FBS shares",  refresh_faostat_fbs.main),
     ("FAOSTAT net food trade", refresh_net_food_trade.main),
+    ("WB WDI bulk",         refresh_worldbank_bulk.main),
     ("WB WFSO",             refresh_wb_wfso.main),
     ("Countries dataset",   build_countries_dataset.main),
     ("Nowcast build",       build_nowcast.main),

@@ -8882,6 +8882,9 @@ const LIVE = {
   eurostat_food: null, faostat_food: null,
   // v20.4 trust pass: live commodity benchmarks + source health manifest
   pink_sheet: null, manifest: null, wfso: null,
+  // v20.18 — WB WDI bulk: 20 indicators × ~190 countries (Pipeline 4).
+  // Format: {iso3: {indicator_code: {value, year, name}}}
+  wdi_bulk: null,
   meta: { loaded_at: null, sources_ok: 0, sources_failed: 0, headline_status: null },
 };
 
@@ -9011,6 +9014,55 @@ function wfpAcrLinkHTML(iso3) {
     <a href="${url}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">Read WFP 2025 Annual Country Report ↗</a>
     <span style="color:var(--t3);font-size:9.5px;margin-left:6px;">operational narrative from WFP country office</span>
   </div>`;
+}
+
+// v20.18 — Pipeline 4: WB WDI Structural Indicators card.
+// Surfaces a curated subset (5 indicators) on the country panel — the ones
+// most relevant to food-security framing. Hover the row for the full
+// indicator name + year. The full 20-indicator payload remains in
+// LIVE.wdi_bulk[iso3] for other tabs that want to consume it.
+//
+// The card is intentionally compact: 1-row-per-indicator, value + unit
+// + small year stamp + "WB WDI sourced" badge in the header. We deliberately
+// don't try to replicate the WDI catalog — just the highest-signal indicators.
+const WDI_PANEL_INDICATORS = [
+  { code: 'NV.AGR.TOTL.ZS',    label: 'Agriculture % of GDP',      unit: '%',      fmt: v => v.toFixed(1) + '%' },
+  { code: 'TM.VAL.FOOD.ZS.UN', label: 'Food % of imports',         unit: '%',      fmt: v => v.toFixed(1) + '%' },
+  { code: 'AG.YLD.CREL.KG',    label: 'Cereal yield',              unit: 'kg/ha',  fmt: v => Math.round(v).toLocaleString() + ' kg/ha' },
+  { code: 'SH.STA.STNT.ZS',    label: 'Child stunting (under 5)',  unit: '%',      fmt: v => v.toFixed(1) + '%' },
+  { code: 'ER.H2O.FWST.ZS',    label: 'Water stress',              unit: '%',      fmt: v => v.toFixed(1) + '%' },
+];
+
+function wdiStructuralCardHTML(iso3) {
+  const row = LIVE.wdi_bulk?.[iso3];
+  if (!row) return '';
+  const present = WDI_PANEL_INDICATORS
+    .map(spec => ({ spec, hit: row[spec.code] }))
+    .filter(x => x.hit && x.hit.value != null);
+  if (!present.length) return '';
+  // Latest vintage across surfaced indicators (max year)
+  const latestYear = Math.max(...present.map(p => p.hit.year || 0));
+  const rows = present.map(({ spec, hit }) => {
+    const yearTag = hit.year ? `<span style="color:var(--t3);font-size:9.5px;margin-left:6px;">${hit.year}</span>` : '';
+    const fullName = (hit.name || spec.label).replace(/"/g, '&quot;');
+    return `<div class="sp-row" title="${fullName} (World Bank WDI)">
+      <span class="k">${spec.label}</span>
+      <span class="v" style="color:var(--t1);">${spec.fmt(hit.value)}${yearTag}</span>
+    </div>`;
+  }).join('');
+  return `
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Structural indicators</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">WB WDI · sourced</span>
+        </div>
+      </div>
+      ${rows}
+      <div style="font-size:9.5px;color:var(--t3);margin-top:6px;">
+        latest ${latestYear || 'unknown'} · World Bank WDI bulk
+      </div>
+    </div>`;
 }
 function cloneStructured(value) {
   if (value == null) return value;
@@ -9296,6 +9348,15 @@ async function loadLiveData() {
     const wfsoEnv = await _fetchData('wb_wfso');
     LIVE.wfso = (wfsoEnv && (wfsoEnv.data || wfsoEnv)) || {};
   } catch (e) { LIVE.wfso = {}; }
+
+  // v20.18 — Pipeline 4: WB WDI bulk (20 indicators per country). Loaded outside
+  // the main Promise.all so a slow/missing payload doesn't block the critical
+  // render path; the country panel falls back to existing LIVE.worldbank (5 inds)
+  // if this bulk feed is absent or empty.
+  try {
+    const wdiEnv = await _fetchData('worldbank_bulk');
+    LIVE.wdi_bulk = (wdiEnv && (wdiEnv.data || wdiEnv)) || {};
+  } catch (e) { LIVE.wdi_bulk = {}; }
 
   // v20.5 provenance scaffold — fetch the per-metric override file. Schema is documented
   // in data/countries.json. Any country with verified fields here will have those merged
@@ -11683,7 +11744,10 @@ function openPanel(c, skipDrilldown) {
     // wfsoCardHTML returns empty string when no data exists for the country.
     // wfpAcrLinkHTML returns empty string when the country isn't in the WFP_ACR_2025 map.
     (typeof wfsoCardHTML === 'function' ? wfsoCardHTML(c.iso) : '') +
-    (typeof wfpAcrLinkHTML === 'function' ? wfpAcrLinkHTML(c.iso) : '');
+    (typeof wfpAcrLinkHTML === 'function' ? wfpAcrLinkHTML(c.iso) : '') +
+    // v20.18: WB WDI Structural Indicators card (Pipeline 4).
+    // Returns empty string when the country has no WDI bulk coverage (rare).
+    (typeof wdiStructuralCardHTML === 'function' ? wdiStructuralCardHTML(c.iso) : '');
 
   document.getElementById('sp-ai').textContent = c.ai;
 
