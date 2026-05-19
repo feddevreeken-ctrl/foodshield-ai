@@ -53,5 +53,23 @@ jobs:
             echo "No data changes today."
           else
             git commit -m "data: daily refresh $(date -u +%Y-%m-%d)"
-            git push
+            # v20.7: handle race condition where origin/main moved during the ~25-min refresh run.
+            # Rebase-and-push-with-retry. If rebase fails (conflict in data/*.json against new
+            # remote work), we abort cleanly rather than corrupt history; a human re-runs.
+            for attempt in 1 2 3; do
+              echo "Push attempt $attempt/3"
+              git pull --rebase --autostash origin main || {
+                echo "Rebase failed on attempt $attempt — aborting and exiting non-zero"
+                git rebase --abort 2>/dev/null || true
+                exit 1
+              }
+              if git push origin main; then
+                echo "Push succeeded on attempt $attempt"
+                exit 0
+              fi
+              echo "Push race detected — retrying after 10s"
+              sleep 10
+            done
+            echo "All 3 push attempts failed — exiting non-zero"
+            exit 1
           fi
