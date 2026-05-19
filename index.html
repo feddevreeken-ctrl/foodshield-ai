@@ -9086,14 +9086,21 @@ function commodityTradeDependency(c, commodity) {
   const isProducer = (COMMODITY_PRODUCERS[commodity] || new Set()).has(c.iso)
                   || (US_STATE_PRODUCERS[commodity] || new Set()).has(c.iso);
 
-  // Skip the trade-dep number when there's no meaningful trade relationship at all.
-  if (!inImports && !inExports && !isProducer) return null;
+  // KEY INSIGHT: every country in the world consumes the three core staples (wheat, rice,
+  // maize) to some extent. So the right question for trade-dependency is not "is this
+  // commodity in the imports list?" (curated lists are biased toward non-food imports
+  // like petroleum, electronics, vehicles), but "does the country produce enough to meet
+  // its consumption?" If not, it must be sourcing externally.
+  //
+  // Therefore: if the country is NOT in the producer set for a staple, treat it as
+  // structurally import-dependent — regardless of what the curated imports/exports list
+  // says. This fixes the Netherlands/Rice case where rice doesn't appear in either list
+  // but the Netherlands is clearly almost-fully import-dependent for rice.
+  //
+  // For non-staple commodities (e.g., specific named items), fall back to the original
+  // logic that requires explicit appearance in imports/exports.
+  const isCoreStaple = ['Wheat','Rice','Maize'].includes(commodity);
 
-  // PRODUCER LOOKUP DOMINATES. The hardcoded imports/exports lists are noisy because some
-  // countries appear as "exporters" simply because they re-export imported supply — Germany
-  // and the Netherlands re-export rice they don't grow. Without anchoring on the producer
-  // lookup, those countries get classified as net exporters and trade-dependency drops to
-  // ~5%, which is the bug we are fixing.
   let dep;
   if (isProducer) {
     // Country actually grows this crop at scale. Now look at trade flows.
@@ -9102,7 +9109,6 @@ function commodityTradeDependency(c, commodity) {
       dep = 5;
     } else if (inExports && inImports) {
       // Producer that both imports and exports (Italy for rice, France for wheat, Spain).
-      // Partial trade exposure scaled by production trend.
       const trend = (c.c || [])[2] || 50;
       dep = Math.round(15 + trend * 0.35);   // 15–50% range
     } else if (inImports) {
@@ -9110,23 +9116,22 @@ function commodityTradeDependency(c, commodity) {
       const trend = (c.c || [])[2] || 50;
       dep = Math.round(25 + trend * 0.5);    // 25–75% range
     } else {
-      // Producer with no obvious trade flows recorded — assume largely self-sufficient.
+      // Producer with no listed trade flows — assume self-sufficient.
       dep = 10;
     }
+  } else if (isCoreStaple) {
+    // Not a meaningful producer of a core staple — and every country consumes wheat/rice/maize
+    // at some level. So trade-dependency is structurally high, regardless of imports list.
+    // This is the Netherlands/Rice, Germany/Rice, UK/Rice, Singapore/everything case.
+    // We do allow a small adjustment for countries that re-export (they at least have
+    // logistics infrastructure to source flexibly), but the dependency is still high.
+    dep = inExports ? 90 : 95;
   } else {
-    // NOT a meaningful producer. Trade dependency is structurally high regardless of
-    // whether the country appears in "exports" (likely re-exporting) or "imports".
-    // Examples: Germany/rice, Netherlands/rice, UK/rice, Singapore/almost everything.
-    if (inImports || inExports) {
-      // Re-exporters and importers both rely on external supply for what they consume.
-      // The re-export volume doesn't reduce import dependency — it's purely a transit
-      // economy bolted on top of the same imported supply.
-      dep = 95;
-    } else {
-      // Doesn't import or export AND doesn't produce — commodity simply isn't relevant.
-      // (Returned null at the top, but defensive default here.)
-      dep = 50;
-    }
+    // Non-staple commodity, country not in producer list. Fall back to imports/exports
+    // presence — if the curated list doesn't mention it, we genuinely don't know.
+    if (inImports) dep = 90;
+    else if (inExports) dep = 75;  // re-exporter
+    else return null;              // nothing in any list and not a staple — skip the number
   }
   return Math.max(0, Math.min(100, dep));
 }
