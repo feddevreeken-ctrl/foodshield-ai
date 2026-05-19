@@ -1,9 +1,21 @@
-name: Refresh data (daily)
+name: Refresh data (every 6h)
 
 on:
   schedule:
-    # 06:00 UTC every day = 07:00 Amsterdam (CET) / 08:00 CEST
-    - cron: "0 6 * * *"
+    # Every 6 hours: 00:00, 06:00, 12:00, 18:00 UTC.
+    # 4×/day strikes a balance:
+    #   - Fast-moving feeds (HungerMap, GDACS, ReliefWeb, OpenAQ, NASA FIRMS,
+    #     Open-Meteo) refresh meaningfully more often than daily.
+    #   - Heavy bulk downloads (FAO FBS ZIP ~21MB, FAO TCL ZIP ~250MB,
+    #     World Bank WFSO ~60 API pages) still only hit upstream 4×/day —
+    #     polite to FAO's CDN, well under any documented rate limit.
+    #   - Most upstream data is monthly/quarterly so the 4 extra daily runs
+    #     mostly just re-fetch the same bytes; we keep them anyway so the
+    #     "loaded_at" timestamp on the source-health UI stays fresh and any
+    #     intra-day spot updates from FAO/WB land within hours.
+    # Every-2h was considered but rejected: 12 bulk downloads/day × 250MB
+    # of FAOSTAT TCL is wasteful when that file changes ~once a year.
+    - cron: "0 */6 * * *"
   workflow_dispatch:
     # Allows manual trigger from the GitHub Actions UI
 

@@ -14494,6 +14494,14 @@ const SEV_LABEL = { critical:'CRITICAL', high:'HIGH', medium:'MEDIUM', low:'LOW'
 
 let disturbanceEvents = [];
 let disturbanceFilter = 'all';
+// v20.17 — expose the live array as a getter so window.disturbanceEvents
+// tracks reassignments (renderDisturbancesTab re-binds `disturbanceEvents`
+// after each fetch). Lets external code, dev tools, and onclick handlers
+// see the current data.
+Object.defineProperty(window, 'disturbanceEvents', {
+  get() { return disturbanceEvents; },
+  configurable: true,
+});
 
 async function renderDisturbancesTab() {
   const el = document.getElementById('disturbances-body');
@@ -14565,16 +14573,22 @@ async function loadDisturbanceData() {
         const evType = (p.eventtype || '').toLowerCase();
         const typeMap = { dr:'drought', fl:'flood', tc:'cyclone', eq:'earthquake', vo:'earthquake', wf:'drought' };
         const sev = p.alertlevel === 'Red' ? 'high' : 'medium';
+        // v20.17 — GDACS often omits countryname on the feature. Fall back to
+        // our local country DB by ISO3 so cards/modals don't read "📍 Unknown"
+        // and the "View ___ full profile" button gets a real label.
+        const isoUpper = (p.iso3 || '').toUpperCase();
+        const dbCountry = isoUpper ? byISO(isoUpper) : null;
+        const resolvedName = p.countryname || (dbCountry && dbCountry.name) || isoUpper || 'Unknown';
         events.push({
           id: 'gdacs_' + (p.eventid || i),
           type: typeMap[evType] || 'flood',
           severity: sev,
           title: p.eventname || `${evType.toUpperCase()} Alert`,
-          country: p.countryname || 'Unknown',
-          iso: (p.iso3 || '').toUpperCase(),
+          country: resolvedName,
+          iso: isoUpper,
           lat: coords[1] || 0,
           lng: coords[0] || 0,
-          detail: `Alert level: ${p.alertlevel}. ${p.episodealertlevel ? 'Episode: ' + p.episodealertlevel + '. ' : ''}Affected: ${p.affectedcountries || p.countryname}. ${p.htmldescription ? '' : ''}`,
+          detail: `Alert level: ${p.alertlevel}. ${p.episodealertlevel ? 'Episode: ' + p.episodealertlevel + '. ' : ''}Affected: ${p.affectedcountries || resolvedName}.`,
           source: 'GDACS',
           date: (p.fromdate || '').slice(0, 10) || new Date().toISOString().slice(0,10),
           live: true,
@@ -14815,6 +14829,32 @@ function renderDisturbanceList() {
   }).join('');
 }
 
+// v20.17 — single canonical jump from a Live Disturbance modal to that
+// country's full profile. Centralizes three things the old inline onclick
+// got wrong:
+//   1. Calls showTab('global') with no second arg — the previous code passed
+//      document.querySelector('.nav-btn') which resolves to the Explore
+//      *group* button, not the Global Map subtab. (.nav-btn → showGroup;
+//      .subnav-btn → showTab.)
+//   2. Resolves the country object via byISO and guards against null so we
+//      never call openPanel(null) and throw.
+//   3. Closes the modal cleanly first so the side panel isn't dimmed by the
+//      modal's backdrop.
+// Exposed on window because the onclick="" attribute looks up handlers in
+// the global scope, and at module-script scope nothing is auto-attached.
+function jumpFromDisturbanceToCountry(iso) {
+  const modal = document.getElementById('disturbance-modal');
+  if (modal) modal.remove();
+  const c = (typeof byISO === 'function') ? byISO(iso) : null;
+  if (!c) {
+    console.warn('[FoodShield] disturbance → country jump skipped: no country for ISO', iso);
+    return;
+  }
+  if (typeof showTab === 'function') showTab('global');
+  if (typeof openPanel === 'function') openPanel(c);
+}
+window.jumpFromDisturbanceToCountry = jumpFromDisturbanceToCountry;
+
 function openDisturbanceDetail(id) {
   const ev = disturbanceEvents.find(e => e.id === id);
   if (!ev) return;
@@ -14822,8 +14862,16 @@ function openDisturbanceDetail(id) {
   const sc = SEV_COLOR[ev.severity] || '#c9a957';
   const country = byISO(ev.iso);
   const fdrs = country ? country.fdrs : null;
-  const affected = ev.affectedISOs || [ev.iso];
-  const affectedLabels = ev.affectedLabels || [ev.country];
+  // v20.17: resolve country name with explicit fallbacks so the modal never
+  // says "View Unknown full profile". Source order: live country DB → event's
+  // own .country field → event ISO code as last resort.
+  const resolvedCountryName = (country && country.name) || ev.country || ev.iso || 'this country';
+  const affected = (Array.isArray(ev.affectedISOs) && ev.affectedISOs.length)
+    ? ev.affectedISOs
+    : (ev.iso ? [ev.iso] : []);
+  const affectedLabels = (Array.isArray(ev.affectedLabels) && ev.affectedLabels.length)
+    ? ev.affectedLabels
+    : (ev.iso ? [resolvedCountryName] : []);
   const comms = ev.commoditiesAffected || [];
 
   const existing = document.getElementById('disturbance-modal');
@@ -14887,8 +14935,8 @@ function openDisturbanceDetail(id) {
               const scoreCol = score ? (score>75?'#c44b3c':score>50?'#d27a3e':score>25?'#c9a957':'#6ba36b') : 'var(--t3)';
               const isClickable = !!cdata;
               return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg2);border:1px solid var(--b1);border-radius:8px;cursor:${isClickable?'pointer':'default'};transition:border-color .15s;"
-                onmouseover="if(${isClickable})this.style.borderColor='var(--b3)'" onmouseout="this.style.borderColor='var(--b1)'"
-                ${isClickable ? `onclick="document.getElementById('disturbance-modal').remove();openPanel(byISO('${iso}'));showTab('global',document.querySelector('.nav-btn'));"` : ''}>
+                ${isClickable ? `onmouseover="this.style.borderColor='var(--b3)'" onmouseout="this.style.borderColor='var(--b1)'"` : ''}
+                ${isClickable ? `onclick="jumpFromDisturbanceToCountry('${iso}')"` : ''}>
                 <div style="flex:1;font-size:12px;color:var(--t1);">${label}</div>
                 ${score !== null ? `<div style="font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:600;color:${scoreCol};background:${scoreCol}18;padding:2px 8px;border-radius:4px;white-space:nowrap;">FDRS ${score}</div>` : ''}
                 ${isClickable ? `<div style="font-size:10px;color:var(--t3);">→</div>` : ''}
@@ -14900,9 +14948,9 @@ function openDisturbanceDetail(id) {
       </div>
 
       <div style="padding:14px 24px;border-top:1px solid var(--b1);display:flex;gap:10px;flex-wrap:wrap;">
-        ${fdrs !== null ? `<button onclick="document.getElementById('disturbance-modal').remove();openPanel(byISO('${ev.iso}'));showTab('global',document.querySelector('.nav-btn'));"
+        ${fdrs !== null ? `<button onclick="jumpFromDisturbanceToCountry('${ev.iso}')"
           style="flex:1;min-width:140px;padding:9px 14px;background:var(--accent)18;border:1px solid var(--accent)44;color:var(--accent);border-radius:8px;cursor:pointer;font-size:12px;font-weight:500;">
-          View ${ev.country} full profile →
+          View ${resolvedCountryName} full profile →
         </button>` : ''}
         ${ev.url ? `<a href="${ev.url}" target="_blank" rel="noopener"
           style="flex:1;min-width:120px;padding:9px 14px;background:var(--bg2);border:1px solid var(--b2);color:var(--t2);border-radius:8px;font-size:12px;text-align:center;text-decoration:none;">
@@ -14914,6 +14962,10 @@ function openDisturbanceDetail(id) {
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
   document.body.appendChild(modal);
 }
+// v20.17 — onclick="" attributes (in disturbance lists, risk-radar event buttons,
+// affected-country rows) resolve handler names against the global scope. A
+// function declared inside a <script> module-level body is not auto-exposed.
+window.openDisturbanceDetail = openDisturbanceDetail;
 
 
 function renderDisturbanceSidebar() {
