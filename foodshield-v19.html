@@ -9283,29 +9283,50 @@ async function loadLiveData() {
     const provData = await _fetchData('countries');
     const overrides = provData?.data?.countries || provData?.countries || {};
     if (Array.isArray(window.COUNTRIES) && Object.keys(overrides).length) {
-      let touched = 0;
+      let touched = 0, fieldsApplied = 0;
       for (const c of COUNTRIES) {
         const row = overrides[c.iso];
         if (!row) continue;
         c._provenance = c._provenance || {};
         c._canonical = c._canonical || {};
         for (const [field, meta] of Object.entries(row)) {
-          if (!meta || typeof meta !== 'object' || !('value' in meta)) continue;
-          const value = cloneStructured(meta.value);
-          c._provenance[field] = {
-            source: meta.source || null,
-            source_url: meta.source_url || null,
-            as_of: meta.as_of || null,
-            method: meta.method || null,
-            quality_flag: meta.quality_flag || 'sourced',
-            note: meta.note || null,
-          };
+          // v20.12 — accept BOTH schemas:
+          //   structured (current):  {value: 14.8, source:'FBS', quality_flag:'sourced', ...}
+          //   flat (legacy export): 14.8 / "Some string" / [array]
+          // Earlier code silently skipped flat primitives, which left c.w=0 for
+          // every country (legacy seed value) when an older countries.json got cached.
+          let value, prov;
+          if (meta && typeof meta === 'object' && !Array.isArray(meta) && 'value' in meta) {
+            value = cloneStructured(meta.value);
+            prov = {
+              source: meta.source || null,
+              source_url: meta.source_url || null,
+              as_of: meta.as_of || null,
+              method: meta.method || null,
+              quality_flag: meta.quality_flag || 'sourced',
+              note: meta.note || null,
+            };
+          } else if (meta != null) {
+            value = cloneStructured(meta);
+            prov = {
+              source: 'data/countries.json (flat legacy schema)',
+              source_url: null, as_of: null, method: null,
+              quality_flag: 'legacy_curated',
+              note: 'Imported from flat schema; promote to {value, source, ...} for proper provenance.',
+            };
+          } else {
+            continue;
+          }
+          c._provenance[field] = prov;
           c._canonical[field] = value;
           c[field] = cloneStructured(value);
+          fieldsApplied++;
         }
         touched++;
       }
-      if (touched) console.info(`[FoodShield] Provenance overrides applied to ${touched} countries from data/countries.json`);
+      if (touched) console.info(`[FoodShield] Provenance overrides applied to ${touched} countries (${fieldsApplied} fields) from data/countries.json`);
+    } else {
+      console.warn('[FoodShield] Provenance overlay returned no overrides — check data/countries.json schema');
     }
   } catch (e) {
     console.warn('[FoodShield] Provenance overlay failed:', e);
