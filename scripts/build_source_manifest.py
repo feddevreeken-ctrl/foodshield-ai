@@ -135,6 +135,13 @@ SOURCES = [
         "cadence": "daily",
         "mode": "live",
     },
+    {
+        "key": "wb_wfso",
+        "file": "wb_wfso.json",
+        "label": "World Bank WFSO (Food Security Outlook)",
+        "cadence": "daily fetch / quarterly upstream",
+        "mode": "forecast",
+    },
 ]
 
 
