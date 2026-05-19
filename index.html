@@ -9238,15 +9238,31 @@ function showLiveStatusDialog() {
 // (e.g. legacy_curated food inflation on countries where Eurostat / WFP HungerMap
 // values existed). Add a per-page-load cache-buster query string AND force
 // `cache: 'no-store'` so every visit gets the latest committed payload.
+//
+// v20.14 — use ABSOLUTE path (/data/...) instead of relative (data/...) so it
+// can't get rewritten by Vercel SPA routing under a sub-path. Also log every
+// fetch failure to the console so the next diagnostic round shows exactly which
+// file failed and why (HTTP code, parse error, etc).
 const _FETCH_TS = Date.now();
 async function _fetchData(name) {
+  const url = `/data/${name}.json?t=${_FETCH_TS}`;
   try {
-    const r = await fetch(`data/${name}.json?t=${_FETCH_TS}`, { cache: 'no-store' });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const j = await r.json();
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) {
+      console.warn(`[FoodShield] _fetchData(${name}) HTTP ${r.status} for ${url}`);
+      throw new Error(`HTTP ${r.status}`);
+    }
+    const ct = r.headers.get('content-type') || '';
+    const text = await r.text();
+    if (!ct.includes('json') && !text.trimStart().startsWith('{') && !text.trimStart().startsWith('[')) {
+      console.warn(`[FoodShield] _fetchData(${name}) got non-JSON (content-type=${ct}). First 80 chars: ${text.slice(0, 80)}`);
+      throw new Error('non-JSON response (likely SPA fallback HTML)');
+    }
+    const j = JSON.parse(text);
     LIVE.meta.sources_ok++;
     return j;
   } catch (e) {
+    console.warn(`[FoodShield] _fetchData(${name}) failed:`, e.message || e);
     LIVE.meta.sources_failed++;
     return null;
   }
