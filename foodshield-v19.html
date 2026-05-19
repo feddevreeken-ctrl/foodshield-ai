@@ -8874,7 +8874,7 @@ const LIVE = {
   openaq: null, nasa_firms: null, usgs_water: null,
   eurostat_food: null, faostat_food: null,
   // v20.4 trust pass: live commodity benchmarks + source health manifest
-  pink_sheet: null, manifest: null,
+  pink_sheet: null, manifest: null, wfso: null,
   meta: { loaded_at: null, sources_ok: 0, sources_failed: 0, headline_status: null },
 };
 
@@ -8907,6 +8907,104 @@ function provenanceTooltip(c, field) {
   return lines.join(' · ') || 'Provenance: ' + (p.quality_flag || 'unknown');
 }
 const COUNTRY_STRUCTURAL_FIELDS = ['fdrs','c','f2030','w','r','m','fi','net','imports','exports','exportDests','suppliers','supPct'];
+
+// ════════════════════════════════════════════════════════════════════════════
+// v20.9: WFP Annual Country Reports — static iso3 → operation_id lookup
+// from https://www.wfp.org/annual-country-reports-2025 (86 countries WFP operates in).
+// Renders a "Read WFP 2025 country report ↗" link in the country panel when present.
+// ════════════════════════════════════════════════════════════════════════════
+const WFP_ACR_2025 = {
+  AFG:"AF01", DZA:"DZ02", AGO:"AO02", ARM:"AM02", BGD:"BD02", BEN:"BJ03", BTN:"BT03",
+  BOL:"BO03", BFA:"BF02", BDI:"BI03", KHM:"KH03", CMR:"CM02", CAF:"CF02", TCD:"TD02",
+  CHN:"CN02", COL:"CO03", COG:"CG01", CRI:"CR01", CUB:"CU03", CIV:"CI02", COD:"CD02",
+  DJI:"DJ02", DOM:"DO03", ECU:"EC02", EGY:"EG03", SLV:"SV02", SWZ:"SZ02", ETH:"ET02",
+  GMB:"GM03", GHA:"GH03", GTM:"GT02", GIN:"GN03", GNB:"GW03", HTI:"HT03", HND:"HN02",
+  IND:"IN03", IDN:"ID02", IRN:"IR02", IRQ:"IQ02", JOR:"JO03", KEN:"KE02", KGZ:"KG02",
+  LAO:"LA02", LBN:"LB02", LSO:"LS03", LBR:"LR02", LBY:"LY02", MDG:"MG03", MWI:"MW02",
+  MLI:"ML02", MRT:"MR03", MDA:"MD02", MOZ:"MZ02", NAM:"NA02", NPL:"NP03", NIC:"NI03",
+  NER:"NE02", NGA:"NG02", PAK:"PK02", PER:"PE02", PHL:"PH03", RWA:"RW01", STP:"ST03",
+  SEN:"SN03", SLE:"SL02", SOM:"SO02", SSD:"SS02", LKA:"LK02", PSE:"PS02", SDN:"SD02",
+  SYR:"SY03", TJK:"TJ03", TLS:"TL02", TGO:"TG05", TUR:"TR03", UGA:"UG01", UKR:"UA03",
+  TZA:"TZ02", VEN:"VE02", YEM:"YE02", ZMB:"ZM03", ZWE:"ZW02",
+  // Regional reports (no single ISO3)
+  // Caribbean Community → XC02 (skip — not country-specific)
+  // Pacific Islands → XP02 (skip)
+};
+function wfpAcrUrl(iso3) {
+  const opId = WFP_ACR_2025[iso3];
+  if (!opId) return null;
+  return `https://www.wfp.org/operations/annual-country-report?operation_id=${opId}&year=2025`;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// v20.9: WFSO renderer — produces a panel card for World Bank Food Security Outlook
+// ════════════════════════════════════════════════════════════════════════════
+function wfsoCardHTML(iso3) {
+  const row = (LIVE.wfso || {})[iso3];
+  if (!row || !row.indicators) return '';
+  const crisis = row.indicators.crisis_pop;
+  const emergency = row.indicators.emergency_pop;
+  const crisisPct = row.indicators.crisis_pct;
+  const fmt = (n) => {
+    if (n == null) return '—';
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return Math.round(n / 1e3) + 'k';
+    return Math.round(n).toLocaleString();
+  };
+  const proj = row.projection || {};
+  // Build the 2026–2031 baseline-vs-downside table
+  const years = [2026, 2027, 2028, 2029, 2030, 2031];
+  const rows = years.map(y => {
+    // 2026 is "Preliminary model estimate" in crisis_pop series, not a baseline/downside
+    let baseline, downside;
+    if (y === 2026) {
+      const prelim = (crisis?.series || []).find(s => s.year === 2026);
+      baseline = prelim?.value;
+      downside = null;
+    } else {
+      baseline = proj[`year_${y}_baseline_crisis_pop`];
+      downside = proj[`year_${y}_downside_crisis_pop`];
+    }
+    if (baseline == null && downside == null) return '';
+    return `<tr>
+      <td style="padding:3px 8px;font-family:'Geist Mono',monospace;font-size:10px;color:var(--t3)">${y}</td>
+      <td style="padding:3px 8px;text-align:right;font-family:'Geist Mono',monospace;font-size:11px;color:var(--t1)">${fmt(baseline)}</td>
+      <td style="padding:3px 8px;text-align:right;font-family:'Geist Mono',monospace;font-size:11px;color:#c44b3c">${fmt(downside)}</td>
+    </tr>`;
+  }).filter(Boolean).join('');
+  if (!rows) return '';
+  const latestPct = crisisPct?.latest_value != null
+    ? `<div style="font-size:10px;color:var(--t3);margin-top:4px;">Latest observed: <b style="color:var(--t1);">${crisisPct.latest_value}%</b> of population in food crisis (${crisisPct.latest_year})</div>`
+    : '';
+  return `
+    <div class="sp-section">
+      <div class="sp-section-title">World Bank · WFSO Outlook <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#6ba36b;background:#6ba36b18;padding:1px 4px;border-radius:3px;margin-left:6px;letter-spacing:.04em;text-transform:uppercase;">sourced</span></div>
+      <div style="font-size:10.5px;color:var(--t3);line-height:1.5;margin-bottom:8px;">
+        Population in food crisis (IPC/CH Phase 3+). Baseline and downside projections from World Bank DECDG (Andrée et al.).
+      </div>
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr>
+          <th style="padding:3px 8px;text-align:left;font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;">Year</th>
+          <th style="padding:3px 8px;text-align:right;font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;">Baseline</th>
+          <th style="padding:3px 8px;text-align:right;font-size:9px;color:#c44b3c;text-transform:uppercase;letter-spacing:.08em;">Downside</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      ${latestPct}
+      <div style="font-size:9.5px;color:var(--t3);margin-top:8px;">
+        Source: <a href="https://microdatalibqa.worldbank.org/index.php/catalog/15616" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">World Bank WFSO ↗</a>
+      </div>
+    </div>`;
+}
+
+function wfpAcrLinkHTML(iso3) {
+  const url = wfpAcrUrl(iso3);
+  if (!url) return '';
+  return `<div style="font-size:10.5px;margin-top:6px;">
+    <a href="${url}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">Read WFP 2025 Annual Country Report ↗</a>
+    <span style="color:var(--t3);font-size:9.5px;margin-left:6px;">operational narrative from WFP country office</span>
+  </div>`;
+}
 function cloneStructured(value) {
   if (value == null) return value;
   if (typeof structuredClone === 'function') {
@@ -9162,6 +9260,13 @@ async function loadLiveData() {
     // v20.4 trust pass
     _fetchData('worldbank_pink_sheet'), _fetchData('source_manifest'),
   ]);
+
+  // v20.9 — pull WFSO (World Bank Food Security Outlook) separately to keep the main
+  // Promise.all() readable; it's not on the critical render path so a small delay is fine.
+  try {
+    const wfsoEnv = await _fetchData('wb_wfso');
+    LIVE.wfso = (wfsoEnv && (wfsoEnv.data || wfsoEnv)) || {};
+  } catch (e) { LIVE.wfso = {}; }
 
   // v20.5 provenance scaffold — fetch the per-metric override file. Schema is documented
   // in data/countries.json. Any country with verified fields here will have those merged
@@ -11520,7 +11625,12 @@ function openPanel(c, skipDrilldown) {
         <div class="supplier-name">${s}</div>
         <div class="supplier-bar-wrap"><div class="supplier-bar-fill" style="width:${(c.supPct||[])[i]||20}%"></div></div>
         <div class="supplier-pct">${(c.supPct||[])[i]||'—'}%</div>
-      </div>`).join('');
+      </div>`).join('') +
+    // v20.9: World Bank WFSO outlook card + WFP Annual Country Report link.
+    // wfsoCardHTML returns empty string when no data exists for the country.
+    // wfpAcrLinkHTML returns empty string when the country isn't in the WFP_ACR_2025 map.
+    (typeof wfsoCardHTML === 'function' ? wfsoCardHTML(c.iso) : '') +
+    (typeof wfpAcrLinkHTML === 'function' ? wfpAcrLinkHTML(c.iso) : '');
 
   document.getElementById('sp-ai').textContent = c.ai;
 
