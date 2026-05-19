@@ -10,9 +10,20 @@ First push of v19 adds:
 - `.github/workflows/refresh-data.yml` — daily cron workflow
 - `data/` — JSON snapshots loaded by `index.html`
 
-### 2. Register for API keys (only ACLED + Comtrade are gated)
+### 2. Register for API keys (4 sources need registration)
 
-The other 6 sources need nothing — they're fully public.
+The other 4 sources (World Bank, FAO FFPI, WFP HungerMap, Feeding America static) need nothing — they're fully public.
+
+**ReliefWeb** (humanitarian alerts — register an *appname*, no key)
+1. Email apidoc@reliefweb.int requesting an appname like "foodshield-ai-fv" (~24h approval)
+2. In GitHub secrets: add `RELIEFWEB_APPNAME` = your approved name
+3. Without this, the script writes an empty stub and the nowcast just skips ReliefWeb signals
+
+**IPC** (food-security phase classifications)
+1. Register at https://www.ipcinfo.org/ipc-data-portal (free, requires email confirmation)
+2. Request API access from your dashboard
+3. In GitHub secrets: add `IPC_API_KEY` if/when they issue one
+4. NOTE (May 2026): IPC restricted their public population endpoint to authenticated callers. Script will skip with a stub until you register.
 
 **ACLED** (conflict events — required for the nowcast layer)
 1. Register a free account at https://developer.acleddata.com
