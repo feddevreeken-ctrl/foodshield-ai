@@ -27,6 +27,8 @@ import refresh_openaq
 import refresh_nasa_firms
 import refresh_eurostat
 import refresh_faostat
+import refresh_faostat_fbs
+import build_countries_dataset
 import build_nowcast
 import build_source_manifest
 
@@ -49,6 +51,8 @@ STEPS = [
     ("NASA FIRMS Fires",    refresh_nasa_firms.main),
     ("Eurostat food HICP",  refresh_eurostat.main),
     ("FAOSTAT food CPI",    refresh_faostat.main),
+    ("FAOSTAT FBS shares",  refresh_faostat_fbs.main),
+    ("Countries dataset",   build_countries_dataset.main),
     ("Nowcast build",       build_nowcast.main),
     ("Source manifest",     build_source_manifest.main),
 ]

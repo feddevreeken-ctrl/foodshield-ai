@@ -144,15 +144,21 @@ The source manifest will label this feed `manual` even when it is current.
 
 ## Provenance scaffold (v20.5, in progress)
 
-Country structural fields (`fdrs`, `c[]`, `w`, `r`, `m`, `fi`, `net`, etc.) are migrating
-out of `index.html` into `data/countries.json` with per-metric provenance:
+Country structural fields (`fdrs`, `c[]`, `w`, `r`, `m`, `fi`, `net`, `imports`, `exports`,
+`suppliers`, etc.) are now generated into `data/countries.json` with per-metric provenance:
 
 ```
 {
-  "BEL": {
-    "w": { "value": 12, "source": "Statbel 2024 winter wheat", "as_of": "2024",
-           "url": "https://statbel.fgov.be/...", "method": "national stat office",
-           "quality_flag": "sourced" }
+  "_meta": { "...": "..." },
+  "data": {
+    "countries": {
+      "BEL": {
+        "w": { "value": 12, "source": "FAOSTAT Food Balance Sheets", "as_of": "2022",
+               "source_url": "https://www.fao.org/faostat/en/#data/FBS",
+               "method": "caloric share", "quality_flag": "sourced" },
+        "imports": { "value": ["Wheat","Rice","Vegetable oil"], "quality_flag": "legacy_curated" }
+      }
+    }
   }
 }
 ```
@@ -161,9 +167,9 @@ Quality flags: `sourced` (verified against a public dataset), `legacy_curated` (
 heritage value, not yet re-verified), `modeled` (computed from sourced inputs), `manual`
 (hand-maintained from an annual release).
 
-Migration is country-by-country starting with the EU 27, then top food-trade economies,
-then the rest of the world. Until a country's fields are migrated they continue to read
-from `index.html` with `quality_flag: legacy_curated`.
+The build currently preserves the embedded dataset as a fallback while externalizing it into
+`countries.json`. Fields backed by public datasets can be upgraded in-place without changing
+the frontend schema.
 
 ## Troubleshooting
 

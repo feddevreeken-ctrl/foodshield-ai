@@ -7,6 +7,8 @@ Auto-generated JSON snapshots used by the frontend.
 | File | Purpose | Typical cadence |
 |---|---|---|
 | `nowcast.json` | per-country live adjustment layer | daily |
+| `countries.json` | canonical structural country overlay + per-field provenance | on pipeline rebuild |
+| `country_caloric_shares.json` | FAOSTAT Food Balance Sheets caloric shares used to source `w/r/m` | daily fetch / annual upstream |
 | `source_manifest.json` | per-source health and freshness summary | daily |
 | `fao_ffpi.json` | FAO Food Price Index monthly series | daily fetch / monthly upstream |
 | `worldbank_pink_sheet.json` | World Bank commodity benchmark prices | daily fetch / monthly upstream |
@@ -61,4 +63,6 @@ All files use the same wrapper:
 
 - A file existing does **not** mean the source is healthy.
 - The frontend should treat `source_manifest.json` as the authority for health, freshness, and setup state.
+- `countries.json` is the preferred structural baseline for the frontend. The embedded `COUNTRIES`
+  array in `index.html` is now fallback-only.
 - Some files intentionally exist as empty or degraded stubs so the workflow never hard-fails on one missing upstream.

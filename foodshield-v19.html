@@ -4552,12 +4552,12 @@ input[type="email"]:focus {
       </div>
 
       <div class="sp-section">
-        <div class="sp-section-title">Top Imports</div>
+        <div class="sp-section-title">Import Dependencies</div>
         <div id="sp-imports"></div>
       </div>
 
       <div class="sp-section">
-        <div class="sp-section-title">Top Suppliers</div>
+        <div class="sp-section-title">Supplier Snapshot</div>
         <div id="sp-suppliers"></div>
       </div>
 
@@ -4916,7 +4916,7 @@ input[type="email"]:focus {
 //   Exports data:    ITC TradeMap / FAO 2024
 //   Crisis numbers:  IPC analyses (Sudan/Yemen/Somalia/Afghanistan/Haiti/Gaza/S.Sudan 2025-2026)
 //                    GRFC 2025, SOFI 2025
-// Last updated: May 2026 · 75 countries
+// Last updated: May 2026 · 177 countries + 50 US states
 // ════════════════════════════════════════════════════════════════════════════
 //
 // FDRS = (Import Dep×30%) + (Supplier Conc×20%) + (Prod Trend×15%)
@@ -8905,6 +8905,41 @@ function provenanceTooltip(c, field) {
   if (p.note) lines.push(p.note);
   return lines.join(' · ') || 'Provenance: ' + (p.quality_flag || 'unknown');
 }
+const COUNTRY_STRUCTURAL_FIELDS = ['fdrs','c','f2030','w','r','m','fi','net','imports','exports','exportDests','suppliers','supPct'];
+function cloneStructured(value) {
+  if (value == null) return value;
+  if (typeof structuredClone === 'function') {
+    try { return structuredClone(value); } catch {}
+  }
+  return JSON.parse(JSON.stringify(value));
+}
+function structuralCaption(c, field, label='Structural snapshot') {
+  const p = fieldProvenance(c, field) || { quality_flag: 'legacy_curated' };
+  const asOf = p.as_of ? ` · ${p.as_of}` : '';
+  return `<div style="font-size:10px;color:var(--t3);margin:4px 0 10px;">${label}${asOf}${provenanceBadge(p.quality_flag)}</div>`;
+}
+function seedCountryCanonicalFields() {
+  if (!Array.isArray(window.COUNTRIES)) return;
+  COUNTRIES.forEach(c => {
+    c._canonical = c._canonical || {};
+    c._provenance = c._provenance || {};
+    COUNTRY_STRUCTURAL_FIELDS.forEach(field => {
+      if (!(field in c._canonical) && c[field] !== undefined) {
+        c._canonical[field] = cloneStructured(c[field]);
+      }
+      if (!c._provenance[field] && c[field] !== undefined) {
+        c._provenance[field] = {
+          source: 'Embedded FoodShield legacy dataset',
+          as_of: '2026-05',
+          method: 'Inline fallback value from index.html. External countries.json overrides take precedence when present.',
+          quality_flag: 'legacy_curated',
+          note: 'Fallback only. This field still needs source-by-source verification.',
+        };
+      }
+    });
+  });
+}
+seedCountryCanonicalFields();
 
 // ════════════════════════════════════════════════════════════════════════════
 // v20.4: SOURCE HEALTH UI — reads from data/source_manifest.json
@@ -9065,6 +9100,7 @@ async function _fetchData(name) {
 }
 
 async function loadLiveData() {
+  seedCountryCanonicalFields();
   const [nc, wfp, ipc, wb, ffpi, rw, ct, fa, wfpc, om, omf, aq, fires, usgs, estat, faostat, pink, manifest] = await Promise.all([
     _fetchData('nowcast'), _fetchData('wfp_hungermap'), _fetchData('ipc'),
     _fetchData('worldbank_wdi'), _fetchData('fao_ffpi'), _fetchData('reliefweb_alerts'),
@@ -9085,15 +9121,17 @@ async function loadLiveData() {
   // can show "sourced" / "legacy_curated" / "modeled" badges per metric where it matters.
   try {
     const provData = await _fetchData('countries');
-    const overrides = provData?.countries || {};
+    const overrides = provData?.data?.countries || provData?.countries || {};
     if (Array.isArray(window.COUNTRIES) && Object.keys(overrides).length) {
       let touched = 0;
       for (const c of COUNTRIES) {
         const row = overrides[c.iso];
         if (!row) continue;
         c._provenance = c._provenance || {};
+        c._canonical = c._canonical || {};
         for (const [field, meta] of Object.entries(row)) {
           if (!meta || typeof meta !== 'object' || !('value' in meta)) continue;
+          const value = cloneStructured(meta.value);
           c._provenance[field] = {
             source: meta.source || null,
             source_url: meta.source_url || null,
@@ -9102,7 +9140,8 @@ async function loadLiveData() {
             quality_flag: meta.quality_flag || 'sourced',
             note: meta.note || null,
           };
-          c[field] = meta.value;
+          c._canonical[field] = value;
+          c[field] = cloneStructured(value);
         }
         touched++;
       }
@@ -11388,20 +11427,23 @@ function openPanel(c, skipDrilldown) {
       // No live data — show heritage value with explicit "legacy_curated" badge
       return `<div class="sp-row" title="No live source available — showing legacy curated baseline. Not current."><span class="k">Food inflation</span><span class="v" style="color:var(--t3)">${c.fi}% / yr <span style="color:var(--t3);font-size:10px;">legacy_curated</span></span></div>`;
     })()}
-    <div class="sp-row" title="Net food trade balance. Definition includes basic agricultural commodities only (HS chapters 01–24); excludes processed-food re-exports and intra-firm transfers. See methodology page for full caveats."><span class="k">Net food trade</span><span class="v" style="color:${c.net>=0?'#6ba36b':'#c44b3c'}">${c.net>=0?'+':''}${(c.net/1000).toFixed(0)}B USD <span style="color:var(--t3);font-size:10px;">legacy_curated · ?</span></span></div>
+    <div class="sp-row" title="${provenanceTooltip(c, 'net')}"><span class="k">Net food trade</span><span class="v" style="color:${c.net>=0?'#6ba36b':'#c44b3c'}">${c.net>=0?'+':''}${(c.net/1000).toFixed(0)}B USD ${provenanceBadge(fieldProvenance(c, 'net')?.quality_flag || 'legacy_curated')}</span></div>
     <div class="sp-row" title="${TIP_SCE}"><span class="k">Supply-chain exposure</span><span class="v mono" style="color:${riskColor(supplyChainExposure(c))};">${supplyChainExposure(c)}/100 <span style="font-family:'Geist Mono',monospace;font-size:9px;color:var(--accent);background:var(--accent)18;padding:1px 4px;border-radius:3px;margin-left:4px;letter-spacing:.04em;text-transform:uppercase;">modeled</span></span></div>`;
 
   // Imports — clickable to open commodity drilldown (qty + companies)
   document.getElementById('sp-imports').innerHTML =
-    (c.imports||[]).map(i=>`<span class="import-tag" onclick="openCommodityDrilldown('${i.replace(/'/g, '&#39;')}', '${c.iso}')" title="Click for trading companies + volumes">${i}</span>`).join('');
+    `<div style="font-size:10px;color:var(--t3);margin-bottom:8px;">Food-only structural snapshot${fieldProvenance(c, 'imports')?.as_of ? ` · ${fieldProvenance(c, 'imports').as_of}` : ''}${provenanceBadge(fieldProvenance(c, 'imports')?.quality_flag || 'legacy_curated')}</div>` +
+    (c.imports||[]).map(i=>`<span class="import-tag" onclick="openCommodityDrilldown('${i.replace(/'/g, '&#39;')}', '${c.iso}')" title="Structural dependency snapshot. Click for modeled routing + company estimates.">${i}</span>`).join('');
 
   // Suppliers
-  document.getElementById('sp-suppliers').innerHTML = (c.suppliers||[]).map((s,i)=>`
-    <div class="supplier-row">
-      <div class="supplier-name">${s}</div>
-      <div class="supplier-bar-wrap"><div class="supplier-bar-fill" style="width:${(c.supPct||[])[i]||20}%"></div></div>
-      <div class="supplier-pct">${(c.supPct||[])[i]||'—'}%</div>
-    </div>`).join('');
+  document.getElementById('sp-suppliers').innerHTML =
+    `<div style="font-size:10px;color:var(--t3);margin-bottom:8px;">Supplier concentration snapshot${fieldProvenance(c, 'suppliers')?.as_of ? ` · ${fieldProvenance(c, 'suppliers').as_of}` : ''}${provenanceBadge(fieldProvenance(c, 'suppliers')?.quality_flag || 'legacy_curated')}</div>` +
+    (c.suppliers||[]).map((s,i)=>`
+      <div class="supplier-row">
+        <div class="supplier-name">${s}</div>
+        <div class="supplier-bar-wrap"><div class="supplier-bar-fill" style="width:${(c.supPct||[])[i]||20}%"></div></div>
+        <div class="supplier-pct">${(c.supPct||[])[i]||'—'}%</div>
+      </div>`).join('');
 
   document.getElementById('sp-ai').textContent = c.ai;
 
@@ -11592,8 +11634,8 @@ function renderCountryTab() {
           <div class="ct-stat-label">Supply-chain exposure <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:var(--accent);background:var(--accent)18;padding:1px 4px;border-radius:3px;margin-left:4px;letter-spacing:.04em;text-transform:uppercase;">modeled</span></div>
           <div class="ct-stat-val" style="color:${riskColor(sce)}">${sce}<span class="ct-stat-unit">/100</span></div>
         </div>
-        <div class="ct-stat" title="Net food trade balance. Definition: agri-food commodities only (HS 01–24); excludes processed-food re-exports and intra-firm transfers. See methodology page.">
-          <div class="ct-stat-label">Net trade <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#c47a3c;background:#c47a3c18;padding:1px 4px;border-radius:3px;margin-left:4px;letter-spacing:.04em;text-transform:uppercase;">legacy</span></div>
+        <div class="ct-stat" title="${provenanceTooltip(c, 'net')}">
+          <div class="ct-stat-label">Net trade ${provenanceBadge(fieldProvenance(c, 'net')?.quality_flag || 'legacy_curated')}</div>
           <div class="ct-stat-val" style="color:${c.net>=0?'#6ba36b':'#c44b3c'}">${c.net>=0?'+':''}${(c.net/1000).toFixed(1)}<span class="ct-stat-unit">B USD</span></div>
         </div>
       </div>`;
@@ -11622,16 +11664,18 @@ function renderCountryTab() {
     <!-- Trade exposure -->
     <div class="grid-2">
       <div class="card">
-        <div class="card-title"><span class="card-marker"></span> Top Food Imports</div>
+        <div class="card-title"><span class="card-marker"></span> Key Import Dependencies</div>
+        ${structuralCaption(c, 'imports', 'Food-only structural snapshot')}
         ${(c.imports||[]).map((im,i)=>`
-          <div class="ct-import-row" onclick="openCommodityDrilldown('${im.replace(/'/g, '&#39;')}', '${c.iso}')" style="cursor:pointer;">
+          <div class="ct-import-row" onclick="openCommodityDrilldown('${im.replace(/'/g, '&#39;')}', '${c.iso}')" style="cursor:pointer;" title="Structural dependency snapshot. Click for modeled routing + company estimates.">
             <span class="ct-import-num">${String(i+1).padStart(2,'0')}</span>
             <span class="ct-import-name">${im}</span>
             <span style="margin-left:auto;font-family:'Geist Mono',monospace;font-size:10px;color:var(--t3);">→</span>
           </div>`).join('')}
       </div>
       <div class="card">
-        <div class="card-title"><span class="card-marker"></span> Top Supplier Countries</div>
+        <div class="card-title"><span class="card-marker"></span> Supplier Concentration Snapshot</div>
+        ${structuralCaption(c, 'suppliers', 'Structural supplier ranking')}
         ${(c.suppliers||[]).map((s,i)=>`
           <div class="supplier-row" style="padding:7px 0;border-bottom:1px solid var(--b1);">
             <div class="supplier-name">${s}</div>
@@ -11781,11 +11825,12 @@ function renderTradeTab() {
     <!-- Imports / Exports breakdown -->
     <div class="grid-2">
       <div class="card">
-        <div class="card-title"><span class="card-marker" style="background:#c44b3c"></span> Top food imports</div>
+        <div class="card-title"><span class="card-marker" style="background:#c44b3c"></span> Key import dependencies</div>
+        ${structuralCaption(c, 'imports', 'Structural food-only snapshot')}
         ${(c.imports||[]).map((name,i)=>{
           const pct = [35,25,18,12,10][i];
           const sup = (c.suppliers||[])[i] || '';
-          return `<div class="tr-bar-row" style="flex-wrap:wrap;gap:2px;cursor:pointer;" onclick="openCommodityDrilldown('${name.replace(/'/g, '&#39;')}', '${c.iso}')" title="Click for trading companies + volumes">
+          return `<div class="tr-bar-row" style="flex-wrap:wrap;gap:2px;cursor:pointer;" onclick="openCommodityDrilldown('${name.replace(/'/g, '&#39;')}', '${c.iso}')" title="Structural dependency snapshot. Click for modeled routing + company estimates.">
             <div style="display:flex;align-items:center;width:100%;gap:6px;margin-bottom:3px;">
               <span class="tr-bar-name" style="flex:1">${name}</span>
               ${sup ? `<span style="font-size:10px;color:var(--t3);white-space:nowrap;">from ${sup}</span>` : ''}
@@ -11802,7 +11847,8 @@ function renderTradeTab() {
       </div>
 
       <div class="card">
-        <div class="card-title"><span class="card-marker" style="background:#6ba36b"></span> Top food exports</div>
+        <div class="card-title"><span class="card-marker" style="background:#6ba36b"></span> Structural export basket</div>
+        ${structuralCaption(c, 'exports', 'Structural dashboard snapshot')}
         ${exportItems.map((name,i)=>{
           const pct = [40,28,16,10,6][i];
           const dest = (c.exportDests||[])[i] || '';
@@ -11825,6 +11871,7 @@ function renderTradeTab() {
     <!-- Supplier concentration -->
     <div class="card">
       <div class="card-title"><span class="card-marker"></span> Supplier concentration</div>
+      ${structuralCaption(c, 'suppliers', 'Structural supplier ranking')}
       <div class="tr-conc-grid">
         <div class="tr-conc-chart">
           <canvas id="supplier-pie" style="max-height:220px;"></canvas>
@@ -13529,9 +13576,9 @@ function openCommodityDrilldown(commodity, importerIso){
   modal.innerHTML = `
     <div class="commodity-sheet" onclick="event.stopPropagation()">
       <div class="commodity-head">
-        <div class="commodity-eyebrow">${c.name} · Food import drilldown</div>
+        <div class="commodity-eyebrow">${c.name} · Structural import dependency drilldown</div>
         <div class="commodity-name">${commodity}</div>
-        <div class="commodity-sub">Estimated annual <b style="color:var(--t1)">${commodity.toLowerCase()}</b> imports into <b style="color:var(--t1)">${c.name}</b>, broken down by source country and the major trading companies that move it.</div>
+        <div class="commodity-sub">Modeled routing for <b style="color:var(--t1)">${commodity.toLowerCase()}</b> into <b style="color:var(--t1)">${c.name}</b>, anchored to the structural supplier snapshot. This is not an observed customs ledger.</div>
         <button class="commodity-close" onclick="document.getElementById('commodity-modal').remove()">✕</button>
       </div>
 
@@ -13551,7 +13598,7 @@ function openCommodityDrilldown(commodity, importerIso){
       </div>
 
       <div class="commodity-body">
-        <div class="commodity-section-title">Source countries &amp; trading companies</div>
+        <div class="commodity-section-title">Modeled source countries &amp; trading companies</div>
         ${suppliers.length ? suppliers.map(s => `
           <div class="commodity-supplier">
             <div>
@@ -13576,8 +13623,7 @@ function openCommodityDrilldown(commodity, importerIso){
           : '<div style="color:var(--t3);font-size:12px;padding:8px 0;">No supplier data available for this country.</div>'}
 
         <div class="commodity-note">
-          Volumes are estimated from <b style="color:var(--t2)">FAO trade statistics</b> + country net food balance and the published top-5 supplier share.
-          Company-level shares are illustrative — derived from public corporate disclosures + Trase / SAFE database mapping.
+          Source countries come from the structural supplier snapshot. Volumes and company-level shares are modeled estimates for directional analysis only, not observed bilateral shipment data.
         </div>
       </div>
     </div>`;
@@ -15013,8 +15059,8 @@ async function fetchAINarrative(iso, forceRefresh, targetElId) {
 - Current FDRS score: ${c.fdrs}/100 (${riskLabel(c.fdrs)}) — structural ${c._fdrsStructural||c.fdrs} ${adjStr !== '0' ? `with live nowcast ${adjStr}` : ''}
 - 2030 forecast: ${c.f2030}/100
 - Modeled FDRS backcast 2018-2025 (not observed history): ${histStr}
-- Top imports: ${(c.imports||[]).slice(0,3).join(', ')}
-- Top suppliers: ${(c.suppliers||[]).slice(0,3).join(', ')}
+- Structural import dependencies: ${(c.imports||[]).slice(0,3).join(', ')}
+- Structural suppliers: ${(c.suppliers||[]).slice(0,3).join(', ')}
 - Food inflation: ${c.fi}%/yr
 - Active live shocks (May 2026): ${liveShocksStr}
 If active live shocks are listed, your analysis MUST acknowledge at least one of them. Focus on the most important trend and actionable insight. Be specific, not generic.`;
@@ -16054,7 +16100,7 @@ function showCommodityDetail(key) {
         <!-- Importers -->
         <div>
           <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">
-            Countries importing ${key} (${importers.length})
+            Countries with structural import exposure to ${key} (${importers.length})
           </div>
           ${importers.slice(0,12).map(c => `
             <div class="live-indicator-row" style="cursor:pointer;" onclick="openPanel(byISO('${c.iso}'));showTab('global',document.querySelector('.nav-btn'))">
@@ -16073,7 +16119,7 @@ function showCommodityDetail(key) {
         <!-- Exporters / producers -->
         <div>
           <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">
-            Countries exporting ${key} (${exporters.length})
+            Countries with structural export exposure to ${key} (${exporters.length})
           </div>
           ${exporters.slice(0,12).map(c => `
             <div class="live-indicator-row" style="cursor:pointer;" onclick="openPanel(byISO('${c.iso}'));showTab('global',document.querySelector('.nav-btn'))">
