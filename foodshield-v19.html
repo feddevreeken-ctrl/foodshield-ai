@@ -13863,10 +13863,78 @@ function openCommodityDrilldown(commodity, importerIso){
 // underlying trade snapshot.
 // ════════════════════════════════════════════════════
 let _scrubDone = false;
+// v20.9 backfill: when a country's curated imports list is all non-food (re-export
+// hubs like NL, DEU, FRA, GBR show "Crude petroleum, Vehicles, ..." as their top
+// imports overall), the food-only filter strips it to nothing. Backfill with the
+// country's known structural food-import profile so the panel commodity dropdown
+// has something realistic to show. Marked as "modeled menu" in the UI.
+const FOOD_BACKFILL_BY_ISO = {
+  NLD: ['Cocoa beans','Soybeans','Bananas','Wheat','Rice','Maize','Palm oil','Citrus fruit','Fish','Coffee','Avocados'],
+  BEL: ['Cocoa beans','Coffee','Soybeans','Wheat','Rice','Bananas','Citrus fruit','Fish','Palm oil'],
+  DEU: ['Coffee','Cocoa beans','Soybeans','Bananas','Citrus fruit','Fish','Wheat','Rice','Vegetable oil','Tropical fruit','Tea','Pork','Beef'],
+  FRA: ['Coffee','Cocoa beans','Soybeans','Bananas','Citrus fruit','Fish','Tropical fruit','Rice','Tea'],
+  ITA: ['Coffee','Cocoa beans','Soybeans','Wheat','Bananas','Fish','Beef','Tropical fruit'],
+  ESP: ['Coffee','Cocoa beans','Maize','Wheat','Soybeans','Fish','Tropical fruit','Beef'],
+  GBR: ['Wheat','Rice','Bananas','Citrus fruit','Cocoa beans','Coffee','Tea','Fish','Tropical fruit','Wine','Avocados'],
+  CHE: ['Coffee','Cocoa beans','Wheat','Rice','Bananas','Citrus fruit','Fish','Wine','Soybeans'],
+  AUT: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Fish','Tropical fruit','Soybeans'],
+  DNK: ['Coffee','Cocoa beans','Bananas','Soybeans','Fish','Wheat','Tropical fruit'],
+  SWE: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Fish','Tropical fruit','Wheat'],
+  FIN: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Fish','Wheat','Tropical fruit'],
+  NOR: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Wheat','Rice','Tropical fruit'],
+  POL: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Fish','Tropical fruit','Soybeans'],
+  IRL: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Wheat','Rice','Tropical fruit'],
+  PRT: ['Cocoa beans','Coffee','Wheat','Soybeans','Fish','Bananas','Beef','Tropical fruit'],
+  GRC: ['Coffee','Cocoa beans','Wheat','Soybeans','Maize','Tropical fruit','Bananas'],
+  CZE: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Tropical fruit','Soybeans','Rice'],
+  HUN: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Tropical fruit','Rice','Fish'],
+  ROU: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Tropical fruit','Soybeans','Sugar'],
+  SGP: ['Rice','Wheat','Maize','Soybeans','Vegetable oil','Sugar','Dairy','Eggs','Pork','Beef','Poultry','Fish','Vegetables','Fruits','Cocoa beans','Coffee'],
+  HKG: ['Rice','Wheat','Vegetable oil','Sugar','Dairy','Pork','Beef','Vegetables','Fruits','Fish','Soybeans'],
+  LUX: ['Coffee','Cocoa beans','Bananas','Wheat','Fish','Soybeans','Citrus fruit'],
+  MLT: ['Wheat','Rice','Sugar','Vegetable oil','Dairy','Meat','Coffee','Tropical fruit'],
+  CYP: ['Wheat','Rice','Sugar','Soybeans','Dairy','Meat','Tropical fruit'],
+  SAU: ['Wheat','Rice','Sugar','Vegetable oil','Dairy','Tea','Coffee','Meat','Vegetables','Fruits','Soybeans'],
+  ARE: ['Rice','Wheat','Sugar','Vegetable oil','Dairy','Meat','Tea','Coffee','Vegetables','Fruits'],
+  KWT: ['Rice','Wheat','Sugar','Vegetable oil','Dairy','Meat','Tea','Vegetables'],
+  QAT: ['Rice','Wheat','Sugar','Dairy','Meat','Vegetables','Fruits','Vegetable oil'],
+  BHR: ['Rice','Wheat','Sugar','Vegetable oil','Dairy','Meat','Tea'],
+  OMN: ['Rice','Wheat','Sugar','Vegetable oil','Dairy','Meat','Tea','Vegetables'],
+  JPN: ['Wheat','Maize','Soybeans','Beef','Pork','Coffee','Cocoa beans','Bananas','Fish','Vegetable oil'],
+  KOR: ['Wheat','Maize','Soybeans','Beef','Pork','Coffee','Bananas','Vegetable oil','Sugar'],
+  USA: ['Coffee','Cocoa beans','Bananas','Avocados','Citrus fruit','Tropical fruit','Tea','Wine','Fish','Beef','Vegetables'],
+  CAN: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Fish','Tropical fruit','Wine','Vegetables','Rice'],
+  AUS: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Fish','Rice','Tropical fruit','Tea'],
+  NZL: ['Coffee','Cocoa beans','Sugar','Bananas','Rice','Tropical fruit','Tea'],
+};
+const REGION_FOOD_DEFAULTS = {
+  Africa:         ['Wheat','Rice','Vegetable oil','Sugar','Dairy','Maize','Pulses'],
+  Asia:           ['Wheat','Rice','Vegetable oil','Pulses','Sugar','Dairy','Soybeans'],
+  'Middle East':  ['Wheat','Rice','Vegetable oil','Sugar','Dairy','Meat','Vegetables'],
+  Europe:         ['Cocoa beans','Coffee','Tea','Soybeans','Bananas','Citrus fruit','Fish','Vegetable oil'],
+  'Latin America':['Wheat','Dairy','Vegetable oil','Wine','Apples','Pears'],
+  'North America':['Coffee','Cocoa beans','Bananas','Tropical fruit','Fish'],
+  Oceania:        ['Coffee','Cocoa beans','Rice','Tropical fruit','Tea'],
+};
+
 function scrubFoodData(){
   if (_scrubDone) return; _scrubDone = true;
   COUNTRIES.forEach(c => {
-    c._displayImports = dedupeLabels(structuralImportList(c).filter(isFoodTradeItem));
+    const filtered = dedupeLabels(structuralImportList(c).filter(isFoodTradeItem));
+    // If the food-filtered list is sparse (< 4 items), enrich with the country-specific
+    // backfill table or fall back to regional defaults. This is the v20.3 logic that got
+    // dropped in the v20.6 externalization. UI labels the merged list as "modeled menu".
+    let merged = filtered.slice();
+    if (merged.length < 4) {
+      const additions = FOOD_BACKFILL_BY_ISO[c.iso] || REGION_FOOD_DEFAULTS[c.region] || REGION_FOOD_DEFAULTS.Asia;
+      const seen = new Set(merged.map(s => s.toLowerCase()));
+      additions.forEach(item => {
+        const k = item.toLowerCase();
+        if (!seen.has(k)) { merged.push(item); seen.add(k); }
+      });
+      merged = merged.slice(0, 10);
+    }
+    c._displayImports = merged;
     c._displayExports = dedupeLabels(structuralExportList(c).filter(isFoodTradeItem));
   });
   _companyIndex = null;
