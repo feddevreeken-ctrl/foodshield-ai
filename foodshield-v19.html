@@ -9233,9 +9233,15 @@ function showLiveStatusDialog() {
   document.body.appendChild(modal);
 }
 
+// v20.11 — bypass any intermediate cache. Vercel/edge/browser used to hold onto
+// data/*.json for hours; the workflow refreshes daily but users saw stale numbers
+// (e.g. legacy_curated food inflation on countries where Eurostat / WFP HungerMap
+// values existed). Add a per-page-load cache-buster query string AND force
+// `cache: 'no-store'` so every visit gets the latest committed payload.
+const _FETCH_TS = Date.now();
 async function _fetchData(name) {
   try {
-    const r = await fetch(`data/${name}.json`, { cache: 'no-cache' });
+    const r = await fetch(`data/${name}.json?t=${_FETCH_TS}`, { cache: 'no-store' });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const j = await r.json();
     LIVE.meta.sources_ok++;
