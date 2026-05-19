@@ -24,7 +24,7 @@ INPUTS:
   element 664 = Food supply (kcal/capita/day)
   item   2901 = Grand Total
   item   2511 = Wheat and products
-  item   2805 = Rice and products
+  item   2807 = Rice and products (FBS 2010+; the old FBSH legacy domain used 2805)
   item   2514 = Maize and products
 
 Caloric share % = item kcal / Grand Total kcal × 100.
@@ -63,11 +63,13 @@ from _common import http_get, write_json
 
 BULK_URL = "https://bulks-faostat.fao.org/production/FoodBalanceSheets_E_All_Data.zip"
 
-# FAOSTAT FBS item codes (verified May 2026 via probe on data/FBS)
+# FAOSTAT FBS item codes (verified May 2026 via FAOSTAT /definitions/domain/FBS/item probe)
+# Note: FBS (Food Balances, 2010-) uses item 2807 for rice. The legacy FBSH (Food Balances
+# pre-2010) used item 2805 — confused them once; re-verified directly from the API.
 ITEMS = {
     2901: "total",
     2511: "wheat",
-    2805: "rice",
+    2807: "rice",
     2514: "maize",
 }
 ELEMENT_KCAL = 664   # Food supply (kcal/capita/day)
