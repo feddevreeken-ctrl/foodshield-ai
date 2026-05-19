@@ -4297,9 +4297,9 @@ input[type="email"]:focus {
   </nav>
 
   <div id="topbar-right">
-    <div class="status-pill" id="live-status-pill" title="Live data refreshed daily via GitHub Actions. Click for details." style="cursor:pointer;" onclick="(async()=>{const m = LIVE.meta; const ok = m.sources_ok; const fail = m.sources_failed; const t = m.loaded_at ? new Date(m.loaded_at).toLocaleString() : 'pending'; alert(`FoodShield AI v20 — Live data\n\nLast refresh: ${t}\nSources loaded: ${ok}/${ok+fail}\n\n16 data sources:\n• WFP HungerMap LIVE (global)\n• WFP HungerMap per-country (FX, food inflation, nutrition)\n• IPC Phase 3+ classifications (via HungerMap mirror)\n• ACLED conflict events\n• FAO Food Price Index\n• Eurostat food HICP (EU member states, monthly)\n• FAOSTAT Consumer Price Index (global, annual)\n• ReliefWeb humanitarian alerts\n• World Bank WDI\n• UN Comtrade Plus (if key configured)\n• Feeding America (US states)\n• Open-Meteo (weather + soil moisture)\n• Open-Meteo Flood (river discharge)\n• USGS Water Services (US river flow)\n• NASA FIRMS (active fire detection)\n• OpenAQ (PM2.5 air quality)`);})()">
+    <div class="status-pill" id="live-status-pill" title="Click for per-source status." style="cursor:pointer;" onclick="showLiveStatusDialog()">
       <div class="live-dot"></div>
-      <span class="status-label" id="live-status-label">Live · 16 sources · daily</span>
+      <span class="status-label" id="live-status-label">Loading sources…</span>
     </div>
 
     <button class="fs-filter-btn" id="filter-btn" onclick="toggleFilterPanel(event)" aria-haspopup="true" aria-expanded="false">
@@ -8878,6 +8878,151 @@ const LIVE = {
   meta: { loaded_at: null, sources_ok: 0, sources_failed: 0, headline_status: null },
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// v20.4: SOURCE HEALTH UI — reads from data/source_manifest.json
+// ════════════════════════════════════════════════════════════════════════════
+function sourceManifestSummary() {
+  return LIVE.manifest?.summary || null;
+}
+function sourceManifestEntry(key) {
+  return LIVE.manifest?.sources?.[key] || null;
+}
+function sourceStatusLabel(status) {
+  return ({
+    ok: 'Healthy',
+    manual: 'Manual snapshot',
+    degraded: 'Degraded',
+    setup_required: 'Setup required',
+    failed: 'Failed',
+  })[status] || 'Unknown';
+}
+function sourceStatusColor(status) {
+  return ({
+    ok: '#6ba36b',
+    manual: '#7c9fcf',
+    degraded: '#c9a957',
+    setup_required: '#d27a3e',
+    failed: '#c44b3c',
+  })[status] || 'var(--t3)';
+}
+function mergeSourceStatuses(...statuses) {
+  const list = statuses.filter(Boolean);
+  if (!list.length) return null;
+  if (list.includes('failed')) return 'failed';
+  if (list.includes('setup_required')) return 'setup_required';
+  if (list.includes('degraded')) return 'degraded';
+  if (list.includes('manual')) return list.every(s => s === 'manual') ? 'manual' : 'ok';
+  if (list.includes('ok')) return 'ok';
+  return list[0];
+}
+function formatSnapshotTime(ts) {
+  if (!ts) return 'pending';
+  try {
+    return new Date(ts).toLocaleString();
+  } catch { return ts; }
+}
+function monthTokenLabel(t) {
+  if (!t) return '';
+  // Tokens look like "2026-04" — return as-is, or a friendlier "Apr 2026" if recognisable
+  const m = /^(\d{4})-(\d{2})$/.exec(t);
+  if (!m) return t;
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const idx = parseInt(m[2], 10) - 1;
+  return (months[idx] || m[2]) + ' ' + m[1];
+}
+
+function updateLiveStatusUI() {
+  const pill = document.getElementById('live-status-pill');
+  const dot  = pill?.querySelector('.live-dot');
+  const label = document.getElementById('live-status-label');
+  if (!pill || !dot || !label) return;
+
+  const summary = sourceManifestSummary();
+  if (summary) {
+    const healthy = (summary.ok_sources || 0) + (summary.manual_sources || 0);
+    const issues  = (summary.degraded_sources || 0) + (summary.setup_required_sources || 0) + (summary.failed_sources || 0);
+    const total   = summary.total_sources || (healthy + issues);
+    const color = issues === 0 ? '#6ba36b' : issues <= 3 ? '#c9a957' : '#c44b3c';
+    label.textContent = issues === 0
+      ? `${healthy}/${total} feeds healthy`
+      : `${healthy}/${total} healthy · ${issues} need attention`;
+    label.style.color = color;
+    dot.style.background = color;
+    dot.style.boxShadow = `0 0 8px ${color}`;
+    pill.title = `Snapshot refreshed ${formatSnapshotTime(summary.loaded_at)}. Click for per-source status.`;
+    LIVE.meta.headline_status = summary.headline_status || (issues === 0 ? 'healthy' : 'attention');
+    return;
+  }
+  // Manifest not yet loaded — show how many JSON fetches succeeded
+  const color = LIVE.meta.sources_failed === 0 ? '#6ba36b' : '#c9a957';
+  label.textContent = LIVE.meta.sources_ok > 0
+    ? `${LIVE.meta.sources_ok} feeds loaded`
+    : 'Source health pending';
+  label.style.color = color;
+  dot.style.background = color;
+  dot.style.boxShadow = `0 0 8px ${color}`;
+  pill.title = `Snapshot loaded ${formatSnapshotTime(LIVE.meta.loaded_at)}. Click for per-source status.`;
+}
+
+function showLiveStatusDialog() {
+  const summary = sourceManifestSummary();
+  const sources = LIVE.manifest?.sources || {};
+  const rows = Object.entries(sources)
+    .sort((a, b) => {
+      const order = { degraded: 0, setup_required: 1, failed: 2, manual: 3, ok: 4 };
+      const ao = order[a[1]?.status] ?? 9;
+      const bo = order[b[1]?.status] ?? 9;
+      return ao - bo || (a[1]?.label || a[0]).localeCompare(b[1]?.label || b[0]);
+    })
+    .map(([key, row]) => `
+      <div style="display:grid;grid-template-columns:minmax(0,1.4fr) 130px 1fr;gap:12px;align-items:start;padding:11px 0;border-bottom:1px solid var(--b1);">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--t1);">${row.label || key}</div>
+          <div style="font-size:10px;color:var(--t3);margin-top:2px;">${row.cadence || 'snapshot'} · ${row.mode || 'data'}</div>
+        </div>
+        <div style="font-size:11px;font-weight:600;color:${sourceStatusColor(row.status)};">${sourceStatusLabel(row.status)}</div>
+        <div style="font-size:10.5px;color:var(--t2);line-height:1.55;">
+          ${row.reason || 'No notes'}
+          ${row.latest_period ? `<div style="color:var(--t3);margin-top:3px;">Latest period: ${monthTokenLabel(row.latest_period)}</div>` : ''}
+          ${row.generated_at ? `<div style="color:var(--t3);margin-top:3px;">Snapshot: ${formatSnapshotTime(row.generated_at)}</div>` : ''}
+          ${row.count != null ? `<div style="color:var(--t3);margin-top:3px;">Rows: ${row.count}</div>` : ''}
+        </div>
+      </div>`).join('');
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:3000;padding:24px;';
+  modal.innerHTML = `
+    <div style="width:min(900px,96vw);max-height:88vh;overflow:auto;background:var(--bg1);border:1px solid var(--b2);border-radius:14px;padding:22px 22px 18px;box-shadow:0 30px 90px rgba(0,0,0,.45);">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:16px;">
+        <div>
+          <div style="font-size:18px;font-weight:700;color:var(--t1);">Daily source health</div>
+          <div style="font-size:12px;color:var(--t3);margin-top:4px;">Truthful view of every pipeline feed. Categories: <b style="color:#6ba36b">Healthy</b> · <b style="color:#7c9fcf">Manual</b> · <b style="color:#c9a957">Degraded</b> · <b style="color:#d27a3e">Setup required</b> · <b style="color:#c44b3c">Failed</b>.</div>
+        </div>
+        <button onclick="this.closest('div[style*=fixed]').remove()" style="background:var(--bg2);color:var(--t2);border:1px solid var(--b2);border-radius:8px;padding:7px 10px;cursor:pointer;font-size:11px;">Close</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;">
+        ${summary ? [
+          { label: 'Total feeds',    value: summary.total_sources, color: 'var(--t1)' },
+          { label: 'Healthy',        value: (summary.ok_sources || 0) + (summary.manual_sources || 0), color: '#6ba36b' },
+          { label: 'Degraded',       value: summary.degraded_sources || 0, color: '#c9a957' },
+          { label: 'Setup / failed', value: (summary.setup_required_sources || 0) + (summary.failed_sources || 0), color: '#d27a3e' },
+        ].map(card => `
+          <div style="background:var(--bg0);border:1px solid var(--b1);border-radius:10px;padding:12px 14px;">
+            <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;">${card.label}</div>
+            <div style="font-size:22px;font-weight:700;color:${card.color};font-family:'Geist Mono',monospace;margin-top:6px;">${card.value}</div>
+          </div>`).join('') : `
+          <div style="grid-column:1/-1;font-size:12px;color:var(--t3);">Source manifest not loaded yet.</div>`
+        }
+      </div>
+      <div style="font-size:11px;color:var(--t3);margin-bottom:10px;">Snapshot refreshed ${formatSnapshotTime(summary?.loaded_at || LIVE.meta.loaded_at)}. Monthly and annual upstreams can be Healthy even when they did not change today.</div>
+      <div style="background:var(--bg0);border:1px solid var(--b1);border-radius:10px;padding:0 14px;">
+        ${rows || '<div style="padding:14px 0;color:var(--t3);font-size:12px;">No per-source rows available.</div>'}
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
 async function _fetchData(name) {
   try {
     const r = await fetch(`data/${name}.json`, { cache: 'no-cache' });
@@ -8982,6 +9127,8 @@ async function loadLiveData() {
     if (typeof _companyIndex !== 'undefined') _companyIndex = null;
     if (typeof _commodityCache !== 'undefined') _commodityCache = null;
   }
+  // v20.4: refresh the status-pill from the manifest now that LIVE.manifest is loaded
+  if (typeof updateLiveStatusUI === 'function') updateLiveStatusUI();
 
   // ── US States — replace state FDRS with Feeding America MMG food-insecurity scaling ──
   // Maps state food-insecurity % (5%-25% range) onto FDRS-equivalent (0-100), blended 70/30
