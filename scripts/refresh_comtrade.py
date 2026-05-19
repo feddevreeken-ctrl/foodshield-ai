@@ -28,11 +28,18 @@ Commodity HS codes:
   1006  Rice
   1201  Soybeans
 """
+import time
 from collections import defaultdict
-from _common import env, http_get, write_json
+
+import requests
+from _common import env, write_json, UA
 
 URL = "https://comtradeapi.un.org/data/v1/get/C/A/HS"
 COMMODITIES = {"1001": "wheat", "1005": "maize", "1006": "rice", "1201": "soybeans"}
+
+# Free tier rate limit: appears to be ~1 request per second.
+# Sleep generously between calls and back off hard on 429.
+THROTTLE_SECONDS = 1.5
 
 # Priority importers (M.49 codes), chosen for high import dependency or strategic
 # relevance to FoodShield's nowcast layer. ~25 countries × 4 commodities = 100 calls/day,
@@ -82,24 +89,42 @@ def main():
     skipped = 0
     succeeded = 0
 
+    session = requests.Session()
+    session.headers.update({"User-Agent": UA, "Accept": "application/json"})
+
     for reporter_code, importer_iso in PRIORITY_IMPORTERS.items():
         for cmd_code, cmd_name in COMMODITIES.items():
+            # Throttle to stay under free-tier rate limit (~1 req/sec).
+            time.sleep(THROTTLE_SECONDS)
+            params = {
+                "subscription-key": key,
+                "cmdCode": cmd_code,
+                "flowCode": "M",
+                "reporterCode": reporter_code,
+                "partnerCode": "",
+                "period": year,
+                "max": 500,
+            }
+            # Single attempt; back off on 429 instead of retrying (retries waste calls)
             try:
-                r = http_get(URL, params={
-                    "subscription-key": key,
-                    "cmdCode": cmd_code,
-                    "flowCode": "M",
-                    "reporterCode": reporter_code,
-                    "partnerCode": "",   # all partners
-                    "period": year,
-                    "max": 500,
-                }, timeout=45)
+                r = session.get(URL, params=params, timeout=45)
             except Exception as e:
-                print(f"    {importer_iso}/{cmd_name}: skipped ({e})")
+                print(f"    {importer_iso}/{cmd_name}: skipped (network: {e})")
+                skipped += 1
+                continue
+            if r.status_code == 429:
+                # Too many requests — back off 30s and continue to next call.
+                # Don't retry; we'll catch the rest tomorrow.
+                print(f"    {importer_iso}/{cmd_name}: 429 rate-limited, backing off 30s")
+                skipped += 1
+                time.sleep(30)
+                continue
+            if r.status_code != 200:
+                print(f"    {importer_iso}/{cmd_name}: HTTP {r.status_code}")
                 skipped += 1
                 continue
             payload = r.json()
-            rows = payload.get("data", [])
+            rows = payload.get("data", []) or []
             succeeded += 1
             for row in rows:
                 sup = (row.get("partnerISO") or "").upper()
@@ -136,11 +161,27 @@ def main():
                 "top_suppliers": suppliers[:5],
             }
 
+    # Safety: if we got very little data this run (e.g. heavy rate-limiting),
+    # don't overwrite an existing file that has real data.
+    if len(final) < 5:
+        from pathlib import Path
+        import json
+        existing = Path(__file__).resolve().parent.parent / "data" / "comtrade_staples.json"
+        if existing.exists():
+            try:
+                prev = json.loads(existing.read_text())
+                if len(prev.get("data", {})) > len(final):
+                    print(f"  Only got {len(final)} importers this run; existing file has {len(prev.get('data',{}))}. Keeping existing.")
+                    return
+            except Exception:
+                pass
+
     write_json(
         "comtrade_staples.json",
         final,
         source=f"UN Comtrade Plus (comtradeapi.un.org) — HS6, year {year}",
-        notes=f"Top 5 suppliers per importer-commodity. ~25 priority importers (free-tier quota).",
+        notes=(f"Top 5 suppliers per importer-commodity. ~25 priority importers (free-tier quota). "
+               f"Succeeded: {succeeded}, skipped: {skipped}."),
     )
 
 
