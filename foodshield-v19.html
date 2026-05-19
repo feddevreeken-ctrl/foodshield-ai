@@ -8873,7 +8873,9 @@ const LIVE = {
   wfp_country: null, openmeteo: null, openmeteo_flood: null,
   openaq: null, nasa_firms: null, usgs_water: null,
   eurostat_food: null, faostat_food: null,
-  meta: { loaded_at: null, sources_ok: 0, sources_failed: 0 },
+  // v20.4 trust pass: live commodity benchmarks + source health manifest
+  pink_sheet: null, manifest: null,
+  meta: { loaded_at: null, sources_ok: 0, sources_failed: 0, headline_status: null },
 };
 
 async function _fetchData(name) {
@@ -8890,7 +8892,7 @@ async function _fetchData(name) {
 }
 
 async function loadLiveData() {
-  const [nc, wfp, ipc, wb, ffpi, rw, ct, fa, wfpc, om, omf, aq, fires, usgs, estat, faostat] = await Promise.all([
+  const [nc, wfp, ipc, wb, ffpi, rw, ct, fa, wfpc, om, omf, aq, fires, usgs, estat, faostat, pink, manifest] = await Promise.all([
     _fetchData('nowcast'), _fetchData('wfp_hungermap'), _fetchData('ipc'),
     _fetchData('worldbank_wdi'), _fetchData('fao_ffpi'), _fetchData('reliefweb_alerts'),
     _fetchData('comtrade_staples'), _fetchData('feeding_america_states'),
@@ -8899,6 +8901,8 @@ async function loadLiveData() {
     _fetchData('openaq'), _fetchData('nasa_firms'), _fetchData('usgs_water'),
     // v20.1
     _fetchData('eurostat_food'), _fetchData('faostat_food'),
+    // v20.4 trust pass
+    _fetchData('worldbank_pink_sheet'), _fetchData('source_manifest'),
   ]);
   LIVE.nowcast = nc?.data || {};
   LIVE.wfp = wfp?.data || {};
@@ -8916,7 +8920,9 @@ async function loadLiveData() {
   LIVE.usgs_water = usgs?.data || {};
   LIVE.eurostat_food = estat?.data || {};
   LIVE.faostat_food = faostat?.data || {};
-  LIVE.meta.loaded_at = (nc?._meta?.generated_at) || new Date().toISOString();
+  LIVE.pink_sheet = pink?.data || null;
+  LIVE.manifest = manifest?.data || null;
+  LIVE.meta.loaded_at = (manifest?._meta?.generated_at) || (nc?._meta?.generated_at) || new Date().toISOString();
 
   // ── v20.2: Apply Supply-Chain Exposure (SCE) overlay BEFORE nowcast ──────
   // SCE is a structural correction — it captures trade-import dependency, distinct from
