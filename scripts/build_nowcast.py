@@ -5,7 +5,8 @@ an adjusted current-conditions score.
 Reads: data/wfp_hungermap.json, data/ipc.json, data/acled.json,
        data/reliefweb_alerts.json, data/fao_ffpi.json,
        data/wfp_country.json, data/openmeteo.json, data/openmeteo_flood.json,
-       data/openaq.json, data/nasa_firms.json, data/usgs_water.json
+       data/openaq.json, data/nasa_firms.json, data/usgs_water.json,
+       data/eurostat_food.json, data/faostat_food.json
 Writes: data/nowcast.json
 
 Formula (extended May 2026):
@@ -54,6 +55,8 @@ def main():
     fires   = load("nasa_firms.json")["data"]
     aq      = load("openaq.json")["data"]
     usgs    = load("usgs_water.json")["data"]
+    estat   = load("eurostat_food.json")["data"]
+    faostat = load("faostat_food.json")["data"]
 
     global_food_kick = 0
     if isinstance(ffpi, dict):
@@ -70,7 +73,7 @@ def main():
         if iso:
             rw_by_iso.setdefault(iso, []).append(ev)
 
-    all_iso = set(wfp) | set(ipc) | set(acled) | set(om) | set(wfp_c)
+    all_iso = set(wfp) | set(ipc) | set(acled) | set(om) | set(wfp_c) | set(estat) | set(faostat)
     out = {}
     for iso in all_iso:
         ipc_p3   = (ipc.get(iso) or {}).get("phase3plus_pct") or 0
@@ -95,11 +98,27 @@ def main():
         if isinstance(fx_pct, (int, float)) and fx_pct < -10:
             fx_shock = min(3, abs(fx_pct + 10) * 0.1)
 
-        # Food inflation shock
+        # Food inflation shock — best of three sources, priority HungerMap > Eurostat > FAOSTAT
+        # HungerMap per-country (sticky for crisis countries)
         food_infl = wc.get("food_inflation_pct")
+        food_infl_source = "hungermap" if food_infl is not None else None
+        # Eurostat (EU only, fresher than FAOSTAT)
+        if food_infl is None:
+            es = estat.get(iso) or {}
+            if es.get("food_hicp_yoy_pct") is not None:
+                food_infl = es["food_hicp_yoy_pct"]
+                food_infl_source = "eurostat"
+        # FAOSTAT (global, but lagged 4-12 months)
+        if food_infl is None:
+            fs = faostat.get(iso) or {}
+            if fs.get("food_cpi_yoy_pct") is not None:
+                food_infl = fs["food_cpi_yoy_pct"]
+                food_infl_source = "faostat"
         inflation_shock = 0
-        if isinstance(food_infl, (int, float)) and food_infl > 15:
-            inflation_shock = min(3, (food_infl - 15) * 0.1)
+        # Eurostat uses 8% threshold (EU baseline lower); others use 15%
+        threshold = 8 if food_infl_source == "eurostat" else 15
+        if isinstance(food_infl, (int, float)) and food_infl > threshold:
+            inflation_shock = min(3, (food_infl - threshold) * 0.1)
 
         # Weather extremes — drought + heat
         weather_kick = 0
@@ -155,6 +174,7 @@ def main():
                 "active_reports_30d":   relief_n,
                 "fx_90d_change_pct":    fx_pct,
                 "food_inflation_pct":   food_infl,
+                "food_inflation_source": food_infl_source,
                 "precip_anomaly_pct":   om_row.get("precip_anomaly_pct"),
                 "temp_anomaly_c":       om_row.get("temp_anomaly_c"),
                 "drought_flag":         om_row.get("drought_flag"),
@@ -173,7 +193,7 @@ def main():
             "source": (
                 "Composite: WFP HungerMap + IPC + ACLED + FAO FFPI + ReliefWeb + "
                 "Open-Meteo (weather/flood) + NASA FIRMS + OpenAQ + USGS Water + "
-                "WFP per-country (FX/inflation)"
+                "WFP per-country (FX/inflation) + Eurostat food HICP + FAOSTAT food CPI"
             ),
             "notes": (
                 "Adjustment range -10 to +35 added to structural FDRS to produce "

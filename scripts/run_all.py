@@ -24,6 +24,8 @@ import refresh_openmeteo_flood
 import refresh_usgs_water
 import refresh_openaq
 import refresh_nasa_firms
+import refresh_eurostat
+import refresh_faostat
 import build_nowcast
 
 
@@ -42,6 +44,8 @@ STEPS = [
     ("USGS Water",          refresh_usgs_water.main),
     ("OpenAQ Air Quality",  refresh_openaq.main),
     ("NASA FIRMS Fires",    refresh_nasa_firms.main),
+    ("Eurostat food HICP",  refresh_eurostat.main),
+    ("FAOSTAT food CPI",    refresh_faostat.main),
     ("Nowcast build",       build_nowcast.main),
 ]
 
