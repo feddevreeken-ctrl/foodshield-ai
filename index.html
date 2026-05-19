@@ -3034,13 +3034,21 @@ body {
   font-family: 'Geist Mono', monospace; font-size: 10px;
   color: var(--t3); text-transform: uppercase; letter-spacing: .14em;
 }
+/* v20: action bar sits in normal flow (no overlap) — restored on a clear row */
 .scn-action-bar {
-  position: sticky; bottom: 50px; z-index: 30;
   display: flex; align-items: center; gap: 12px;
-  margin: 14px 0; padding: 10px 14px;
-  background: var(--bg1); border: 1px solid var(--b2);
+  margin: 18px 0 8px;
+  padding: 12px 16px;
+  background: var(--bg1);
+  border: 1px solid var(--b2);
   border-radius: 10px;
-  box-shadow: 0 4px 18px rgba(0,0,0,.4);
+  box-shadow: 0 2px 10px rgba(0,0,0,.25);
+}
+.scn-action-bar .run-btn { flex-shrink: 0; }
+.scn-action-bar .scn-action-hint {
+  margin-left: auto;
+  font-size: 10.5px; color: var(--t3);
+  font-family: 'Geist Mono', monospace;
 }
 .scn-card {
   background: var(--bg2);
@@ -3065,7 +3073,11 @@ body {
   display: flex; align-items: flex-start; justify-content: space-between;
   gap: 10px;
   margin-bottom: 8px;
+  /* leave space so the absolute-positioned check box (16px + 12px right) doesn't overlap the tag */
+  padding-right: 32px;
+  min-width: 0;
 }
+.scn-card-head .scn-card-title { min-width: 0; flex: 1; }
 .scn-card-title {
   font-size: 12.5px;
   font-weight: 600;
@@ -3074,15 +3086,18 @@ body {
 }
 .scn-card-tag {
   font-family: 'Geist Mono', monospace;
-  font-size: 9px;
+  font-size: 8.5px;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   color: var(--t3);
   background: var(--bg3);
   border-radius: 3px;
-  padding: 2px 6px;
+  padding: 2px 5px;
   white-space: nowrap;
   flex-shrink: 0;
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: clip;
 }
 .scn-card-desc {
   font-size: 10.5px;
@@ -12006,15 +12021,15 @@ function renderScenarioTab() {
         </div>`).join('')}
     </div>
 
-    <!-- Sticky action bar — always visible while scrolling shock list -->
+    <!-- Action bar — sits in normal flow under the shock grid -->
     <div class="scn-action-bar">
-      <button class="run-btn" onclick="runScenarios()" style="min-width:200px;">
+      <button class="run-btn" onclick="runScenarios();setTimeout(()=>document.getElementById('scn-results')?.scrollIntoView({behavior:'smooth',block:'start'}),120);" style="min-width:200px;">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg>
         Run Scenario Analysis
       </button>
       <button class="filter-clear-btn" onclick="clearScenarios()" style="font-size:11px;padding:7px 14px;">Clear all</button>
       <span style="font-size:11px;color:var(--t3);" id="scn-selected-count">No scenarios selected</span>
-      <span style="margin-left:auto;font-size:10.5px;color:var(--t3);font-family:'Geist Mono',monospace;">⌥ Results appear below ↓</span>
+      <span class="scn-action-hint">Results appear below ↓</span>
     </div>
 
     <div id="scn-results" style="display:none;">
