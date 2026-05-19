@@ -10,9 +10,14 @@ First push of v19 adds:
 - `.github/workflows/refresh-data.yml` — daily cron workflow
 - `data/` — JSON snapshots loaded by `index.html`
 
-### 2. Register for API keys (4 sources need registration)
+### 2. Register for API keys (some sources need registration)
 
-The other 4 sources (World Bank, FAO FFPI, WFP HungerMap, Feeding America static) need nothing — they're fully public.
+The following sources need nothing — they're fully public:
+- World Bank WDI, FAO FFPI, WFP HungerMap (both global + per-country endpoints)
+- Feeding America (static lookup)
+- Open-Meteo (weather + flood)
+- USGS Water Services
+- IPC (now via HungerMap mirror — no key needed since May 2026)
 
 **ReliefWeb** (humanitarian alerts — register an *appname*, no key)
 1. Email apidoc@reliefweb.int requesting an appname like "foodshield-ai-fv" (~24h approval)
@@ -20,10 +25,23 @@ The other 4 sources (World Bank, FAO FFPI, WFP HungerMap, Feeding America static
 3. Without this, the script writes an empty stub and the nowcast just skips ReliefWeb signals
 
 **IPC** (food-security phase classifications)
-1. Register at https://www.ipcinfo.org/ipc-data-portal (free, requires email confirmation)
-2. Request API access from your dashboard
-3. In GitHub secrets: add `IPC_API_KEY` if/when they issue one
-4. NOTE (May 2026): IPC restricted their public population endpoint to authenticated callers. Script will skip with a stub until you register.
+- No registration required as of May 2026 — we read IPC from WFP HungerMap's mirror
+  at `api.hungermapdata.org/v2/ipc.json` (same data, no auth).
+- Keep `IPC_API_KEY` as a fallback secret if you want to hit the official endpoint
+  when HungerMap's mirror is down. Optional.
+
+**OpenAQ** (PM2.5 air quality — chronic crop & labour stress signal)
+1. Register at https://api.openaq.org/register (free, instant)
+2. Copy your API key
+3. In GitHub secrets: add `OPENAQ_API_KEY` = your key
+4. Without this, the OpenAQ script writes an empty stub — no error.
+
+**NASA FIRMS** (active fire detection over cropland)
+1. Register at https://firms.modaps.eosdis.nasa.gov/api/ (free, "MAP_KEY")
+2. Copy the MAP_KEY emailed to you
+3. In GitHub secrets: add `NASA_FIRMS_MAP_KEY` = your key
+4. Without this, the FIRMS script writes an empty stub — no error.
+5. Free tier: 5000 lines per request, 1000 requests per 10 minutes.
 
 **ACLED** (conflict events — required for the nowcast layer)
 1. Register a free account at https://developer.acleddata.com

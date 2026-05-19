@@ -11,6 +11,7 @@ from _common import safe_run
 
 # Import each refresh module
 import refresh_wfp
+import refresh_wfp_country
 import refresh_worldbank
 import refresh_fao_ffpi
 import refresh_reliefweb
@@ -18,19 +19,30 @@ import refresh_ipc
 import refresh_acled
 import refresh_comtrade
 import refresh_feeding_america
+import refresh_openmeteo
+import refresh_openmeteo_flood
+import refresh_usgs_water
+import refresh_openaq
+import refresh_nasa_firms
 import build_nowcast
 
 
 STEPS = [
-    ("WFP HungerMap",    refresh_wfp.main),
-    ("World Bank WDI",   refresh_worldbank.main),
-    ("FAO FFPI",         refresh_fao_ffpi.main),
-    ("ReliefWeb",        refresh_reliefweb.main),
-    ("IPC",              refresh_ipc.main),
-    ("ACLED",            refresh_acled.main),
-    ("Comtrade",         refresh_comtrade.main),
-    ("Feeding America",  refresh_feeding_america.main),
-    ("Nowcast build",    build_nowcast.main),
+    ("WFP HungerMap",       refresh_wfp.main),
+    ("WFP per-country",     refresh_wfp_country.main),
+    ("World Bank WDI",      refresh_worldbank.main),
+    ("FAO FFPI",            refresh_fao_ffpi.main),
+    ("ReliefWeb",           refresh_reliefweb.main),
+    ("IPC",                 refresh_ipc.main),
+    ("ACLED",               refresh_acled.main),
+    ("Comtrade",            refresh_comtrade.main),
+    ("Feeding America",     refresh_feeding_america.main),
+    ("Open-Meteo Weather",  refresh_openmeteo.main),
+    ("Open-Meteo Flood",    refresh_openmeteo_flood.main),
+    ("USGS Water",          refresh_usgs_water.main),
+    ("OpenAQ Air Quality",  refresh_openaq.main),
+    ("NASA FIRMS Fires",    refresh_nasa_firms.main),
+    ("Nowcast build",       build_nowcast.main),
 ]
 
 

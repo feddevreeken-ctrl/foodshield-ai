@@ -4240,9 +4240,9 @@ input[type="email"]:focus {
   </nav>
 
   <div id="topbar-right">
-    <div class="status-pill" id="live-status-pill" title="Live data refreshed daily via GitHub Actions. Click for details." style="cursor:pointer;" onclick="(async()=>{const m = LIVE.meta; const ok = m.sources_ok; const fail = m.sources_failed; const t = m.loaded_at ? new Date(m.loaded_at).toLocaleString() : 'pending'; alert(`FoodShield AI v19 — Live data\n\nLast refresh: ${t}\nSources loaded: ${ok}/${ok+fail}\n\nSources:\n• WFP HungerMap LIVE\n• IPC Phase 3+ classifications\n• ACLED conflict events\n• FAO Food Price Index\n• ReliefWeb humanitarian alerts\n• World Bank WDI\n• UN Comtrade (if key configured)\n• Feeding America (US states)`);})()">
+    <div class="status-pill" id="live-status-pill" title="Live data refreshed daily via GitHub Actions. Click for details." style="cursor:pointer;" onclick="(async()=>{const m = LIVE.meta; const ok = m.sources_ok; const fail = m.sources_failed; const t = m.loaded_at ? new Date(m.loaded_at).toLocaleString() : 'pending'; alert(`FoodShield AI v20 — Live data\n\nLast refresh: ${t}\nSources loaded: ${ok}/${ok+fail}\n\n14 data sources:\n• WFP HungerMap LIVE (global)\n• WFP HungerMap per-country (FX, food inflation, nutrition)\n• IPC Phase 3+ classifications (via HungerMap mirror)\n• ACLED conflict events\n• FAO Food Price Index\n• ReliefWeb humanitarian alerts\n• World Bank WDI\n• UN Comtrade Plus (if key configured)\n• Feeding America (US states)\n• Open-Meteo (weather + soil moisture)\n• Open-Meteo Flood (river discharge)\n• USGS Water Services (US river flow)\n• NASA FIRMS (active fire detection)\n• OpenAQ (PM2.5 air quality)`);})()">
       <div class="live-dot"></div>
-      <span class="status-label" id="live-status-label">Live · daily</span>
+      <span class="status-label" id="live-status-label">Live · 14 sources · daily</span>
     </div>
 
     <button class="fs-filter-btn" id="filter-btn" onclick="toggleFilterPanel(event)" aria-haspopup="true" aria-expanded="false">
@@ -4688,9 +4688,9 @@ input[type="email"]:focus {
       <!-- Stat strip -->
       <div class="about-stats">
         <div class="about-stat"><div class="about-stat-num">177</div><div class="about-stat-lab">countries + 50 US states</div></div>
-        <div class="about-stat"><div class="about-stat-num">42</div><div class="about-stat-lab">data sources</div></div>
+        <div class="about-stat"><div class="about-stat-num">14</div><div class="about-stat-lab">live data feeds · daily</div></div>
         <div class="about-stat"><div class="about-stat-num">8 yrs</div><div class="about-stat-lab">history (since 2018)</div></div>
-        <div class="about-stat"><div class="about-stat-num">24</div><div class="about-stat-lab">live disturbances</div></div>
+        <div class="about-stat"><div class="about-stat-num">11</div><div class="about-stat-lab">nowcast sub-signals</div></div>
       </div>
       <div id="about-body" class="fade-in"></div>
     </div>
@@ -8812,6 +8812,9 @@ const COUNTRIES = [
 const LIVE = {
   nowcast: null, wfp: null, ipc: null, worldbank: null,
   ffpi: null, reliefweb: null, comtrade: null, feeding_america: null,
+  // v20 additions
+  wfp_country: null, openmeteo: null, openmeteo_flood: null,
+  openaq: null, nasa_firms: null, usgs_water: null,
   meta: { loaded_at: null, sources_ok: 0, sources_failed: 0 },
 };
 
@@ -8829,10 +8832,13 @@ async function _fetchData(name) {
 }
 
 async function loadLiveData() {
-  const [nc, wfp, ipc, wb, ffpi, rw, ct, fa] = await Promise.all([
+  const [nc, wfp, ipc, wb, ffpi, rw, ct, fa, wfpc, om, omf, aq, fires, usgs] = await Promise.all([
     _fetchData('nowcast'), _fetchData('wfp_hungermap'), _fetchData('ipc'),
     _fetchData('worldbank_wdi'), _fetchData('fao_ffpi'), _fetchData('reliefweb_alerts'),
     _fetchData('comtrade_staples'), _fetchData('feeding_america_states'),
+    // v20
+    _fetchData('wfp_country'), _fetchData('openmeteo'), _fetchData('openmeteo_flood'),
+    _fetchData('openaq'), _fetchData('nasa_firms'), _fetchData('usgs_water'),
   ]);
   LIVE.nowcast = nc?.data || {};
   LIVE.wfp = wfp?.data || {};
@@ -8842,6 +8848,12 @@ async function loadLiveData() {
   LIVE.reliefweb = rw?.data || {};
   LIVE.comtrade = ct?.data || {};
   LIVE.feeding_america = fa?.data || {};
+  LIVE.wfp_country = wfpc?.data || {};
+  LIVE.openmeteo = om?.data || {};
+  LIVE.openmeteo_flood = omf?.data || {};
+  LIVE.openaq = aq?.data || {};
+  LIVE.nasa_firms = fires?.data || {};
+  LIVE.usgs_water = usgs?.data || {};
   LIVE.meta.loaded_at = (nc?._meta?.generated_at) || new Date().toISOString();
 
   // ── Apply nowcast adjustment to every country in-place ────────────────────
@@ -8851,7 +8863,9 @@ async function loadLiveData() {
   if (LIVE.nowcast && Object.keys(LIVE.nowcast).length > 0 && Array.isArray(window.COUNTRIES)) {
     for (const c of COUNTRIES) {
       if (c._fdrsStructural == null) c._fdrsStructural = c.fdrs;
-      const adj = LIVE.nowcast[c.iso]?.adjustment;
+      if (c._f2030Structural == null) c._f2030Structural = c.f2030;
+      const ncRow = LIVE.nowcast[c.iso] || {};
+      const adj = ncRow.adjustment;
       if (adj != null) {
         c.fdrs = Math.max(0, Math.min(100, Math.round(c._fdrsStructural + adj)));
         c._fdrsAdj = adj;
@@ -8859,6 +8873,23 @@ async function loadLiveData() {
         c.fdrs = c._fdrsStructural;
         c._fdrsAdj = 0;
       }
+      // ── v20: persistent-shock signals nudge the 2030 forecast ────────────
+      // Only signals that imply *durable* damage adjust the long-run forecast:
+      //   IPC Phase 3+ (humanitarian crisis), FX collapse (lasts months),
+      //   food inflation (sticky), fire/drought (chronic for affected regions).
+      // Acute/transient signals (flood, AQ, US river noise) do not.
+      const sig = ncRow.signals || {};
+      const cmp = ncRow.components || {};
+      let f2030Adj = 0;
+      f2030Adj += (cmp.ipc_pressure   || 0) * 0.5;    // half-weight: chronic crisis persists
+      f2030Adj += (cmp.fx_shock       || 0) * 0.7;    // currency collapses leave a multi-year drag
+      f2030Adj += (cmp.inflation_shock|| 0) * 0.6;
+      f2030Adj += (cmp.weather_kick   || 0) * 0.3;    // climate trend reinforcement
+      f2030Adj += (cmp.fire_kick      || 0) * 0.4;    // deforestation/cropland loss
+      f2030Adj += (cmp.conflict_kick  || 0) * 0.5;    // active conflict often persists
+      f2030Adj = Math.max(-3, Math.min(8, Math.round(f2030Adj * 10) / 10));
+      c.f2030 = Math.max(0, Math.min(100, Math.round(c._f2030Structural + f2030Adj)));
+      c._f2030Adj = f2030Adj;
     }
     console.info(`[FoodShield] Nowcast applied to ${Object.keys(LIVE.nowcast).length} countries · loaded at ${LIVE.meta.loaded_at}`);
   }
@@ -8929,13 +8960,42 @@ function calibrationAnchors(c) {
   const wb = LIVE.worldbank?.[c.iso] || {};
   const wfp = LIVE.wfp?.[c.iso] || {};
   const ipc = LIVE.ipc?.[c.iso] || {};
+  const wc = LIVE.wfp_country?.[c.iso] || {};
+  const om = LIVE.openmeteo?.[c.iso] || {};
+  const fl = LIVE.openmeteo_flood?.[c.iso] || {};
+  const aq = LIVE.openaq?.[c.iso] || {};
+  const fi = LIVE.nasa_firms?.[c.iso] || {};
+  const usg = LIVE.usgs_water?.[c.iso] || {};
+  // Prefer HungerMap's per-country food inflation over WB headline CPI when available
+  const food_infl = (wc.food_inflation_pct != null) ? wc.food_inflation_pct
+                  : (wb['FP.CPI.TOTL.ZG']?.value ?? null);
   return {
     undernourishment_pct: wb['SN.ITK.DEFC.ZS']?.value ?? null,
-    food_inflation_pct: wb['FP.CPI.TOTL.ZG']?.value ?? null,
+    food_inflation_pct: food_infl,
     wfp_fcs_pct: wfp.fcs_pct ?? null,
     ipc_phase3plus_pct: ipc.phase3plus_pct ?? null,
     ipc_phase3plus_count: ipc.phase3plus_count ?? null,
     ipc_period: ipc.period ?? null,
+    // v20
+    fx_currency: wc.fx_currency ?? null,
+    fx_90d_change_pct: wc.fx_90d_change_pct ?? null,
+    fx_currency_shock: !!wc.fx_currency_shock,
+    wasting_pct: wc.wasting_pct ?? null,
+    stunting_pct: wc.stunting_pct ?? null,
+    precip_anomaly_pct: om.precip_anomaly_pct ?? null,
+    temp_anomaly_c: om.temp_anomaly_c ?? null,
+    drought_flag: !!om.drought_flag,
+    heat_flag: !!om.heat_flag,
+    wet_flag: !!om.wet_flag,
+    flood_river: fl.river ?? null,
+    flood_anomaly_pct: fl.discharge_anomaly_pct ?? null,
+    flood_flag: !!fl.flood_flag,
+    pm25_latest: aq.pm25_latest ?? null,
+    pm25_flag: !!aq.pm25_flag,
+    fires_7d: fi.fires_7d ?? null,
+    fire_flag: !!fi.fire_flag,
+    us_flow_anomaly: usg.flow_anomaly ?? null,
+    us_river: usg.river ?? null,
   };
 }
 
@@ -10584,16 +10644,53 @@ function openPanel(c, skipDrilldown) {
     }
     if (anchEl) {
       const items = [];
+      // ── Baseline anchors (always shown when available) ───────────────────
       if (a.undernourishment_pct != null)   items.push(`<b>${a.undernourishment_pct}%</b> undernourished <span style="color:var(--t3)">(FAO)</span>`);
       if (a.ipc_phase3plus_pct != null)     items.push(`<b>${a.ipc_phase3plus_pct}%</b> IPC Phase 3+ <span style="color:var(--t3)">(${a.ipc_period||'IPC'})</span>`);
       if (a.wfp_fcs_pct != null)            items.push(`<b>${a.wfp_fcs_pct}%</b> poor food consumption <span style="color:var(--t3)">(WFP FCS)</span>`);
-      if (a.food_inflation_pct != null)     items.push(`<b>${a.food_inflation_pct}%</b> CPI inflation <span style="color:var(--t3)">(WB)</span>`);
-      if (items.length === 0) {
+      if (a.food_inflation_pct != null)     items.push(`<b>${a.food_inflation_pct}%</b> food CPI inflation <span style="color:var(--t3)">(${a.food_inflation_pct === LIVE.wfp_country?.[c.iso]?.food_inflation_pct ? 'HungerMap' : 'WB'})</span>`);
+      if (a.stunting_pct != null)           items.push(`<b>${a.stunting_pct}%</b> child stunting <span style="color:var(--t3)">(WFP)</span>`);
+      // ── v20 live-shock anchors (only shown when the signal fires) ────────
+      const liveShocks = [];
+      if (a.fx_currency_shock && a.fx_90d_change_pct != null) {
+        liveShocks.push(`<b style="color:#c44b3c">${a.fx_90d_change_pct}%</b> 90d FX vs USD <span style="color:var(--t3)">(${a.fx_currency || 'local'})</span>`);
+      }
+      if (a.drought_flag) {
+        liveShocks.push(`<b style="color:#d27a3e">Drought</b> · precip ${a.precip_anomaly_pct}% vs 30d <span style="color:var(--t3)">(Open-Meteo)</span>`);
+      } else if (a.wet_flag) {
+        liveShocks.push(`<b style="color:#3e8ec4">Wet</b> · precip +${a.precip_anomaly_pct}% vs 30d <span style="color:var(--t3)">(Open-Meteo)</span>`);
+      }
+      if (a.heat_flag) {
+        liveShocks.push(`<b style="color:#c44b3c">Heat</b> · +${a.temp_anomaly_c}°C vs 30d <span style="color:var(--t3)">(Open-Meteo)</span>`);
+      }
+      if (a.flood_flag) {
+        liveShocks.push(`<b style="color:#3e8ec4">Flood</b> · ${a.flood_river} +${a.flood_anomaly_pct}% discharge <span style="color:var(--t3)">(Open-Meteo)</span>`);
+      }
+      if (a.fire_flag) {
+        liveShocks.push(`<b style="color:#c44b3c">Fire spike</b> · ${a.fires_7d} detections last 7d <span style="color:var(--t3)">(NASA FIRMS)</span>`);
+      }
+      if (a.pm25_flag && a.pm25_latest != null) {
+        liveShocks.push(`<b style="color:#c47a3c">${a.pm25_latest} µg/m³</b> PM2.5 (>WHO target) <span style="color:var(--t3)">(OpenAQ)</span>`);
+      }
+      if (a.us_flow_anomaly === 'low') {
+        liveShocks.push(`<b style="color:#d27a3e">Low flow</b> · ${a.us_river} <span style="color:var(--t3)">(USGS)</span>`);
+      } else if (a.us_flow_anomaly === 'high') {
+        liveShocks.push(`<b style="color:#3e8ec4">High flow</b> · ${a.us_river} <span style="color:var(--t3)">(USGS)</span>`);
+      }
+      if (items.length === 0 && liveShocks.length === 0) {
         anchEl.style.display = 'none';
       } else {
         anchEl.style.display = 'block';
-        anchEl.innerHTML = `<div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.14em;margin-bottom:6px;">Absolute anchors · live</div>` +
-          items.map(s => `<div style="font-size:11.5px;color:var(--t1);padding:2px 0;">${s}</div>`).join('');
+        let html = '';
+        if (items.length) {
+          html += `<div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.14em;margin-bottom:6px;">Absolute anchors · live</div>` +
+            items.map(s => `<div style="font-size:11.5px;color:var(--t1);padding:2px 0;">${s}</div>`).join('');
+        }
+        if (liveShocks.length) {
+          html += `<div style="font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.14em;margin:${items.length?10:0}px 0 6px;">Active live shocks</div>` +
+            liveShocks.map(s => `<div style="font-size:11.5px;color:var(--t1);padding:2px 0;">${s}</div>`).join('');
+        }
+        anchEl.innerHTML = html;
       }
     }
 
@@ -13035,18 +13132,38 @@ function renderMethodologyTab() {
           <div style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--accent);">cadence: daily · 06:00 UTC</div>
         </div>
       </div>
-      <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:10px;padding:16px 20px;font-family:'Geist Mono',monospace;font-size:12.5px;line-height:2;margin-bottom:14px;">
-        <div style="color:var(--t3);font-size:10.5px;margin-bottom:6px;font-family:'Geist',sans-serif;letter-spacing:.06em;text-transform:uppercase;">Nowcast Adjustment</div>
+      <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:10px;padding:16px 20px;font-family:'Geist Mono',monospace;font-size:12.5px;line-height:1.9;margin-bottom:14px;">
+        <div style="color:var(--t3);font-size:10.5px;margin-bottom:6px;font-family:'Geist',sans-serif;letter-spacing:.06em;text-transform:uppercase;">Nowcast Adjustment Δ<sub>nowcast</sub></div>
         <div><span style="color:var(--accent)">Nowcast FDRS</span> = Structural FDRS + Δ<sub>nowcast</sub></div>
-        <div style="padding-left:24px;color:var(--t3);font-size:11px;font-family:'Geist',sans-serif;margin-top:6px;">
-          where Δ<sub>nowcast</sub> ∈ [−10, +25] — bounded so live noise never overwhelms the structural baseline.
-          A country panel showing <b style="color:var(--accent)">Δ +N</b> next to FDRS is the nowcast moving above the structural score.
+        <div style="padding-left:18px;margin-top:6px;font-size:11.5px;">
+          Δ<sub>nowcast</sub> = ipc_pressure (0–12)
+          + wfp_consumption (0–6)
+          + conflict (0–5)
+          + global_price (0–2)
+          <br>+ fx_shock (0–3)
+          + inflation_shock (0–3)
+          + weather_extremes (0–4)
+          + flood (0–3)
+          + fire (0–2)
+          + air_quality (0–1)
+          + us_water (0–2)
+          − humanitarian_response (0–2)
+        </div>
+        <div style="padding-left:18px;color:var(--t3);font-size:11px;font-family:'Geist',sans-serif;margin-top:8px;">
+          Bounded to [−10, +35] so live noise never overwhelms the structural baseline.
+          A country panel showing <b style="color:var(--accent)">Δ +N</b> next to FDRS is the nowcast above the structural score.
         </div>
       </div>
-      <div style="font-size:11.5px;color:var(--t3);line-height:1.7;">
+      <div style="font-size:11.5px;color:var(--t3);line-height:1.7;margin-bottom:14px;">
         <b style="color:var(--t2)">Why two scores?</b> Aid agencies need structural to plan; commodity desks need nowcast to react.
         A country can be structurally resilient but acutely stressed (e.g., a flood in Pakistan), or structurally fragile but
         temporarily stable (e.g., a quiet quarter in Yemen). Showing both keeps the picture honest.
+      </div>
+      <div style="background:var(--bg0);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:12px 16px;font-size:11.5px;color:var(--t2);line-height:1.7;">
+        <b style="color:var(--t1)">Scoring change · May 2026.</b> The nowcast adjustment was extended from 5 to 11 sub-signals
+        (added: FX shock, food inflation, weather extremes, river flood, fire activity, air quality, US river flow).
+        The cap moved from <span style="font-family:'Geist Mono',monospace">[−10, +25]</span> to <span style="font-family:'Geist Mono',monospace">[−10, +35]</span>
+        to preserve discrimination. Nowcast deltas before and after this date are <em>not directly comparable</em>; same-day comparisons across countries remain valid.
       </div>
     </div>
 
@@ -13054,7 +13171,7 @@ function renderMethodologyTab() {
     <div class="card" style="grid-column:1/-1">
       <div class="card-title"><span class="card-marker"></span> Live Data Pipeline · how the daily refresh works</div>
       <div style="font-size:13px;color:var(--t2);line-height:1.75;margin-bottom:16px;">
-        Every day at <b style="color:var(--t1)">06:00 UTC</b> a GitHub Actions workflow fetches eight public sources,
+        Every day at <b style="color:var(--t1)">06:00 UTC</b> a GitHub Actions workflow fetches <b style="color:var(--t1)">14 public sources</b>,
         writes JSON snapshots to <code style="font-size:11px;background:var(--bg1);padding:1px 6px;border-radius:3px;">/data</code>,
         builds the composite <code style="font-size:11px;background:var(--bg1);padding:1px 6px;border-radius:3px;">nowcast.json</code>,
         commits the diff and triggers a Vercel redeploy. The frontend you're reading reloads the snapshot on every page visit.
@@ -13063,12 +13180,18 @@ function renderMethodologyTab() {
         ${[
           {src:'FAO Food Price Index (FFPI)',role:'global price shock signal',key:'no key'},
           {src:'WFP HungerMap LIVE',role:'consumption + IPC + alerts',key:'no key'},
+          {src:'WFP HungerMap per-country',role:'FX, food inflation, nutrition',key:'no key'},
           {src:'World Bank WDI',role:'baseline inflation, GDP, ag share',key:'no key'},
           {src:'Feeding America (Map the Meal Gap)',role:'US state food-insecurity %',key:'no key'},
+          {src:'Open-Meteo (weather)',role:'precipitation + temperature anomalies',key:'no key'},
+          {src:'Open-Meteo Flood',role:'river discharge in 30 flood-exposed nations',key:'no key'},
+          {src:'USGS Water Services',role:'US river flow anomalies (drought/flood)',key:'no key'},
+          {src:'ReliefWeb',role:'humanitarian alerts feed',key:'appname'},
+          {src:'IPC Acute Food Insecurity',role:'phase classifications (via HungerMap mirror)',key:'no key'},
           {src:'ACLED',role:'conflict event count + fatalities',key:'API key'},
           {src:'UN Comtrade Plus',role:'bilateral staples trade volumes',key:'API key'},
-          {src:'ReliefWeb',role:'humanitarian alerts feed',key:'appname'},
-          {src:'IPC Acute Food Insecurity',role:'phase classifications',key:'API key (restricted May 2026)'},
+          {src:'NASA FIRMS',role:'active fire detection over cropland',key:'API key'},
+          {src:'OpenAQ',role:'PM2.5 background — labour & crop stress',key:'API key'},
         ].map(d=>`
           <div style="background:var(--bg0);border:1px solid var(--b1);border-radius:8px;padding:11px 13px;">
             <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:3px;">${d.src}</div>
@@ -13141,6 +13264,8 @@ function renderMethodologyTab() {
            body:'The model is back-tested against 2018–2023 realized data. Countries where the model diverged >8 points from realized outcomes are flagged and recalibrated annually.'},
           {step:'06',title:'Uncertainty Bands',
            body:'Each 2030 forecast carries an implicit ±5–12 point uncertainty range. The displayed number represents the central estimate. Scenario Simulator tab allows stress-testing beyond the baseline.'},
+          {step:'07',title:'Live Overlay (v20, May 2026)',
+           body:'Persistent live signals — IPC Phase 3+ status, currency collapse, sticky food inflation, active conflict, sustained drought, fire-driven cropland loss — adjust the 2030 forecast by up to +8 points. Transient signals (single-week flood, AQ spikes, US river noise) do not. The structural f2030 is preserved on each country as <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">_f2030Structural</code>.'},
         ].map(s=>`
           <div style="display:flex;gap:14px;align-items:flex-start;">
             <div style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--accent);background:var(--accent)18;border-radius:4px;padding:3px 7px;flex-shrink:0;margin-top:1px;">${s.step}</div>
@@ -13158,14 +13283,14 @@ function renderMethodologyTab() {
       <div class="card-title"><span class="card-marker"></span> Limitations &amp; Caveats</div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
         ${[
-          {icon:'✓',title:'Daily Refresh (v19)',body:'Live signals (WFP HungerMap, IPC, ACLED conflict events, FAO FFPI prices, ReliefWeb alerts) are fetched daily via a GitHub Actions workflow. The structural baseline (FAOSTAT, USDA, WB WDI) still updates annually — but a per-country <b>nowcast adjustment</b> (range &minus;10 to +25) is layered on top to reflect current conditions.'},
+          {icon:'✓',title:'Daily Refresh (v20)',body:'Live signals from 14 public feeds — WFP HungerMap (global + per-country FX/inflation), IPC, ACLED, FAO FFPI, ReliefWeb, Open-Meteo (weather + river flood), USGS Water, NASA FIRMS fires, OpenAQ — are fetched daily via a GitHub Actions workflow. The structural baseline (FAOSTAT, USDA, WB WDI) still updates annually — but a per-country <b>nowcast adjustment</b> (range &minus;10 to +35) is layered on top to reflect current conditions, plus a smaller persistent-shock overlay that nudges the 2030 forecast.'},
           {icon:'✓',title:'Sub-national Drill-Down',body:'For crisis countries with IPC sub-national analysis (Sudan, Yemen, Somalia, Afghanistan, Haiti, S.Sudan, DRC, Burkina, Niger, Nigeria and ~25 others), the country panel shows admin-1 area scores. Where IPC sub-national data is unavailable we now report the national min/max range so users see variance, not just the average.'},
           {icon:'✓',title:'Absolute Calibration Anchors',body:'Every country panel shows the relative FDRS alongside <b>absolute</b> reference numbers: FAO prevalence of undernourishment %, IPC Phase 3+ population %, WFP poor food consumption % (FCS), and World Bank food CPI inflation %. Use these to translate the FDRS into something concrete.'},
           {icon:'✓',title:'US States Methodology',body:'US state scores now incorporate <b>Feeding America Map the Meal Gap</b> food-insecurity prevalence at state level (annual release, May). State FDRS aggregates real food-insecurity rates instead of mirroring the country formula. County-level extension planned for v20.'},
           {icon:'✓',title:'Real Trade Volumes',body:'When the UN Comtrade refresh is configured, import/export arcs use actual bilateral trade in cereal staples (HS 1001 wheat, 1005 maize, 1006 rice, 1201 soybeans) — tonnage and USD values, not estimated shares. Arc weight reflects real % of imports.'},
           {icon:'ℹ',title:'FDRS Remains a Composite Index',body:'FDRS is a ranked-position score, not a direct % of food-insecure population. The new <b>absolute anchors</b> address this by sitting next to it. A country at FDRS 50 is in the middle of the global distribution; the anchors tell you what 50 looks like in human terms.'},
           {icon:'ℹ',title:'Source Lag (Structural Layer Only)',body:'Annual data — FAOSTAT food balance sheets, USDA PSD production — still has 6–18 month lags inherent to those releases. The nowcast layer compensates by adjusting for live signals that the slow data cannot capture (active conflict, recent IPC declarations, current price shocks).'},
-          {icon:'ℹ',title:'Where the Numbers Come From',body:'Every panel cites its source. The structural FDRS uses FAO/USDA/WB/ND-GAIN. The nowcast adjustment uses WFP HungerMap (FCS prevalence), IPC (Phase 3+ %), ACLED (last-30-day events), FAO FFPI (month-on-month price change), and ReliefWeb (active humanitarian reports). All weights and the formula are open in /scripts/build_nowcast.py.'},
+          {icon:'ℹ',title:'Where the Numbers Come From',body:'Every panel cites its source. The structural FDRS uses FAO/USDA/WB/ND-GAIN. The v20 nowcast adjustment uses 11 sub-signals: IPC Phase 3+, WFP FCS, ACLED conflict, FAO FFPI MoM, ReliefWeb response presence, FX shock (HungerMap), food inflation (HungerMap), weather extremes (Open-Meteo), river flood (Open-Meteo Flood), fire activity (NASA FIRMS), PM2.5 (OpenAQ), and US-state water flow (USGS). All weights and the formula are open in /scripts/build_nowcast.py.'},
         ].map(c=>`
           <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:8px;padding:14px 16px;">
             <div style="font-size:12.5px;font-weight:600;color:var(--t1);margin-bottom:6px;">${c.icon} ${c.title}</div>
@@ -13202,7 +13327,7 @@ function renderMethodologyTab() {
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
         <div>
           <div style="font-size:12px;color:var(--t3);line-height:1.8;">
-            <b style="color:var(--t2)">FoodShield AI v14</b> · Built May 2026 ·
+            <b style="color:var(--t2)">FoodShield AI v20</b> · Built May 2026 ·
             ${COUNTRIES.filter(c=>!c.iso.startsWith('US-')).length} countries + 50 US states ·
             Data vintage: FAO SOFI 2025, USDA WASDE May 2026, ND-GAIN 2024, ACLED 2025, World Bank LPI 2.0 (2025), UN WPP 2024, IPC 2025–2026
           </div>
@@ -13212,7 +13337,7 @@ function renderMethodologyTab() {
           </div>
         </div>
         <div style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--accent);background:var(--accent)18;border-radius:6px;padding:8px 14px;white-space:nowrap;">
-          v19.0 · May 2026 · daily refresh
+          v20.0 · May 2026 · 14 sources · daily refresh
         </div>
       </div>
     </div>
