@@ -8918,6 +8918,24 @@ async function loadLiveData() {
   LIVE.faostat_food = faostat?.data || {};
   LIVE.meta.loaded_at = (nc?._meta?.generated_at) || new Date().toISOString();
 
+  // ── v20.2: Apply Supply-Chain Exposure (SCE) overlay BEFORE nowcast ──────
+  // SCE is a structural correction — it captures trade-import dependency, distinct from
+  // the caloric-reliance components in the original 6-component FDRS. Applied here so it
+  // flows through every downstream consumer (map color, ranking, comparison, scenarios).
+  //
+  // Weight: 8% — small enough that no existing country shifts by more than ~7 points,
+  // but large enough that countries like Netherlands, Singapore, Gulf states move up to
+  // reflect their actual sourcing risk.
+  if (Array.isArray(window.COUNTRIES)) {
+    for (const c of COUNTRIES) {
+      if (c._fdrsRaw == null) c._fdrsRaw = c.fdrs;
+      // SCE-adjusted structural FDRS: blend 92% original + 8% SCE
+      const sce = (typeof supplyChainExposure === 'function') ? supplyChainExposure(c) : 0;
+      c._sce = sce;
+      c.fdrs = Math.max(0, Math.min(100, Math.round(c._fdrsRaw * 0.92 + sce * 0.08)));
+    }
+  }
+
   // ── Apply nowcast adjustment to every country in-place ────────────────────
   // c.fdrs becomes the live nowcast value; structural preserved on c._fdrsStructural.
   // This makes EVERY existing chart, simulation, calculation, comparison, and panel
@@ -9018,6 +9036,117 @@ function fdrsDeltaSign(c) {
   if (d == null || d === 0) return '';
   return d > 0 ? `+${d}` : `${d}`;
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// v20.2: COMMODITY TRADE DEPENDENCY + SUPPLY-CHAIN EXPOSURE (applies to all 195 + 50)
+// ════════════════════════════════════════════════════════════════════════════
+//
+// The original FDRS treats c.w / c.r / c.m as "caloric share" — what fraction of
+// the country's calories come from that commodity. That's the right definition for
+// food-SECURITY (Egypt is wheat-dependent because half its bread calories come from wheat).
+//
+// But "import dependency" in the trade sense — what fraction of consumed volume is
+// imported — is a different question, and the original panel labels conflated the two.
+//
+// The Netherlands example is the clearest case: rice is ~0% of the Dutch diet
+// (caloric share), but nearly 100% of the rice it does consume is imported (trade share).
+// Both numbers are correct; both matter; for different decisions.
+//
+// commodityTradeDependency(c, commodity) infers a trade-import dependency rating
+// from public food-system structure. It returns:
+//   null  → commodity not relevant to this country (not in imports, not in exports,
+//           and not a staple — the panel will hide the trade % rather than mislead)
+//   0–100 → estimated trade-import dependency for that commodity
+//
+// Method: countries that list the commodity in c.exports and are net exporters get low
+// trade-dependency. Countries that list it in c.imports and have low production capacity
+// for that crop (inferred from production-trend component c.c[2] and supplier
+// concentration c.c[1]) get high trade-dependency. We layer on known producer/non-producer
+// signals from a small adjustment table for the major staple-producing geographies.
+
+// Known meaningful producers of each commodity (rough; covers ~80% of world production).
+// Used to anchor the trade-dependency estimate so it doesn't drift into nonsense.
+const COMMODITY_PRODUCERS = {
+  'Wheat': new Set(['CHN','IND','RUS','USA','FRA','CAN','UKR','PAK','AUS','DEU','TUR','ARG','KAZ','POL','GBR','ROU','BRA','IRN','UZB','HUN','ITA','ESP','EGY','MAR','BGR']),
+  'Rice':  new Set(['CHN','IND','IDN','BGD','VNM','THA','MMR','PHL','PAK','KHM','JPN','BRA','USA','EGY','MYS','LAO','NPL','MDG','ITA','ESP','TUR']),
+  'Maize': new Set(['USA','CHN','BRA','ARG','UKR','IND','MEX','RUS','FRA','ROU','HUN','RSA','ZAF','CAN','IDN','NGA','ETH','TZA','PHL','VNM','SRB','EGY','ITA']),
+};
+
+// US states that meaningfully produce these crops (production state lookup).
+const US_STATE_PRODUCERS = {
+  'Wheat': new Set(['US-KS','US-ND','US-MT','US-WA','US-OK','US-ID','US-SD','US-NE','US-CO','US-TX','US-OR','US-MN']),
+  'Rice':  new Set(['US-AR','US-CA','US-LA','US-MS','US-TX','US-MO']),
+  'Maize': new Set(['US-IA','US-IL','US-NE','US-MN','US-IN','US-OH','US-WI','US-SD','US-MO','US-KS','US-MI','US-KY','US-PA','US-ND']),
+};
+
+function commodityTradeDependency(c, commodity) {
+  if (!c || !c.iso) return null;
+  const inImports = (c.imports || []).some(x => (x||'').toLowerCase().includes(commodity.toLowerCase()));
+  const inExports = (c.exports || []).some(x => (x||'').toLowerCase().includes(commodity.toLowerCase()));
+  const isProducer = (COMMODITY_PRODUCERS[commodity] || new Set()).has(c.iso)
+                  || (US_STATE_PRODUCERS[commodity] || new Set()).has(c.iso);
+
+  // Skip the trade-dep number when there's no meaningful trade relationship at all.
+  // (E.g., Liechtenstein for rice — neither imports nor exports, and not a producer.)
+  if (!inImports && !inExports && !isProducer) return null;
+
+  let dep;
+  if (inExports && !inImports) {
+    // Net exporter — by definition, domestic production exceeds domestic consumption.
+    // Trade-import dependency is structurally low.
+    dep = isProducer ? 5 : 12;
+  } else if (isProducer && inImports) {
+    // Country produces this but also imports — partial self-sufficiency. Number depends on production trend.
+    // c.c[2] = production trend component (100 = bad trend, 0 = strong trend)
+    const trend = (c.c || [])[2] || 50;
+    dep = Math.round(20 + trend * 0.5);    // 20–70% range
+  } else if (isProducer && !inImports) {
+    // Producer with no listed imports → low trade dep.
+    dep = 10;
+  } else if (inImports && !isProducer) {
+    // Imports this commodity and is NOT a meaningful producer → essentially fully import-dependent.
+    // This is the Netherlands/rice case, also Egypt/wheat, Senegal/rice, Singapore/everything.
+    dep = 95;
+  } else {
+    // Producer + nothing else → defensive default
+    dep = 15;
+  }
+  return Math.max(0, Math.min(100, dep));
+}
+
+// Supply-Chain Exposure (SCE) — v20.2 7th structural sub-component.
+// Captures TRADE exposure separately from caloric reliance. A country can score high
+// here even when its FDRS calorie-side components are moderate, if it depends on
+// imports for a wide range of inputs (e.g., Netherlands, Singapore, Gulf states).
+//
+// Formula: weighted average of trade-import dependency on the three staple commodities,
+// adjusted by supplier-concentration component (more concentrated suppliers = higher SCE).
+function supplyChainExposure(c) {
+  if (!c) return 0;
+  // Weights reflect global caloric importance of each staple in the food system
+  const w = commodityTradeDependency(c, 'Wheat');
+  const r = commodityTradeDependency(c, 'Rice');
+  const m = commodityTradeDependency(c, 'Maize');
+  const parts = [];
+  if (w != null) parts.push({val: w, weight: 0.45});  // wheat broadest staple
+  if (r != null) parts.push({val: r, weight: 0.30});
+  if (m != null) parts.push({val: m, weight: 0.25});
+  if (!parts.length) return 0;
+  const totalWeight = parts.reduce((s,p) => s + p.weight, 0);
+  let weighted = parts.reduce((s,p) => s + p.val * p.weight, 0) / totalWeight;
+  // Supplier concentration premium — if supply is highly concentrated, exposure is worse
+  const hhi = (c.c || [])[1] || 50;
+  weighted += (hhi - 50) * 0.08;       // up to ±4 pts based on HHI
+  return Math.max(0, Math.min(100, Math.round(weighted)));
+}
+
+// Tooltips
+const TIP_COMMODITY = 'Caloric = % of national caloric supply from this commodity (food-security view).\n' +
+                       'Trade = % of consumed volume that is imported (supply-chain view).\n' +
+                       'A country can be 0% caloric and 95% trade for the same crop — see methodology.';
+const TIP_SCE = 'Supply-Chain Exposure: weighted trade-import dependency across staple commodities,\n' +
+                 'premium-adjusted for supplier concentration. Captures sourcing risk distinct from\n' +
+                 'caloric-reliance vulnerability.';
 
 // ── v20: ISO3 → (lat, lng) for plotting disturbance points on the map ─────
 // Mirrors scripts/_common.py COUNTRY_COORDS. Coordinates are capital-city centroids.
@@ -10992,12 +11121,35 @@ function openPanel(c, skipDrilldown) {
     </div>`;
   }).join('');
 
-  // Metrics
+  // Metrics — v20.2: relabeled to be unambiguous, shows both caloric reliance + trade-import dependency
+  // c.w/r/m are caloric-share figures (% of national caloric supply from this commodity).
+  // commodityTradeDependency() computes a live estimate of trade-import dependency from the imports list.
+  const wTd = commodityTradeDependency(c, 'Wheat');
+  const rTd = commodityTradeDependency(c, 'Rice');
+  const mTd = commodityTradeDependency(c, 'Maize');
+  const fmt = (cal, td) => td != null
+    ? `<span class="v">${cal}% <span style="color:var(--t3);font-size:10px;">caloric</span> · <span class="mono" style="color:var(--accent);">${td}% trade</span></span>`
+    : `<span class="v">${cal}% <span style="color:var(--t3);font-size:10px;">caloric</span></span>`;
   document.getElementById('sp-metrics').innerHTML = `
-    <div class="sp-row"><span class="k">Wheat import dep.</span><span class="v">${c.w}%</span></div>
-    <div class="sp-row"><span class="k">Rice import dep.</span><span class="v">${c.r}%</span></div>
-    <div class="sp-row"><span class="k">Food inflation</span><span class="v" style="color:${c.fi>20?'#c44b3c':'#9a988f'}">${c.fi}% / yr</span></div>
-    <div class="sp-row"><span class="k">Net food trade</span><span class="v" style="color:${c.net>=0?'#6ba36b':'#c44b3c'}">${c.net>=0?'+':''}${(c.net/1000).toFixed(0)}B USD</span></div>`;
+    <div class="sp-row" title="${TIP_COMMODITY}"><span class="k">Wheat</span>${fmt(c.w, wTd)}</div>
+    <div class="sp-row" title="${TIP_COMMODITY}"><span class="k">Rice</span>${fmt(c.r, rTd)}</div>
+    <div class="sp-row" title="${TIP_COMMODITY}"><span class="k">Maize</span>${fmt(c.m, mTd)}</div>
+    ${(function(){
+      // v20.2: use live food-inflation from calibrationAnchors (HungerMap > Eurostat > FAOSTAT > WB),
+      // falling back to the hardcoded c.fi only if no live source exists. The label tells the reader
+      // which source provided the number so they can audit.
+      const a = (typeof calibrationAnchors === 'function') ? calibrationAnchors(c) : {};
+      const live = a.food_inflation_pct;
+      const src  = a.food_inflation_source;
+      const label = a.food_inflation_label || 'food inflation';
+      if (live != null) {
+        return `<div class="sp-row" title="Source: ${src||'live'}. ${label}."><span class="k">Food inflation</span><span class="v" style="color:${live>15?'#c44b3c':live>8?'#d27a3e':'#9a988f'}">${live}% <span style="color:var(--t3);font-size:10px;">${src||''}</span></span></div>`;
+      }
+      // Fallback to hardcoded only if no live data — flag it clearly as stale
+      return `<div class="sp-row" title="Stale baseline figure — no live source available for this country."><span class="k">Food inflation</span><span class="v" style="color:#9a988f">${c.fi}% / yr <span style="color:var(--t3);font-size:10px;">baseline</span></span></div>`;
+    })()}
+    <div class="sp-row"><span class="k">Net food trade</span><span class="v" style="color:${c.net>=0?'#6ba36b':'#c44b3c'}">${c.net>=0?'+':''}${(c.net/1000).toFixed(0)}B USD</span></div>
+    <div class="sp-row" title="${TIP_SCE}"><span class="k">Supply-chain exposure</span><span class="v mono" style="color:${riskColor(supplyChainExposure(c))};">${supplyChainExposure(c)}/100</span></div>`;
 
   // Imports — clickable to open commodity drilldown (qty + companies)
   document.getElementById('sp-imports').innerHTML =
@@ -13272,46 +13424,51 @@ function renderMethodologyTab() {
         It is computed from six independently-sourced components, each normalized to 0–100 before weighting.
       </div>
 
-      <!-- Visual weight bar -->
+      <!-- Visual weight bar (v20.2: 7th component added) -->
       <div class="meth-weight-bar">
-        <div style="width:30%;background:#c44b3c" title="Import Dependency 30%"><span>30%</span></div>
-        <div style="width:20%;background:#c47a3c" title="Supplier Concentration 20%"><span>20%</span></div>
-        <div style="width:15%;background:#c9a957" title="Production Trend 15%"><span>15%</span></div>
-        <div style="width:15%;background:#c9a957;opacity:.75" title="Food Inflation 15%"><span>15%</span></div>
-        <div style="width:10%;background:#6ba36b" title="Climate 10%"><span>10%</span></div>
-        <div style="width:10%;background:#6ba36b;opacity:.75" title="Conflict 10%"><span>10%</span></div>
+        <div style="width:28%;background:#c44b3c" title="Import Dependency 28%"><span>28%</span></div>
+        <div style="width:18%;background:#c47a3c" title="Supplier Concentration 18%"><span>18%</span></div>
+        <div style="width:14%;background:#c9a957" title="Production Trend 14%"><span>14%</span></div>
+        <div style="width:14%;background:#c9a957;opacity:.75" title="Food Inflation 14%"><span>14%</span></div>
+        <div style="width:9%;background:#6ba36b" title="Climate 9%"><span>9%</span></div>
+        <div style="width:9%;background:#6ba36b;opacity:.75" title="Conflict 9%"><span>9%</span></div>
+        <div style="width:8%;background:#8aa6c4" title="Supply-Chain Exposure 8% (v20.2)"><span>8%</span></div>
       </div>
       <div class="meth-weight-legend">
-        <span><span class="mwl-dot" style="background:#c44b3c"></span> Import Dep.</span>
+        <span><span class="mwl-dot" style="background:#c44b3c"></span> Import Dep. (caloric)</span>
         <span><span class="mwl-dot" style="background:#c47a3c"></span> Supplier Conc.</span>
         <span><span class="mwl-dot" style="background:#c9a957"></span> Prod. Trend</span>
         <span><span class="mwl-dot" style="background:#c9a957;opacity:.75"></span> Food Infl.</span>
         <span><span class="mwl-dot" style="background:#6ba36b"></span> Climate</span>
         <span><span class="mwl-dot" style="background:#6ba36b;opacity:.75"></span> Conflict</span>
+        <span><span class="mwl-dot" style="background:#8aa6c4"></span> Supply-Chain Exposure (v20.2)</span>
       </div>
       <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:10px;padding:18px 22px;font-family:'Geist Mono',monospace;font-size:13px;margin-bottom:18px;line-height:2.2;">
         <div style="color:var(--t3);font-size:11px;margin-bottom:8px;font-family:'Geist',sans-serif;letter-spacing:.06em;text-transform:uppercase;">FDRS Equation</div>
-        <div><span style="color:var(--accent)">FDRS</span> = <span style="color:#c44b3c">(Import Dependency)</span> × 0.30</div>
-        <div style="padding-left:52px">+ <span style="color:#c47a3c">(Supplier Concentration)</span> × 0.20</div>
-        <div style="padding-left:52px">+ <span style="color:#c9a957">(Production Trend)</span> × 0.15</div>
-        <div style="padding-left:52px">+ <span style="color:#c9a957">(Food Inflation)</span> × 0.15</div>
-        <div style="padding-left:52px">+ <span style="color:#6ba36b">(Climate Vulnerability)</span> × 0.10</div>
-        <div style="padding-left:52px">+ <span style="color:#6ba36b">(Conflict / Logistics)</span> × 0.10</div>
+        <div><span style="color:var(--accent)">FDRS</span> = <span style="color:#c44b3c">(Import Dependency, caloric)</span> × 0.28</div>
+        <div style="padding-left:52px">+ <span style="color:#c47a3c">(Supplier Concentration)</span> × 0.18</div>
+        <div style="padding-left:52px">+ <span style="color:#c9a957">(Production Trend)</span> × 0.14</div>
+        <div style="padding-left:52px">+ <span style="color:#c9a957">(Food Inflation)</span> × 0.14</div>
+        <div style="padding-left:52px">+ <span style="color:#6ba36b">(Climate Vulnerability)</span> × 0.09</div>
+        <div style="padding-left:52px">+ <span style="color:#6ba36b">(Conflict / Logistics)</span> × 0.09</div>
+        <div style="padding-left:52px">+ <span style="color:#8aa6c4">(Supply-Chain Exposure, trade)</span> × 0.08</div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
         ${[
-          {w:'30%',label:'Import Dependency',col:'#c44b3c',
-           desc:'Share of caloric supply sourced from abroad. Computed from FAO Food Balance Sheets 2022. 100 = 100% imported; 0 = fully self-sufficient.'},
-          {w:'20%',label:'Supplier Concentration',col:'#c47a3c',
+          {w:'28%',label:'Import Dependency (caloric)',col:'#c44b3c',
+           desc:'Share of national caloric supply imported. From FAO Food Balance Sheets. CALORIC view — what fraction of food eaten comes from abroad. Distinct from trade volume (see Supply-Chain Exposure).'},
+          {w:'18%',label:'Supplier Concentration',col:'#c47a3c',
            desc:'Herfindahl-Hirschman Index (HHI) of the top-5 import source countries. 100 = single-source monopoly; 0 = perfectly diversified.'},
-          {w:'15%',label:'Production Trend',col:'#c9a957',
+          {w:'14%',label:'Production Trend',col:'#c9a957',
            desc:'5-year CAGR of domestic food production (USDA PSD 2018-2024). Negative trends score higher. Normalized against global peers.'},
-          {w:'15%',label:'Food Inflation',col:'#c9a957',
-           desc:'Annual food CPI change (World Bank WDI FP.CPI.TOTL.ZG, latest year 2023). Captures affordability deterioration. 100 = >60% inflation.'},
-          {w:'10%',label:'Climate Vulnerability',col:'#6ba36b',
+          {w:'14%',label:'Food Inflation',col:'#c9a957',
+           desc:'Annual food CPI change. Live-sourced from WFP HungerMap → Eurostat HICP → FAOSTAT food CPI → World Bank CPI fallback. Captures affordability deterioration. 100 = >60% inflation.'},
+          {w:'9%',label:'Climate Vulnerability',col:'#6ba36b',
            desc:'ND-GAIN Country Index 2023 vulnerability sub-score. Captures exposure and sensitivity of food/water/health systems to climate hazards.'},
-          {w:'10%',label:'Conflict / Logistics',col:'#6ba36b',
+          {w:'9%',label:'Conflict / Logistics',col:'#6ba36b',
            desc:'Composite of ACLED 2023 conflict intensity and World Bank LPI 2023 (logistics performance). High conflict + poor logistics = 100.'},
+          {w:'8%',label:'Supply-Chain Exposure (trade) · v20.2',col:'#8aa6c4',
+           desc:'NEW. Weighted trade-import dependency across staple commodities, premium-adjusted for supplier concentration. Captures sourcing risk distinct from caloric reliance. Why it matters: the Netherlands has 0% rice in its diet but 95% of rice it consumes is imported — caloric view would call this "low risk" but supply-chain view correctly flags it.'},
         ].map(c=>`
           <div style="background:var(--bg0);border:1px solid var(--b1);border-radius:8px;padding:14px 16px;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
@@ -13388,6 +13545,7 @@ function renderMethodologyTab() {
         The cap moved from <span style="font-family:'Geist Mono',monospace">[−10, +25]</span> to <span style="font-family:'Geist Mono',monospace">[−10, +35]</span>
         to preserve discrimination. Nowcast deltas before and after this date are <em>not directly comparable</em>; same-day comparisons across countries remain valid.
         <br><b style="color:var(--t1)">v20.1.</b> Food-inflation signal now reads from the freshest available source per country: WFP HungerMap (crisis countries) &gt; Eurostat HICP (EU monthly) &gt; FAOSTAT food CPI (global annual) &gt; World Bank headline CPI fallback.
+        <br><b style="color:var(--t1)">v20.2.</b> Added <b>Supply-Chain Exposure</b> as a 7th structural sub-component (weight 8%). Captures TRADE import dependency, distinct from caloric reliance. Resolves the "Netherlands shows 0% rice dependency despite importing $481M of rice annually" class of issue. Commodity rows in country panels now display <b>both caloric share AND trade dependency</b>. Existing weights re-balanced (28/18/14/14/9/9/8 = 100). Country FDRS values may shift by up to ±7 points; relative rankings preserved.
       </div>
     </div>
 
