@@ -11330,25 +11330,45 @@ function renderCountryTab() {
       </div>
     </div>
 
-    <!-- Stat strip -->
-    <div class="ct-stat-strip">
-      <div class="ct-stat">
-        <div class="ct-stat-label">Wheat dep.</div>
-        <div class="ct-stat-val">${c.w}<span class="ct-stat-unit">%</span></div>
-      </div>
-      <div class="ct-stat">
-        <div class="ct-stat-label">Rice dep.</div>
-        <div class="ct-stat-val">${c.r}<span class="ct-stat-unit">%</span></div>
-      </div>
-      <div class="ct-stat">
-        <div class="ct-stat-label">Food inflation</div>
-        <div class="ct-stat-val" style="color:${c.fi>20?'#c44b3c':'inherit'}">${c.fi}<span class="ct-stat-unit">%/yr</span></div>
-      </div>
-      <div class="ct-stat">
-        <div class="ct-stat-label">Net trade</div>
-        <div class="ct-stat-val" style="color:${c.net>=0?'#6ba36b':'#c44b3c'}">${c.net>=0?'+':''}${(c.net/1000).toFixed(1)}<span class="ct-stat-unit">B USD</span></div>
-      </div>
-    </div>
+    <!-- Stat strip — v20.2.2: dual caloric+trade for staples, live food-inflation -->
+    ${(function(){
+      const wTd = commodityTradeDependency(c, 'Wheat');
+      const rTd = commodityTradeDependency(c, 'Rice');
+      const a = (typeof calibrationAnchors === 'function') ? calibrationAnchors(c) : {};
+      const liveInfl = a.food_inflation_pct;
+      const inflSrc  = a.food_inflation_source;
+      const inflVal  = liveInfl != null ? liveInfl : c.fi;
+      const inflBadge = liveInfl != null
+        ? `<span class="ct-stat-unit" style="display:block;font-size:9px;color:var(--t3);margin-top:2px;">${inflSrc||'live'} · food CPI</span>`
+        : `<span class="ct-stat-unit" style="display:block;font-size:9px;color:var(--t3);margin-top:2px;">baseline</span>`;
+      const sce = (typeof supplyChainExposure === 'function') ? supplyChainExposure(c) : 0;
+      const dual = (cal, td) => td != null
+        ? `${cal}<span class="ct-stat-unit">% caloric</span> <span style="color:var(--accent);font-family:'Geist Mono',monospace;font-size:13px;margin-left:8px;">${td}<span class="ct-stat-unit">% trade</span></span>`
+        : `${cal}<span class="ct-stat-unit">% caloric</span>`;
+      return `
+      <div class="ct-stat-strip">
+        <div class="ct-stat" title="${TIP_COMMODITY}">
+          <div class="ct-stat-label">Wheat</div>
+          <div class="ct-stat-val">${dual(c.w, wTd)}</div>
+        </div>
+        <div class="ct-stat" title="${TIP_COMMODITY}">
+          <div class="ct-stat-label">Rice</div>
+          <div class="ct-stat-val">${dual(c.r, rTd)}</div>
+        </div>
+        <div class="ct-stat" title="Live food-inflation. Source priority: HungerMap > Eurostat > FAOSTAT > World Bank fallback.">
+          <div class="ct-stat-label">Food inflation</div>
+          <div class="ct-stat-val" style="color:${inflVal>15?'#c44b3c':inflVal>8?'#d27a3e':'inherit'}">${inflVal}<span class="ct-stat-unit">%/yr</span>${inflBadge}</div>
+        </div>
+        <div class="ct-stat" title="${TIP_SCE}">
+          <div class="ct-stat-label">Supply-chain exposure</div>
+          <div class="ct-stat-val" style="color:${riskColor(sce)}">${sce}<span class="ct-stat-unit">/100</span></div>
+        </div>
+        <div class="ct-stat">
+          <div class="ct-stat-label">Net trade</div>
+          <div class="ct-stat-val" style="color:${c.net>=0?'#6ba36b':'#c44b3c'}">${c.net>=0?'+':''}${(c.net/1000).toFixed(1)}<span class="ct-stat-unit">B USD</span></div>
+        </div>
+      </div>`;
+    })()}
 
     <!-- Composition: radar + bars -->
     <div class="grid-2">
