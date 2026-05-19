@@ -11493,7 +11493,16 @@ function openPanel(c, skipDrilldown) {
       // No live data — show heritage value with explicit "legacy_curated" badge
       return `<div class="sp-row" title="No live source available — showing legacy curated baseline. Not current."><span class="k">Food inflation</span><span class="v" style="color:var(--t3)">${c.fi}% / yr <span style="color:var(--t3);font-size:10px;">legacy_curated</span></span></div>`;
     })()}
-    <div class="sp-row" title="${provenanceTooltip(c, 'net')}"><span class="k">Net food trade</span><span class="v" style="color:${c.net>=0?'#6ba36b':'#c44b3c'}">${c.net>=0?'+':''}${(c.net/1000).toFixed(0)}B USD ${provenanceBadge(fieldProvenance(c, 'net')?.quality_flag || 'legacy_curated')}</span></div>
+    ${(function(){
+      // v20.7 item 7: only show Net food trade row when sourced. Hide entirely when legacy
+      // — a precise-looking +/- $XB number without provenance erodes trust faster than its absence.
+      const netProv = fieldProvenance(c, 'net');
+      if (!netProv || netProv.quality_flag === 'legacy_curated') {
+        // Suppressed entirely; reader can still see the heritage value in countries.json with badge.
+        return `<div class="sp-row" title="Net agri-food trade balance not yet sourced for this country. Heritage estimate is available in data/countries.json but not displayed because it would look precise without provenance."><span class="k">Net food trade</span><span class="v" style="color:var(--t3);font-style:italic;">Not sourced ${provenanceBadge('legacy_curated')}</span></div>`;
+      }
+      return `<div class="sp-row" title="${provenanceTooltip(c, 'net')}"><span class="k">Net food trade</span><span class="v" style="color:${c.net>=0?'#6ba36b':'#c44b3c'}">${c.net>=0?'+':''}${(c.net/1000).toFixed(0)}B USD ${provenanceBadge(netProv.quality_flag)}</span></div>`;
+    })()}
     <div class="sp-row" title="${TIP_SCE}"><span class="k">Supply-chain exposure</span><span class="v mono" style="color:${riskColor(supplyChainExposure(c))};">${supplyChainExposure(c)}/100 <span style="font-family:'Geist Mono',monospace;font-size:9px;color:var(--accent);background:var(--accent)18;padding:1px 4px;border-radius:3px;margin-left:4px;letter-spacing:.04em;text-transform:uppercase;">modeled</span></span></div>`;
 
   // Imports — clickable to open commodity drilldown (qty + companies)
@@ -16091,6 +16100,46 @@ function showCommodityDetail(key) {
           <div style="font-size:12px;color:${meta.chgDir>0?'#c44b3c':'#6ba36b'}">${meta.chg} · ${meta.note}</div>
         </div>
       </div>
+
+      ${(function(){
+        // v20.7 item 4: separate observed-trade flows from modeled dependency
+        const commLower = key.toLowerCase();
+        const obsKey = /wheat/.test(commLower) ? 'wheat'
+                    : /rice/.test(commLower) ? 'rice'
+                    : /maize|corn/.test(commLower) ? 'maize'
+                    : /soy/.test(commLower) ? 'soybeans'
+                    : null;
+        if (!obsKey || !LIVE.comtrade) return '';
+        const obs = [];
+        for (const [iso, byCom] of Object.entries(LIVE.comtrade || {})) {
+          const row = byCom?.[obsKey];
+          if (row && row.total_usd_m != null) obs.push({iso, ...row});
+        }
+        if (!obs.length) return `<div style="margin-bottom:18px;padding:12px 14px;background:var(--bg1);border:1px dashed var(--b2);border-radius:8px;font-size:11.5px;color:var(--t3);"><b style="color:var(--t2);">Observed bilateral trade</b> · Unavailable. UN Comtrade staples snapshot does not cover ${key} for any tracked country.</div>`;
+        obs.sort((a,b)=> (b.total_usd_m||0)-(a.total_usd_m||0));
+        return `
+        <div style="margin-bottom:20px;padding:14px 16px;background:var(--bg1);border:1px solid var(--b2);border-radius:10px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <div style="font-size:11px;font-weight:700;color:#6ba36b;text-transform:uppercase;letter-spacing:.08em;">Observed bilateral trade</div>
+            <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#6ba36b;background:#6ba36b18;padding:1px 4px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">obs · comtrade</span>
+            <span style="font-size:11px;color:var(--t3);margin-left:auto;">${obs.length} importing countries with UN Comtrade volumes</span>
+          </div>
+          ${obs.slice(0,8).map(o => {
+            const co = byISO(o.iso);
+            return `<div style="display:grid;grid-template-columns:1.4fr auto auto;gap:14px;padding:6px 0;border-bottom:1px solid var(--b1);font-size:11.5px;">
+              <div style="cursor:pointer;color:var(--t1);" onclick="openPanel(byISO('${o.iso}'));showTab('global',document.querySelector('.nav-btn'))">${co?.name || o.iso}</div>
+              <div class="mono" style="color:var(--accent);">${o.total_kt ? o.total_kt.toLocaleString()+' kt' : 'n/a'}</div>
+              <div class="mono" style="color:var(--t2);">$${o.total_usd_m}M</div>
+            </div>`;
+          }).join('')}
+        </div>`;
+      })()}
+
+      <div style="font-size:11px;font-weight:700;color:#c47a3c;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">
+        Modeled dependency / exposure
+        <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#c47a3c;background:#c47a3c18;padding:1px 4px;border-radius:3px;margin-left:4px;letter-spacing:.04em;text-transform:uppercase;">modeled</span>
+      </div>
+      <div style="font-size:10.5px;color:var(--t3);margin-bottom:10px;">Below: countries whose curated import/export list mentions ${key}. Heuristic match — not customs records.</div>
 
       <div class="grid-2">
         <!-- Importers -->
