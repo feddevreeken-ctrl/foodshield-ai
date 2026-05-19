@@ -4552,12 +4552,12 @@ input[type="email"]:focus {
       </div>
 
       <div class="sp-section">
-        <div class="sp-section-title">Import Dependencies</div>
+        <div class="sp-section-title">Key dependency commodities <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#c47a3c;background:#c47a3c18;padding:1px 4px;border-radius:3px;margin-left:6px;letter-spacing:.04em;text-transform:uppercase;" title="Curated structural list — not a live customs feed. Some entries are backfilled from regional defaults when the curated list is sparse. UI normalises to food-only.">modeled menu</span></div>
         <div id="sp-imports"></div>
       </div>
 
       <div class="sp-section">
-        <div class="sp-section-title">Supplier Snapshot</div>
+        <div class="sp-section-title">Supplier snapshot <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#c47a3c;background:#c47a3c18;padding:1px 4px;border-radius:3px;margin-left:6px;letter-spacing:.04em;text-transform:uppercase;" title="Top supplier countries and shares are structural baseline values from the embedded dataset. Not bilateral customs records.">legacy curated</span></div>
         <div id="sp-suppliers"></div>
       </div>
 
@@ -4728,7 +4728,7 @@ input[type="email"]:focus {
           Live Feed
         </div>
         <div class="page-title">Live <em>Disturbances</em></div>
-        <div class="page-sub">Real-time food security disruptions — droughts, conflicts, price shocks and humanitarian crises. Data from GDACS, ReliefWeb, WFP, FAO and FEWS NET.</div>
+        <div class="page-sub">Real-time food security disruptions — droughts, conflicts, price shocks and humanitarian crises. Live data from GDACS and ReliefWeb; baseline events curated from FAO/WFP/IPC/FEWS NET reports (no live FEWS feed in pipeline).</div>
       </div>
       <div id="disturbances-body" class="fade-in"></div>
     </div>
@@ -10935,7 +10935,7 @@ function tfaShowFlows() {
       const pct = (c.supPct || [])[i] || 0;
       // If a specific commodity is chosen, only keep suppliers that matter for it
       const commo = commodity || importItems[i] || 'Food products';
-      const vol = _estimateVolume(c, commo, i);
+      const vol = _estimateVolume(c, commo, i) || _modeledVolumeFallback(c, commo, i);
       const companies = _companiesFor(commo);
       const supplierCompanies = companies.slice(i, i + 3).map((co, j) => ({
         name: co, share: Math.max(8, Math.round((35 - j*8) * (1 - i*0.1))),
@@ -10958,7 +10958,7 @@ function tfaShowFlows() {
     const suppliers = dests.map((dest, i) => {
       const pct = [35, 25, 18, 12, 7, 3][i] || 5;
       const commo = commodity || exportItems[i] || 'Agricultural goods';
-      const vol = _estimateVolume(c, commo, i);
+      const vol = _estimateVolume(c, commo, i) || _modeledVolumeFallback(c, commo, i);
       const companies = _companiesFor(commo);
       const supplierCompanies = companies.slice(0, 3).map((co, j) => ({
         name: co, share: Math.max(8, Math.round((35 - j*8) * (1 - i*0.1))),
@@ -10993,25 +10993,34 @@ function _tfaShowSidePanel(title, suppliers, dir) {
 
   titleEl.textContent = title;
 
-  body.innerHTML = suppliers.map(s => `
+  body.innerHTML = suppliers.map(s => {
+    const prov = s.vol && s.vol.provenance;
+    const provBadge = prov === 'observed'
+      ? `<span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#6ba36b;background:#6ba36b18;padding:1px 4px;border-radius:3px;margin-left:6px;letter-spacing:.04em;text-transform:uppercase;" title="Observed bilateral trade from UN Comtrade.">obs · comtrade</span>`
+      : prov === 'observed_aggregate'
+      ? `<span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#c9a957;background:#c9a95718;padding:1px 4px;border-radius:3px;margin-left:6px;letter-spacing:.04em;text-transform:uppercase;" title="Observed aggregate total from UN Comtrade; supplier breakdown is approximated.">obs · aggregate</span>`
+      : `<span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#c47a3c;background:#c47a3c18;padding:1px 4px;border-radius:3px;margin-left:6px;letter-spacing:.04em;text-transform:uppercase;" title="Volume estimated from country net-trade balance × supplier share. Not observed bilateral trade.">modeled</span>`;
+    return `
     <div class="tfa-row">
       <div class="tfa-row-top">
         <div>
           <span style="color:${color};margin-right:5px;font-size:10px;">${arrow}</span>
           <span class="tfa-row-country">${s.country}</span>
           <span class="tfa-row-vol"> · ${s.vol && s.vol.kt ? s.vol.kt.toLocaleString() + ' kt' : ''}</span>
+          ${provBadge}
         </div>
         <span class="tfa-row-pct">${s.pct}%</span>
       </div>
       <div class="tfa-row-vol">${s.commo}${s.vol && s.vol.usdM ? ' · ≈ $' + s.vol.usdM + 'M / yr' : ''}</div>
-      <div class="tfa-companies">
+      <div class="tfa-companies" title="Company shares are illustrative — public industry knowledge, not customs records.">
         ${(s.companies || []).map(co => `
           <span class="tfa-company-pill">
             ${co.name}
-            <span class="tfa-company-share">${co.share}%</span>
+            <span class="tfa-company-share">~${co.share}%</span>
           </span>`).join('')}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   panel.style.display = 'flex';
 }
@@ -12278,7 +12287,7 @@ function renderForecastWhy(c, delta, trendUp, futureCol, todayCol){
           <div><span class="fc-method-step">02</span><span><b style="color:var(--t1)">Climate adjust</b> · ND-GAIN + IPCC AR6 regional yield projections</span></div>
           <div><span class="fc-method-step">03</span><span><b style="color:var(--t1)">Demographic scale</b> · UN WPP medium-scenario population</span></div>
           <div><span class="fc-method-step">04</span><span><b style="color:var(--t1)">Geopolitical overlay</b> · ACLED conflict + active sanctions</span></div>
-          <div><span class="fc-method-step">05</span><span><b style="color:var(--t1)">Back-test</b> · validated against 2018–2023 realized FDRS</span></div>
+          <div><span class="fc-method-step">05</span><span><b style="color:var(--t1)">Back-test</b> · validated against realized input series (FAO supply/demand, WB CPI, ACLED). FDRS itself is not an observed public time series.</span></div>
           <div><span class="fc-method-step">06</span><span><b style="color:var(--t1)">Uncertainty</b> · ±${band} pt band, recalibrated annually</span></div>
         </div>
       </div>
@@ -13579,17 +13588,46 @@ function _companiesFor(name){
   return COMMODITY_COMPANIES.food;
 }
 
-// Estimate quantity from country net trade balance and supplier share
+// v20.7: Volume estimator — clearly modeled, not observed.
+// First try real Comtrade observation; only fall back to model when we have nothing.
+// The return shape now carries a `provenance` field so the UI can label it honestly.
 function _estimateVolume(country, commodity, supplierIdx){
-  // Total food import bill ≈ |min(net, 0)| (negative net = import); fallback to a baseline by FDRS
-  const baseBill = Math.max(500, Math.abs(country.net || 1000)); // USD millions
-  const commodityShare = 0.2; // rough — each top commodity ≈ 20% of import bill
+  // Try observed Comtrade staples data first (covers ~25 priority countries × 4 staples)
+  const commLower = (commodity || '').toLowerCase();
+  const obsKey = /wheat/.test(commLower) ? 'wheat'
+              : /rice/.test(commLower) ? 'rice'
+              : /maize|corn/.test(commLower) ? 'maize'
+              : /soy/.test(commLower) ? 'soybeans'
+              : null;
+  if (obsKey && LIVE && LIVE.comtrade) {
+    const row = (LIVE.comtrade[country.iso] || {})[obsKey];
+    if (row && row.total_usd_m != null) {
+      const supShare = ((row.top_suppliers || [])[supplierIdx] || {}).share_pct;
+      if (supShare != null && row.total_kt != null) {
+        return {
+          usdM: Math.round(row.total_usd_m * supShare / 100),
+          kt:   Math.round(row.total_kt * supShare / 100),
+          provenance: 'observed',
+        };
+      }
+      // Total exists but no supplier-level breakdown — return aggregate without share
+      return { usdM: Math.round(row.total_usd_m), kt: Math.round(row.total_kt || 0), provenance: 'observed_aggregate' };
+    }
+  }
+  // No observed data — return null so the UI knows to show "Observed bilateral trade unavailable"
+  // rather than fabricating a number that looks precise but isn't grounded.
+  return null;
+}
+
+// Fallback heuristic kept for backward compatibility with older call sites — clearly modeled.
+function _modeledVolumeFallback(country, commodity, supplierIdx) {
+  const baseBill = Math.max(500, Math.abs(country.net || 1000));
+  const commodityShare = 0.2;
   const supplierShare = ((country.supPct || [])[supplierIdx] || 25) / 100;
   const usdM = Math.round(baseBill * commodityShare * supplierShare);
-  // Estimate MT — use $400/ton baseline for cereals, $4000/ton for meat
   const tonPrice = /beef|meat|pork|poultry|chicken|dairy|cheese|butter|coffee|cocoa/i.test(commodity) ? 4000 : 400;
   const kt = Math.round((usdM * 1_000_000) / tonPrice / 1000);
-  return { usdM, kt };
+  return { usdM, kt, provenance: 'modeled' };
 }
 
 function openCommodityDrilldown(commodity, importerIso){
@@ -13669,12 +13707,12 @@ function openCommodityDrilldown(commodity, importerIso){
               <div class="commodity-supplier-pct">${s.pct}% of imports</div>
             </div>
             <div>
-              <div style="font-size:9.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;font-weight:600;margin-bottom:6px;">Trading companies</div>
-              <div class="commodity-supplier-companies">
+              <div style="font-size:9.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;font-weight:600;margin-bottom:6px;">Trading companies <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#c47a3c;background:#c47a3c18;padding:1px 4px;border-radius:3px;margin-left:4px;letter-spacing:.04em;text-transform:uppercase;">illustrative</span></div>
+              <div class="commodity-supplier-companies" title="Company allocation shares are illustrative — drawn from public industry knowledge of major commodity traders, not customs-cleared shipment records. Treat as 'who would plausibly handle this volume', not bilateral counterparty data.">
                 ${s.companies.map(co => `
                   <span class="commodity-company">
                     <span>${co.name}</span>
-                    <span class="commodity-company-share">${co.share}%</span>
+                    <span class="commodity-company-share">~${co.share}%</span>
                   </span>`).join('')}
               </div>
             </div>
@@ -14107,7 +14145,7 @@ const BASELINE_EVENTS = [
     title:'Drought — Horn of Africa',
     country:'Somalia', iso:'SOM', lat:5.2, lng:46.2,
     detail:'Somalia declared a national drought emergency November 2025 after four consecutive failed rainy seasons. Deyr rains far below average. Pastoral livestock losses acute in Puntland and Galmudug. WFP funding cuts have reduced food assistance from 2M+ to ~600,000 people.',
-    source:'FEWS NET / IPC', date:'2026-03-15', live:true,
+    source:'FEWS NET / IPC (curated baseline event, not from live feed)', date:'2026-03-15', live:false,
     affectedISOs:['SOM','ETH','KEN','DJI','ERI'],
     affectedLabels:['Somalia — drought epicentre','Ethiopia — Somali & Oromia regions','Kenya — Northern arid districts','Djibouti — water access critical','Eritrea — border pastoral zones'],
     duration:'6–18 months. Dependent on Indian Ocean Dipole and La Nina exit. Recovery requires 2 full rainy seasons. Next FEWS NET assessment: August 2026.',
@@ -14661,7 +14699,7 @@ function renderDisturbanceSidebar() {
       { name:'GDACS', desc:'UN Disaster Alerts', ok: SOURCE_STATUSES.gdacs.ok, count: SOURCE_STATUSES.gdacs.count },
       { name:'ReliefWeb', desc:'Humanitarian DB', ok: SOURCE_STATUSES.reliefweb.ok, count: SOURCE_STATUSES.reliefweb.count },
       { name:'WFP / IPC', desc:'Famine Intelligence', ok: true, count: 3 },
-      { name:'FEWS NET', desc:'Early Warning', ok: true, count: 2 },
+      { name:'FEWS NET', desc:'Early Warning (curated, no live feed)', ok: null, count: 0 },
       { name:'FAO FPMA', desc:'Food Price Monitor', ok: true, count: 1 },
     ];
     srcEl.innerHTML = sources.map(s=>`

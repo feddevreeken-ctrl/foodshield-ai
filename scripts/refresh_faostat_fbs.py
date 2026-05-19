@@ -74,28 +74,40 @@ ITEMS = {
 }
 ELEMENT_KCAL = 664   # Food supply (kcal/capita/day)
 
-# FAO area_code → ISO3 (reused from refresh_faostat.py — same M.49 coding)
+# FAO Country Code → ISO3 mapping.
+# CANONICAL: pulled May 2026 from FAOSTAT /definitions/domain/FBS/area
+# 174 real countries with ISO3 codes (excludes FAO regional aggregates and
+# placeholders like X01/X06/X21). This is the authoritative list — do NOT
+# hand-edit; regenerate from FAOSTAT if codes change.
 FAO_AREA_TO_ISO3 = {
-    2:"AFG",3:"ALB",4:"DZA",7:"AGO",8:"ATG",9:"ARG",1:"ARM",10:"AUS",11:"AUT",52:"AZE",
-    12:"BHS",13:"BHR",16:"BGD",14:"BRB",57:"BLR",255:"BEL",23:"BLZ",53:"BEN",18:"BTN",19:"BOL",
-    80:"BIH",20:"BWA",21:"BRA",26:"BRN",27:"BGR",233:"BFA",29:"BDI",115:"KHM",32:"CMR",33:"CAN",
-    35:"CAF",39:"TCD",40:"CHL",41:"CHN",351:"COL",45:"COM",46:"COG",250:"COD",48:"CRI",107:"CIV",
-    98:"HRV",49:"CUB",50:"CYP",167:"CZE",54:"DNK",72:"DJI",55:"DMA",56:"DOM",58:"ECU",59:"EGY",
-    60:"SLV",61:"GNQ",178:"ERI",63:"EST",209:"SWZ",238:"ETH",66:"FJI",67:"FIN",68:"FRA",74:"GAB",
-    75:"GMB",73:"GEO",79:"DEU",81:"GHA",84:"GRC",86:"GRD",89:"GTM",90:"GIN",175:"GNB",91:"GUY",
-    93:"HTI",95:"HND",97:"HUN",99:"ISL",100:"IND",101:"IDN",102:"IRN",103:"IRQ",104:"IRL",105:"ISR",
-    106:"ITA",109:"JAM",110:"JPN",112:"JOR",108:"KAZ",114:"KEN",83:"KIR",118:"KGZ",120:"LAO",119:"LBN",
-    122:"LSO",123:"LBR",124:"LBY",126:"LTU",256:"LUX",129:"MDG",130:"MWI",131:"MYS",132:"MDV",133:"MLI",
-    134:"MLT",136:"MRT",137:"MUS",138:"MEX",276:"MDA",141:"MNG",273:"MNE",143:"MAR",144:"MOZ",28:"MMR",
-    147:"NAM",149:"NPL",150:"NLD",156:"NZL",157:"NIC",158:"NER",159:"NGA",116:"PRK",154:"NOR",221:"OMN",
-    165:"PAK",166:"PAN",168:"PNG",169:"PRY",170:"PER",171:"PHL",173:"POL",174:"PRT",179:"QAT",183:"ROU",
-    185:"RWA",186:"KNA",188:"LCA",191:"WSM",193:"STP",194:"SAU",195:"SEN",272:"SRB",196:"SYC",197:"SLE",
-    200:"SVK",198:"SVN",25:"SOM",202:"ZAF",277:"SSD",203:"ESP",38:"LKA",207:"SUR",210:"SWE",
-    211:"CHE",212:"SYR",214:"TZA",216:"THA",176:"TGO",219:"TTO",218:"TUN",223:"TUR",213:"TKM",226:"UGA",
-    230:"UKR",225:"ARE",229:"GBR",231:"USA",234:"URY",235:"UZB",237:"VEN",251:"VNM",249:"YEM",181:"ZWE",
-    # Some countries need disambiguation: Sudan/SDN, S. Sudan/SSD, Zambia/ZMB
-    276:"SDN",   # Sudan (former code 277 = South Sudan; FAO updated mapping)
-    251:"ZMB",   # Zambia (CP uses 251; same code reused for VNM in some contexts — FBS keeps these distinct via Area name; resolved at parse time)
+    1: "ARM", 2: "AFG", 3: "ALB", 4: "DZA", 7: "AGO", 8: "ATG", 9: "ARG", 10: "AUS",
+    11: "AUT", 12: "BHS", 13: "BHR", 14: "BRB", 16: "BGD", 18: "BTN", 19: "BOL",
+    20: "BWA", 21: "BRA", 23: "BLZ", 25: "SLB", 27: "BGR", 28: "MMR", 32: "CMR",
+    33: "CAN", 35: "CPV", 38: "LKA", 40: "CHL", 41: "CHN", 44: "COL", 45: "COM",
+    46: "COG", 48: "CRI", 49: "CUB", 50: "CYP", 52: "AZE", 54: "DNK", 56: "DOM",
+    57: "BLR", 58: "ECU", 59: "EGY", 60: "SLV", 63: "EST", 70: "PYF", 72: "DJI",
+    73: "GEO", 74: "GAB", 75: "GMB", 79: "DEU", 80: "BIH", 81: "GHA", 83: "KIR",
+    84: "GRC", 86: "GRD", 89: "GTM", 90: "GIN", 91: "GUY", 93: "HTI", 95: "HND",
+    96: "HKG", 97: "HUN", 98: "HRV", 99: "ISL", 100: "IND", 101: "IDN", 102: "IRN",
+    103: "IRQ", 104: "IRL", 105: "ISR", 106: "ITA", 107: "CIV", 108: "KAZ",
+    109: "JAM", 112: "JOR", 113: "KGZ", 114: "KEN", 115: "KHM", 116: "PRK",
+    117: "KOR", 118: "KWT", 119: "LVA", 120: "LAO", 121: "LBN", 122: "LSO",
+    123: "LBR", 124: "LBY", 126: "LTU", 127: "MHL", 128: "MAC", 129: "MDG",
+    130: "MWI", 131: "MYS", 132: "MDV", 134: "MLT", 136: "MRT", 137: "MUS",
+    138: "MEX", 141: "MNG", 143: "MAR", 144: "MOZ", 146: "MDA", 147: "NAM",
+    148: "NRU", 149: "NPL", 150: "NLD", 153: "NCL", 154: "MKD", 155: "VUT",
+    156: "NZL", 157: "NIC", 158: "NER", 159: "NGA", 162: "NOR", 165: "PAK",
+    166: "PAN", 167: "CZE", 168: "PNG", 169: "PRY", 170: "PER", 171: "PHL",
+    173: "POL", 174: "PRT", 175: "GNB", 176: "TLS", 179: "QAT", 181: "ZWE",
+    183: "ROU", 184: "RWA", 185: "RUS", 188: "KNA", 189: "LCA", 191: "VCT",
+    193: "STP", 194: "SAU", 195: "SEN", 196: "SYC", 197: "SLE", 198: "SVN",
+    199: "SVK", 202: "ZAF", 203: "ESP", 207: "SUR", 208: "TJK", 209: "SWZ",
+    210: "SWE", 211: "CHE", 212: "SYR", 213: "TKM", 214: "TWN", 215: "TZA",
+    216: "THA", 219: "TON", 220: "TTO", 221: "OMN", 222: "TUN", 223: "TUR",
+    225: "ARE", 226: "UGA", 227: "TUV", 229: "GBR", 230: "UKR", 231: "USA",
+    233: "BFA", 234: "URY", 235: "UZB", 236: "VEN", 237: "VNM", 238: "ETH",
+    244: "WSM", 249: "YEM", 250: "COD", 251: "ZMB", 255: "BEL", 256: "LUX",
+    272: "SRB", 273: "MNE",
 }
 
 # Some FAO area codes are ambiguous in older mappings. We resolve at parse time
