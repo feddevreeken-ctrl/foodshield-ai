@@ -8886,10 +8886,11 @@ function fieldProvenance(c, field) {
 }
 function provenanceBadge(quality_flag) {
   const map = {
-    sourced:        { color: '#6ba36b', label: 'SOURCED' },
-    legacy_curated: { color: '#c47a3c', label: 'LEGACY' },
-    modeled:        { color: '#7c9fcf', label: 'MODELED' },
-    manual:         { color: '#7c9fcf', label: 'MANUAL' },
+    sourced:                  { color: '#6ba36b', label: 'SOURCED' },
+    legacy_curated:           { color: '#c47a3c', label: 'LEGACY' },
+    legacy_import_dependency: { color: '#c44b3c', label: 'LEGACY · IMPORT-DEP' },
+    modeled:                  { color: '#7c9fcf', label: 'MODELED' },
+    manual:                   { color: '#7c9fcf', label: 'MANUAL' },
   };
   const m = map[quality_flag] || map.legacy_curated;
   return `<span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:${m.color};background:${m.color}18;padding:1px 4px;border-radius:3px;margin-left:4px;letter-spacing:.04em;text-transform:uppercase;">${m.label}</span>`;
@@ -8940,6 +8941,54 @@ function seedCountryCanonicalFields() {
   });
 }
 seedCountryCanonicalFields();
+const FOOD_TRADE_BLOCKLIST = [
+  'petroleum','crude oil','crude','natural gas','fuel','refined petroleum',
+  'petrochemical','petroleum products','oil products',
+  'gold','diamond','platinum','copper','cobalt','aluminum','aluminium','nickel',
+  'iron ore','iron','steel','manganese','zinc','bauxite','ore','silver','uranium',
+  'lithium','gem','mineral','coal','mineral ores',
+  'machinery','equipment','electronic','consumer goods','vehicle','automotive','aircraft',
+  'textile','apparel','garment','knitwear','clothing','cotton','wool','leather','jute','hides',
+  'cement','plastic','chemical','phosphate','phosphates',
+  'pharmaceutical','medicine','medicines','drug','opium','qat','khat','tobacco',
+  'timber','jade','teak','charcoal','rubber','services','tourism',
+  'semiconductor','chip','software','hardware','furniture','glass','paper','printing','sand'
+];
+function dedupeLabels(items) {
+  const out = [];
+  const seen = new Set();
+  (items || []).forEach(item => {
+    if (!item) return;
+    const key = String(item).trim().toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(item);
+  });
+  return out;
+}
+function isFoodTradeItem(label) {
+  if (!label) return false;
+  const l = String(label).toLowerCase();
+  // Vegetable / olive / palm / cooking / edible oils ARE food — keep them.
+  if (/\b(vegetable|olive|palm|cooking|edible|sunflower|soybean|coconut|rapeseed|canola)\s+oil/.test(l)) return true;
+  return !FOOD_TRADE_BLOCKLIST.some(b => l.includes(b));
+}
+function structuralImportList(c) {
+  const raw = c?._canonical?.imports ?? c?.imports;
+  return Array.isArray(raw) ? raw : [];
+}
+function structuralExportList(c) {
+  const raw = c?._canonical?.exports ?? c?.exports;
+  return Array.isArray(raw) ? raw : [];
+}
+function displayImportList(c) {
+  if (Array.isArray(c?._displayImports)) return c._displayImports;
+  return dedupeLabels(structuralImportList(c).filter(isFoodTradeItem));
+}
+function displayExportList(c) {
+  if (Array.isArray(c?._displayExports)) return c._displayExports;
+  return dedupeLabels(structuralExportList(c).filter(isFoodTradeItem));
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 // v20.4: SOURCE HEALTH UI — reads from data/source_manifest.json
@@ -9335,8 +9384,8 @@ const US_STATE_PRODUCERS = {
 
 function commodityTradeDependency(c, commodity) {
   if (!c || !c.iso) return null;
-  const inImports = (c.imports || []).some(x => (x||'').toLowerCase().includes(commodity.toLowerCase()));
-  const inExports = (c.exports || []).some(x => (x||'').toLowerCase().includes(commodity.toLowerCase()));
+  const inImports = displayImportList(c).some(x => (x||'').toLowerCase().includes(commodity.toLowerCase()));
+  const inExports = displayExportList(c).some(x => (x||'').toLowerCase().includes(commodity.toLowerCase()));
   const isProducer = (COMMODITY_PRODUCERS[commodity] || new Set()).has(c.iso)
                   || (US_STATE_PRODUCERS[commodity] || new Set()).has(c.iso);
 
@@ -10253,8 +10302,8 @@ const SCENARIOS = [
     G.flowsActive = true;
     G.flows = [];
 
-    const importCommodities = country.imports || [];
-    const exportCommodities = country.exports || [];
+    const importCommodities = displayImportList(country);
+    const exportCommodities = displayExportList(country);
     const exportDests = country.exportDests || [];
 
     if (isState) {
@@ -10841,7 +10890,7 @@ function tfaRefreshChips() {
   const iso = _currentOpenISO || (window.Globe && Globe.state.selectedISO);
   const c = iso ? byISO(iso) : null;
   if (!c) return;
-  const list = _tfaDir === 'import' ? (c.imports || []) : (c.exports || []);
+  const list = _tfaDir === 'import' ? displayImportList(c) : displayExportList(c);
   const chips = document.getElementById('tfa-chips');
   if (!chips) return;
   chips.innerHTML = list.slice(0, 10).map(cm => {
@@ -10877,13 +10926,15 @@ function tfaShowFlows() {
 
   const dir = _tfaDir;
   const commodity = _tfaCommodity;  // null = all
+  const importItems = displayImportList(c);
+  const exportItems = displayExportList(c);
 
   if (dir === 'import') {
     // Build supplier list filtered by commodity if one is selected
     const suppliers = (c.suppliers || []).slice(0, 6).map((sup, i) => {
       const pct = (c.supPct || [])[i] || 0;
       // If a specific commodity is chosen, only keep suppliers that matter for it
-      const commo = commodity || (c.imports || [])[i] || 'Food products';
+      const commo = commodity || importItems[i] || 'Food products';
       const vol = _estimateVolume(c, commo, i);
       const companies = _companiesFor(commo);
       const supplierCompanies = companies.slice(i, i + 3).map((co, j) => ({
@@ -10904,10 +10955,9 @@ function tfaShowFlows() {
   } else {
     // Export direction
     const dests = (c.exportDests || []).slice(0, 6);
-    const exports = (c.exports || []);
     const suppliers = dests.map((dest, i) => {
       const pct = [35, 25, 18, 12, 7, 3][i] || 5;
-      const commo = commodity || exports[i] || 'Agricultural goods';
+      const commo = commodity || exportItems[i] || 'Agricultural goods';
       const vol = _estimateVolume(c, commo, i);
       const companies = _companiesFor(commo);
       const supplierCompanies = companies.slice(0, 3).map((co, j) => ({
@@ -11157,6 +11207,7 @@ function openPanel(c, skipDrilldown) {
   const col = riskColor(c.fdrs);
   document.getElementById('sp-header-bg').style.background =
     `linear-gradient(135deg, ${col}22, ${col}08)`;
+  const importItems = displayImportList(c);
 
   // Score (nowcast-adjusted, with structural baseline shown below)
   document.getElementById('sp-score').textContent    = c.fdrs;
@@ -11403,19 +11454,25 @@ function openPanel(c, skipDrilldown) {
   const wTd = commodityTradeDependency(c, 'Wheat');
   const rTd = commodityTradeDependency(c, 'Rice');
   const mTd = commodityTradeDependency(c, 'Maize');
-  const calLabel = (v) => (v === 0 || v == null)
-    ? '<span class="v" style="color:var(--t2);">&lt;0.5% <span style="color:var(--t3);font-size:10px;">caloric · negligible</span></span>'
-    : `<span class="v">${v}% <span style="color:var(--t3);font-size:10px;">caloric</span></span>`;
-  const fmt = (cal, td) => {
-    const calPart = calLabel(cal);
+  const calLabel = (v, field) => {
+    const p = fieldProvenance(c, field);
+    if (p && p.quality_flag === 'legacy_import_dependency') {
+      return `<span class="v" style="color:var(--t2);">${v}% <span style="color:#c44b3c;font-size:10px;">import-dep · legacy</span></span>`;
+    }
+    if (v === 0 || v == null) {
+      return '<span class="v" style="color:var(--t2);">&lt;0.5% <span style="color:var(--t3);font-size:10px;">caloric · negligible</span></span>';
+    }
+    return `<span class="v">${v}% <span style="color:var(--t3);font-size:10px;">caloric</span></span>`;
+  };
+  const fmt = (cal, td, field) => {
+    const calPart = calLabel(cal, field);
     if (td == null) return calPart;
-    // Insert trade segment into the same span — works for both 0% and N% caloric cases
     return calPart.replace('</span>', ` · <span class="mono" style="color:var(--accent);">${td}% trade</span></span>`);
   };
   document.getElementById('sp-metrics').innerHTML = `
-    <div class="sp-row" title="${TIP_COMMODITY}"><span class="k">Wheat</span>${fmt(c.w, wTd)}</div>
-    <div class="sp-row" title="${TIP_COMMODITY}"><span class="k">Rice</span>${fmt(c.r, rTd)}</div>
-    <div class="sp-row" title="${TIP_COMMODITY}"><span class="k">Maize</span>${fmt(c.m, mTd)}</div>
+    <div class="sp-row" title="${TIP_COMMODITY}"><span class="k">Wheat</span>${fmt(c.w, wTd, 'w')}</div>
+    <div class="sp-row" title="${TIP_COMMODITY}"><span class="k">Rice</span>${fmt(c.r, rTd, 'r')}</div>
+    <div class="sp-row" title="${TIP_COMMODITY}"><span class="k">Maize</span>${fmt(c.m, mTd, 'm')}</div>
     ${(function(){
       const a = (typeof calibrationAnchors === 'function') ? calibrationAnchors(c) : {};
       const live = a.food_inflation_pct;
@@ -11433,7 +11490,9 @@ function openPanel(c, skipDrilldown) {
   // Imports — clickable to open commodity drilldown (qty + companies)
   document.getElementById('sp-imports').innerHTML =
     `<div style="font-size:10px;color:var(--t3);margin-bottom:8px;">Food-only structural snapshot${fieldProvenance(c, 'imports')?.as_of ? ` · ${fieldProvenance(c, 'imports').as_of}` : ''}${provenanceBadge(fieldProvenance(c, 'imports')?.quality_flag || 'legacy_curated')}</div>` +
-    (c.imports||[]).map(i=>`<span class="import-tag" onclick="openCommodityDrilldown('${i.replace(/'/g, '&#39;')}', '${c.iso}')" title="Structural dependency snapshot. Click for modeled routing + company estimates.">${i}</span>`).join('');
+    (importItems.length
+      ? importItems.map(i=>`<span class="import-tag" onclick="openCommodityDrilldown('${i.replace(/'/g, '&#39;')}', '${c.iso}')" title="Structural dependency snapshot. Click for modeled routing + company estimates.">${i}</span>`).join('')
+      : '<div style="font-size:11px;color:var(--t3);line-height:1.5;">No food-specific import items are verified in the current structural snapshot.</div>');
 
   // Suppliers
   document.getElementById('sp-suppliers').innerHTML =
@@ -11568,6 +11627,7 @@ function populateSelects() {
 function renderCountryTab() {
   const c = byISO(document.getElementById('country-sel').value); if(!c) return;
   const col = riskColor(c.fdrs);
+  const importItems = displayImportList(c);
   const compLabels=['Staple Import Dep.','Supplier Concentration','Production Trend','Food Inflation','Climate Volatility','Conflict / Logistics'];
   const compWeights=['30%','20%','15%','15%','10%','10%'];
   const trendUp = c.f2030 > c.fdrs;
@@ -11666,12 +11726,12 @@ function renderCountryTab() {
       <div class="card">
         <div class="card-title"><span class="card-marker"></span> Key Import Dependencies</div>
         ${structuralCaption(c, 'imports', 'Food-only structural snapshot')}
-        ${(c.imports||[]).map((im,i)=>`
+        ${importItems.length ? importItems.map((im,i)=>`
           <div class="ct-import-row" onclick="openCommodityDrilldown('${im.replace(/'/g, '&#39;')}', '${c.iso}')" style="cursor:pointer;" title="Structural dependency snapshot. Click for modeled routing + company estimates.">
             <span class="ct-import-num">${String(i+1).padStart(2,'0')}</span>
             <span class="ct-import-name">${im}</span>
             <span style="margin-left:auto;font-family:'Geist Mono',monospace;font-size:10px;color:var(--t3);">→</span>
-          </div>`).join('')}
+          </div>`).join('') : '<div style="font-size:11px;color:var(--t3);line-height:1.5;">No food-specific import items are verified in the current structural snapshot.</div>'}
       </div>
       <div class="card">
         <div class="card-title"><span class="card-marker"></span> Supplier Concentration Snapshot</div>
@@ -11760,7 +11820,9 @@ function renderCountryTab() {
 // ════════════════════════════════════════════════════
 function renderTradeTab() {
   const c = byISO(document.getElementById('trade-sel').value); if(!c) return;
-  const exportItems = (c.exports && c.exports.length) ? c.exports.slice(0,5) : (c.net>0
+  const importItems = displayImportList(c);
+  const exportItems = displayExportList(c);
+  const exportBasket = exportItems.length ? exportItems.slice(0,5) : (c.net>0
     ? ['Food commodities','Grains','Protein','Oilseeds','Livestock']
     : ['Non-food exports','Minerals','Energy','Manufactures','Services']).slice(0,5);
   const isExporter = c.net >= 0;
@@ -11800,8 +11862,8 @@ function renderTradeTab() {
       const topSup = (c.suppliers||[])[0];
       const topPct = (c.supPct||[])[0];
       const concentration = c.c[1];
-      const importsCount = (c.imports||[]).length;
-      const topImport = (c.imports||[])[0] || 'food imports';
+      const importsCount = importItems.length;
+      const topImport = importItems[0] || 'food imports';
       if (!topSup || concentration < 35) return '';
       const sev = concentration > 60 ? 'severe' : 'moderate';
       const col = sev === 'severe' ? '#c44b3c' : '#d27a3e';
@@ -11827,7 +11889,7 @@ function renderTradeTab() {
       <div class="card">
         <div class="card-title"><span class="card-marker" style="background:#c44b3c"></span> Key import dependencies</div>
         ${structuralCaption(c, 'imports', 'Structural food-only snapshot')}
-        ${(c.imports||[]).map((name,i)=>{
+        ${importItems.length ? importItems.map((name,i)=>{
           const pct = [35,25,18,12,10][i];
           const sup = (c.suppliers||[])[i] || '';
           return `<div class="tr-bar-row" style="flex-wrap:wrap;gap:2px;cursor:pointer;" onclick="openCommodityDrilldown('${name.replace(/'/g, '&#39;')}', '${c.iso}')" title="Structural dependency snapshot. Click for modeled routing + company estimates.">
@@ -11839,7 +11901,7 @@ function renderTradeTab() {
             </div>
             <div class="tr-bar-track" style="width:100%;margin-bottom:2px;"><div class="tr-bar-fill" style="width:${pct}%;background:#c44b3c"></div></div>
           </div>`;
-        }).join('')}
+        }).join('') : '<div style="font-size:11px;color:var(--t3);line-height:1.5;">No food-specific import items are verified in the current structural snapshot.</div>'}
         <div class="tr-card-footer">
           <span>Total food imports</span>
           <span class="mono" style="color:#c44b3c;font-weight:600">${importsTotal}B USD</span>
@@ -11849,7 +11911,7 @@ function renderTradeTab() {
       <div class="card">
         <div class="card-title"><span class="card-marker" style="background:#6ba36b"></span> Structural export basket</div>
         ${structuralCaption(c, 'exports', 'Structural dashboard snapshot')}
-        ${exportItems.map((name,i)=>{
+        ${exportBasket.map((name,i)=>{
           const pct = [40,28,16,10,6][i];
           const dest = (c.exportDests||[])[i] || '';
           return `<div class="tr-bar-row" style="flex-wrap:wrap;gap:2px;">
@@ -13327,7 +13389,8 @@ function showDisturbanceImpact(ev){
     if (sIdx >= 0) {
       const pct = (c.supPct || [])[sIdx] || 0;
       // Pick most likely commodity (matching index, else first food import)
-      const commodity = (c.imports || [])[sIdx] || (c.imports || [])[0] || 'Food imports';
+      const imports = displayImportList(c);
+      const commodity = imports[sIdx] || imports[0] || 'Food imports';
       dependents.push({ iso: c.iso, name: c.name, pct, commodity, fdrs: c.fdrs, region: c.region });
     }
   });
@@ -13633,123 +13696,18 @@ function openCommodityDrilldown(commodity, importerIso){
 
 // ════════════════════════════════════════════════════
 // FOOD-ONLY DATA SCRUB
-// Strips non-food items (petroleum, metals, machinery, textiles, etc.)
-// from imports/exports so the dashboard reads as pure food trade.
+// Builds non-destructive food-only display lists from the canonical structural
+// import/export arrays. Important: this no longer backfills or mutates the
+// underlying trade snapshot.
 // ════════════════════════════════════════════════════
 let _scrubDone = false;
 function scrubFoodData(){
   if (_scrubDone) return; _scrubDone = true;
-  const BLOCK = [
-    'petroleum','crude oil','crude','natural gas','fuel','refined petroleum',
-    'petrochemical','petroleum products','oil products',
-    'gold','diamond','platinum','copper','cobalt','aluminum','aluminium','nickel',
-    'iron ore','iron','steel','manganese','zinc','bauxite','ore','silver','uranium',
-    'lithium','gem','mineral','coal','mineral ores',
-    'machinery','equipment','electronic','consumer goods','vehicle','automotive','aircraft',
-    'textile','apparel','garment','knitwear','clothing','cotton','wool','leather','jute','hides',
-    'cement','plastic','chemical','phosphate','phosphates',
-    'pharmaceutical','medicine','medicines','drug','opium','qat','khat','tobacco',
-    'timber','jade','teak','charcoal','rubber','services','tourism',
-    'semiconductor','chip','software','hardware','furniture','glass','paper','printing','sand'
-  ];
-  const isFood = (s) => {
-    if (!s) return false;
-    const l = s.toLowerCase();
-    // Vegetable / olive / palm / cooking / edible oils ARE food — keep them.
-    if (/\b(vegetable|olive|palm|cooking|edible|sunflower|soybean|coconut|rapeseed|canola)\s+oil/.test(l)) return true;
-    return !BLOCK.some(b => l.includes(b));
-  };
-
-  // v20.3: structural food-import inferences per archetype. Curated arrays are biased
-  // toward "interesting" imports (cocoa, petroleum) and routinely omit staples every
-  // country in the archetype actually imports. We backfill to give the Trade Flow Atlas
-  // and panel a realistic commodity menu.
-  //
-  // Backfill is *additive* — we never remove curated entries, just add staples that are
-  // structurally certain to be imported but missing from the list. Deduplicated case-insensitively.
-  const REGION_DEFAULTS = {
-    Africa:         ['Wheat','Rice','Vegetable oil','Sugar','Dairy','Maize','Pulses'],
-    Asia:           ['Wheat','Rice','Vegetable oil','Pulses','Sugar','Dairy','Soybeans'],
-    'Middle East':  ['Wheat','Rice','Vegetable oil','Sugar','Dairy','Meat','Vegetables'],
-    Europe:         ['Cocoa beans','Coffee','Tea','Soybeans','Bananas','Citrus fruit','Fish','Vegetable oil'],
-    'Latin America':['Wheat','Dairy','Vegetable oil','Wine','Apples','Pears'],
-    'North America':['Coffee','Cocoa beans','Bananas','Tropical fruit','Fish'],
-    Oceania:        ['Coffee','Cocoa beans','Rice','Tropical fruit','Tea']
-  };
-
-  // Country-specific additions where we know the country's actual import patterns differ
-  // from regional defaults. Built from public trade-flow knowledge (OEC, FAO, Eurostat).
-  const COUNTRY_ADDITIONS = {
-    // European re-export / processing hubs (massive food trade even for own consumption)
-    NLD: ['Cocoa beans','Soybeans','Bananas','Wheat','Rice','Maize','Palm oil','Citrus fruit','Fish','Coffee','Avocados'],
-    BEL: ['Cocoa beans','Coffee','Soybeans','Wheat','Rice','Bananas','Citrus fruit','Fish','Palm oil'],
-    DEU: ['Coffee','Cocoa beans','Soybeans','Bananas','Citrus fruit','Fish','Wheat','Rice','Vegetable oil','Tropical fruit','Tea','Pork','Beef'],
-    FRA: ['Coffee','Cocoa beans','Soybeans','Bananas','Citrus fruit','Fish','Tropical fruit','Rice','Tea'],
-    ITA: ['Coffee','Cocoa beans','Soybeans','Wheat','Bananas','Fish','Beef','Tropical fruit'],
-    ESP: ['Coffee','Cocoa beans','Maize','Wheat','Soybeans','Fish','Tropical fruit','Beef'],
-    GBR: ['Wheat','Rice','Bananas','Citrus fruit','Cocoa beans','Coffee','Tea','Fish','Tropical fruit','Wine','Avocados'],
-    CHE: ['Coffee','Cocoa beans','Wheat','Rice','Bananas','Citrus fruit','Fish','Wine','Soybeans'],
-    AUT: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Fish','Tropical fruit','Soybeans'],
-    DNK: ['Coffee','Cocoa beans','Bananas','Soybeans','Fish','Wheat','Tropical fruit'],
-    SWE: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Fish','Tropical fruit','Wheat'],
-    FIN: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Fish','Wheat','Tropical fruit'],
-    NOR: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Wheat','Rice','Tropical fruit'],
-    POL: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Fish','Tropical fruit','Soybeans'],
-    IRL: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Wheat','Rice','Tropical fruit'],
-    PRT: ['Cocoa beans','Coffee','Wheat','Soybeans','Fish','Bananas','Beef','Tropical fruit'],
-    GRC: ['Coffee','Cocoa beans','Wheat','Soybeans','Maize','Tropical fruit','Bananas'],
-    CZE: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Tropical fruit','Soybeans','Rice'],
-    HUN: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Tropical fruit','Rice','Fish'],
-    ROU: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Tropical fruit','Soybeans','Sugar'],
-    // City-states + tiny territories
-    SGP: ['Rice','Wheat','Maize','Soybeans','Vegetable oil','Sugar','Dairy','Eggs','Pork','Beef','Poultry','Fish','Vegetables','Fruits','Cocoa beans','Coffee'],
-    HKG: ['Rice','Wheat','Vegetable oil','Sugar','Dairy','Pork','Beef','Vegetables','Fruits','Fish','Soybeans'],
-    LUX: ['Coffee','Cocoa beans','Bananas','Wheat','Fish','Soybeans','Citrus fruit'],
-    MLT: ['Wheat','Rice','Sugar','Vegetable oil','Dairy','Meat','Coffee','Tropical fruit'],
-    CYP: ['Wheat','Rice','Sugar','Soybeans','Dairy','Meat','Tropical fruit'],
-    // Major Gulf + MENA importers
-    SAU: ['Wheat','Rice','Sugar','Vegetable oil','Dairy','Tea','Coffee','Meat','Vegetables','Fruits','Soybeans'],
-    ARE: ['Rice','Wheat','Sugar','Vegetable oil','Dairy','Meat','Tea','Coffee','Vegetables','Fruits'],
-    KWT: ['Rice','Wheat','Sugar','Vegetable oil','Dairy','Meat','Tea','Vegetables'],
-    QAT: ['Rice','Wheat','Sugar','Dairy','Meat','Vegetables','Fruits','Vegetable oil'],
-    BHR: ['Rice','Wheat','Sugar','Vegetable oil','Dairy','Meat','Tea'],
-    OMN: ['Rice','Wheat','Sugar','Vegetable oil','Dairy','Meat','Tea','Vegetables'],
-    JPN: ['Wheat','Maize','Soybeans','Beef','Pork','Coffee','Cocoa beans','Bananas','Fish','Vegetable oil'],
-    KOR: ['Wheat','Maize','Soybeans','Beef','Pork','Coffee','Bananas','Vegetable oil','Sugar'],
-    // Other notable importers
-    USA: ['Coffee','Cocoa beans','Bananas','Avocados','Citrus fruit','Tropical fruit','Tea','Wine','Fish','Beef','Vegetables'],
-    CAN: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Fish','Tropical fruit','Wine','Vegetables','Rice'],
-    AUS: ['Coffee','Cocoa beans','Bananas','Citrus fruit','Fish','Rice','Tropical fruit','Tea'],
-    NZL: ['Coffee','Cocoa beans','Sugar','Bananas','Rice','Tropical fruit','Tea'],
-  };
-
   COUNTRIES.forEach(c => {
-    if (Array.isArray(c.imports)) c.imports = c.imports.filter(isFood);
-    if (Array.isArray(c.exports)) c.exports = c.exports.filter(isFood);
-
-    // Build the full food-import set: curated + country-specific additions + region defaults
-    const curated = c.imports || [];
-    const additions = COUNTRY_ADDITIONS[c.iso] || [];
-    const regional = REGION_DEFAULTS[c.region] || REGION_DEFAULTS.Asia;
-    // Country-specific takes priority; region defaults fill gaps; cap at 10 items so UI stays clean
-    const merged = [];
-    const seen = new Set();
-    const push = (item) => {
-      if (!item) return;
-      const k = item.toLowerCase();
-      if (seen.has(k)) return;
-      seen.add(k);
-      merged.push(item);
-    };
-    curated.forEach(push);
-    additions.forEach(push);
-    regional.forEach(push);
-    c.imports = merged.slice(0, 10);
-
-    if (!c.exports || !c.exports.length) {
-      c.exports = ['Limited food exports'];
-    }
+    c._displayImports = dedupeLabels(structuralImportList(c).filter(isFoodTradeItem));
+    c._displayExports = dedupeLabels(structuralExportList(c).filter(isFoodTradeItem));
   });
+  _companyIndex = null;
 }
 
 // ════════════════════════════════════════════════════
@@ -15059,7 +15017,7 @@ async function fetchAINarrative(iso, forceRefresh, targetElId) {
 - Current FDRS score: ${c.fdrs}/100 (${riskLabel(c.fdrs)}) — structural ${c._fdrsStructural||c.fdrs} ${adjStr !== '0' ? `with live nowcast ${adjStr}` : ''}
 - 2030 forecast: ${c.f2030}/100
 - Modeled FDRS backcast 2018-2025 (not observed history): ${histStr}
-- Structural import dependencies: ${(c.imports||[]).slice(0,3).join(', ')}
+- Structural import dependencies: ${displayImportList(c).slice(0,3).join(', ')}
 - Structural suppliers: ${(c.suppliers||[]).slice(0,3).join(', ')}
 - Food inflation: ${c.fi}%/yr
 - Active live shocks (May 2026): ${liveShocksStr}
@@ -15384,7 +15342,7 @@ function buildCompanyIndex() {
 
   COUNTRIES.forEach(c => {
     if (!c.fdrs || !c.iso) return;
-    const allCommodities = [...(c.imports||[]), ...(c.exports||[])];
+    const allCommodities = [...displayImportList(c), ...displayExportList(c)];
     allCommodities.forEach(commo => {
       const cos = _companiesFor(commo);
       cos.forEach(company => {
@@ -15598,7 +15556,7 @@ function showCompanyDetail(company) {
 // ════════════════════════════════════════════════════════════════════════════
 
 function renderTopCompaniesForCountry(c) {
-  const allCommodities = [...(c.imports||[]), ...(c.exports||[])];
+  const allCommodities = [...displayImportList(c), ...displayExportList(c)];
   const companyMap = {};
   allCommodities.forEach(commo => {
     const cos = _companiesFor(commo);
@@ -16071,12 +16029,12 @@ function showCommodityDetail(key) {
 
   // Countries that import this commodity
   const importers = COUNTRIES
-    .filter(c => !c.iso.startsWith('US-') && c.imports && c.imports.some(i => i.toLowerCase().includes(key.toLowerCase())))
+    .filter(c => !c.iso.startsWith('US-') && displayImportList(c).some(i => i.toLowerCase().includes(key.toLowerCase())))
     .sort((a,b) => b.fdrs - a.fdrs);
 
   // Countries that export this commodity
   const exporters = COUNTRIES
-    .filter(c => !c.iso.startsWith('US-') && c.exports && c.exports.some(e => e.toLowerCase().includes(key.toLowerCase())))
+    .filter(c => !c.iso.startsWith('US-') && displayExportList(c).some(e => e.toLowerCase().includes(key.toLowerCase())))
     .sort((a,b) => b.fdrs - a.fdrs);
 
   const detail = document.getElementById('commodity-detail');

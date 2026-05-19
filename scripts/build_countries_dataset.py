@@ -46,6 +46,11 @@ STRUCTURAL_FIELDS = [
 QUALITY_FLAGS = {
     "sourced": "Verified against a public dataset; source_url + as_of populated.",
     "legacy_curated": "Hand-authored heritage value, not yet re-verified. Treated as draft.",
+    "legacy_import_dependency": (
+        "Heritage value originally meant 'fraction of consumption imported' (0-100), "
+        "NOT the caloric-share definition the field name now implies. Mis-display would "
+        "be misleading; UI should treat as import-dependency only until replaced by FBS-sourced caloric share."
+    ),
     "modeled": "Computed from sourced inputs or explicit structural assumptions.",
     "manual": "Hand-maintained snapshot from an annual or static public release.",
 }
@@ -242,6 +247,24 @@ def _load_fbs_overlay():
 
 
 def _legacy_field_meta(field, value):
+    # v20.7: w/r/m heritage values are import-dependency %, not caloric shares.
+    # Tag them with a distinct quality flag so the UI does NOT mis-display them as caloric.
+    if field in {"w", "r", "m"}:
+        return {
+            "value": value,
+            "source": LEGACY_SOURCE,
+            "as_of": "2026-05",
+            "method": (
+                "Legacy embedded import-dependency percentage (0-100) from index.html. "
+                "Semantically distinct from the FAOSTAT FBS caloric-share definition this field now nominally holds."
+            ),
+            "quality_flag": "legacy_import_dependency",
+            "note": (
+                "This value represents the share of consumption that is imported (legacy meaning), "
+                "NOT the caloric share of national diet (current meaning). Replaced by FAOSTAT FBS sourced "
+                "values once FBS coverage reaches this country."
+            ),
+        }
     note = LEGACY_TRADE_NOTE if field in {"imports", "exports", "exportDests", "suppliers", "supPct"} else LEGACY_NOTE
     method = _legacy_method(field)
     return {
