@@ -9087,29 +9087,46 @@ function commodityTradeDependency(c, commodity) {
                   || (US_STATE_PRODUCERS[commodity] || new Set()).has(c.iso);
 
   // Skip the trade-dep number when there's no meaningful trade relationship at all.
-  // (E.g., Liechtenstein for rice — neither imports nor exports, and not a producer.)
   if (!inImports && !inExports && !isProducer) return null;
 
+  // PRODUCER LOOKUP DOMINATES. The hardcoded imports/exports lists are noisy because some
+  // countries appear as "exporters" simply because they re-export imported supply — Germany
+  // and the Netherlands re-export rice they don't grow. Without anchoring on the producer
+  // lookup, those countries get classified as net exporters and trade-dependency drops to
+  // ~5%, which is the bug we are fixing.
   let dep;
-  if (inExports && !inImports) {
-    // Net exporter — by definition, domestic production exceeds domestic consumption.
-    // Trade-import dependency is structurally low.
-    dep = isProducer ? 5 : 12;
-  } else if (isProducer && inImports) {
-    // Country produces this but also imports — partial self-sufficiency. Number depends on production trend.
-    // c.c[2] = production trend component (100 = bad trend, 0 = strong trend)
-    const trend = (c.c || [])[2] || 50;
-    dep = Math.round(20 + trend * 0.5);    // 20–70% range
-  } else if (isProducer && !inImports) {
-    // Producer with no listed imports → low trade dep.
-    dep = 10;
-  } else if (inImports && !isProducer) {
-    // Imports this commodity and is NOT a meaningful producer → essentially fully import-dependent.
-    // This is the Netherlands/rice case, also Egypt/wheat, Senegal/rice, Singapore/everything.
-    dep = 95;
+  if (isProducer) {
+    // Country actually grows this crop at scale. Now look at trade flows.
+    if (inExports && !inImports) {
+      // Genuine producer-exporter (Thailand for rice, USA for wheat, Brazil for maize, etc.)
+      dep = 5;
+    } else if (inExports && inImports) {
+      // Producer that both imports and exports (Italy for rice, France for wheat, Spain).
+      // Partial trade exposure scaled by production trend.
+      const trend = (c.c || [])[2] || 50;
+      dep = Math.round(15 + trend * 0.35);   // 15–50% range
+    } else if (inImports) {
+      // Producer that imports but doesn't export — production probably doesn't meet demand.
+      const trend = (c.c || [])[2] || 50;
+      dep = Math.round(25 + trend * 0.5);    // 25–75% range
+    } else {
+      // Producer with no obvious trade flows recorded — assume largely self-sufficient.
+      dep = 10;
+    }
   } else {
-    // Producer + nothing else → defensive default
-    dep = 15;
+    // NOT a meaningful producer. Trade dependency is structurally high regardless of
+    // whether the country appears in "exports" (likely re-exporting) or "imports".
+    // Examples: Germany/rice, Netherlands/rice, UK/rice, Singapore/almost everything.
+    if (inImports || inExports) {
+      // Re-exporters and importers both rely on external supply for what they consume.
+      // The re-export volume doesn't reduce import dependency — it's purely a transit
+      // economy bolted on top of the same imported supply.
+      dep = 95;
+    } else {
+      // Doesn't import or export AND doesn't produce — commodity simply isn't relevant.
+      // (Returned null at the top, but defensive default here.)
+      dep = 50;
+    }
   }
   return Math.max(0, Math.min(100, dep));
 }
