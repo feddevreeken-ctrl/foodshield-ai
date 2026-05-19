@@ -1067,6 +1067,15 @@ body {
 .bb-brand { font-weight:700; color:var(--t2); letter-spacing:-.01em; }
 .bb-sep { opacity:.4; }
 .bb-tag { color:var(--t3); }
+.bb-contact {
+  display:inline-flex; align-items:center; gap:5px;
+  color:var(--t3); text-decoration:none;
+  padding:2px 7px; border-radius:4px;
+  font-size:10.5px; letter-spacing:.01em;
+  border:1px solid transparent;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.bb-contact:hover { color:var(--t1); border-color:var(--b3); background:var(--bg2); }
 .bb-center { display:flex; align-items:center; gap:4px; }
 .bb-btn {
   display: flex; align-items: center; gap:5px;
@@ -12995,6 +13004,90 @@ function renderMethodologyTab() {
       </div>
     </div>
 
+    <!-- Structural vs Nowcast — dual FDRS explanation -->
+    <div class="card" style="grid-column:1/-1">
+      <div class="card-title"><span class="card-marker"></span> Structural FDRS vs Nowcast FDRS</div>
+      <div style="font-size:13px;color:var(--t2);line-height:1.75;margin-bottom:16px;">
+        Country panels show <b style="color:var(--t1)">two FDRS values</b>: a slow-moving <b style="color:var(--t1)">Structural</b> score
+        and a daily-updating <b style="color:var(--accent)">Nowcast</b>. They answer different questions.
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;">
+        <div style="background:var(--bg0);border:1px solid var(--b1);border-radius:8px;padding:14px 16px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <div style="width:8px;height:8px;border-radius:50%;background:var(--t1);"></div>
+            <div style="font-size:12.5px;font-weight:600;color:var(--t1)">Structural FDRS</div>
+          </div>
+          <div style="font-size:11.5px;color:var(--t3);line-height:1.6;margin-bottom:8px;">
+            The six-component composite above. Rebuilt annually as new vintages drop (FAO SOFI, USDA WASDE, ND-GAIN, ACLED).
+            Captures the underlying fragility of a country's food system — answers <b>"how exposed is this country, in steady state?"</b>
+          </div>
+          <div style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--t3);">cadence: annual · vintage: 2024–2026</div>
+        </div>
+        <div style="background:var(--bg0);border:1px solid var(--accent)33;border-radius:8px;padding:14px 16px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <div style="width:8px;height:8px;border-radius:50%;background:var(--accent);animation:livePulse 1.5s infinite;"></div>
+            <div style="font-size:12.5px;font-weight:600;color:var(--t1)">Nowcast FDRS</div>
+          </div>
+          <div style="font-size:11.5px;color:var(--t3);line-height:1.6;margin-bottom:8px;">
+            Structural FDRS adjusted daily by live signals: IPC phase shifts, ACLED conflict spikes, FAO Food Price Index,
+            ReliefWeb humanitarian alerts and WFP HungerMap consumption flags. Answers <b>"what's moving right now?"</b>
+          </div>
+          <div style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--accent);">cadence: daily · 06:00 UTC</div>
+        </div>
+      </div>
+      <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:10px;padding:16px 20px;font-family:'Geist Mono',monospace;font-size:12.5px;line-height:2;margin-bottom:14px;">
+        <div style="color:var(--t3);font-size:10.5px;margin-bottom:6px;font-family:'Geist',sans-serif;letter-spacing:.06em;text-transform:uppercase;">Nowcast Adjustment</div>
+        <div><span style="color:var(--accent)">Nowcast FDRS</span> = Structural FDRS + Δ<sub>nowcast</sub></div>
+        <div style="padding-left:24px;color:var(--t3);font-size:11px;font-family:'Geist',sans-serif;margin-top:6px;">
+          where Δ<sub>nowcast</sub> ∈ [−10, +25] — bounded so live noise never overwhelms the structural baseline.
+          A country panel showing <b style="color:var(--accent)">Δ +N</b> next to FDRS is the nowcast moving above the structural score.
+        </div>
+      </div>
+      <div style="font-size:11.5px;color:var(--t3);line-height:1.7;">
+        <b style="color:var(--t2)">Why two scores?</b> Aid agencies need structural to plan; commodity desks need nowcast to react.
+        A country can be structurally resilient but acutely stressed (e.g., a flood in Pakistan), or structurally fragile but
+        temporarily stable (e.g., a quiet quarter in Yemen). Showing both keeps the picture honest.
+      </div>
+    </div>
+
+    <!-- Live Data Pipeline — refresh cadence and source health -->
+    <div class="card" style="grid-column:1/-1">
+      <div class="card-title"><span class="card-marker"></span> Live Data Pipeline · how the daily refresh works</div>
+      <div style="font-size:13px;color:var(--t2);line-height:1.75;margin-bottom:16px;">
+        Every day at <b style="color:var(--t1)">06:00 UTC</b> a GitHub Actions workflow fetches eight public sources,
+        writes JSON snapshots to <code style="font-size:11px;background:var(--bg1);padding:1px 6px;border-radius:3px;">/data</code>,
+        builds the composite <code style="font-size:11px;background:var(--bg1);padding:1px 6px;border-radius:3px;">nowcast.json</code>,
+        commits the diff and triggers a Vercel redeploy. The frontend you're reading reloads the snapshot on every page visit.
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:16px;">
+        ${[
+          {src:'FAO Food Price Index (FFPI)',role:'global price shock signal',key:'no key'},
+          {src:'WFP HungerMap LIVE',role:'consumption + IPC + alerts',key:'no key'},
+          {src:'World Bank WDI',role:'baseline inflation, GDP, ag share',key:'no key'},
+          {src:'Feeding America (Map the Meal Gap)',role:'US state food-insecurity %',key:'no key'},
+          {src:'ACLED',role:'conflict event count + fatalities',key:'API key'},
+          {src:'UN Comtrade Plus',role:'bilateral staples trade volumes',key:'API key'},
+          {src:'ReliefWeb',role:'humanitarian alerts feed',key:'appname'},
+          {src:'IPC Acute Food Insecurity',role:'phase classifications',key:'API key (restricted May 2026)'},
+        ].map(d=>`
+          <div style="background:var(--bg0);border:1px solid var(--b1);border-radius:8px;padding:11px 13px;">
+            <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:3px;">${d.src}</div>
+            <div style="font-size:11px;color:var(--t3);line-height:1.5;margin-bottom:6px;">${d.role}</div>
+            <div style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--accent);">${d.key}</div>
+          </div>
+        `).join('')}
+      </div>
+      <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:10px;padding:14px 18px;">
+        <div style="font-size:11px;color:var(--t3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px;">Failure modes — designed to degrade gracefully</div>
+        <div style="font-size:11.5px;color:var(--t2);line-height:1.7;">
+          Each source fetch is wrapped in <code style="font-size:10.5px;background:var(--bg0);padding:1px 5px;border-radius:3px;">safe_run</code> — a failure writes a
+          <code style="font-size:10.5px;background:var(--bg0);padding:1px 5px;border-radius:3px;">*_FAILED.json</code> stub but never aborts the workflow.
+          When a source is down, the nowcast simply omits its signal and the frontend falls back to the structural FDRS for that dimension.
+          The status pill in the top-right shows how many sources loaded successfully on the latest refresh.
+        </div>
+      </div>
+    </div>
+
     <!-- Data Sources -->
     <div class="card">
       <div class="card-title"><span class="card-marker"></span> Primary Data Sources</div>
@@ -14990,7 +15083,19 @@ function showCommodityDetail(key) {
   <div class="bb-left">
     <span class="bb-brand">FoodShield AI</span>
     <span class="bb-sep">·</span>
-    <span class="bb-tag">By: Fedde Vreeken</span>
+    <span class="bb-tag">Built by Fedde Vreeken</span>
+    <a class="bb-contact" href="https://www.linkedin.com/in/feddevreeken/" target="_blank" rel="noopener" title="Fedde Vreeken on LinkedIn">
+      <svg viewBox="0 0 24 24" fill="currentColor" style="width:11px;height:11px;"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+      LinkedIn
+    </a>
+    <a class="bb-contact" href="mailto:fedde.vreeken@gmail.com?subject=FoodShield%20AI" title="Email Fedde">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+      Contact
+    </a>
+    <a class="bb-contact" href="https://github.com/feddevreeken-ctrl/foodshield-ai" target="_blank" rel="noopener" title="View source on GitHub">
+      <svg viewBox="0 0 24 24" fill="currentColor" style="width:11px;height:11px;"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.69-3.87-1.54-3.87-1.54-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.68 1.25 3.34.96.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.18 1.18a11.04 11.04 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.58.23 2.75.12 3.04.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.05.78 2.13 0 1.54-.01 2.78-.01 3.16 0 .31.21.67.8.56C20.21 21.38 23.5 17.08 23.5 12c0-6.35-5.15-11.5-11.5-11.5z"/></svg>
+      Source
+    </a>
   </div>
   <div class="bb-center">
     <button class="bb-btn" onclick="openInstructions()">
