@@ -14600,42 +14600,53 @@ window.renderDisturbancesTab = async function() {
 // v14 FEATURE 1: FDRS HISTORICAL DATA 2018–2025
 // ════════════════════════════════════════════════════════════════════════════
 
-// Generate plausible FDRS history from current score + trend data
-// Uses the country's f2030 trend direction and component profile
+// ── v20.4 modeled backcast (DETERMINISTIC) ──────────────────────────────────
+// Reconstructs an 8-year structural backcast from the country's current score,
+// its 2030 forecast, and three KNOWN global shock years (COVID 2020,
+// Ukraine 2022, El Niño 2023). The function contains NO randomness — same
+// inputs always produce the same output. This is a *modeled* backcast, not
+// observed FDRS history. Labels everywhere in the UI must say "modeled
+// backcast" not "history" to keep that distinction honest.
+//
+// Determinism: shock magnitudes are derived from each country's own components
+// (climate vulnerability c[4], conflict c[5], import-dep c[0]) and food
+// inflation c.fi. Direction of the COVID shock is set by ISO3 parity (a stable
+// pseudorandom function of the country code) instead of Math.random(), so the
+// page renders the same backcast on every reload.
 function getFDRSHistory(c) {
+  if (!c) return {};
   const current = c.fdrs;
-  const f2030   = c.f2030;
-  const delta   = f2030 - current; // total change 2025→2030
-  // Back-project: assume similar rate from 2018
-  // Average annual change
-  const annualFwd = delta / 5;       // 2025→2030 = 5 years
-  const annualBwd = -annualFwd * 0.7; // 2018→2025 was slightly less volatile
+  const f2030 = c.f2030;
+  const delta = f2030 - current;
+  const annualFwd = delta / 5;
+  const annualBwd = -annualFwd * 0.7;
 
-  // Add some country-specific noise based on components
-  const climateNoise = (c.c[4] / 100) * 4; // climate-exposed = more volatile
-  const conflictNoise = (c.c[5] / 100) * 5;
-  const totalNoise = climateNoise + conflictNoise;
+  // Stable per-country sign for COVID shock (deterministic, not random).
+  const isoSum = (c.iso || '').split('').reduce((a, ch) => a + ch.charCodeAt(0), 0);
+  const covidSign = (isoSum % 2 === 0) ? 1 : -1;
 
-  // Key global shock years
-  const shockYears = {
-    2020: totalNoise * (Math.random() > 0.5 ? 1 : -1) * 1.5, // COVID
-    2022: (c.c[0] > 50 ? 4 : 1),   // Ukraine war → wheat shock
-    2023: (c.fi > 20 ? 3 : 0.5),   // food inflation peak
+  const climateExposure = (c.c?.[4] || 0) / 100;
+  const conflictExposure = (c.c?.[5] || 0) / 100;
+  const importExposure  = (c.c?.[0] || 0);
+  const totalExposure = climateExposure + conflictExposure;
+
+  // Modeled global shock overlays — KNOWN events with magnitude proportional to
+  // each country's structural exposure on the relevant dimension.
+  const shocks = {
+    2020: totalExposure * 1.5 * covidSign,             // COVID supply-chain
+    2022: importExposure > 50 ? 4 : 1,                 // Ukraine wheat shock
+    2023: (c.fi || 0) > 20 ? 3 : 0.5,                  // food inflation peak / El Niño
   };
 
-  const years = [2018,2019,2020,2021,2022,2023,2024,2025];
+  const years = [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
   const scores = {};
-  years.forEach((yr, i) => {
+  years.forEach(yr => {
     const yearsBack = 2025 - yr;
-    let base = current + annualBwd * yearsBack;
-    // Add shock
-    let shock = 0;
-    if (shockYears[yr]) shock = shockYears[yr];
-    // Clamp
+    const base = current + annualBwd * yearsBack;
+    const shock = shocks[yr] || 0;
     scores[yr] = Math.min(99, Math.max(5, Math.round(base + shock)));
   });
-  // Ensure 2025 = current exactly
-  scores[2025] = current;
+  scores[2025] = current; // anchor: today's nowcast-adjusted score
   return scores;
 }
 
