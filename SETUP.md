@@ -128,13 +128,42 @@ Important rule: a file existing is not the same thing as a feed being healthy. T
 
 ## Manual annual source
 
-`scripts/refresh_feeding_america.py` is still a manual snapshot. Update it when Feeding America publishes a new state release:
+`scripts/refresh_feeding_america.py` is a manual snapshot of Map the Meal Gap (MMG).
 
-1. download the latest state table from `https://www.feedingamerica.org/research/map-the-meal-gap`
-2. update the state lookup in `refresh_feeding_america.py`
-3. rerun the refresh pipeline
+- **Current release**: MMG 2025, data year 2023, published May 14, 2025.
+- **Next release**: MMG 2026 (data year 2024), expected late July 2026.
+
+Update procedure when MMG publishes:
+
+1. download the latest state table from `https://www.feedingamerica.org/research/map-the-meal-gap/overall-executive-summary`
+2. update the `STATE_MMG` lookup in `refresh_feeding_america.py`
+3. bump the `year` field and the source note string
+4. rerun the refresh pipeline
 
 The source manifest will label this feed `manual` even when it is current.
+
+## Provenance scaffold (v20.5, in progress)
+
+Country structural fields (`fdrs`, `c[]`, `w`, `r`, `m`, `fi`, `net`, etc.) are migrating
+out of `index.html` into `data/countries.json` with per-metric provenance:
+
+```
+{
+  "BEL": {
+    "w": { "value": 12, "source": "Statbel 2024 winter wheat", "as_of": "2024",
+           "url": "https://statbel.fgov.be/...", "method": "national stat office",
+           "quality_flag": "sourced" }
+  }
+}
+```
+
+Quality flags: `sourced` (verified against a public dataset), `legacy_curated` (hand-authored
+heritage value, not yet re-verified), `modeled` (computed from sourced inputs), `manual`
+(hand-maintained from an annual release).
+
+Migration is country-by-country starting with the EU 27, then top food-trade economies,
+then the rest of the world. Until a country's fields are migrated they continue to read
+from `index.html` with `quality_flag: legacy_curated`.
 
 ## Troubleshooting
 
