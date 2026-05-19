@@ -14876,16 +14876,13 @@ async function refreshLiveData() {
   _liveDataLoaded = true;
   const body = document.getElementById('live-data-body');
   if (!body) return;
-  body.innerHTML = '<div style="color:var(--t3);font-size:13px;padding:40px 0;text-align:center;">Fetching live data…</div>';
+  body.innerHTML = '<div style="color:var(--t3);font-size:13px;padding:40px 0;text-align:center;">Loading live snapshots…</div>';
 
-  // Fetch World Bank commodity price data (public, no auth)
-  let wbData = null;
-  try {
-    const res = await fetch('https://api.worldbank.org/v2/indicator/FP.CPI.TOTL.ZG?format=json&mrv=1&per_page=300');
-    if (res.ok) wbData = await res.json();
-  } catch(e) {}
+  // v20.4: read commodity benchmarks from the daily-refreshed World Bank Pink Sheet
+  // snapshot (data/worldbank_pink_sheet.json) and FAO Food Price Index snapshot
+  // (data/fao_ffpi.json). NO hardcoded prices, NO ad-hoc fetches that look "live" but
+  // aren't. If the snapshot is missing, the tile says "Unavailable" — not a fake number.
 
-  // Build food price index from our own data (since WB doesn't have commodity prices directly)
   const topVulnerable = [...COUNTRIES]
     .filter(c => c.fdrs > 0)
     .sort((a,b) => b.fdrs - a.fdrs)
@@ -14898,48 +14895,56 @@ async function refreshLiveData() {
   const resilient = COUNTRIES.filter(c=>c.fdrs < 25).length;
   const avgInflation = Math.round(COUNTRIES.filter(c=>c.fi>0).reduce((s,c)=>s+c.fi,0) / COUNTRIES.filter(c=>c.fi>0).length * 10) / 10;
 
-  // Commodity prices — fetch from FAO FPMA API, fallback to reference data
-  const COMMODITY_FALLBACK = [
-    { name: 'Wheat (CBOT)', val: '$198', unit: '/MT', chg: '-4.2%', status: 'yellow', note: 'Chicago Board of Trade front month', key: 'wheat' },
-    { name: 'Corn (CBOT)', val: '$164', unit: '/MT', chg: '+1.8%', status: 'green', note: 'Front-month futures', key: 'maize' },
-    { name: 'Soybeans', val: '$365', unit: '/MT', chg: '-2.1%', status: 'yellow', note: 'US Gulf FOB', key: 'soybean' },
-    { name: 'Rice (Thailand)', val: '$442', unit: '/MT', chg: '+0.6%', status: 'green', note: '5% broken, Bangkok price', key: 'rice' },
-    { name: 'Sugar (ICE #11)', val: '$0.19', unit: '/lb', chg: '-1.4%', status: 'yellow', note: 'ICE raw sugar futures', key: 'sugar' },
-    { name: 'Palm Oil', val: '$870', unit: '/MT', chg: '+3.1%', status: 'green', note: 'Malaysia BMD front month', key: 'palm_oil' },
-    { name: 'FAO Food Price Index', val: '127.1', unit: 'pts', chg: '+2.3%', status: 'yellow', note: 'Apr 2025 · Base 2014-16=100', key: 'fpi' },
-    { name: 'Fertilizer (Urea)', val: '$310', unit: '/MT', chg: '-8.4%', status: 'green', note: 'Black Sea FOB, spot', key: 'urea' },
-  ];
-  let commodities = COMMODITY_FALLBACK;
-  try {
-    // FAO FPMA API — food price monitoring & analysis (public, no auth)
-    const faoRes = await Promise.race([
-      fetch('https://fpma.fao.org/giews/fpmat4/dashboard/rest/data/domesticCommodityPrices?commodity=140&country=206&language=E'),
-      new Promise((_,r) => setTimeout(()=>r(new Error('timeout')), 4000))
-    ]);
-    if (faoRes && faoRes.ok) {
-      const faoData = await faoRes.json();
-      // FAO returns array of price series; update wheat if available
-      if (faoData && faoData.length > 0) {
-        const series = faoData[0];
-        const pts = series.dataPoints || series.prices || [];
-        if (pts.length >= 2) {
-          const latest = pts[pts.length - 1];
-          const prev = pts[pts.length - 2];
-          const price = Math.round(latest.value || latest.price || 0);
-          const prevP = Math.round(prev.value || prev.price || 0);
-          if (price > 0) {
-            const pct = prevP ? (((price - prevP) / prevP) * 100).toFixed(1) : '0.0';
-            const sign = pct >= 0 ? '+' : '';
-            commodities = commodities.map(c => c.key === 'wheat' ? {
-              ...c, val: '$' + price, chg: sign + pct + '%',
-              status: Math.abs(pct) < 2 ? 'green' : 'yellow',
-              note: 'FAO FPMA live · ' + (latest.date || latest.month || 'Latest')
-            } : c);
-          }
-        }
-      }
+  // Build commodity tiles from the Pink Sheet snapshot
+  const pinkSheetMonth = LIVE.pink_sheet?.as_of_month || null;
+  const pinkSheetUpdated = LIVE.pink_sheet?.dataset_updated_on || null;
+  const buildTile = (name, seriesKey, unitLabel) => {
+    const s = LIVE.pink_sheet?.series?.[seriesKey];
+    if (!s || s.latest_value == null) {
+      return { name, val: 'Unavailable', unit: unitLabel || '', chg: 'n/a', status: 'yellow', note: 'WB Pink Sheet snapshot missing — see source health' };
     }
-  } catch(e) { /* fallback already set */ }
+    const chgNum = s.change_mom_pct;
+    const chg = (chgNum == null || Number.isNaN(Number(chgNum)))
+      ? 'n/a'
+      : ((chgNum >= 0 ? '+' : '') + Number(chgNum).toFixed(1) + '%');
+    const absPct = chgNum == null ? null : Math.abs(Number(chgNum));
+    const status = absPct == null ? 'yellow' : (absPct < 1 ? 'green' : absPct < 4 ? 'yellow' : 'red');
+    return {
+      name,
+      val: '$' + (Number(s.latest_value).toLocaleString(undefined, {maximumFractionDigits: 2})),
+      unit: s.unit || unitLabel || '',
+      chg, status,
+      note: `World Bank Pink Sheet · ${s.label || seriesKey} · ${s.latest_month || ''}`,
+      key: seriesKey
+    };
+  };
+  const commodities = [
+    buildTile('Wheat',         'wheat',     '/mt'),
+    buildTile('Maize',         'maize',     '/mt'),
+    buildTile('Rice',          'rice',      '/mt'),
+    buildTile('Soybeans',      'soybeans',  '/mt'),
+    buildTile('Sugar',         'sugar',     '/kg'),
+    buildTile('Palm Oil',      'palm_oil',  '/mt'),
+    buildTile('Coffee',        'coffee',    '/kg'),
+    buildTile('Cocoa',         'cocoa',     '/kg'),
+    buildTile('Fertilizer · Urea', 'urea',  '/mt'),
+  ];
+
+  // FAO FFPI tile — read from snapshot, no hardcoded value
+  const ffpiLatest = LIVE.ffpi?.latest;
+  const ffpiChg = LIVE.ffpi?.change_mom_pct;
+  const ffpiTile = ffpiLatest && ffpiLatest.fpi != null ? {
+    val: Number(ffpiLatest.fpi).toFixed(1),
+    unit: ' pts',
+    chg: (ffpiChg == null || Number.isNaN(Number(ffpiChg)))
+      ? 'n/a'
+      : ((ffpiChg >= 0 ? '+' : '') + Number(ffpiChg).toFixed(1) + '% MoM'),
+    color: (ffpiChg == null) ? 'var(--t3)' : (Number(ffpiChg) > 2 ? '#c44b3c' : Number(ffpiChg) > 0 ? '#c9a957' : '#6ba36b'),
+    note: `${ffpiLatest.month || 'Latest'} · Base 2014–16 = 100`,
+  } : {
+    val: 'Unavailable', unit: '', chg: '—', color: 'var(--t3)',
+    note: 'FAO FFPI snapshot missing — see source health'
+  };
 
   // Active alerts from disturbance-prone countries
   const alerts = COUNTRIES
@@ -14955,7 +14960,7 @@ async function refreshLiveData() {
       <div class="live-stat-card">
         <div class="live-stat-label">Global Average FDRS</div>
         <div class="live-stat-val" style="color:${riskColor(avgFDRS)}">${avgFDRS}<span class="live-stat-unit">/100</span></div>
-        <div class="live-stat-source">Across ${COUNTRIES.filter(c=>c.fdrs>0).length} tracked countries · May 2025</div>
+        <div class="live-stat-source">Across ${COUNTRIES.filter(c=>c.fdrs>0).length} tracked countries · live nowcast snapshot</div>
       </div>
       <div class="live-stat-card">
         <div class="live-stat-label">Countries at Severe Risk</div>
@@ -14969,8 +14974,8 @@ async function refreshLiveData() {
       </div>
       <div class="live-stat-card">
         <div class="live-stat-label">FAO Food Price Index</div>
-        <div class="live-stat-val" style="color:#c9a957">127.1<span class="live-stat-unit"> pts</span></div>
-        <div class="live-stat-source">Apr 2025 · Base 2014-16=100 · +2.3% MoM</div>
+        <div class="live-stat-val" style="color:${ffpiTile.color}">${ffpiTile.val}<span class="live-stat-unit">${ffpiTile.unit}</span></div>
+        <div class="live-stat-source">${ffpiTile.note}${ffpiTile.chg !== '—' && ffpiTile.chg !== 'n/a' ? ' · ' + ffpiTile.chg : ''}</div>
       </div>
     </div>
 
@@ -15005,18 +15010,20 @@ async function refreshLiveData() {
       </div>
     </div>
 
-    <!-- Commodity prices -->
+    <!-- Commodity prices · World Bank Pink Sheet -->
     <div class="card" style="margin-bottom:18px;">
-      <div class="card-title"><span class="card-marker"></span> Global Commodity Prices · May 2025</div>
+      <div class="card-title"><span class="card-marker"></span> Commodity Benchmarks · World Bank Pink Sheet
+        <span style="font-family:'Geist Mono',monospace;font-size:9.5px;color:var(--accent);background:var(--accent)18;padding:1px 6px;border-radius:3px;margin-left:8px;letter-spacing:.05em;text-transform:uppercase;">monthly source</span>
+      </div>
       ${commodities.map(cm=>`
         <div class="live-indicator-row">
           <div class="live-status-dot ${cm.status}"></div>
           <div class="live-indicator-name">${cm.name}</div>
           <div style="font-size:10px;color:var(--t3);flex:1;padding-left:10px;">${cm.note}</div>
-          <div class="live-indicator-val">${cm.val}<span style="color:var(--t3);font-size:10px">${cm.unit}</span></div>
-          <div class="live-indicator-chg" style="color:${cm.chg.startsWith('+')?'#c44b3c':'#6ba36b'}">${cm.chg}</div>
+          <div class="live-indicator-val">${cm.val}<span style="color:var(--t3);font-size:10px"> ${cm.unit}</span></div>
+          <div class="live-indicator-chg" style="color:${cm.chg.startsWith('+')?'#c44b3c':cm.chg==='n/a'?'var(--t3)':'#6ba36b'}">${cm.chg}</div>
         </div>`).join('')}
-      <div style="font-size:10px;color:var(--t3);margin-top:10px;">Sources: CBOT, ICE, BMD, FAO · Indicative prices · Updated May 2025</div>
+      <div style="font-size:10px;color:var(--t3);margin-top:10px;">Source: World Bank Commodity Markets Pink Sheet · monthly release · ${pinkSheetMonth ? 'as-of ' + pinkSheetMonth : 'snapshot missing'}${pinkSheetUpdated ? ' · dataset updated ' + pinkSheetUpdated : ''}. Benchmark reference prices — not customs-cleared transactions.</div>
     </div>
 
     <!-- Top 10 most vulnerable -->
@@ -15055,7 +15062,7 @@ async function refreshLiveData() {
   }, 50);
 
   const upd = document.getElementById('live-last-updated');
-  if (upd) upd.textContent = `Last updated: ${new Date().toLocaleString()} · Data from FAO, World Bank, CBOT, ICE`;
+  if (upd) upd.textContent = `Snapshot loaded ${new Date().toLocaleString()} · Sources: FAO FFPI · World Bank Pink Sheet · WB WDI · pipeline manifest`;
   renderLiveEventsFeed();
 }
 
@@ -15729,6 +15736,26 @@ function initCommoditiesTab() {
   }
 }
 
+// v20.4: COMMODITY_META keys → Pink Sheet series keys. Render-time read; no hardcoded prices.
+const COMMODITY_PINK_KEY = {
+  Wheat:'wheat', Rice:'rice', Corn:'maize', Soybeans:'soybeans',
+  'Palm Oil':'palm_oil', Sugar:'sugar', Coffee:'coffee', Cocoa:'cocoa',
+  Fertilizer:'urea', Cattle:'beef'
+};
+function commodityLivePrice(cmKey) {
+  const seriesKey = COMMODITY_PINK_KEY[cmKey];
+  if (!seriesKey) return null;
+  const s = LIVE.pink_sheet?.series?.[seriesKey];
+  if (!s || s.latest_value == null) return null;
+  const formatted = '$' + Number(s.latest_value).toLocaleString(undefined, {maximumFractionDigits: 2}) + ' ' + (s.unit || '');
+  const chgNum = s.change_mom_pct;
+  const chg = (chgNum == null || Number.isNaN(Number(chgNum)))
+    ? 'n/a'
+    : ((chgNum >= 0 ? '+' : '') + Number(chgNum).toFixed(1) + '%');
+  return { price: formatted, chg, chgDir: chgNum == null ? 0 : (chgNum >= 0 ? 1 : -1),
+           note: `WB Pink Sheet · ${s.label || seriesKey} · ${s.latest_month || ''}` };
+}
+
 function renderCommodityGrid() {
   const grid = document.getElementById('commodities-grid');
   if (!grid) return;
@@ -15741,11 +15768,17 @@ function renderCommodityGrid() {
     intro.innerHTML = `
       <div class="commodity-intro-eyebrow">10 commodities · ~85% of the world's caloric trade</div>
       <div class="commodity-intro-body">
-        Click any card to see <b>who imports it</b>, <b>where it's produced</b>, and <b>which trading companies</b> move the volume. Prices update from CBOT and ICE; production data from USDA PSD and FAO.
+        Click any card to see <b>who imports it</b>, <b>where it's produced</b>, and <b>which trading companies</b> move the volume. Market tiles use World Bank Pink Sheet monthly benchmark prices. Trade exposure remains a modeled structural layer, not customs-cleared transaction data.
       </div>`;
     wrap.insertBefore(intro, grid);
   }
-  grid.innerHTML = COMMODITY_META.map(cm => `
+  grid.innerHTML = COMMODITY_META.map(cm => {
+    const live = commodityLivePrice(cm.key);
+    const price = live ? live.price : (cm.price + ' <span style="font-size:9.5px;color:var(--accent);background:var(--accent)18;padding:1px 4px;border-radius:3px;margin-left:4px;">baseline</span>');
+    const chg   = live ? live.chg   : cm.chg;
+    const chgDir = live ? live.chgDir : cm.chgDir;
+    const note  = live ? live.note  : (cm.note + ' · baseline');
+    return `
     <div class="card" style="cursor:pointer;transition:border-color .15s;"
       onclick="showCommodityDetail('${cm.key}')"
       onmouseover="this.style.borderColor='var(--accent)'"
@@ -15754,16 +15787,17 @@ function renderCommodityGrid() {
         <div style="font-size:22px;">${cm.icon}</div>
         <div>
           <div style="font-size:13px;font-weight:700;color:var(--t1)">${cm.key}</div>
-          <div style="font-size:10px;color:var(--t3)">${cm.note}</div>
+          <div style="font-size:10px;color:var(--t3)">${note}</div>
         </div>
       </div>
       <div style="display:flex;align-items:baseline;justify-content:space-between;">
-        <div style="font-size:18px;font-weight:600;font-family:'Geist Mono',monospace;color:var(--t1)">${cm.price}</div>
-        <div style="font-size:12px;font-weight:600;color:${cm.chgDir>0?'#c44b3c':'#6ba36b'}">${cm.chg}</div>
+        <div style="font-size:18px;font-weight:600;font-family:'Geist Mono',monospace;color:var(--t1)">${price}</div>
+        <div style="font-size:12px;font-weight:600;color:${chgDir>0?'#c44b3c':'#6ba36b'}">${chg}</div>
       </div>
       <div style="font-size:11px;color:var(--t3);margin-top:8px;line-height:1.5;">${cm.desc}</div>
       <div style="margin-top:12px;font-size:11px;color:var(--accent);">View exposure →</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function showCommodityDetail(key) {
