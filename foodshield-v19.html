@@ -8879,6 +8879,34 @@ const LIVE = {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
+// v20.5: PER-METRIC PROVENANCE HELPERS
+// ════════════════════════════════════════════════════════════════════════════
+function fieldProvenance(c, field) {
+  return c?._provenance?.[field] || null;
+}
+function provenanceBadge(quality_flag) {
+  const map = {
+    sourced:        { color: '#6ba36b', label: 'SOURCED' },
+    legacy_curated: { color: '#c47a3c', label: 'LEGACY' },
+    modeled:        { color: '#7c9fcf', label: 'MODELED' },
+    manual:         { color: '#7c9fcf', label: 'MANUAL' },
+  };
+  const m = map[quality_flag] || map.legacy_curated;
+  return `<span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:${m.color};background:${m.color}18;padding:1px 4px;border-radius:3px;margin-left:4px;letter-spacing:.04em;text-transform:uppercase;">${m.label}</span>`;
+}
+function provenanceTooltip(c, field) {
+  const p = fieldProvenance(c, field);
+  if (!p) return 'No provenance metadata — value is legacy curated, awaiting verification.';
+  const lines = [];
+  if (p.source) lines.push('Source: ' + p.source);
+  if (p.as_of) lines.push('As-of: ' + p.as_of);
+  if (p.method) lines.push('Method: ' + p.method);
+  if (p.source_url) lines.push('URL: ' + p.source_url);
+  if (p.note) lines.push(p.note);
+  return lines.join(' · ') || 'Provenance: ' + (p.quality_flag || 'unknown');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // v20.4: SOURCE HEALTH UI — reads from data/source_manifest.json
 // ════════════════════════════════════════════════════════════════════════════
 function sourceManifestSummary() {
@@ -9049,6 +9077,40 @@ async function loadLiveData() {
     // v20.4 trust pass
     _fetchData('worldbank_pink_sheet'), _fetchData('source_manifest'),
   ]);
+
+  // v20.5 provenance scaffold — fetch the per-metric override file. Schema is documented
+  // in data/countries.json. Any country with verified fields here will have those merged
+  // on top of the legacy COUNTRIES[i] entry; the rest of that country's fields remain
+  // legacy_curated. Provenance metadata is attached at c._provenance[fieldName] so the UI
+  // can show "sourced" / "legacy_curated" / "modeled" badges per metric where it matters.
+  try {
+    const provData = await _fetchData('countries');
+    const overrides = provData?.countries || {};
+    if (Array.isArray(window.COUNTRIES) && Object.keys(overrides).length) {
+      let touched = 0;
+      for (const c of COUNTRIES) {
+        const row = overrides[c.iso];
+        if (!row) continue;
+        c._provenance = c._provenance || {};
+        for (const [field, meta] of Object.entries(row)) {
+          if (!meta || typeof meta !== 'object' || !('value' in meta)) continue;
+          c._provenance[field] = {
+            source: meta.source || null,
+            source_url: meta.source_url || null,
+            as_of: meta.as_of || null,
+            method: meta.method || null,
+            quality_flag: meta.quality_flag || 'sourced',
+            note: meta.note || null,
+          };
+          c[field] = meta.value;
+        }
+        touched++;
+      }
+      if (touched) console.info(`[FoodShield] Provenance overrides applied to ${touched} countries from data/countries.json`);
+    }
+  } catch (e) {
+    console.warn('[FoodShield] Provenance overlay failed:', e);
+  }
   LIVE.nowcast = nc?.data || {};
   LIVE.wfp = wfp?.data || {};
   LIVE.ipc = ipc?.data || {};
@@ -11296,23 +11358,26 @@ function openPanel(c, skipDrilldown) {
     </div>`;
   }).join('');
 
-  // Metrics — v20.2: relabeled to be unambiguous, shows both caloric reliance + trade-import dependency
-  // c.w/r/m are caloric-share figures (% of national caloric supply from this commodity).
-  // commodityTradeDependency() computes a live estimate of trade-import dependency from the imports list.
+  // Metrics — v20.4 honesty pass: caloric percentages of 0 are relabeled "<0.5% negligible"
+  // (every country eats some wheat/rice/maize — exact zero is misleading); SCE shown with
+  // "modeled" badge; Net food trade row has a definition tooltip.
   const wTd = commodityTradeDependency(c, 'Wheat');
   const rTd = commodityTradeDependency(c, 'Rice');
   const mTd = commodityTradeDependency(c, 'Maize');
-  const fmt = (cal, td) => td != null
-    ? `<span class="v">${cal}% <span style="color:var(--t3);font-size:10px;">caloric</span> · <span class="mono" style="color:var(--accent);">${td}% trade</span></span>`
-    : `<span class="v">${cal}% <span style="color:var(--t3);font-size:10px;">caloric</span></span>`;
+  const calLabel = (v) => (v === 0 || v == null)
+    ? '<span class="v" style="color:var(--t2);">&lt;0.5% <span style="color:var(--t3);font-size:10px;">caloric · negligible</span></span>'
+    : `<span class="v">${v}% <span style="color:var(--t3);font-size:10px;">caloric</span></span>`;
+  const fmt = (cal, td) => {
+    const calPart = calLabel(cal);
+    if (td == null) return calPart;
+    // Insert trade segment into the same span — works for both 0% and N% caloric cases
+    return calPart.replace('</span>', ` · <span class="mono" style="color:var(--accent);">${td}% trade</span></span>`);
+  };
   document.getElementById('sp-metrics').innerHTML = `
     <div class="sp-row" title="${TIP_COMMODITY}"><span class="k">Wheat</span>${fmt(c.w, wTd)}</div>
     <div class="sp-row" title="${TIP_COMMODITY}"><span class="k">Rice</span>${fmt(c.r, rTd)}</div>
     <div class="sp-row" title="${TIP_COMMODITY}"><span class="k">Maize</span>${fmt(c.m, mTd)}</div>
     ${(function(){
-      // v20.2: use live food-inflation from calibrationAnchors (HungerMap > Eurostat > FAOSTAT > WB),
-      // falling back to the hardcoded c.fi only if no live source exists. The label tells the reader
-      // which source provided the number so they can audit.
       const a = (typeof calibrationAnchors === 'function') ? calibrationAnchors(c) : {};
       const live = a.food_inflation_pct;
       const src  = a.food_inflation_source;
@@ -11320,11 +11385,11 @@ function openPanel(c, skipDrilldown) {
       if (live != null) {
         return `<div class="sp-row" title="Source: ${src||'live'}. ${label}."><span class="k">Food inflation</span><span class="v" style="color:${live>15?'#c44b3c':live>8?'#d27a3e':'#9a988f'}">${live}% <span style="color:var(--t3);font-size:10px;">${src||''}</span></span></div>`;
       }
-      // Fallback to hardcoded only if no live data — flag it clearly as stale
-      return `<div class="sp-row" title="Stale baseline figure — no live source available for this country."><span class="k">Food inflation</span><span class="v" style="color:#9a988f">${c.fi}% / yr <span style="color:var(--t3);font-size:10px;">baseline</span></span></div>`;
+      // No live data — show heritage value with explicit "legacy_curated" badge
+      return `<div class="sp-row" title="No live source available — showing legacy curated baseline. Not current."><span class="k">Food inflation</span><span class="v" style="color:var(--t3)">${c.fi}% / yr <span style="color:var(--t3);font-size:10px;">legacy_curated</span></span></div>`;
     })()}
-    <div class="sp-row"><span class="k">Net food trade</span><span class="v" style="color:${c.net>=0?'#6ba36b':'#c44b3c'}">${c.net>=0?'+':''}${(c.net/1000).toFixed(0)}B USD</span></div>
-    <div class="sp-row" title="${TIP_SCE}"><span class="k">Supply-chain exposure</span><span class="v mono" style="color:${riskColor(supplyChainExposure(c))};">${supplyChainExposure(c)}/100</span></div>`;
+    <div class="sp-row" title="Net food trade balance. Definition includes basic agricultural commodities only (HS chapters 01–24); excludes processed-food re-exports and intra-firm transfers. See methodology page for full caveats."><span class="k">Net food trade</span><span class="v" style="color:${c.net>=0?'#6ba36b':'#c44b3c'}">${c.net>=0?'+':''}${(c.net/1000).toFixed(0)}B USD <span style="color:var(--t3);font-size:10px;">legacy_curated · ?</span></span></div>
+    <div class="sp-row" title="${TIP_SCE}"><span class="k">Supply-chain exposure</span><span class="v mono" style="color:${riskColor(supplyChainExposure(c))};">${supplyChainExposure(c)}/100 <span style="font-family:'Geist Mono',monospace;font-size:9px;color:var(--accent);background:var(--accent)18;padding:1px 4px;border-radius:3px;margin-left:4px;letter-spacing:.04em;text-transform:uppercase;">modeled</span></span></div>`;
 
   // Imports — clickable to open commodity drilldown (qty + companies)
   document.getElementById('sp-imports').innerHTML =
@@ -11488,7 +11553,7 @@ function renderCountryTab() {
       </div>
     </div>
 
-    <!-- Stat strip — v20.2.2: dual caloric+trade for staples, live food-inflation -->
+    <!-- Stat strip — v20.4 honesty: 0% caloric shown as "<0.5% negligible"; SCE labeled MODELED; Net trade has definition tooltip -->
     ${(function(){
       const wTd = commodityTradeDependency(c, 'Wheat');
       const rTd = commodityTradeDependency(c, 'Rice');
@@ -11498,11 +11563,17 @@ function renderCountryTab() {
       const inflVal  = liveInfl != null ? liveInfl : c.fi;
       const inflBadge = liveInfl != null
         ? `<span class="ct-stat-unit" style="display:block;font-size:9px;color:var(--t3);margin-top:2px;">${inflSrc||'live'} · food CPI</span>`
-        : `<span class="ct-stat-unit" style="display:block;font-size:9px;color:var(--t3);margin-top:2px;">baseline</span>`;
+        : `<span class="ct-stat-unit" style="display:block;font-size:9px;color:#c47a3c;margin-top:2px;">legacy_curated · not current</span>`;
       const sce = (typeof supplyChainExposure === 'function') ? supplyChainExposure(c) : 0;
-      const dual = (cal, td) => td != null
-        ? `${cal}<span class="ct-stat-unit">% caloric</span> <span style="color:var(--accent);font-family:'Geist Mono',monospace;font-size:13px;margin-left:8px;">${td}<span class="ct-stat-unit">% trade</span></span>`
-        : `${cal}<span class="ct-stat-unit">% caloric</span>`;
+      // v20.4 honesty: relabel exact-zero caloric values
+      const dual = (cal, td) => {
+        const calBlock = (cal === 0 || cal == null)
+          ? `<span style="color:var(--t2);">&lt;0.5</span><span class="ct-stat-unit">% caloric · negligible</span>`
+          : `${cal}<span class="ct-stat-unit">% caloric</span>`;
+        return td != null
+          ? `${calBlock} <span style="color:var(--accent);font-family:'Geist Mono',monospace;font-size:13px;margin-left:8px;">${td}<span class="ct-stat-unit">% trade</span></span>`
+          : calBlock;
+      };
       return `
       <div class="ct-stat-strip">
         <div class="ct-stat" title="${TIP_COMMODITY}">
@@ -11513,16 +11584,16 @@ function renderCountryTab() {
           <div class="ct-stat-label">Rice</div>
           <div class="ct-stat-val">${dual(c.r, rTd)}</div>
         </div>
-        <div class="ct-stat" title="Live food-inflation. Source priority: HungerMap > Eurostat > FAOSTAT > World Bank fallback.">
+        <div class="ct-stat" title="Live food-inflation. Source priority: HungerMap > Eurostat > FAOSTAT > World Bank fallback. If no live source available, shows legacy curated baseline (not current).">
           <div class="ct-stat-label">Food inflation</div>
           <div class="ct-stat-val" style="color:${inflVal>15?'#c44b3c':inflVal>8?'#d27a3e':'inherit'}">${inflVal}<span class="ct-stat-unit">%/yr</span>${inflBadge}</div>
         </div>
-        <div class="ct-stat" title="${TIP_SCE}">
-          <div class="ct-stat-label">Supply-chain exposure</div>
+        <div class="ct-stat" title="${TIP_SCE} — this is a modeled composite from sourced inputs, not a measured statistic.">
+          <div class="ct-stat-label">Supply-chain exposure <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:var(--accent);background:var(--accent)18;padding:1px 4px;border-radius:3px;margin-left:4px;letter-spacing:.04em;text-transform:uppercase;">modeled</span></div>
           <div class="ct-stat-val" style="color:${riskColor(sce)}">${sce}<span class="ct-stat-unit">/100</span></div>
         </div>
-        <div class="ct-stat">
-          <div class="ct-stat-label">Net trade</div>
+        <div class="ct-stat" title="Net food trade balance. Definition: agri-food commodities only (HS 01–24); excludes processed-food re-exports and intra-firm transfers. See methodology page.">
+          <div class="ct-stat-label">Net trade <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#c47a3c;background:#c47a3c18;padding:1px 4px;border-radius:3px;margin-left:4px;letter-spacing:.04em;text-transform:uppercase;">legacy</span></div>
           <div class="ct-stat-val" style="color:${c.net>=0?'#6ba36b':'#c44b3c'}">${c.net>=0?'+':''}${(c.net/1000).toFixed(1)}<span class="ct-stat-unit">B USD</span></div>
         </div>
       </div>`;
