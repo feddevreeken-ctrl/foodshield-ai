@@ -96,7 +96,13 @@ def main():
         "data": out,
     }
     (DATA / "nowcast.json").write_text(json.dumps(envelope, indent=2))
-    print(f"[OK] wrote nowcast.json with {len(out)} country adjustments")
+    # Distinguish actual UN-member countries from total ISO3 entries
+    # (the upstream feeds include dependencies, disputed territories, etc.)
+    with_signals = sum(
+        1 for v in out.values()
+        if any(s for s in (v.get("signals") or {}).values() if s and s != 0)
+    )
+    print(f"[OK] wrote nowcast.json with {len(out)} ISO3 entries ({with_signals} with at least one live signal)")
 
 
 if __name__ == "__main__":
