@@ -16003,7 +16003,15 @@ async function loadDisturbanceData() {
         // and the "View ___ full profile" button gets a real label.
         const isoUpper = (p.iso3 || '').toUpperCase();
         const dbCountry = isoUpper ? byISO(isoUpper) : null;
-        const resolvedName = p.countryname || (dbCountry && dbCountry.name) || isoUpper || 'Unknown';
+
+        // v20.31 — skip GDACS events that don't resolve to a country we cover.
+        // Rare (most GDACS events have valid ISO3), but covers edge cases like
+        // events with multi-country ISO3 lists, MNP/GUM/etc that we partly
+        // support, or empty iso3 fields. Same rule as ReliefWeb: per-country
+        // Disturbances feed should only show events users can click into.
+        if (!isoUpper || !dbCountry) return;
+
+        const resolvedName = p.countryname || dbCountry.name || isoUpper;
         events.push({
           id: 'gdacs_' + (p.eventid || i),
           type: typeMap[evType] || 'flood',
@@ -16061,8 +16069,23 @@ async function loadDisturbanceData() {
         // Prefer primary_country; fall back to country[0].
         const pc = f.primary_country || (Array.isArray(f.country) ? f.country[0] : null) || {};
         const isoUpper = (pc.iso3 || '').toUpperCase();
+
+        // v20.31 — ReliefWeb tags global / multi-country reports with iso3=WLD
+        // (e.g. "Strait of Hormuz threatens global food prices", annual
+        // disaster financing reports). The Disturbances tab is per-country
+        // by design — global reports have no country profile to drill into,
+        // and clicking them produced a dead-end modal. Skip them at ingest;
+        // the country-specific ReliefWeb reports already cover the user's
+        // actual interest.
+        if (isoUpper === 'WLD' || isoUpper === 'XKX' || !isoUpper) return;
+
         const dbCountry = isoUpper ? byISO(isoUpper) : null;
-        const resolvedName = pc.name || (dbCountry && dbCountry.name) || isoUpper || 'Unknown';
+        // If we don't have a country profile for this ISO either (rare —
+        // territories like XKX/Kosovo, etc.), still skip so the click
+        // experience is consistent.
+        if (!dbCountry) return;
+
+        const resolvedName = pc.name || dbCountry.name || isoUpper;
         const title = f.title || 'Food security situation report';
         // Infer event type from the title — ReliefWeb v2 reports don't carry
         // a type taxonomy the same way disasters did. Conservative default.
