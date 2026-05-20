@@ -184,6 +184,13 @@ SOURCES = [
         "cadence": "6h fetch / annual upstream",
         "mode": "reference",
     },
+    {
+        "key": "wgi",
+        "file": "wgi.json",
+        "label": "WB Worldwide Governance Indicators",
+        "cadence": "6h fetch / annual upstream",
+        "mode": "reference",
+    },
 ]
 
 

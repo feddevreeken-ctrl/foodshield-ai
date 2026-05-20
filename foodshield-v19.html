@@ -8897,6 +8897,9 @@ const LIVE = {
   // v20.22 — Pipeline 9: EU JRC INFORM Risk Index.
   // Format: {iso3: {inform_risk, hazard_exposure, vulnerability, lack_coping_capacity, rank, ...}}
   inform: null,
+  // v20.25 — Pipeline 13: WB Worldwide Governance Indicators (6 dimensions).
+  // Format: {iso3: {control_corruption:{value,year,label}, rule_of_law:{...}, ...}}
+  wgi: null,
   meta: { loaded_at: null, sources_ok: 0, sources_failed: 0, headline_status: null },
 };
 
@@ -9210,6 +9213,47 @@ function informCardHTML(iso3) {
     </div>`;
 }
 
+// v20.25 — Pipeline 13: WB Worldwide Governance Indicators card.
+// 6 dimensions, score range -2.5 (worst) to +2.5 (best). Color-banded.
+function wgiCardHTML(iso3) {
+  const row = LIVE.wgi?.[iso3];
+  if (!row) return '';
+  // -2.5 → +2.5 mapped to red → green
+  const col = (v) => v == null ? 'var(--t3)' :
+    v >= 1.5  ? '#6ba36b' :    // very strong
+    v >= 0.5  ? '#9cc299' :    // strong
+    v >= -0.5 ? '#c9a957' :    // moderate
+    v >= -1.5 ? '#d27a3e' :    // weak
+                '#c44b3c';      // failing
+  const fmt = (v) => v == null ? '—' : (v >= 0 ? '+' : '') + Number(v).toFixed(2);
+  const indicators = [
+    { key: 'rule_of_law',          label: 'Rule of law',                tip: 'Confidence in and abidance by rules of society; quality of contract enforcement, property rights, police, and courts.' },
+    { key: 'control_corruption',   label: 'Control of corruption',      tip: 'Extent to which public power is exercised for private gain.' },
+    { key: 'gov_effectiveness',    label: 'Government effectiveness',   tip: 'Quality of public services + civil service + policy implementation.' },
+    { key: 'political_stability',  label: 'Political stability',        tip: 'Likelihood of political instability and politically-motivated violence including terrorism.' },
+    { key: 'regulatory_quality',   label: 'Regulatory quality',         tip: 'Ability to formulate and implement sound policies and regulations that permit and promote private-sector development.' },
+    { key: 'voice_accountability', label: 'Voice & accountability',     tip: 'Extent to which citizens can select their government, freedom of expression, association, and free media.' },
+  ];
+  const rows = indicators.map(spec => {
+    const ind = row[spec.key];
+    if (!ind || ind.value == null) return '';
+    return `<div class="sp-row" title="${spec.tip}">
+      <span class="k">${spec.label}</span>
+      <span class="v" style="color:${col(ind.value)};font-family:'Geist Mono',monospace;">${fmt(ind.value)}</span>
+    </div>`;
+  }).filter(Boolean).join('');
+  if (!rows) return '';
+  return `
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Governance (WB WGI)</div>
+        <span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">WB · sourced</span>
+      </div>
+      ${rows}
+      <div style="font-size:9.5px;color:var(--t3);margin-top:6px;">${row.year || 'latest'} · range −2.5 (weak) to +2.5 (strong)</div>
+    </div>`;
+}
+
 // v20.18 — Pipeline 4: WB WDI Structural Indicators card.
 // Surfaces a curated subset (5 indicators) on the country panel — the ones
 // most relevant to food-security framing. Hover the row for the full
@@ -9438,6 +9482,29 @@ function formatSnapshotTime(ts) {
     return new Date(ts).toLocaleString();
   } catch { return ts; }
 }
+// v20.25 — human-readable age. Returns 'updated 3h ago', 'updated 2d ago', etc.
+// Bucketed for usefulness:
+//   < 90 min  → "just now"
+//   < 24 h    → "X hr ago"
+//   < 7 d     → "X d ago"
+//   < 30 d    → "X wk ago"
+//   else      → "X mo ago"
+// Returns '' on unparseable input so callers can `formatAge(ts) || fallback`.
+function formatAge(ts) {
+  if (!ts) return '';
+  const t = new Date(ts).getTime();
+  if (!Number.isFinite(t)) return '';
+  const delta = Date.now() - t;
+  if (delta < 0) return 'just now';
+  const min = delta / 60000;
+  if (min < 90) return 'just now';
+  const hr = min / 60;
+  if (hr < 24) return `${Math.round(hr)}h ago`;
+  const d = hr / 24;
+  if (d < 7) return `${Math.round(d)}d ago`;
+  if (d < 30) return `${Math.round(d / 7)}wk ago`;
+  return `${Math.round(d / 30)}mo ago`;
+}
 function monthTokenLabel(t) {
   if (!t) return '';
   // Tokens look like "2026-04" — return as-is, or a friendlier "Apr 2026" if recognisable
@@ -9460,13 +9527,15 @@ function updateLiveStatusUI() {
     const issues  = (summary.degraded_sources || 0) + (summary.setup_required_sources || 0) + (summary.failed_sources || 0);
     const total   = summary.total_sources || (healthy + issues);
     const color = issues === 0 ? '#6ba36b' : issues <= 3 ? '#c9a957' : '#c44b3c';
+    const age = formatAge(summary.loaded_at);
+    const ageSuffix = age ? ` · ${age}` : '';
     label.textContent = issues === 0
-      ? `${healthy}/${total} feeds healthy`
-      : `${healthy}/${total} healthy · ${issues} need attention`;
+      ? `${healthy}/${total} feeds healthy${ageSuffix}`
+      : `${healthy}/${total} healthy · ${issues} need attention${ageSuffix}`;
     label.style.color = color;
     dot.style.background = color;
     dot.style.boxShadow = `0 0 8px ${color}`;
-    pill.title = `Snapshot refreshed ${formatSnapshotTime(summary.loaded_at)}. Click for per-source status.`;
+    pill.title = `Snapshot refreshed ${formatSnapshotTime(summary.loaded_at)}${age ? ` (${age})` : ''}. Click for per-source status.`;
     LIVE.meta.headline_status = summary.headline_status || (issues === 0 ? 'healthy' : 'attention');
     return;
   }
@@ -9501,7 +9570,7 @@ function showLiveStatusDialog() {
         <div style="font-size:10.5px;color:var(--t2);line-height:1.55;">
           ${row.reason || 'No notes'}
           ${row.latest_period ? `<div style="color:var(--t3);margin-top:3px;">Latest period: ${monthTokenLabel(row.latest_period)}</div>` : ''}
-          ${row.generated_at ? `<div style="color:var(--t3);margin-top:3px;">Snapshot: ${formatSnapshotTime(row.generated_at)}</div>` : ''}
+          ${row.generated_at ? `<div style="color:var(--t3);margin-top:3px;">Snapshot: ${formatSnapshotTime(row.generated_at)}${formatAge(row.generated_at) ? ` <span style="color:var(--t2);font-weight:600;">(${formatAge(row.generated_at)})</span>` : ''}</div>` : ''}
           ${row.count != null ? `<div style="color:var(--t3);margin-top:3px;">Rows: ${row.count}</div>` : ''}
         </div>
       </div>`).join('');
@@ -9633,6 +9702,12 @@ async function loadLiveData() {
     const informEnv = await _fetchData('inform_risk');
     LIVE.inform = (informEnv && (informEnv.data || informEnv)) || {};
   } catch (e) { LIVE.inform = {}; }
+
+  // v20.25 — Pipeline 13: WB Worldwide Governance Indicators per country.
+  try {
+    const wgiEnv = await _fetchData('wgi');
+    LIVE.wgi = (wgiEnv && (wgiEnv.data || wgiEnv)) || {};
+  } catch (e) { LIVE.wgi = {}; }
 
   // v20.5 provenance scaffold — fetch the per-metric override file. Schema is documented
   // in data/countries.json. Any country with verified fields here will have those merged
@@ -12060,7 +12135,9 @@ function openPanel(c, skipDrilldown) {
     // v20.22: WRI Aqueduct water risk card (Pipeline 8).
     (typeof aqueductCardHTML === 'function' ? aqueductCardHTML(c.iso) : '') +
     // v20.22: EU JRC INFORM Risk Index card (Pipeline 9).
-    (typeof informCardHTML === 'function' ? informCardHTML(c.iso) : '');
+    (typeof informCardHTML === 'function' ? informCardHTML(c.iso) : '') +
+    // v20.25: WB Worldwide Governance Indicators card (Pipeline 13).
+    (typeof wgiCardHTML === 'function' ? wgiCardHTML(c.iso) : '');
 
   document.getElementById('sp-ai').textContent = c.ai;
 
@@ -13471,16 +13548,21 @@ function renderAboutTab() {
         <div class="about-mission-eyebrow">Why this exists</div>
         <div class="about-mission-body">
           Governments, NGOs and journalists need a fast, free way to see global food-system fragility.
-          Existing tools are paywalled, slow, or buried in PDFs. FoodShield AI turns 42 public data sources
-          into a single, scannable risk score — for every country, updated continuously.
+          Existing tools are paywalled, slow, or buried in PDFs. FoodShield AI runs <b style="color:var(--t1)">29 public data pipelines</b>
+          across <b style="color:var(--t1)">227 countries plus all 50 US states</b>, refreshed every 6 hours,
+          into a single, scannable Food Dependency Risk Score (FDRS) — auditable and free.
         </div>
       </div>
       <div class="about-mission-card">
         <div class="about-mission-eyebrow">How it stays honest</div>
         <div class="about-mission-body">
-          Every score is auditable — open methodology, open data sources, no proprietary weights.
-          If you disagree with how a country is rated, the math is right there in the Methodology tab.
-          Raw inputs are downloadable.
+          Every metric on every country panel carries a <b style="color:var(--t1)">provenance flag</b> —
+          <span style="color:#6ba36b;font-weight:600">sourced</span>,
+          <span style="color:#7c9fcf;font-weight:600">manual</span>,
+          <span style="color:#c9a957;font-weight:600">modeled</span>, or
+          <span style="color:#d27a3e;font-weight:600">legacy_curated</span> — so readers can tell which numbers
+          come from a public dataset and which are heritage carry-overs. All source URLs, methods, and as-of dates
+          are exposed in <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">data/countries.json</code>.
         </div>
       </div>
     </div>
@@ -13534,15 +13616,25 @@ function renderAboutTab() {
 
     <!-- Data sources -->
     <div class="card" style="margin-bottom:16px;">
-      <div class="card-title"><span class="card-marker"></span> Data sources</div>
+      <div class="card-title"><span class="card-marker"></span> Data sources <span style="font-size:10.5px;font-weight:400;color:var(--t3);margin-left:8px;">29 pipelines · refreshed every 6h · see Methodology for full list + cadence</span></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-top:8px;">
         ${[
-          ['FAO', 'Food & Agriculture Organisation — production, trade balance, food supply'],
-          ['WFP', 'World Food Programme — IPC phases, emergency classifications'],
-          ['GDACS', 'Global Disaster Alert & Coordination — live natural disaster events'],
-          ['ReliefWeb', 'UNOCHA — humanitarian crisis reports'],
-          ['World Bank', 'Commodity price indices, GDP, inflation'],
-          ['FEWS NET', 'Famine Early Warning Systems — food security projections'],
+          ['FAOSTAT', 'Food Balance Sheets (caloric shares), Trade Crops & Livestock (net food trade), food CPI'],
+          ['WFP HungerMap', 'Daily food consumption + IPC mirror + per-country FX, food inflation, nutrition'],
+          ['World Bank', 'WDI bulk (20 indicators), WGI (6 governance), WFSO outlook, Pink Sheet commodity prices'],
+          ['USDA PSD', 'Observed production / imports / exports / consumption for wheat, rice, corn, soybeans'],
+          ['ND-GAIN', 'Climate vulnerability + readiness + food-sector sub-score (~192 countries)'],
+          ['WRI Aqueduct', 'Water stress, drought, riverine + coastal flood risk (5 indicators per country)'],
+          ['EU JRC INFORM', 'Composite humanitarian risk index + 3 dimensions (annual)'],
+          ['IPC + GDACS + ReliefWeb', 'Live crisis signals: IPC phase shifts, natural disasters, humanitarian alerts'],
+          ['ACLED', 'Conflict event counts and fatalities feeding the nowcast conflict signal'],
+          ['UN Comtrade', 'Bilateral staples trade flows — observed wheat/rice/corn/soy by importer × exporter'],
+          ['Open-Meteo + USGS + NASA FIRMS + OpenAQ', 'Live weather, river flow, fires, air quality'],
+          ['Eurostat + FAOSTAT food CPI', 'EU monthly food inflation, global annual food CPI'],
+          ['FAO GIEWS + FEWS NET', 'Quarterly food-security situation briefs + monthly IPC-style classifications'],
+          ['WFP ACR + USDA GAIN', 'Operational country narratives + commodity attaché reports'],
+          ['Feeding America', 'US state food-insecurity % (annual Map the Meal Gap)'],
+          ['OECD-FAO + UN WPP', 'Baseline production/consumption + population projections for 2030 forecast'],
         ].map(([src, desc]) => `
           <div style="background:var(--bg3);border:1px solid var(--b1);border-radius:8px;padding:10px 12px;">
             <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:3px;">${src}</div>
@@ -14540,7 +14632,7 @@ function renderMethodologyTab() {
             Structural FDRS adjusted daily by live signals: IPC phase shifts, ACLED conflict spikes, FAO Food Price Index,
             ReliefWeb humanitarian alerts and WFP HungerMap consumption flags. Answers <b>"what's moving right now?"</b>
           </div>
-          <div style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--accent);">cadence: daily · 06:00 UTC</div>
+          <div style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--accent);">cadence: 6h · 00/06/12/18 UTC</div>
         </div>
       </div>
       <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:10px;padding:16px 20px;font-family:'Geist Mono',monospace;font-size:12.5px;line-height:1.9;margin-bottom:14px;">
@@ -14577,6 +14669,7 @@ function renderMethodologyTab() {
         to preserve discrimination. Nowcast deltas before and after this date are <em>not directly comparable</em>; same-day comparisons across countries remain valid.
         <br><b style="color:var(--t1)">v20.1.</b> Food-inflation signal now reads from the freshest available source per country: WFP HungerMap (crisis countries) &gt; Eurostat HICP (EU monthly) &gt; FAOSTAT food CPI (global annual) &gt; World Bank headline CPI fallback.
         <br><b style="color:var(--t1)">v20.2.</b> Added <b>Supply-Chain Exposure</b> as a 7th structural sub-component (weight 8%). Captures TRADE import dependency, distinct from caloric reliance. Resolves the "Netherlands shows 0% rice dependency despite importing $481M of rice annually" class of issue. Commodity rows in country panels now display <b>both caloric share AND trade dependency</b>. Existing weights re-balanced (28/18/14/14/9/9/8 = 100). Country FDRS values may shift by up to ±7 points; relative rankings preserved.
+        <br><b style="color:var(--t1)">v20.5–v20.25.</b> Per-metric provenance system added (see card below). Pipelines added: FAOSTAT FBS (caloric shares for 174 countries), FAOSTAT TCL (observed net food trade ~190 countries), WB WDI bulk (20 structural indicators), WB WGI (6 governance indicators), WB WFSO (food-security outlook), USDA PSD (observed staples production/imports/exports for wheat/rice/corn/soybeans), ND-GAIN climate, WRI Aqueduct water risk, EU JRC INFORM risk. Static-link helpers for FAO GIEWS, FEWS NET, WFP ACR, USDA GAIN. Cron cadence moved from daily 06:00 UTC to every 6h. Source-health pill now shows last-refresh age in human terms.
       </div>
     </div>
 
@@ -14584,29 +14677,51 @@ function renderMethodologyTab() {
     <div class="card" style="grid-column:1/-1">
       <div class="card-title"><span class="card-marker"></span> Live Data Pipeline · how the daily refresh works</div>
       <div style="font-size:13px;color:var(--t2);line-height:1.75;margin-bottom:16px;">
-        Every day at <b style="color:var(--t1)">06:00 UTC</b> a GitHub Actions workflow fetches <b style="color:var(--t1)">17 public sources</b> (including the World Bank Pink Sheet for commodity benchmarks) and a daily-generated <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">source_manifest.json</code> showing per-feed status,
-        writes JSON snapshots to <code style="font-size:11px;background:var(--bg1);padding:1px 6px;border-radius:3px;">/data</code>,
-        builds the composite <code style="font-size:11px;background:var(--bg1);padding:1px 6px;border-radius:3px;">nowcast.json</code>,
-        commits the diff and triggers a Vercel redeploy. The frontend you're reading reloads the snapshot on every page visit.
+        Every <b style="color:var(--t1)">6 hours</b> (00 / 06 / 12 / 18 UTC) a GitHub Actions workflow fetches
+        <b style="color:var(--t1)">29 public data sources</b>, writes JSON snapshots to
+        <code style="font-size:11px;background:var(--bg1);padding:1px 6px;border-radius:3px;">/data</code>,
+        builds the composite <code style="font-size:11px;background:var(--bg1);padding:1px 6px;border-radius:3px;">nowcast.json</code>
+        and a per-feed status file <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">source_manifest.json</code>,
+        commits the diff and triggers a Vercel redeploy. The frontend reloads each snapshot on every page visit; click the live-status pill at the top right to inspect per-source health and last-refresh age.
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:16px;">
         ${[
-          {src:'FAO Food Price Index (FFPI)',role:'global price shock signal',key:'no key'},
+          // Crisis + situation feeds (live cadence)
           {src:'WFP HungerMap LIVE',role:'consumption + IPC + alerts',key:'no key'},
           {src:'WFP HungerMap per-country',role:'FX, food inflation, nutrition',key:'no key'},
-          {src:'World Bank WDI',role:'baseline inflation, GDP, ag share',key:'no key'},
-          {src:'Feeding America (Map the Meal Gap)',role:'US state food-insecurity %',key:'no key'},
-          {src:'Open-Meteo (weather)',role:'precipitation + temperature anomalies',key:'no key'},
-          {src:'Open-Meteo Flood',role:'river discharge in 30 flood-exposed nations',key:'no key'},
-          {src:'USGS Water Services',role:'US river flow anomalies (drought/flood)',key:'no key'},
-          {src:'ReliefWeb',role:'humanitarian alerts feed',key:'appname'},
-          {src:'IPC Acute Food Insecurity',role:'phase classifications (via HungerMap mirror)',key:'no key'},
+          {src:'IPC Acute Food Insecurity',role:'phase classifications via HungerMap mirror',key:'no key'},
+          {src:'ReliefWeb',role:'humanitarian alerts (Food & Nutrition theme)',key:'appname'},
           {src:'ACLED',role:'conflict event count + fatalities',key:'API key'},
-          {src:'UN Comtrade Plus',role:'bilateral staples trade volumes',key:'API key'},
+          {src:'GDACS (in-browser)',role:'natural-disaster alerts on Disturbances tab',key:'no key'},
+          // Prices + trade
+          {src:'FAO Food Price Index (FFPI)',role:'global price shock signal',key:'no key'},
+          {src:'World Bank Pink Sheet',role:'monthly commodity benchmarks (wheat/rice/corn/oil/fertilizer)',key:'no key'},
+          {src:'UN Comtrade Plus (public preview)',role:'bilateral staples trade flows',key:'no key'},
+          {src:'FAOSTAT TCL net food trade',role:'observed net agri-food trade balance (USD)',key:'no key'},
+          {src:'USDA PSD',role:'observed production / imports / exports for wheat / rice / corn / soybeans',key:'no key'},
+          // Reference / structural
+          {src:'FAOSTAT Food Balance Sheets',role:'caloric shares of wheat / rice / maize per country',key:'no key'},
+          {src:'World Bank WDI bulk',role:'20 structural indicators (GDP, ag % of GDP, stunting, fertilizer, water stress…)',key:'no key'},
+          {src:'World Bank WGI',role:'6 governance indicators (rule of law, gov effectiveness, control of corruption…)',key:'no key'},
+          {src:'World Bank WFSO',role:'food-security outlook with baseline + downside projections',key:'no key'},
+          {src:'ND-GAIN Country Index',role:'climate vulnerability + readiness, food sector sub-score',key:'no key'},
+          {src:'WRI Aqueduct 4.0',role:'water stress, drought, riverine + coastal flood risk',key:'no key'},
+          {src:'EU JRC INFORM Risk Index',role:'composite humanitarian risk + 3 dimensions',key:'no key'},
+          {src:'Eurostat food HICP',role:'EU 27 monthly food inflation (CP011)',key:'no key'},
+          {src:'FAOSTAT food CPI',role:'global annual food consumer-price index',key:'no key'},
+          // Live environmental
+          {src:'Open-Meteo Weather',role:'precipitation + temperature anomalies',key:'no key'},
+          {src:'Open-Meteo Flood',role:'river discharge in flood-exposed nations',key:'no key'},
+          {src:'USGS Water Services',role:'US river flow anomalies (drought/flood)',key:'no key'},
           {src:'NASA FIRMS',role:'active fire detection over cropland',key:'API key'},
           {src:'OpenAQ',role:'PM2.5 background — labour & crop stress',key:'API key'},
-          {src:'Eurostat food HICP',role:'EU 27 monthly food inflation (CP011)',key:'no key'},
-          {src:'FAOSTAT food CPI',role:'global annual food consumer-price index',key:'no key (guest token auto)'},
+          // US-specific
+          {src:'Feeding America (Map the Meal Gap)',role:'US state food-insecurity %',key:'annual manual snapshot'},
+          // Static link helpers (no JSON refresh — country-panel deep-links)
+          {src:'FAO GIEWS Country Briefs',role:'quarterly food-security briefs (~80 countries) — static link',key:'no fetch'},
+          {src:'FEWS NET',role:'monthly IPC-style classifications (~36 countries) — static link',key:'no fetch'},
+          {src:'WFP Annual Country Reports',role:'WFP country-office narrative reports — static link',key:'no fetch'},
+          {src:'USDA GAIN attaché reports',role:'weekly commodity intelligence (~80 countries) — static link',key:'no fetch'},
         ].map(d=>`
           <div style="background:var(--bg0);border:1px solid var(--b1);border-radius:8px;padding:11px 13px;">
             <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:3px;">${d.src}</div>
@@ -14615,13 +14730,38 @@ function renderMethodologyTab() {
           </div>
         `).join('')}
       </div>
-      <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:10px;padding:14px 18px;">
+      <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:10px;padding:14px 18px;margin-bottom:14px;">
         <div style="font-size:11px;color:var(--t3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px;">Failure modes — designed to degrade gracefully</div>
         <div style="font-size:11.5px;color:var(--t2);line-height:1.7;">
           Each source fetch is wrapped in <code style="font-size:10.5px;background:var(--bg0);padding:1px 5px;border-radius:3px;">safe_run</code> — a failure writes a
           <code style="font-size:10.5px;background:var(--bg0);padding:1px 5px;border-radius:3px;">*_FAILED.json</code> stub but never aborts the workflow.
           When a source is down, the nowcast simply omits its signal and the frontend falls back to the structural FDRS for that dimension.
           The status pill in the top-right shows how many sources loaded successfully on the latest refresh.
+        </div>
+      </div>
+
+      <!-- Per-metric provenance system -->
+      <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:10px;padding:14px 18px;">
+        <div style="font-size:11px;color:var(--t3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px;">Per-metric provenance · introduced v20.5, expanded v20.6–v20.25</div>
+        <div style="font-size:11.5px;color:var(--t2);line-height:1.7;margin-bottom:10px;">
+          Every metric on a country panel carries a <b style="color:var(--t1)">quality_flag</b> recorded in
+          <code style="font-size:10.5px;background:var(--bg0);padding:1px 5px;border-radius:3px;">data/countries.json</code>
+          alongside the value, source URL, as-of date, and method. The UI surfaces the flag as a colour-coded badge so readers can tell which numbers are sourced and which are still legacy carry-overs from the May-2026 embedded baseline. Build script:
+          <code style="font-size:10.5px;background:var(--bg0);padding:1px 5px;border-radius:3px;">scripts/build_countries_dataset.py</code>.
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;">
+          ${[
+            {flag:'sourced',col:'#6ba36b',desc:'Verified against a public dataset with source_url + as_of populated. The most credible class — applies to FBS caloric shares, FAOSTAT TCL net trade, WDI bulk, WGI, ND-GAIN, Aqueduct, INFORM, USDA PSD, live HungerMap inflation, Eurostat HICP.'},
+            {flag:'manual',col:'#7c9fcf',desc:'Hand-maintained snapshot from an annual / static public release. Today this is Feeding America Map the Meal Gap (US state food-insecurity %), refreshed each May.'},
+            {flag:'modeled',col:'#c9a957',desc:'Computed at render time from sourced inputs or explicit structural assumptions. Includes the Supply-Chain Exposure component, 2018–2025 modeled backcast, the 2030 forecast persistent-shock overlay.'},
+            {flag:'legacy_curated',col:'#d27a3e',desc:'Hand-authored heritage value from the May 2026 embedded dataset, not yet re-verified. Replaced as new pipelines come online. Currently still applies to most supplier-list percentages and a few small countries outside FBS coverage.'},
+            {flag:'legacy_import_dependency',col:'#c44b3c',desc:'Heritage value where the field name suggests caloric share but the original meaning was import-dependency %. Tagged explicitly so the UI displays a red "import-dep · legacy" pill instead of mis-rendering it as caloric share. Cleared one country at a time as FBS coverage expands.'},
+          ].map(b=>`
+            <div style="background:var(--bg0);border:1px solid var(--b1);border-left:3px solid ${b.col};border-radius:6px;padding:9px 11px;">
+              <div style="font-family:'Geist Mono',monospace;font-size:10.5px;font-weight:700;color:${b.col};text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">${b.flag}</div>
+              <div style="font-size:11px;color:var(--t3);line-height:1.55;">${b.desc}</div>
+            </div>
+          `).join('')}
         </div>
       </div>
     </div>
@@ -14631,18 +14771,35 @@ function renderMethodologyTab() {
       <div class="card-title"><span class="card-marker"></span> Primary Data Sources</div>
       <div style="display:flex;flex-direction:column;gap:0;">
         ${[
-          {src:'FAO Food Balance Sheets',yr:'2024',used:'Import dependency ratios, dietary supply per capita, caloric self-sufficiency',url:'https://www.fao.org/faostat'},
-          {src:'FAO GIEWS / FAOSTAT',yr:'2025',used:'Commodity price alerts, crop production statistics, trade flow data',url:'https://www.fao.org/giews'},
-          {src:'USDA PSD (Production, Supply & Distribution)',yr:'May 2026 WASDE',used:'Cereal production, consumption, import/export volumes 2019–2026 for all major commodities',url:'https://apps.fas.usda.gov/psdonline'},
-          {src:'FAO SOFI 2025',yr:'2025',used:'Global hunger headline numbers (~673M hungry in 2024) and regional disparities',url:'https://www.fao.org/publications/sofi'},
-          {src:'IPC Acute Food Insecurity',yr:'2025–2026',used:'IPC Phase 3+/Emergency/Catastrophe figures for Sudan, Yemen, Somalia, Afghanistan, Haiti, Gaza, S. Sudan',url:'https://www.ipcinfo.org'},
-          {src:'GRFC 2025 (Global Report on Food Crises)',yr:'2025',used:'266M people in 47 countries facing acute food insecurity; Phase 5 trends',url:'https://www.fsinplatform.org'},
-          {src:'World Bank LPI 2.0',yr:'2025 (data 2023–2024)',used:'Shipment-level supply-chain connectivity, speed and reliability scoring',url:'https://lpi.worldbank.org'},
-          {src:'ND-GAIN Country Index',yr:'2024',used:'Climate vulnerability sub-scores for food, water and health system exposure',url:'https://gain.nd.edu'},
-          {src:'ACLED (Armed Conflict Location & Event Data)',yr:'2025',used:'Conflict fatality and event counts (~205K events, ~244K fatalities Nov 2024–Nov 2025)',url:'https://acleddata.com'},
-          {src:'ITC TradeMap',yr:'2024',used:'Top export destination countries and bilateral trade share data',url:'https://www.trademap.org'},
-          {src:'OECD-FAO Agricultural Outlook',yr:'2025–2034',used:'Baseline production/consumption trajectories; global ag output +14% over decade',url:'https://www.oecd.org/en/publications/oecd-fao-agricultural-outlook-2025-2034_601276cd-en.html'},
-          {src:'UN World Population Prospects',yr:'2024',used:'Medium-scenario population projections; global peak ~10.3B in 2084',url:'https://population.un.org/wpp'},
+          {src:'FAOSTAT Food Balance Sheets',yr:'2022 vintage (Feb 2026)',used:'Caloric shares of wheat / rice / maize per country — 174 countries via bulk download',url:'https://www.fao.org/faostat/en/#data/FBS'},
+          {src:'FAOSTAT Trade Crops & Livestock (TCL)',yr:'2023 vintage',used:'Observed net food trade balance (Food Total aggregate, USD) for ~190 countries',url:'https://www.fao.org/faostat/en/#data/TCL'},
+          {src:'USDA PSD (Production, Supply & Distribution)',yr:'May 2026 WASDE',used:'Observed production / imports / exports / consumption / stocks for wheat, rice, corn, soybeans',url:'https://apps.fas.usda.gov/psdonline'},
+          {src:'World Bank WDI bulk',yr:'2024 / quarterly',used:'20 structural indicators: GDP/capita, ag % of GDP, stunting, fertilizer use, water stress, irrigation, food imports % of merchandise…',url:'https://databank.worldbank.org/data/download/WDI_CSV.zip'},
+          {src:'World Bank WGI',yr:'2024',used:'6 governance indicators: rule of law, control of corruption, government effectiveness, political stability, regulatory quality, voice & accountability',url:'https://www.worldbank.org/en/publication/worldwide-governance-indicators'},
+          {src:'World Bank WFSO',yr:'2026 quarterly',used:'Food-security outlook with historical + baseline + downside projections to 2031',url:'https://microdata.worldbank.org/index.php/catalog/6103/data-api'},
+          {src:'WFP HungerMap LIVE',yr:'live',used:'Daily food consumption + IPC mirror + alerts + per-country FX / food inflation / nutrition',url:'https://hungermap.wfp.org'},
+          {src:'IPC Acute Food Insecurity',yr:'2025–2026',used:'Phase 3+/Emergency/Catastrophe figures for crisis countries (via HungerMap mirror)',url:'https://www.ipcinfo.org'},
+          {src:'ND-GAIN Country Index',yr:'2023 vintage',used:'Climate vulnerability + readiness + food-sector sub-score for ~192 countries',url:'https://gain.nd.edu/our-work/country-index/'},
+          {src:'WRI Aqueduct 4.0',yr:'2023 release',used:'Water stress, drought risk, riverine + coastal flood risk — 5 indicators per country',url:'https://www.wri.org/data/aqueduct-40-country-rankings'},
+          {src:'EU JRC INFORM Risk Index',yr:'2026',used:'Composite humanitarian risk (0–10) + 3 dimensions: hazard/exposure, vulnerability, lack of coping capacity',url:'https://drmkc.jrc.ec.europa.eu/inform-index/INFORM-Risk'},
+          {src:'FAO FFPI + WB Pink Sheet',yr:'monthly',used:'Global food price index + commodity benchmarks (wheat, rice, corn, palm oil, fertilizer)',url:'https://www.fao.org/worldfoodsituation/foodpricesindex'},
+          {src:'ACLED (Armed Conflict Location & Event Data)',yr:'live',used:'Conflict fatality + event counts feeding the nowcast conflict signal',url:'https://acleddata.com'},
+          {src:'ReliefWeb',yr:'live',used:'Humanitarian situation reports tagged Food & Nutrition theme',url:'https://reliefweb.int'},
+          {src:'GDACS',yr:'live',used:'Natural-disaster alerts on the Disturbances tab (in-browser fetch)',url:'https://www.gdacs.org'},
+          {src:'UN Comtrade Plus (public preview)',yr:'2024',used:'Bilateral staples trade flows — observed wheat/rice/corn/soy by importer × exporter',url:'https://comtradeplus.un.org'},
+          {src:'Open-Meteo Weather + Flood',yr:'live',used:'Precipitation + temperature anomalies, river discharge in flood-exposed basins',url:'https://open-meteo.com'},
+          {src:'USGS Water Services',yr:'live',used:'US river flow anomalies (drought / flood proxies for cropland regions)',url:'https://waterservices.usgs.gov'},
+          {src:'NASA FIRMS',yr:'live',used:'Active fire detection over cropland (MODIS / VIIRS)',url:'https://firms.modaps.eosdis.nasa.gov'},
+          {src:'OpenAQ',yr:'live',used:'PM2.5 background — labour + crop stress proxy',url:'https://openaq.org'},
+          {src:'Eurostat food HICP',yr:'monthly',used:'EU 27 monthly food inflation (HICP CP011)',url:'https://ec.europa.eu/eurostat'},
+          {src:'FAOSTAT food CPI',yr:'quarterly',used:'Global annual food consumer-price index',url:'https://www.fao.org/faostat/en/#data/CP'},
+          {src:'Feeding America (Map the Meal Gap)',yr:'2025 (data 2023)',used:'US state food-insecurity %',url:'https://map.feedingamerica.org'},
+          {src:'FAO GIEWS Country Briefs',yr:'quarterly',used:'Per-country food-security situation briefs (~80 countries) — static link to FAO',url:'https://www.fao.org/giews/countrybrief/'},
+          {src:'FEWS NET',yr:'monthly',used:'IPC-style classifications for ~36 priority countries — static link to FEWS NET',url:'https://fews.net'},
+          {src:'WFP Annual Country Reports',yr:'2025',used:'WFP country-office operational narratives — static link to wfp.org',url:'https://www.wfp.org/annual-country-reports-2025'},
+          {src:'USDA GAIN attaché reports',yr:'weekly',used:'Per-country commodity intelligence (~80 FAS posts) — static search link',url:'https://www.fas.usda.gov/data/search'},
+          {src:'OECD-FAO Agricultural Outlook',yr:'2025–2034',used:'Baseline production / consumption trajectories used in the 2030 forecast',url:'https://www.oecd.org/en/publications/oecd-fao-agricultural-outlook-2025-2034_601276cd-en.html'},
+          {src:'UN World Population Prospects',yr:'2024',used:'Medium-scenario population projections feeding 2030 demographics overlay',url:'https://population.un.org/wpp'},
         ].map((d,i)=>`
           <div style="display:flex;gap:12px;padding:11px 0;${i>0?'border-top:1px solid var(--b1)':''}">
             <div style="min-width:7px;height:7px;border-radius:50%;background:var(--accent);margin-top:6px;flex-shrink:0;"></div>
