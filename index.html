@@ -11133,9 +11133,35 @@ const SCENARIOS = [
     map.createPane('disturbances');
     map.getPane('disturbances').style.zIndex = 680;
 
-    // Load geo data
-    fetch('https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson')
-      .then(r => r.json())
+    // v20.32 — World GeoJSON. Pulled from a third-party raw GitHub URL.
+    // Fallback chain to keep the map usable when one CDN throttles or 404s:
+    //   1. jsDelivr GitHub mirror (CDN-cached, primary)
+    //   2. statically.io GitHub mirror (secondary)
+    //   3. raw.githubusercontent.com (origin, last resort — has aggressive
+    //      rate limiting for anonymous fetches from popular paths)
+    // If all three fail, the rest of the app still works — country panels,
+    // companies tab, disturbances, etc. don't depend on the map polygons.
+    const _geoUrls = [
+      'https://cdn.jsdelivr.net/gh/holtzy/D3-graph-gallery@master/DATA/world.geojson',
+      'https://cdn.statically.io/gh/holtzy/D3-graph-gallery/master/DATA/world.geojson',
+      'https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson',
+    ];
+    const _tryGeo = async (urls) => {
+      for (const url of urls) {
+        try {
+          const r = await fetch(url);
+          if (r.ok) {
+            const json = await r.json();
+            if (json && Array.isArray(json.features)) {
+              console.info(`[FoodShield] map geojson loaded from ${url}`);
+              return json;
+            }
+          }
+        } catch (e) { /* fall through to next URL */ }
+      }
+      throw new Error('all map geojson sources failed');
+    };
+    _tryGeo(_geoUrls)
       .then(data => {
         G.features = data.features;
         G.features.forEach(f => {
@@ -11266,7 +11292,10 @@ const SCENARIOS = [
         if (typeof updateOverlayStats === 'function') updateOverlayStats();
         if (typeof updateRail === 'function') updateRail();
       })
-      .catch(err => console.warn('map geojson load failed', err));
+      .catch(err => {
+        console.warn('[FoodShield] map geojson load failed across all 3 CDN mirrors:', err);
+        console.warn('[FoodShield] map polygons will be missing but the rest of the app still works.');
+      });
   }
 
   // ── Country styling ──
@@ -15696,7 +15725,7 @@ function renderMethodologyTab() {
           {icon:'📉',title:'FDRS Historical Tracking (2018–2025)',
            body:'Every country profile now shows an 8-year FDRS timeline back-projected from the current score using trend direction, production data, and known global shock overlays (2020 COVID, 2022 Ukraine war, 2023 El Niño). Computed with <code style="font-size:10px;background:var(--bg1);padding:1px 4px;border-radius:3px;">getFDRSHistory()</code>.'},
           {icon:'🤖',title:'AI Risk Narratives via OpenRouter',
-           body:'Country profiles include an AI-generated brief synthesising FDRS components, historical trend and 2030 outlook. Template-based by default (no API key needed). Connect <a href="https://openrouter.ai" target="_blank" style="color:var(--accent)">OpenRouter</a> + set <code style="font-size:10px;background:var(--bg1);padding:1px 4px;border-radius:3px;">OPENROUTER_KEY</code> for live Llama 3.1 8B responses.'},
+           body:'Country profiles include a deterministic brief that synthesises FDRS components, historical trend, live shocks, and 2030 outlook from sourced data — no LLM. Live LLM integration was removed in v20.32 because embedding any API key in this static page would expose it to every visitor; if you want LLM responses in your own deployment, route them through a serverless proxy.'},
           {icon:'📊',title:'Live Market Data Tab',
            body:'Real-time global food security dashboard: commodity spot prices (CBOT wheat, corn, ICE sugar, BMD palm oil), FAO Food Price Index, risk distribution doughnut, high-alert country watch list, and live ranking of the 10 most vulnerable countries. Pulls from World Bank public API where available.'},
           {icon:'🏢',title:'Company Supply Chain Risk Tracker',
@@ -15983,7 +16012,14 @@ async function loadDisturbanceData() {
 
   // Attempt to fetch GDACS live data
   try {
-    const gdacsUrl = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?alertlevel=Red,Orange&eventlist=DR,FL,TC,EQ,VO&limit=30&fromdate=2026-01-01';
+    // v20.32 — compute fromdate dynamically (last 5 months) instead of the
+    // previous hardcoded 2026-01-01 which would silently go stale by 2027.
+    const _gdacsFromDate = (function(){
+      const d = new Date();
+      d.setMonth(d.getMonth() - 5);
+      return d.toISOString().slice(0, 10);
+    })();
+    const gdacsUrl = `https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?alertlevel=Red,Orange&eventlist=DR,FL,TC,EQ,VO&limit=30&fromdate=${_gdacsFromDate}`;
     const res = await Promise.race([
       fetch(gdacsUrl),
       new Promise((_,r) => setTimeout(()=>r(new Error('timeout')), 6000))
@@ -16816,8 +16852,12 @@ function renderFDRSEvents(containerId, c) {
 // ════════════════════════════════════════════════════════════════════════════
 
 const _aiNarrativeCache = {};
-const OPENROUTER_KEY = ''; // User can add their own key; falls back to template
-
+// v20.32 — OpenRouter key field removed. Putting a real API key in a static
+// HTML file would expose it to every visitor. The narrative is now always
+// generated from the deterministic template below, which is honest about
+// what it is. If you want live LLM responses in future, route them through
+// a serverless proxy (Vercel function / Cloudflare Worker) — never embed
+// the key in client-side code.
 async function fetchAINarrative(iso, forceRefresh, targetElId) {
   const c = byISO(iso); if (!c) return;
 
@@ -16884,36 +16924,17 @@ async function fetchAINarrative(iso, forceRefresh, targetElId) {
 - Structural import dependencies: ${displayImportList(c).slice(0,3).join(', ')}
 - Structural suppliers: ${(c.suppliers||[]).slice(0,3).join(', ')}
 - Food inflation: ${c.fi}%/yr
-- Active live shocks (May 2026): ${liveShocksStr}
+- Active live shocks (${new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}): ${liveShocksStr}
 If active live shocks are listed, your analysis MUST acknowledge at least one of them. Focus on the most important trend and actionable insight. Be specific, not generic.`;
 
   try {
+    // v20.32 — template-only path. Live LLM via OpenRouter was previously
+    // gated on a client-side key constant, which would have leaked any real
+    // key to every visitor. Removed entirely. The template narrative below
+    // is deterministic, audit-friendly, and honest about being model-free.
     let narrative = '';
 
-    if (OPENROUTER_KEY) {
-      // Real API call
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENROUTER_KEY}`,
-          'HTTP-Referer': window.location.origin,
-          'X-Title': 'FoodShield AI'
-        },
-        body: JSON.stringify({
-          model: 'meta-llama/llama-3.1-8b-instruct:free',
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 150,
-          temperature: 0.6,
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        narrative = data.choices?.[0]?.message?.content?.trim() || '';
-      }
-    }
-
-    // Fallback: generate template narrative from data (now live-shock aware)
+    // Generate template narrative from data (live-shock aware)
     if (!narrative) {
       const trend = c.f2030 > c.fdrs ? 'deteriorating' : 'improving';
       const delta = Math.abs(c.f2030 - c.fdrs);
@@ -16930,7 +16951,7 @@ If active live shocks are listed, your analysis MUST acknowledge at least one of
       let liveSentence = '';
       if (liveShocks.length) {
         const adjTxt = (c._fdrsAdj || 0) > 0 ? `lifting nowcast +${c._fdrsAdj} above structural` : '';
-        liveSentence = ` Active live signals (May 2026): ${liveShocks.slice(0, 2).join(' and ')}${adjTxt ? `, ${adjTxt}` : ''}.`;
+        liveSentence = ` Active live signals (${new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}): ${liveShocks.slice(0, 2).join(' and ')}${adjTxt ? `, ${adjTxt}` : ''}.`;
       }
       narrative = `${c.name}'s food security trajectory is ${trend}, with FDRS projected to ${c.f2030 > c.fdrs ? 'rise to' : 'hold at'} ${c.f2030} by 2030 — a ${c.f2030 > c.fdrs ? '+' : ''}${c.f2030 - c.fdrs} point shift. The primary structural vulnerability is ${mainRisk}${suppliers ? `, with heavy reliance on ${suppliers}` : ''}.${liveSentence} Peak vulnerability was observed in ${peakYear} (score: ${peak}); the current reading of ${c.fdrs} reflects ${c.fdrs < peak ? 'partial stabilization' : 'ongoing stress'}.`;
     }
@@ -16938,9 +16959,9 @@ If active live shocks are listed, your analysis MUST acknowledge at least one of
     _aiNarrativeCache[cacheKey] = narrative;
     textEl.textContent = narrative;
 
-    // Update meta in sidepanel
+    // Update meta in sidepanel — template-only since v20.32 (no client-side LLM key)
     const metaEl = document.getElementById('sp-ai-live-meta');
-    if (metaEl) metaEl.textContent = `Generated ${new Date().toLocaleTimeString()} · ${OPENROUTER_KEY ? 'Llama 3.1 via OpenRouter' : 'Template model (add OpenRouter key for live AI)'}`;
+    if (metaEl) metaEl.textContent = `Generated ${new Date().toLocaleTimeString()} · Deterministic template from sourced data`;
 
   } catch(e) {
     textEl.innerHTML = `<span style="color:var(--t3);">${c.ai}</span>`;

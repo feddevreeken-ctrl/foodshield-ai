@@ -57,16 +57,38 @@ def write_json(filename, payload, *, source=None, notes=None):
     return path
 
 
-def safe_run(label, fn):
-    """Run a refresh function and never crash the workflow — log failure, write a stub."""
+def safe_run(label, fn, output_name=None):
+    """Run a refresh function and never crash the workflow.
+
+    Args:
+        label: human-readable step name printed in workflow logs
+        fn:    the refresh function to run
+        output_name: canonical data file the script is supposed to produce
+                     (e.g. 'lpi.json'). If the function raises, we still
+                     write an empty envelope to data/<output_name> so the
+                     frontend gets a graceful empty payload instead of a
+                     404. If omitted, falls back to the legacy label-based
+                     stub name — but every step in run_all.py should now
+                     pass an explicit output_name.
+
+    Why this matters: prior versions wrote 'wb_lpi_logistics_FAILED.json'
+    when refresh_lpi.py crashed, but the frontend fetches 'lpi.json'. Users
+    saw silent 404s instead of an empty 'no data yet' state.
+    """
     print(f"\n=== {label} ===")
     try:
         fn()
     except Exception as e:
         print(f"[FAIL] {label}: {e}", file=sys.stderr)
-        # Write a stub so the JSON file exists and the frontend can degrade gracefully
-        stub_name = label.lower().replace(" ", "_") + "_FAILED.json"
-        write_json(stub_name, {}, source=label, notes=f"Last refresh failed: {e}")
+        if output_name:
+            write_json(output_name, {}, source=label, notes=f"Last refresh failed: {e}")
+        else:
+            # Legacy fallback — keeps older callers working but logs a warning
+            stub_name = label.lower().replace(" ", "_").replace("/", "_") + "_FAILED.json"
+            print(f"[WARN] {label}: no output_name passed to safe_run; "
+                  f"writing legacy stub {stub_name} (frontend will still 404 on "
+                  f"the real path)", file=sys.stderr)
+            write_json(stub_name, {}, source=label, notes=f"Last refresh failed: {e}")
 
 
 def env(key, default=None, required=False):
