@@ -4,14 +4,139 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FoodShield AI — Global Food Resilience Monitor</title>
+
+<!-- v20.34 — SEO + social-share meta. updatePageTitle() rewrites these at runtime
+     when ?country / ?commodity are present in the URL, so a shared link to a
+     country page renders with that country's name + score in the link preview. -->
+<meta name="description" content="Open-data food-security risk dashboard tracking 227 countries + 50 US states across 33 public pipelines. FDRS scores, climate vulnerability, trade dependency, live disturbances.">
+<meta name="theme-color" content="#0b0b0d">
+<link rel="canonical" href="https://foodshield-ai-fv.vercel.app/">
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="FoodShield AI">
+<meta property="og:title" content="FoodShield AI — Global Food Resilience Monitor">
+<meta property="og:description" content="Open-data food-security risk dashboard tracking 227 countries + 50 US states across 33 public pipelines. FDRS scores, climate vulnerability, trade dependency, live disturbances.">
+<meta property="og:url" content="https://foodshield-ai-fv.vercel.app/">
+<meta property="og:image" content="https://foodshield-ai-fv.vercel.app/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="FoodShield AI — global food-security risk dashboard">
+
+<!-- Twitter / X card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="FoodShield AI — Global Food Resilience Monitor">
+<meta name="twitter:description" content="Open-data food-security risk dashboard tracking 227 countries + 50 US states across 33 public pipelines.">
+<meta name="twitter:image" content="https://foodshield-ai-fv.vercel.app/og-cover.png">
+
+<!-- JSON-LD: WebSite + Organization. Helps Google build the knowledge panel
+     and enables sitelinks search box. Country-specific JSON-LD would require
+     server-rendering, which we don't do; this is the static baseline. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://foodshield-ai-fv.vercel.app/#website",
+      "url": "https://foodshield-ai-fv.vercel.app/",
+      "name": "FoodShield AI",
+      "description": "Open-data food-security risk dashboard tracking 227 countries + 50 US states across 33 public pipelines.",
+      "inLanguage": "en",
+      "publisher": { "@id": "https://foodshield-ai-fv.vercel.app/#org" }
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://foodshield-ai-fv.vercel.app/#org",
+      "name": "FoodShield AI",
+      "url": "https://foodshield-ai-fv.vercel.app/",
+      "logo": "https://foodshield-ai-fv.vercel.app/og-cover.png"
+    },
+    {
+      "@type": "Dataset",
+      "name": "FoodShield AI Food Dependency Risk Score (FDRS)",
+      "description": "Composite food-security risk index for 227 countries + 50 US states, refreshed every 6 hours from 33 open-data pipelines including FAO FFPI, FAOSTAT FBS, USDA PSD, World Bank WDI/WGI/LPI/CCKP, UNDP HDI, WFP HungerMap, IPC, WRI Aqueduct, INFORM Risk, ND-GAIN, ReliefWeb, ACLED, NASA FIRMS, OpenAQ, Open-Meteo, USGS, Eurostat, Comtrade and Feeding America.",
+      "url": "https://foodshield-ai-fv.vercel.app/",
+      "license": "https://creativecommons.org/licenses/by/4.0/",
+      "creator": { "@id": "https://foodshield-ai-fv.vercel.app/#org" },
+      "keywords": ["food security", "FDRS", "famine risk", "trade dependency", "climate vulnerability", "IPC", "WFP HungerMap"]
+    }
+  ]
+}
+</script>
+
 <script defer src="/_vercel/insights/script.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<!-- v20.34 — Chart.js is only needed once the user opens a country panel or
+     the commodity/score tab. Removed the eager <script> tag from the critical
+     path and replaced it with on-demand loadChartJS() (defined below) which
+     returns a Promise that resolves once window.Chart is available. -->
+<script>
+  (function () {
+    let _chartPromise = null;
+    window.loadChartJS = function loadChartJS() {
+      if (typeof window.Chart !== 'undefined') return Promise.resolve(window.Chart);
+      if (_chartPromise) return _chartPromise;
+      _chartPromise = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+        s.async = true;
+        s.onload = () => resolve(window.Chart);
+        s.onerror = () => { _chartPromise = null; reject(new Error('Chart.js failed to load')); };
+        document.head.appendChild(s);
+      });
+      return _chartPromise;
+    };
+    // Pre-warm: once the page has been idle for a moment, kick the fetch
+    // so the first chart render is instant. Falls back to setTimeout for
+    // browsers without requestIdleCallback (Safari < 16.4).
+    const prewarm = () => { try { window.loadChartJS(); } catch (e) {} };
+    if ('requestIdleCallback' in window) requestIdleCallback(prewarm, { timeout: 4000 });
+    else setTimeout(prewarm, 2500);
+
+    // _safeChart — minimal shim used in place of `_safeChart(ctx, cfg)` for the
+    // 13 render call sites. If Chart.js is already loaded (it almost always is
+    // by the time a chart-using tab is opened, thanks to the pre-warm above),
+    // we construct synchronously and return the Chart instance. Otherwise we
+    // kick the load, return null, and re-invoke the caller via the
+    // 'foodshield:chartjs-ready' event so the chart renders as soon as the
+    // library is in. Callers that retain the return value need only check for
+    // null and skip cache writes when it's null.
+    window._safeChart = function _safeChart(ctx, cfg) {
+      if (typeof window.Chart !== 'undefined') return new window.Chart(ctx, cfg);
+      window.loadChartJS().then(() => {
+        document.dispatchEvent(new CustomEvent('foodshield:chartjs-ready'));
+      }).catch(() => {});
+      // Mark the canvas so we can re-render once Chart.js arrives.
+      try {
+        if (ctx && ctx.canvas) ctx = ctx.canvas;
+        if (ctx && ctx.setAttribute) ctx.setAttribute('data-chart-pending', '1');
+      } catch (e) {}
+      return null;
+    };
+    // When Chart.js arrives late, re-run renderers for the active tab so any
+    // pending canvases get populated. We dispatch a custom event the app
+    // already has hooks for (foodshield:live-loaded triggers the same path).
+    document.addEventListener('foodshield:chartjs-ready', () => {
+      try {
+        const activeTab = document.querySelector('.tab-page.active');
+        if (!activeTab) return;
+        const id = activeTab.id.replace('tab-', '');
+        const map = {
+          'country':'renderCountryTab', 'trade':'renderTradeTab', 'score':'renderScoreTab',
+          'forecast':'renderForecastTab', 'compare':'renderCompareTab',
+          'disturbances':'renderDisturbancesTab', 'commodities':'initCommoditiesTab',
+        }[id];
+        if (map && typeof window[map] === 'function') window[map]();
+      } catch (e) {}
+    });
+  })();
+</script>
 <style>
 /* ════════════════════════════════════════════
    FoodShield AI — Editorial dark dashboard
@@ -10474,6 +10599,16 @@ async function loadLiveData() {
   }); } catch(_) {}
 
   document.dispatchEvent(new CustomEvent('foodshield:live-loaded'));
+
+  // v20.34 — initial URL state. Now that COUNTRIES + LIVE.* are populated,
+  // honor ?country=EGY&commodity=wheat&tab=trade&scenario=fx-collapse from
+  // share/bookmark links. Wrapped in try/catch so a bad URL never bricks the
+  // initial render.
+  try {
+    if (typeof applyURLState === 'function') applyURLState();
+  } catch (e) {
+    console.warn('[FoodShield] applyURLState failed at boot:', e);
+  }
 }
 
 // ── Dual-score helpers (Structural vs Nowcast) ──────────────────────────────
@@ -11970,6 +12105,133 @@ function showGroup(group, btn) {
   showTab(GROUP_FIRST[group] || 'global');
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// v20.34 — URL deep-link routing (shareable state)
+// Query params we read on load and write on user navigation:
+//   ?country=EGY    — selects a country (uppercase ISO3)
+//   ?commodity=wheat — opens commodity drilldown / filters Trade Flow Atlas
+//   ?tab=country    — lands on a specific subtab
+//   ?scenario=fx-collapse — restores Scenario Simulator preset
+// Writes use history.replaceState so we don't pile up entries on every
+// minor change. The full <title> + <meta description> regenerate on each
+// state push so OG/Twitter cards render the right preview when shared.
+// ════════════════════════════════════════════════════════════════════════════
+
+const URL_STATE = {
+  // Internal flag — set to true while we're applying URL state to avoid
+  // re-syncing back to the URL during the same tick.
+  _applying: false,
+  // Last-seen state, so updateURL only fires when something actually changed.
+  _last: { tab: null, country: null, commodity: null, scenario: null },
+};
+
+function readURLState() {
+  const p = new URLSearchParams(window.location.search);
+  const country = (p.get('country') || '').toUpperCase();
+  return {
+    tab:       (p.get('tab') || '').toLowerCase() || null,
+    country:   country && /^[A-Z]{2,3}$/.test(country) ? country : null,
+    commodity: (p.get('commodity') || '').toLowerCase() || null,
+    scenario:  (p.get('scenario') || '').toLowerCase() || null,
+  };
+}
+
+function updateURL(patch) {
+  const p = new URLSearchParams(window.location.search);
+  for (const [k, v] of Object.entries(patch)) {
+    if (v == null || v === '') p.delete(k);
+    else p.set(k, String(v));
+  }
+  const newQs = p.toString();
+  const newURL = newQs
+    ? `${window.location.pathname}?${newQs}`
+    : window.location.pathname;
+  if (newURL !== window.location.pathname + window.location.search) {
+    history.replaceState(null, '', newURL);
+  }
+  if (typeof updatePageTitle === 'function') updatePageTitle();
+}
+
+// Apply the URL state we read on initial load. Called once after
+// loadLiveData finishes so COUNTRIES + LIVE.* are populated.
+function applyURLState() {
+  URL_STATE._applying = true;
+  try {
+    const s = readURLState();
+    URL_STATE._last = { ...s };
+
+    // 1. Tab
+    if (s.tab && document.getElementById('tab-' + s.tab)) {
+      showTab(s.tab);
+    }
+    // 2. Country — open side panel (if known)
+    if (s.country && typeof byISO === 'function') {
+      const c = byISO(s.country);
+      if (c) {
+        // Defer so the tab transition completes first
+        setTimeout(() => {
+          if (typeof openPanel === 'function') openPanel(c);
+          // Also drive the country-tab select if that tab is showing
+          const sel = document.getElementById('country-sel');
+          if (sel) {
+            sel.value = c.iso;
+            if (typeof renderCountryTab === 'function') renderCountryTab();
+          }
+        }, 150);
+      }
+    }
+    // 3. Commodity — open drilldown if a country is also selected
+    if (s.commodity && s.country && typeof openCommodityDrilldown === 'function') {
+      setTimeout(() => openCommodityDrilldown(
+        s.commodity.charAt(0).toUpperCase() + s.commodity.slice(1),
+        s.country
+      ), 320);
+    }
+    // 4. Scenario — apply preset if the simulator exists
+    if (s.scenario && typeof applyScenarioPreset === 'function') {
+      setTimeout(() => applyScenarioPreset(s.scenario), 200);
+    }
+  } finally {
+    URL_STATE._applying = false;
+  }
+}
+
+// Honor browser back/forward buttons.
+window.addEventListener('popstate', () => {
+  if (URL_STATE._applying) return;
+  applyURLState();
+});
+
+// Rebuild <title> + <meta description> from current URL state. Used by
+// updateURL so social-share previews reflect the actual page state.
+function updatePageTitle() {
+  const s = readURLState();
+  let title = 'FoodShield AI — Global Food Resilience Monitor';
+  let desc = 'Open-data food-security risk dashboard tracking 227 countries + 50 US states across 33 public pipelines. FDRS scores, climate vulnerability, trade dependency, live disturbances.';
+  if (s.country) {
+    const c = (typeof byISO === 'function') ? byISO(s.country) : null;
+    const name = c ? c.name : s.country;
+    title = `${name} — Food Dependency Risk · FoodShield AI`;
+    if (c) {
+      desc = `${name}: FDRS ${c.fdrs}/100 (${(typeof riskLabel === 'function') ? riskLabel(c.fdrs) : 'tracked'}). Live food-security risk profile with sourced trade, climate, governance, and conflict indicators.`;
+    }
+  }
+  if (s.commodity) {
+    const com = s.commodity.charAt(0).toUpperCase() + s.commodity.slice(1);
+    title = s.country ? `${s.commodity ? com + ' · ' : ''}${title}` : `${com} dependency · FoodShield AI`;
+    desc = `${com} sourcing exposure across 33 public-data pipelines · FoodShield AI`;
+  }
+  document.title = title;
+  let md = document.querySelector('meta[name="description"]');
+  if (md) md.setAttribute('content', desc);
+  let ogt = document.querySelector('meta[property="og:title"]');
+  if (ogt) ogt.setAttribute('content', title);
+  let ogd = document.querySelector('meta[property="og:description"]');
+  if (ogd) ogd.setAttribute('content', desc);
+  let ogu = document.querySelector('meta[property="og:url"]');
+  if (ogu) ogu.setAttribute('content', window.location.href);
+}
+
 function showTab(tab, btn) {
   const group = TAB_GROUPS[tab] || 'explore';
   document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
@@ -12000,6 +12262,12 @@ function showTab(tab, btn) {
   if (tab==='livedata')  initLiveDataTab();
   if (tab==='compare')   initCompareTab();
   if (tab==='commodities') initCommoditiesTab();
+
+  // v20.34 — sync URL (skip if we're in the middle of applying URL state)
+  if (!URL_STATE._applying && tab !== URL_STATE._last.tab) {
+    URL_STATE._last.tab = tab;
+    updateURL({ tab: tab === 'global' ? null : tab });
+  }
 }
 
 // ── Search ────────────────────────────────────────
@@ -12391,6 +12659,12 @@ function openPanel(c, skipDrilldown) {
     return;
   }
 
+  // v20.34 — sync URL on every country open
+  if (c && c.iso && !URL_STATE._applying && c.iso !== URL_STATE._last.country) {
+    URL_STATE._last.country = c.iso;
+    updateURL({ country: c.iso });
+  }
+
   // Close competing panels
   closeImpactPanel();
   const tfaPanel = document.getElementById('tfa-side-panel');
@@ -12611,7 +12885,7 @@ function openPanel(c, skipDrilldown) {
   destroyChart('sp-radar');
   const ctx = document.getElementById('sp-radar');
   const hasLiveDelta = liveComp.deltas.some(d => d > 0);
-  chartInstances['sp-radar'] = new Chart(ctx,{
+  chartInstances['sp-radar'] = _safeChart(ctx,{
     type:'radar',
     data:{
       labels:['Import Dep.','Supplier Conc.','Prod. Trend','Inflation','Climate','Conflict'],
@@ -12809,6 +13083,15 @@ function closePanel() {
     if (Globe.state.map) setTimeout(()=>Globe.state.map.invalidateSize(), 320);
   }
   resetTradeFlowsButton();
+  // v20.34 — drop country + commodity from URL so the page is shareable in the
+  // "no selection" state. Tab + scenario survive.
+  try {
+    if (typeof URL_STATE !== 'undefined' && !URL_STATE._applying) {
+      URL_STATE._last.country = null;
+      URL_STATE._last.commodity = null;
+      updateURL({ country: null, commodity: null });
+    }
+  } catch (e) { /* non-fatal */ }
 }
 
 // ════════════════════════════════════════════════════
@@ -13274,7 +13557,7 @@ function renderTradeTab() {
 
   setTimeout(()=>{
     destroyChart('supplier-pie');
-    chartInstances['supplier-pie'] = new Chart(document.getElementById('supplier-pie'),{
+    chartInstances['supplier-pie'] = _safeChart(document.getElementById('supplier-pie'),{
       type:'doughnut',
       data:{
         labels:c.suppliers,
@@ -13460,7 +13743,7 @@ function renderMatrix() {
     r: 7,
     label:c.name, col:riskColor(c.fdrs), iso:c.iso
   }));
-  chartInstances['matrix-chart'] = new Chart(canvas,{
+  chartInstances['matrix-chart'] = _safeChart(canvas,{
     type:'bubble',
     data:{datasets:[{data,
       backgroundColor:data.map(d=>d.col+'99'),
@@ -14456,7 +14739,7 @@ const CHART_DEFAULTS = {
 function mkRadar(id, c, title) {
   const ctx = document.getElementById(id); if(!ctx) return;
   const col = riskColor(c.fdrs);
-  return new Chart(ctx,{
+  return _safeChart(ctx,{
     type:'radar',
     data:{
       labels:['Import Dep.','Supplier Conc.','Prod. Trend','Inflation','Climate','Conflict'],
@@ -14478,7 +14761,7 @@ function mkProdChart(id, c, showForecast=false) {
   const ctx=document.getElementById(id); if(!ctx) return;
   const t=c.trend;
   const yrs=t.years.map(String);
-  return new Chart(ctx,{
+  return _safeChart(ctx,{
     type:'line',
     data:{labels:yrs,datasets:[
       {label:'Production',data:t.production,borderColor:'#6ba36b',backgroundColor:'#6ba36b15',fill:true,tension:.4,borderWidth:2,pointRadius:0},
@@ -14498,7 +14781,7 @@ function mkProdChart(id, c, showForecast=false) {
 function mkTradeTrendChart(id,c) {
   const ctx=document.getElementById(id); if(!ctx) return;
   const t=c.trend;
-  return new Chart(ctx,{
+  return _safeChart(ctx,{
     type:'line',
     data:{labels:t.years.map(String),datasets:[
       {label:'Imports',data:t.imports,borderColor:'#c44b3c',tension:.4,borderWidth:2,pointRadius:0},
@@ -14514,7 +14797,7 @@ function mkPopChart(id,c) {
   // Food supply index: production / population
   const supply = t.production.map((p,i)=>Math.round(p/t.pop[i]*10)/10);
   const popNorm = t.pop.map(p=>Math.round(p/t.pop[0]*100));
-  return new Chart(ctx,{
+  return _safeChart(ctx,{
     type:'line',
     data:{labels:t.years.map(String),datasets:[
       {label:'Population (index)',data:popNorm,borderColor:'#8aa8c9',tension:.4,borderWidth:2,pointRadius:0},
@@ -15073,6 +15356,16 @@ function _modeledVolumeFallback(country, commodity, supplierIdx) {
 function openCommodityDrilldown(commodity, importerIso){
   const c = byISO(importerIso);
   if (!c) return;
+  // v20.34 — push commodity + country to URL so this drill-down is shareable.
+  try {
+    const comLower = String(commodity || '').toLowerCase();
+    if (typeof URL_STATE !== 'undefined' && !URL_STATE._applying &&
+        (comLower !== URL_STATE._last.commodity || importerIso !== URL_STATE._last.country)) {
+      URL_STATE._last.commodity = comLower;
+      URL_STATE._last.country   = importerIso;
+      updateURL({ commodity: comLower, country: importerIso });
+    }
+  } catch (e) { /* non-fatal */ }
   const companies = _companiesFor(commodity);
 
   // v20.28 — distribute companies via a stable shuffle so the top supplier
@@ -16774,7 +17067,7 @@ function mkFDRSHistoryChart(canvasId, c) {
   const colors = scores.map(s => riskColor(s));
   const col = riskColor(c.fdrs);
 
-  return new Chart(ctx, {
+  return _safeChart(ctx, {
     type: 'line',
     data: {
       labels: years.map(String),
@@ -17157,7 +17450,7 @@ async function refreshLiveData() {
     const ctx = document.getElementById('live-dist-chart');
     if (!ctx) return;
     destroyChart('live-dist-chart');
-    chartInstances['live-dist-chart'] = new Chart(ctx, {
+    chartInstances['live-dist-chart'] = _safeChart(ctx, {
       type: 'doughnut',
       data: {
         labels: ['Resilient (0-24)','Exposed (25-49)','Vulnerable (50-74)','Severe (75+)'],
@@ -17848,7 +18141,7 @@ function renderCompareTab() {
     const cmpCols = ['#d49a4a','#6ba36b','#c44b3c','#7c9fcf'];
     const ctx = document.getElementById('cmp-radar-overlay');
     if (!ctx) return;
-    chartInstances['cmp-radar-overlay'] = new Chart(ctx, {
+    chartInstances['cmp-radar-overlay'] = _safeChart(ctx, {
       type: 'radar',
       data: {
         labels: compLabels,
@@ -17880,7 +18173,7 @@ function renderCompareTab() {
     const ctx2 = document.getElementById('cmp-hist-chart');
     if (!ctx2) return;
     const histYears = [2018,2019,2020,2021,2022,2023,2024,2025];
-    chartInstances['cmp-hist-chart'] = new Chart(ctx2, {
+    chartInstances['cmp-hist-chart'] = _safeChart(ctx2, {
       type: 'line',
       data: {
         labels: histYears,
