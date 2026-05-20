@@ -12069,14 +12069,28 @@ function renderCountryTab() {
     <!-- Trade exposure -->
     <div class="grid-2">
       <div class="card">
-        <div class="card-title"><span class="card-marker"></span> Key Import Dependencies</div>
+        <div class="card-title"><span class="card-marker"></span> Key Import Dependencies <span style="font-size:9.5px;font-weight:400;color:var(--t3);margin-left:6px;">click row → trading companies + volumes</span></div>
         ${structuralCaption(c, 'imports', 'Food-only structural snapshot')}
-        ${importItems.length ? importItems.map((im,i)=>`
-          <div class="ct-import-row" onclick="openCommodityDrilldown('${im.replace(/'/g, '&#39;')}', '${c.iso}')" style="cursor:pointer;" title="Structural dependency snapshot. Click for modeled routing + company estimates.">
-            <span class="ct-import-num">${String(i+1).padStart(2,'0')}</span>
-            <span class="ct-import-name">${im}</span>
-            <span style="margin-left:auto;font-family:'Geist Mono',monospace;font-size:10px;color:var(--t3);">→</span>
-          </div>`).join('') : '<div style="font-size:11px;color:var(--t3);line-height:1.5;">No food-specific import items are verified in the current structural snapshot.</div>'}
+        ${importItems.length ? (function(){
+          // v20.21 — add horizontal bars + share % to the Country profile import list,
+          // matching what the Trade Flow Atlas already shows. Same decay curve as v20.19,
+          // extended to 10 entries so food-backfill items 6-10 don't render undefined%.
+          const IMPORT_PCT_CURVE = [35,25,18,12,10,7,5,4,3,2];
+          return importItems.map((im,i)=>{
+            const pct = IMPORT_PCT_CURVE[i] ?? 2;
+            const supplier = (c.suppliers||[])[i] || '';
+            return `<div class="ct-import-row" onclick="openCommodityDrilldown('${im.replace(/'/g, '&#39;')}', '${c.iso}')" style="cursor:pointer;flex-wrap:wrap;gap:2px 12px;" title="Structural dependency snapshot. Click for modeled routing + company estimates.">
+              <span class="ct-import-num">${String(i+1).padStart(2,'0')}</span>
+              <span class="ct-import-name" style="flex:1;">${im}</span>
+              ${supplier ? `<span style="font-size:10px;color:var(--t3);white-space:nowrap;">from ${supplier}</span>` : ''}
+              <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#c44b3c;font-weight:600;min-width:36px;text-align:right;">${pct}%</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--t3);">→</span>
+              <div style="flex-basis:100%;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;margin-top:2px;">
+                <div style="height:100%;width:${pct}%;background:#c44b3c;"></div>
+              </div>
+            </div>`;
+          }).join('');
+        })() : '<div style="font-size:11px;color:var(--t3);line-height:1.5;">No food-specific import items are verified in the current structural snapshot.</div>'}
       </div>
       <div class="card">
         <div class="card-title"><span class="card-marker"></span> Supplier Concentration Snapshot</div>
@@ -15045,14 +15059,34 @@ function jumpFromDisturbanceToCountry(iso) {
     setTimeout(() => toast.remove(), 4200);
     return;
   }
-  if (typeof showTab === 'function') showTab('global');
-  if (typeof openPanel === 'function') openPanel(c);
+  // v20.21 — defer openPanel by ~120ms when we're switching tabs. showTab kicks
+  // off a Leaflet invalidateSize on a 80ms/300ms timer; calling openPanel
+  // synchronously can race that, leaving the side panel either hidden by tab
+  // transition or rendered against a 0-width map. Tiny delay fixes both.
+  const alreadyGlobal = document.getElementById('tab-global')?.classList.contains('active');
+  if (!alreadyGlobal && typeof showTab === 'function') {
+    showTab('global');
+    setTimeout(() => { if (typeof openPanel === 'function') openPanel(c); }, 120);
+  } else {
+    if (typeof openPanel === 'function') openPanel(c);
+  }
 }
 window.jumpFromDisturbanceToCountry = jumpFromDisturbanceToCountry;
 
 function openDisturbanceDetail(id) {
   const ev = disturbanceEvents.find(e => e.id === id);
-  if (!ev) return;
+  if (!ev) {
+    // v20.21 — visible toast when an event ID doesn't resolve. This usually
+    // means the disturbances list was re-rendered between click and lookup
+    // (live tab refreshes its data every ~60s and the array rebinds).
+    console.warn('[FoodShield] openDisturbanceDetail: no event for id', id);
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--bg2);border:1px solid var(--b2);color:var(--t2);padding:10px 16px;border-radius:8px;font-size:12.5px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:10000;max-width:420px;text-align:center;';
+    toast.innerHTML = `This event refreshed while you clicked it. Try again.`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3500);
+    return;
+  }
   const tc = EV_TYPE[ev.type] || EV_TYPE.conflict;
   const sc = SEV_COLOR[ev.severity] || '#c9a957';
   const country = byISO(ev.iso);
