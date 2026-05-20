@@ -8885,6 +8885,12 @@ const LIVE = {
   // v20.18 — WB WDI bulk: 20 indicators × ~190 countries (Pipeline 4).
   // Format: {iso3: {indicator_code: {value, year, name}}}
   wdi_bulk: null,
+  // v20.20 — Pipeline 5: USDA PSD per (country, staple) — wheat/rice/corn/soybeans.
+  // Format: {iso3: {wheat: {production_kt, imports_kt, exports_kt, consumption_kt, stocks_kt, year, ...}, rice: {...}, ...}}
+  psd: null,
+  // v20.20 — Pipeline 6: ND-GAIN climate vulnerability + readiness.
+  // Format: {iso3: {gain_index, vulnerability, readiness, food_vulnerability, year, ...}}
+  ndgain: null,
   meta: { loaded_at: null, sources_ok: 0, sources_failed: 0, headline_status: null },
 };
 
@@ -9032,6 +9038,60 @@ const WDI_PANEL_INDICATORS = [
   { code: 'SH.STA.STNT.ZS',    label: 'Child stunting (under 5)',  unit: '%',      fmt: v => v.toFixed(1) + '%' },
   { code: 'ER.H2O.FWST.ZS',    label: 'Water stress',              unit: '%',      fmt: v => v.toFixed(1) + '%' },
 ];
+
+// v20.20 — Pipeline 6: ND-GAIN climate vulnerability + readiness card.
+// Surfaces the three composite scores plus the food-sector vulnerability
+// sub-score on the country panel. Vulnerability is in its NATIVE direction
+// (higher = worse) — we don't invert here so the displayed number matches
+// what readers will see in ND-GAIN's own publications.
+function ndgainCardHTML(iso3) {
+  const row = LIVE.ndgain?.[iso3];
+  if (!row) return '';
+  // Color-band the vulnerability score: 0-0.35 green, 0.35-0.5 yellow,
+  // 0.5-0.65 orange, >0.65 red.
+  const vulnColor = (v) => v == null ? 'var(--t3)' :
+    v < 0.35 ? '#6ba36b' :
+    v < 0.50 ? '#c9a957' :
+    v < 0.65 ? '#d27a3e' : '#c44b3c';
+  const gainColor = (g) => g == null ? 'var(--t3)' :
+    g >= 60 ? '#6ba36b' :
+    g >= 45 ? '#c9a957' :
+    g >= 35 ? '#d27a3e' : '#c44b3c';
+  const fmt = (v, dp=2) => v == null ? '—' : Number(v).toFixed(dp);
+  const fmtInt = (v) => v == null ? '—' : Math.round(v);
+  const rows = [
+    row.gain_index != null ? `<div class="sp-row" title="ND-GAIN composite: higher = better-adapted. Combines vulnerability (lower better) and readiness (higher better) into a 0-100 score.">
+      <span class="k">ND-GAIN index</span>
+      <span class="v" style="color:${gainColor(row.gain_index)};">${fmtInt(row.gain_index)}/100</span>
+    </div>` : '',
+    row.vulnerability != null ? `<div class="sp-row" title="Vulnerability: 0-1, higher = more vulnerable to climate impacts. Native ND-GAIN direction.">
+      <span class="k">Climate vulnerability</span>
+      <span class="v" style="color:${vulnColor(row.vulnerability)};">${fmt(row.vulnerability)}</span>
+    </div>` : '',
+    row.readiness != null ? `<div class="sp-row" title="Readiness: 0-1, higher = more capable of adapting. Captures economic, governance, and social capacity to mobilize.">
+      <span class="k">Adaptation readiness</span>
+      <span class="v" style="color:${gainColor(row.readiness * 100)};">${fmt(row.readiness)}</span>
+    </div>` : '',
+    row.food_vulnerability != null ? `<div class="sp-row" title="ND-GAIN food-sector vulnerability sub-score: 0-1, higher = more food-system exposure to climate stress.">
+      <span class="k">Food-system climate exposure</span>
+      <span class="v" style="color:${vulnColor(row.food_vulnerability)};">${fmt(row.food_vulnerability)}</span>
+    </div>` : '',
+  ].filter(Boolean).join('');
+  if (!rows) return '';
+  return `
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Climate adaptation</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">ND-GAIN · sourced</span>
+        </div>
+      </div>
+      ${rows}
+      <div style="font-size:9.5px;color:var(--t3);margin-top:6px;">
+        ${row.year ? `latest ${row.year} · ` : ''}Notre Dame Global Adaptation Initiative
+      </div>
+    </div>`;
+}
 
 function wdiStructuralCardHTML(iso3) {
   const row = LIVE.wdi_bulk?.[iso3];
@@ -9358,6 +9418,22 @@ async function loadLiveData() {
     LIVE.wdi_bulk = (wdiEnv && (wdiEnv.data || wdiEnv)) || {};
   } catch (e) { LIVE.wdi_bulk = {}; }
 
+  // v20.20 — Pipeline 5: USDA PSD (production/imports/exports/consumption/stocks
+  // per staple per country). commodityTradeDependency() prefers PSD observed
+  // values over the modeled fallback.
+  try {
+    const psdEnv = await _fetchData('usda_psd');
+    LIVE.psd = (psdEnv && (psdEnv.data || psdEnv)) || {};
+  } catch (e) { LIVE.psd = {}; }
+
+  // v20.20 — Pipeline 6: ND-GAIN climate vulnerability + readiness per country.
+  // Feeds the climate dimension of the FDRS (today still partly heuristic) and
+  // shows on the country panel as a sourced 'ND-GAIN' card.
+  try {
+    const ndgainEnv = await _fetchData('ndgain');
+    LIVE.ndgain = (ndgainEnv && (ndgainEnv.data || ndgainEnv)) || {};
+  } catch (e) { LIVE.ndgain = {}; }
+
   // v20.5 provenance scaffold — fetch the per-metric override file. Schema is documented
   // in data/countries.json. Any country with verified fields here will have those merged
   // on top of the legacy COUNTRIES[i] entry; the rest of that country's fields remain
@@ -9600,6 +9676,26 @@ const US_STATE_PRODUCERS = {
 
 function commodityTradeDependency(c, commodity) {
   if (!c || !c.iso) return null;
+
+  // v20.20 — Pipeline 5: USDA PSD observed import dependency.
+  // PSD gives us actual imports_kt and consumption_kt per (country, staple, year).
+  // For wheat/rice/corn/soybeans we compute the true ratio: imports / consumption
+  // (clamped 0-100) — sourced, not modeled. The modeled heuristic below still
+  // runs as fallback for countries PSD doesn't track or for non-staple commodities.
+  const psdKey = ({ Wheat: 'wheat', Rice: 'rice', Maize: 'corn', Corn: 'corn', Soybeans: 'soybeans' })[commodity];
+  const psdRow = psdKey ? LIVE?.psd?.[c.iso]?.[psdKey] : null;
+  if (psdRow && psdRow.consumption_kt > 0 && psdRow.imports_kt != null) {
+    const imports = Math.max(0, psdRow.imports_kt);
+    const exports = Math.max(0, psdRow.exports_kt || 0);
+    const cons    = psdRow.consumption_kt;
+    // True import dependency ratio: imports / total apparent supply.
+    // Net importers: ratio is roughly imports/consumption.
+    // Net exporters: low or negative dependency — cap at 5%.
+    const netImports = imports - exports;
+    const ratio = (netImports > 0) ? Math.round((netImports / cons) * 100) : Math.max(0, Math.round((imports / (cons + exports)) * 100));
+    return Math.max(0, Math.min(100, ratio));
+  }
+
   const inImports = displayImportList(c).some(x => (x||'').toLowerCase().includes(commodity.toLowerCase()));
   const inExports = displayExportList(c).some(x => (x||'').toLowerCase().includes(commodity.toLowerCase()));
   const isProducer = (COMMODITY_PRODUCERS[commodity] || new Set()).has(c.iso)
@@ -11747,7 +11843,11 @@ function openPanel(c, skipDrilldown) {
     (typeof wfpAcrLinkHTML === 'function' ? wfpAcrLinkHTML(c.iso) : '') +
     // v20.18: WB WDI Structural Indicators card (Pipeline 4).
     // Returns empty string when the country has no WDI bulk coverage (rare).
-    (typeof wdiStructuralCardHTML === 'function' ? wdiStructuralCardHTML(c.iso) : '');
+    (typeof wdiStructuralCardHTML === 'function' ? wdiStructuralCardHTML(c.iso) : '') +
+    // v20.20: ND-GAIN climate adaptation card (Pipeline 6).
+    // Returns empty when ND-GAIN doesn't cover this country (Taiwan, Kosovo,
+    // Palestine, most non-UN microstates).
+    (typeof ndgainCardHTML === 'function' ? ndgainCardHTML(c.iso) : '');
 
   document.getElementById('sp-ai').textContent = c.ai;
 
@@ -14682,8 +14782,12 @@ async function loadDisturbanceData() {
   }
 
   // Attempt ReliefWeb food security disasters
+  // v20.20 — previous request URL was returning HTTP 410 (Gone) because
+  // ReliefWeb deprecated multi-value array filters with the [][]= syntax.
+  // Simplified to single-status alert filter, which is what we care about
+  // most for the disturbance tab (active alerts > merely ongoing).
   try {
-    const rwUrl = 'https://api.reliefweb.int/v1/disasters?appname=foodshieldai&limit=20&filter[operator]=AND&filter[conditions][0][field]=status&filter[conditions][0][value][]=alert&filter[conditions][0][value][]=ongoing&fields[include][]=name&fields[include][]=status&fields[include][]=date&fields[include][]=country&fields[include][]=type&sort[]=date.created:desc';
+    const rwUrl = 'https://api.reliefweb.int/v1/disasters?appname=foodshieldai&limit=20&filter[field]=status&filter[value]=alert&fields[include][]=name&fields[include][]=status&fields[include][]=date&fields[include][]=country&fields[include][]=type&sort[]=date.created:desc';
     const res = await Promise.race([
       fetch(rwUrl),
       new Promise((_,r) => setTimeout(()=>r(new Error('timeout')), 6000))
@@ -14700,15 +14804,20 @@ async function loadDisturbanceData() {
           'Earthquake':'earthquake','Conflict':'conflict','Famine':'famine',
           'Food Insecurity':'famine', 'Epidemic':'conflict'
         };
+        // v20.20: same byISO name fallback as GDACS so we don't render "Unknown"
+        // when ReliefWeb omits country.name but provides ISO3.
+        const isoUpper = (country.iso3 || '').toUpperCase();
+        const dbCountry = isoUpper ? byISO(isoUpper) : null;
+        const resolvedName = country.name || (dbCountry && dbCountry.name) || isoUpper || 'Unknown';
         events.push({
           id: 'rw_' + item.id,
           type: typeMap[typeRaw] || 'conflict',
           severity: f.status === 'alert' ? 'high' : 'medium',
           title: f.name || 'Humanitarian Situation',
-          country: country.name || 'Unknown',
-          iso: (country.iso3 || '').toUpperCase(),
+          country: resolvedName,
+          iso: isoUpper,
           lat: 0, lng: 0,
-          detail: `${typeRaw} situation — ${f.status}. ${country.name ? 'Affected country: ' + country.name + '.' : ''} Reported via ReliefWeb humanitarian database.`,
+          detail: `${typeRaw} situation — ${f.status}. ${resolvedName !== 'Unknown' ? 'Affected country: ' + resolvedName + '.' : ''} Reported via ReliefWeb humanitarian database.`,
           source: 'ReliefWeb',
           date: (((f.date || {}).created || '')).slice(0,10) || new Date().toISOString().slice(0,10),
           live: true,
@@ -14925,7 +15034,15 @@ function jumpFromDisturbanceToCountry(iso) {
   if (modal) modal.remove();
   const c = (typeof byISO === 'function') ? byISO(iso) : null;
   if (!c) {
-    console.warn('[FoodShield] disturbance → country jump skipped: no country for ISO', iso);
+    // v20.20 — visible toast instead of silent bail. Small territories
+    // (MNP, GUM, ASM, etc.) appear in GDACS/ReliefWeb but aren't in our
+    // 227-country COUNTRIES set yet, so there's no profile to open.
+    console.warn('[FoodShield] disturbance → country jump skipped: no profile for ISO', iso);
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--bg2);border:1px solid var(--b2);color:var(--t2);padding:10px 16px;border-radius:8px;font-size:12.5px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:10000;max-width:420px;text-align:center;';
+    toast.innerHTML = `No FoodShield profile yet for <b>${iso}</b>. This event is logged from a live source (GDACS / ReliefWeb) but the territory isn't in the FDRS dataset.`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 4200);
     return;
   }
   if (typeof showTab === 'function') showTab('global');

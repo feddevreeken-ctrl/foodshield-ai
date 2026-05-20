@@ -156,6 +156,20 @@ SOURCES = [
         "cadence": "6h fetch / quarterly upstream",
         "mode": "reference",
     },
+    {
+        "key": "usda_psd",
+        "file": "usda_psd.json",
+        "label": "USDA PSD staples (wheat/rice/corn/soybeans)",
+        "cadence": "6h fetch / monthly upstream (WASDE)",
+        "mode": "trade",
+    },
+    {
+        "key": "ndgain",
+        "file": "ndgain.json",
+        "label": "ND-GAIN climate vulnerability + readiness",
+        "cadence": "6h fetch / annual upstream",
+        "mode": "reference",
+    },
 ]
 
 
