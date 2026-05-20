@@ -262,7 +262,7 @@ def main():
                 "Adjustment range -10 to +35 added to structural FDRS to produce "
                 "nowcast score. See methodology page for component formula."
             ),
-            "version": "v20",
+            "version": "v21",
         },
         "data": out,
     }

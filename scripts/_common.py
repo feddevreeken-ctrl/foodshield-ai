@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-UA = "FoodShield-AI/20 (+https://foodshield-ai-fv.vercel.app)"
+UA = "FoodShield-AI/21 (+https://foodshield-ai-fv.vercel.app)"
 DEFAULT_TIMEOUT = 30
 
 
@@ -47,7 +47,7 @@ def write_json(filename, payload, *, source=None, notes=None):
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "source": source or "unknown",
             "notes": notes or "",
-            "version": "v20",
+            "version": "v21",
         },
         "data": payload,
     }

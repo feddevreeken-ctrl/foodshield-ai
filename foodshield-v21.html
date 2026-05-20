@@ -68,7 +68,24 @@
 <script defer src="/_vercel/insights/script.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+
+<!-- v21 (#11) — split font load into "critical" (Geist 400/600, render-blocking,
+     preloaded) and "async" (other weights, Geist Mono italics, Instrument Serif).
+     The critical CSS includes a fallback metric-matched stack via font-display:
+     swap so text paints immediately with Inter/system-ui and re-flows to Geist
+     once it lands. Eliminates the half-second FOIT on first paint. -->
+<link rel="preload"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&display=swap"
+      as="style">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&display=swap"
+      rel="stylesheet">
+
+<!-- Secondary font weights — loaded async so they don't block first paint.
+     Inline media-swap trick: load as print, then swap to all once parsed. -->
+<link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@300;500;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap"
+      media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;500;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap"></noscript>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
@@ -1148,6 +1165,51 @@ body {
   font-size: 12px; font-weight: 600; cursor: pointer;
 }
 .instr-start-btn:hover { background: var(--accent)44; }
+
+/* v21 (#20/#21) — collapsible full-guide + restructured footer */
+.instr-full-guide {
+  margin: 0 28px 14px;
+  border-top: 1px solid var(--b1);
+  padding-top: 14px;
+}
+.instr-full-summary {
+  cursor: pointer;
+  font-size: 12px; color: var(--t2); font-weight: 500;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 6px 0;
+  list-style: none;
+  user-select: none;
+  outline: none;
+}
+.instr-full-summary::-webkit-details-marker { display: none; }
+.instr-full-summary:hover { color: var(--t1); }
+.instr-full-guide[open] .instr-full-summary {
+  color: var(--t1); margin-bottom: 12px;
+}
+
+/* v21 (#21) — footer with equal-weight Skip and Go buttons */
+.instr-footer-v2 {
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
+}
+.instr-footer-actions {
+  display: flex; gap: 10px; justify-content: flex-end; align-items: center;
+}
+.instr-skip-btn {
+  padding: 9px 18px;
+  background: transparent;
+  border: 1px solid var(--b3);
+  color: var(--t2); border-radius: 8px;
+  font-size: 12px; font-weight: 500; cursor: pointer;
+  font-family: inherit;
+  transition: color .15s, border-color .15s;
+}
+.instr-skip-btn:hover { color: var(--t1); border-color: var(--t3); }
+.instr-footer-v2 .instr-skip-label {
+  justify-content: flex-end;
+  padding-right: 2px;
+}
 
 /* ── Email signup ────────────────────────────────── */
 .instr-signup {
@@ -3498,6 +3560,59 @@ body {
   border: 1px solid var(--b1);
   border-radius: 22px;
 }
+
+/* v21 (#24) — floating search overlay on the Global Map tab.
+   Positioned below the region-zoom pills so neither overlaps the legend
+   or the stat pills (which live bottom-left / top-right respectively). */
+#map-search-wrap {
+  position: absolute;
+  top: 64px;
+  left: 18px;
+  z-index: 700;
+  width: 260px;
+  background: rgba(20,20,26,0.92);
+  border: 1px solid var(--b2);
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-md);
+}
+#map-search-wrap .fs-search {
+  width: 100%;
+  background: transparent;
+  border: none;
+}
+#map-search-wrap .search-icon {
+  width: 14px; height: 14px;
+}
+#map-autocomplete {
+  position: absolute; top: 100%; left: 0; right: 0;
+  background: var(--bg2);
+  border: 1px solid var(--b2);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  display: none;
+  z-index: 701;
+  box-shadow: var(--shadow-md);
+}
+#map-autocomplete .ac-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 12px; color: var(--t1);
+  cursor: pointer;
+  border-bottom: 1px solid var(--b1);
+}
+#map-autocomplete .ac-item:last-child { border-bottom: none; }
+#map-autocomplete .ac-item:hover { background: var(--bg3); }
+#map-autocomplete .ac-score {
+  font-family: 'Geist Mono', monospace; font-size: 11px;
+  font-weight: 600; padding: 2px 6px; border-radius: 4px;
+}
+@media (max-width: 640px) {
+  #map-search-wrap { width: calc(100% - 36px); top: 58px; }
+}
 .mrz-label {
   font-size: 9.5px;
   font-weight: 600;
@@ -4477,9 +4592,9 @@ input[type="email"]:focus {
       </div>
     </div>
 
-    <div class="search-wrap">
-      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-      <input class="fs-search" type="text" id="search-box" placeholder="Search country…" oninput="handleSearch()" autocomplete="off">
+    <div class="search-wrap" role="search">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><title>Search</title><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input class="fs-search" type="text" id="search-box" placeholder="Search country…" oninput="handleSearch()" autocomplete="off" aria-label="Search for a country">
       <div id="autocomplete"></div>
     </div>
   </div>
@@ -4528,6 +4643,16 @@ input[type="email"]:focus {
         <button class="mrz-pill" onclick="flyToRegion(this,'europe')">Europe</button>
       </div>
 
+      <!-- v21 (#24) — search-country box directly on the map. Mirrors the
+           existing topbar search but is visually impossible to miss when the
+           user is looking at the globe. Uses the same handleSearch / autocomplete
+           machinery as the topbar input (event-delegated by id). -->
+      <div id="map-search-wrap" class="search-wrap" role="search">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><title>Search</title><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input class="fs-search" type="text" id="map-search-box" placeholder="Search country…" oninput="handleMapSearch()" autocomplete="off" aria-label="Search for a country on the map">
+        <div id="map-autocomplete"></div>
+      </div>
+
       <!-- Overlay stat strip -->
       <div id="map-stats">
         <div class="map-stat-pill">
@@ -4552,28 +4677,35 @@ input[type="email"]:focus {
       <!-- Disturbance overlay legend (shown when toggle is on) -->
       <div id="map-dist-legend"></div>
 
-      <!-- Legend -->
-      <div id="map-legend">
+      <!-- v21 (#16) — persistent 5-tier legend, always visible on the Global Map
+           tab. Uses the same saturated palette as the map polygons (mapRiskColor)
+           so the legend swatches match what users see on the map. -->
+      <div id="map-legend" role="region" aria-label="Food Dependency Risk Score legend">
         <div class="legend-title">Food Dependency Risk Score</div>
         <div class="legend-item">
-          <div class="legend-swatch" style="background:var(--r0)"></div>
+          <div class="legend-swatch" style="background:#5fa85f"></div>
           <div class="legend-label">Resilient</div>
           <div class="legend-range">0—25</div>
         </div>
         <div class="legend-item">
-          <div class="legend-swatch" style="background:var(--r1)"></div>
+          <div class="legend-swatch" style="background:#e0b94a"></div>
           <div class="legend-label">Exposed</div>
           <div class="legend-range">26—50</div>
         </div>
         <div class="legend-item">
-          <div class="legend-swatch" style="background:var(--r2)"></div>
+          <div class="legend-swatch" style="background:#e07a2e"></div>
           <div class="legend-label">Dependent</div>
           <div class="legend-range">51—75</div>
         </div>
         <div class="legend-item">
-          <div class="legend-swatch" style="background:var(--r3)"></div>
-          <div class="legend-label">Structurally Vulnerable</div>
-          <div class="legend-range">76—100</div>
+          <div class="legend-swatch" style="background:#d23a2a"></div>
+          <div class="legend-label">Vulnerable</div>
+          <div class="legend-range">76—88</div>
+        </div>
+        <div class="legend-item">
+          <div class="legend-swatch" style="background:#8e1f17"></div>
+          <div class="legend-label">Severe</div>
+          <div class="legend-range">89—100</div>
         </div>
         <div class="legend-item">
           <div class="legend-swatch legend-nodata"></div>
@@ -4966,9 +5098,9 @@ input[type="email"]:focus {
 <div id="instructions-modal" class="instr-modal-hidden">
   <div class="instr-sheet" onclick="event.stopPropagation()">
     <div class="instr-head">
-      <button class="instr-close" onclick="closeInstructions()">✕</button>
+      <button class="instr-close" onclick="closeInstructions()" aria-label="Close Quick Start" title="Close">✕</button>
       <div class="instr-eyebrow">✱ Quick Start · by Fedde Vreeken</div>
-      <div class="instr-title">What worries you about <em>food security</em>?</div>
+      <div class="instr-title" id="instr-title-id">What worries you about <em>food security</em>?</div>
       <div class="instr-sub">FoodShield AI tracks dependency, resilience and vulnerability for 177 countries (plus all 50 US states) using live FAO, USDA, WFP and GDACS data. Pick a starting point — or scroll for the full guide.</div>
       <a href="https://www.linkedin.com/in/feddevreeken" target="_blank" rel="noopener" class="instr-linkedin">
         <svg viewBox="0 0 24 24" fill="currentColor" style="width:11px;height:11px;"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
@@ -5002,26 +5134,27 @@ input[type="email"]:focus {
       </div>
     </div>
 
-    <div class="instr-divider"><span>The full guide</span></div>
+    <!-- v21 (#20) — full guide is now collapsed behind a toggle so first-load
+         shows only the 3 path cards above. Click "Show full guide" to expand. -->
+    <details class="instr-full-guide">
+      <summary class="instr-full-summary">Show full guide ▾</summary>
+      <div class="instr-body" id="instructions-body"></div>
+    </details>
+    <!-- v21 (#19) — email-capture signup removed from onboarding. Still available
+         in the About tab footer for users who reach it organically. -->
 
-    <div class="instr-body" id="instructions-body"></div>
-    <!-- Email signup -->
-    <div class="instr-signup" id="instr-signup-wrap">
-      <div class="instr-signup-label">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;flex-shrink:0;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-        Stay updated on future AI projects &amp; developments
+    <!-- v21 (#21) — Skip & explore link given equal visual weight as the primary
+         CTA. Was previously a tiny low-contrast checkbox label; now it's a
+         button-styled secondary action, paired with the "Don't show again"
+         checkbox in a separate row below. -->
+    <div class="instr-footer instr-footer-v2">
+      <div class="instr-footer-actions">
+        <button class="instr-skip-btn" onclick="closeInstructions()" aria-label="Skip onboarding and explore the dashboard">Skip &amp; explore →</button>
+        <button class="instr-start-btn" onclick="closeInstructions()">Go to map →</button>
       </div>
-      <div class="instr-signup-row">
-        <input type="email" id="instr-email" class="instr-email-input" placeholder="your@email.com">
-        <button class="instr-email-btn" onclick="submitSignup()">Notify me</button>
-      </div>
-      <div id="instr-signup-msg" class="instr-signup-msg" style="display:none;"></div>
-    </div>
-    <div class="instr-footer">
       <label class="instr-skip-label">
-        <input type="checkbox" id="instr-skip"> Don't show again on open
+        <input type="checkbox" id="instr-skip"> Don't show this again
       </label>
-      <button class="instr-start-btn" onclick="closeInstructions()">Go to map →</button>
     </div>
   </div>
 </div>
@@ -10929,11 +11062,30 @@ function riskColor(s) {
   if (s <= 88) return '#c44b3c';
   return '#7a2922';
 }
+
+// v21 (#15) — map-only saturated palette. Country polygons on the dark map
+// theme need a touch more chroma than the editorial accent palette uses
+// everywhere else, otherwise the "exposed" (gold) and "dependent" (burnt
+// orange) bands read nearly identical at country zoom. We push hue
+// separation + saturation just for the GeoJSON fillColor. Used only by the
+// map layer (line 11475); all charts, badges, panels still use riskColor()
+// so the editorial palette stays intact.
+function mapRiskColor(s) {
+  if (s <= 25) return '#5fa85f';   // resilient — slightly cleaner green
+  if (s <= 50) return '#e0b94a';   // exposed   — brighter gold, more separation
+  if (s <= 75) return '#e07a2e';   // dependent — saturated burnt orange
+  if (s <= 88) return '#d23a2a';   // vulnerable — clay-red
+  return '#8e1f17';                // severe   — deeper oxblood
+}
 function riskLabel(s) {
   if (s <= 25) return 'Resilient';
   if (s <= 50) return 'Exposed';
   if (s <= 75) return 'Dependent';
-  return 'Structurally Vulnerable';
+  // v21 (#16) — split the top band into "Vulnerable" (76-88) and "Severe" (89+)
+  // so the legend's 5 tiers match this label function. Previously everything
+  // above 75 collapsed to "Structurally Vulnerable" regardless of severity.
+  if (s <= 88) return 'Vulnerable';
+  return 'Severe';
 }
 function riskBadgeStyle(s) {
   const c = riskColor(s);
@@ -11455,7 +11607,10 @@ const SCENARIOS = [
     const t = c.fdrs / 100;
     const fillOpacity = 0.18 + Math.pow(t, 0.85) * 0.78;
     return {
-      fillColor: riskColor(c.fdrs),
+      // v21 (#15) — mapRiskColor() is a saturation-bumped variant of riskColor()
+      // used only for polygon fills, so the gold/burnt-orange bands read
+      // distinct at country zoom on the dark theme.
+      fillColor: mapRiskColor(c.fdrs),
       color: '#000',
       weight: 0.45,
       fillOpacity,
@@ -12287,7 +12442,40 @@ function handleSearch() {
 document.addEventListener('click', e=>{
   if (!e.target.closest('.search-wrap'))
     document.getElementById('autocomplete').style.display='none';
+  // v21 (#24) — same dismiss behavior for the floating map search.
+  if (!e.target.closest('#map-search-wrap')) {
+    const mac = document.getElementById('map-autocomplete');
+    if (mac) mac.style.display = 'none';
+  }
 });
+
+// v21 (#24) — floating map search. Mirrors handleSearch but writes results
+// into #map-autocomplete and pulls the query from #map-search-box. We keep
+// the two searches independent so opening the topbar autocomplete doesn't
+// close the map one (and vice versa).
+function handleMapSearch() {
+  const inp = document.getElementById('map-search-box');
+  const ac  = document.getElementById('map-autocomplete');
+  if (!inp || !ac) return;
+  const q = inp.value.toLowerCase().trim();
+  if (!q) { ac.style.display = 'none'; return; }
+  const hits = COUNTRIES.filter(c => c.name.toLowerCase().includes(q)).slice(0, 7);
+  if (!hits.length) { ac.style.display = 'none'; return; }
+  ac.style.display = 'block';
+  ac.innerHTML = hits.map(c => `
+    <div class="ac-item" onclick="selectCountryFromMap('${c.iso}')">
+      <span>${c.name}</span>
+      <span class="ac-score" style="background:${riskColor(c.fdrs)}1a;color:${riskColor(c.fdrs)}">${c.fdrs}</span>
+    </div>`).join('');
+}
+function selectCountryFromMap(iso) {
+  const c = byISO(iso); if (!c) return;
+  const ac = document.getElementById('map-autocomplete');
+  const inp = document.getElementById('map-search-box');
+  if (ac) ac.style.display = 'none';
+  if (inp) inp.value = c.name;
+  openPanel(c);
+}
 function selectCountry(iso) {
   const c = byISO(iso); if (!c) return;
   document.getElementById('autocomplete').style.display='none';
@@ -14690,19 +14878,69 @@ function renderInstructionsBody() {
   }).join('');
 }
 
+// v21 (#9) — focus-trap state for the onboarding modal (and reusable for other
+// dialogs). Stores the element that opened the modal so we can return focus on
+// close, plus a keydown handler that traps Tab inside the dialog.
+let _modalReturnFocus = null;
+let _modalKeydownHandler = null;
+
+function _trapFocusInModal(modal) {
+  const focusables = modal.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"]), summary'
+  );
+  if (!focusables.length) return;
+  const first = focusables[0], last = focusables[focusables.length - 1];
+  _modalKeydownHandler = (e) => {
+    if (e.key !== 'Tab') return;
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault(); first.focus();
+    }
+  };
+  modal.addEventListener('keydown', _modalKeydownHandler);
+  // Focus the primary CTA, falling back to the first focusable element.
+  const primary = modal.querySelector('.instr-start-btn') || first;
+  setTimeout(() => primary && primary.focus(), 40);
+}
+
+function _releaseFocusTrap(modal) {
+  if (_modalKeydownHandler && modal) {
+    modal.removeEventListener('keydown', _modalKeydownHandler);
+  }
+  _modalKeydownHandler = null;
+  if (_modalReturnFocus && typeof _modalReturnFocus.focus === 'function') {
+    try { _modalReturnFocus.focus(); } catch (_) {}
+  }
+  _modalReturnFocus = null;
+}
+
 function openInstructions() {
   const modal = document.getElementById('instructions-modal');
   if (!modal) return;
+  // v21 (#22) — restore "Don't show again" checkbox state from localStorage,
+  // so the user sees their previous choice next time the modal is re-opened
+  // (e.g. via the bottom-bar Quick Start button).
+  try {
+    const sk = document.getElementById('instr-skip');
+    if (sk) sk.checked = localStorage.getItem('foodshield_skip_intro') === '1';
+  } catch (e) {}
   renderInstructionsBody();
+  _modalReturnFocus = document.activeElement;
   modal.classList.remove('instr-modal-hidden');
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-labelledby', 'instr-title-id');
   // Close on backdrop click
   modal.onclick = (e) => { if (e.target === modal) closeInstructions(); };
+  _trapFocusInModal(modal);
 }
 
 function closeInstructions() {
   const modal = document.getElementById('instructions-modal');
   if (!modal) return;
   modal.classList.add('instr-modal-hidden');
+  _releaseFocusTrap(modal);
   try {
     if (document.getElementById('instr-skip')?.checked) {
       localStorage.setItem('foodshield_skip_intro', '1');
@@ -14815,6 +15053,25 @@ window.addEventListener('load',()=>{
   populateSelects();
   if (window.Globe) Globe.init();
   updateRail();
+
+  // v21 (#7) — broad-stroke accessibility hygiene for inline SVG icons.
+  // Most SVGs in the markup are decorative (their parent button already has
+  // visible text), but they sit in the accessibility tree as anonymous
+  // "graphic" nodes, which clutters screen-reader output. Mark every SVG
+  // that doesn't have its own aria-label / aria-labelledby / role="img"
+  // as aria-hidden="true" focusable="false". Icon-only buttons that need
+  // labels (e.g. close ✕) get aria-label explicitly on the BUTTON, not
+  // the SVG.
+  try {
+    document.querySelectorAll('svg').forEach(svg => {
+      if (svg.hasAttribute('aria-label')) return;
+      if (svg.hasAttribute('aria-labelledby')) return;
+      if (svg.getAttribute('role') === 'img') return;
+      if (svg.hasAttribute('aria-hidden')) return;
+      svg.setAttribute('aria-hidden', 'true');
+      svg.setAttribute('focusable', 'false');
+    });
+  } catch (e) {}
   // Restore rail collapse state
   if (localStorage.getItem('fs-rail-collapsed') === '1') {
     document.getElementById('global-rail')?.classList.add('collapsed');
