@@ -12132,21 +12132,30 @@ function renderTradeTab() {
     <!-- Imports / Exports breakdown -->
     <div class="grid-2">
       <div class="card">
-        <div class="card-title"><span class="card-marker" style="background:#c44b3c"></span> Key import dependencies</div>
+        <div class="card-title"><span class="card-marker" style="background:#c44b3c"></span> Key import dependencies <span style="font-size:9.5px;font-weight:400;color:var(--t3);margin-left:6px;">click row → trading companies + volumes</span></div>
         ${structuralCaption(c, 'imports', 'Structural food-only snapshot')}
-        ${importItems.length ? importItems.map((name,i)=>{
-          const pct = [35,25,18,12,10][i];
-          const sup = (c.suppliers||[])[i] || '';
-          return `<div class="tr-bar-row" style="flex-wrap:wrap;gap:2px;cursor:pointer;" onclick="openCommodityDrilldown('${name.replace(/'/g, '&#39;')}', '${c.iso}')" title="Structural dependency snapshot. Click for modeled routing + company estimates.">
-            <div style="display:flex;align-items:center;width:100%;gap:6px;margin-bottom:3px;">
-              <span class="tr-bar-name" style="flex:1">${name}</span>
-              ${sup ? `<span style="font-size:10px;color:var(--t3);white-space:nowrap;">from ${sup}</span>` : ''}
-              <span class="tr-bar-pct" style="min-width:32px;text-align:right;">${pct}%</span>
-              <span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--t3);">→</span>
-            </div>
-            <div class="tr-bar-track" style="width:100%;margin-bottom:2px;"><div class="tr-bar-fill" style="width:${pct}%;background:#c44b3c"></div></div>
-          </div>`;
-        }).join('') : '<div style="font-size:11px;color:var(--t3);line-height:1.5;">No food-specific import items are verified in the current structural snapshot.</div>'}
+        ${importItems.length ? (function(){
+          // v20.19: import-share array used to be hard-coded [35,25,18,12,10]
+          // (length 5) but v20.10 food-backfill can extend importItems to 10
+          // entries — positions 5-9 then read `undefined`. Extend the curve
+          // smoothly: top-5 unchanged, then decay 7,5,4,3,2 for positions 5-9.
+          // Sums to ~100 only loosely; this is a structural snapshot display,
+          // not a true share — the legacy badge already says so.
+          const IMPORT_PCT_CURVE = [35,25,18,12,10,7,5,4,3,2];
+          return importItems.map((name,i)=>{
+            const pct = IMPORT_PCT_CURVE[i] ?? 2;
+            const sup = (c.suppliers||[])[i] || '';
+            return `<div class="tr-bar-row" style="flex-wrap:wrap;gap:2px;cursor:pointer;" onclick="openCommodityDrilldown('${name.replace(/'/g, '&#39;')}', '${c.iso}')" title="Structural dependency snapshot. Click for modeled routing + company estimates.">
+              <div style="display:flex;align-items:center;width:100%;gap:6px;margin-bottom:3px;">
+                <span class="tr-bar-name" style="flex:1">${name}</span>
+                ${sup ? `<span style="font-size:10px;color:var(--t3);white-space:nowrap;">from ${sup}</span>` : ''}
+                <span class="tr-bar-pct" style="min-width:32px;text-align:right;">${pct}%</span>
+                <span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--t3);">→</span>
+              </div>
+              <div class="tr-bar-track" style="width:100%;margin-bottom:2px;"><div class="tr-bar-fill" style="width:${pct}%;background:#c44b3c"></div></div>
+            </div>`;
+          }).join('');
+        })() : '<div style="font-size:11px;color:var(--t3);line-height:1.5;">No food-specific import items are verified in the current structural snapshot.</div>'}
         <div class="tr-card-footer">
           <span>Total food imports</span>
           <span class="mono" style="color:#c44b3c;font-weight:600">${importsTotal}B USD</span>
@@ -12156,18 +12165,23 @@ function renderTradeTab() {
       <div class="card">
         <div class="card-title"><span class="card-marker" style="background:#6ba36b"></span> Structural export basket</div>
         ${structuralCaption(c, 'exports', 'Structural dashboard snapshot')}
-        ${exportBasket.map((name,i)=>{
-          const pct = [40,28,16,10,6][i];
-          const dest = (c.exportDests||[])[i] || '';
-          return `<div class="tr-bar-row" style="flex-wrap:wrap;gap:2px;">
-            <div style="display:flex;align-items:center;width:100%;gap:6px;margin-bottom:3px;">
-              <span class="tr-bar-name" style="flex:1">${name}</span>
-              ${dest ? `<span style="font-size:10px;color:var(--t3);white-space:nowrap;">to ${dest}</span>` : ''}
-              <span class="tr-bar-pct" style="min-width:32px;text-align:right;">${pct}%</span>
-            </div>
-            <div class="tr-bar-track" style="width:100%;margin-bottom:2px;"><div class="tr-bar-fill" style="width:${pct}%;background:#6ba36b"></div></div>
-          </div>`;
-        }).join('')}
+        ${(function(){
+          // v20.19: same fix as imports — extend the share curve so positions
+          // 5-9 don't read `undefined` when exportBasket has more than 5 items.
+          const EXPORT_PCT_CURVE = [40,28,16,10,6,4,3,2,1,1];
+          return exportBasket.map((name,i)=>{
+            const pct = EXPORT_PCT_CURVE[i] ?? 1;
+            const dest = (c.exportDests||[])[i] || '';
+            return `<div class="tr-bar-row" style="flex-wrap:wrap;gap:2px;">
+              <div style="display:flex;align-items:center;width:100%;gap:6px;margin-bottom:3px;">
+                <span class="tr-bar-name" style="flex:1">${name}</span>
+                ${dest ? `<span style="font-size:10px;color:var(--t3);white-space:nowrap;">to ${dest}</span>` : ''}
+                <span class="tr-bar-pct" style="min-width:32px;text-align:right;">${pct}%</span>
+              </div>
+              <div class="tr-bar-track" style="width:100%;margin-bottom:2px;"><div class="tr-bar-fill" style="width:${pct}%;background:#6ba36b"></div></div>
+            </div>`;
+          }).join('');
+        })()}
         <div class="tr-card-footer">
           <span>Total food exports</span>
           <span class="mono" style="color:#6ba36b;font-weight:600">${exportsTotal}B USD</span>
