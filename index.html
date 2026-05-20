@@ -10201,6 +10201,105 @@ async function loadLiveData() {
     }
   }
 
+  // ── v20.27: Sourced-structural overlay for climate + conflict/logistics ──
+  // Until now c[4] (climate) and c[5] (conflict/logistics) were heuristic
+  // dashboard values. Six new pipelines (ND-GAIN, Aqueduct, INFORM, WGI, LPI,
+  // CCKP) give us real sourced inputs for both dimensions. We compute a
+  // sourced-equivalent value per dimension, blend it with the heritage value
+  // at 60% sourced / 40% heritage (preserving editorial judgement where it
+  // exists), and recompute FDRS — but in a NON-DESTRUCTIVE way that
+  // preserves the rest of c[] and the rank-order ceiling of v20.2.
+  //
+  // Why blend rather than replace: the heritage c[] vector was hand-curated
+  // with country-specific context (e.g. an editor knew that war-affected
+  // Yemen has a c[5]=90 conflict score that no single dataset captures).
+  // Replacing wholesale would erase that knowledge for ~40 countries while
+  // upgrading the other ~190. The blend gets the upgrade without losing
+  // the curated tail.
+  if (Array.isArray(window.COUNTRIES)) {
+    for (const c of COUNTRIES) {
+      // CLIMATE — composite of ND-GAIN food vulnerability + Aqueduct
+      // drought/water risk + CCKP projected temp delta (linearized to 0-100).
+      const ndg = LIVE.ndgain?.[c.iso] || {};
+      const aqu = LIVE.aqueduct?.[c.iso] || {};
+      const ccp = LIVE.cckp?.[c.iso] || {};
+      let climateScore = null;
+      const climateParts = [];
+      if (ndg.food_vulnerability != null) {
+        climateParts.push({ v: ndg.food_vulnerability * 100, w: 0.45 });
+      }
+      if (aqu.drought_risk?.cat != null && aqu.drought_risk.cat >= 0) {
+        climateParts.push({ v: aqu.drought_risk.cat * 25, w: 0.20 });
+      }
+      if (aqu.water_stress?.cat != null && aqu.water_stress.cat >= 0) {
+        climateParts.push({ v: aqu.water_stress.cat * 25, w: 0.15 });
+      }
+      if (ccp.proj_temp_change_c != null) {
+        // 1°C → 25, 2°C → 50, 3°C → 75, 4°C → 100
+        climateParts.push({ v: Math.min(100, ccp.proj_temp_change_c * 25), w: 0.20 });
+      }
+      if (climateParts.length >= 2) {
+        const sumW = climateParts.reduce((s, p) => s + p.w, 0);
+        climateScore = climateParts.reduce((s, p) => s + p.v * p.w, 0) / sumW;
+      }
+
+      // CONFLICT / LOGISTICS — composite of INFORM (inverse), WGI rule_of_law
+      // (inverted, since higher = better), LPI overall (inverted), and
+      // optionally HDI rule-of-law proxy via stunting-percentile or GII.
+      const inf = LIVE.inform?.[c.iso] || {};
+      const wgi = LIVE.wgi?.[c.iso] || {};
+      const lpi = LIVE.lpi?.[c.iso] || {};
+      let conflictScore = null;
+      const conflictParts = [];
+      if (inf.inform_risk != null) {
+        conflictParts.push({ v: inf.inform_risk * 10, w: 0.45 });  // 0-10 → 0-100
+      }
+      if (wgi.rule_of_law?.value != null) {
+        // -2.5 → 100 (worst), +2.5 → 0 (best). Linear remap.
+        conflictParts.push({ v: Math.max(0, Math.min(100, (2.5 - wgi.rule_of_law.value) * 20)), w: 0.25 });
+      }
+      if (lpi.overall?.value != null) {
+        // 1 → 100, 5 → 0
+        conflictParts.push({ v: Math.max(0, Math.min(100, (5 - lpi.overall.value) * 25)), w: 0.20 });
+      }
+      if (inf.lack_coping_capacity != null) {
+        conflictParts.push({ v: inf.lack_coping_capacity * 10, w: 0.10 });
+      }
+      if (conflictParts.length >= 2) {
+        const sumW = conflictParts.reduce((s, p) => s + p.w, 0);
+        conflictScore = conflictParts.reduce((s, p) => s + p.v * p.w, 0) / sumW;
+      }
+
+      // Apply blend. Preserve heritage on c._cOriginal for reference; the
+      // overlaid score sits in c._cSourced[i] alongside.
+      if (!c._cOriginal) c._cOriginal = c.c ? c.c.slice() : null;
+      if (c._cOriginal) {
+        c._cSourced = c._cOriginal.slice();
+        if (climateScore != null) {
+          c._cSourced[4] = Math.round(c._cOriginal[4] * 0.4 + climateScore * 0.6);
+        }
+        if (conflictScore != null) {
+          c._cSourced[5] = Math.round(c._cOriginal[5] * 0.4 + conflictScore * 0.6);
+        }
+        // Mutate c.c so all downstream consumers (radar charts, scenario
+        // simulator, FDRS Composition card) see the sourced values.
+        c.c = c._cSourced;
+      }
+
+      // Recompute structural FDRS from new c[] vector using the published
+      // weights (28/18/14/14/9/9/8). The 8% SCE is already in c.fdrs from
+      // the block above, so we recompute ONLY when climate or conflict moved.
+      if (climateScore != null || conflictScore != null) {
+        const w = [0.28, 0.18, 0.14, 0.14, 0.09, 0.09];
+        const newCaloric = c._cSourced.slice(0, 6).reduce((s, v, i) => s + v * w[i], 0);
+        const sce = c._sce || 0;
+        // Same blend as v20.2: 92% caloric + 8% SCE
+        c._fdrsRaw = Math.round(newCaloric);
+        c.fdrs = Math.max(0, Math.min(100, Math.round(c._fdrsRaw * 0.92 + sce * 0.08)));
+      }
+    }
+  }
+
   // ── Apply nowcast adjustment to every country in-place ────────────────────
   // c.fdrs becomes the live nowcast value; structural preserved on c._fdrsStructural.
   // This makes EVERY existing chart, simulation, calculation, comparison, and panel
@@ -10232,7 +10331,36 @@ async function loadLiveData() {
       f2030Adj += (cmp.weather_kick   || 0) * 0.3;    // climate trend reinforcement
       f2030Adj += (cmp.fire_kick      || 0) * 0.4;    // deforestation/cropland loss
       f2030Adj += (cmp.conflict_kick  || 0) * 0.5;    // active conflict often persists
-      f2030Adj = Math.max(-3, Math.min(8, Math.round(f2030Adj * 10) / 10));
+      // v20.27 — nowcast-new components also have durable signal value
+      f2030Adj += (cmp.inform_amp      || 0) * 0.4;   // composite humanitarian risk persists
+      f2030Adj += (cmp.governance_drag || 0) * 0.6;   // institutional decay is slow-recovery
+      f2030Adj += (cmp.psd_shortfall   || 0) * 0.3;   // production shortfalls correct year-on-year
+
+      // ── v20.27: structural climate kick from CCKP + ND-GAIN ────────────────
+      // Replaces the heuristic "climate adjustment" step of the 2030 forecast
+      // with sourced inputs. Higher projected temperature delta + higher
+      // ND-GAIN food vulnerability → more upward forecast drift.
+      // Capped at +5 to prevent climate from dominating; the other signals
+      // (IPC, FX, inflation) collectively cap at +8 above.
+      const ccp2030 = LIVE.cckp?.[c.iso];
+      const ndg2030 = LIVE.ndgain?.[c.iso];
+      let climateKick = 0;
+      if (ccp2030?.proj_temp_change_c != null) {
+        // 1°C → 0.5, 2°C → 1.5, 3°C → 3.0 (food-system damage non-linear above 2°C)
+        const dT = ccp2030.proj_temp_change_c;
+        climateKick += dT < 2 ? dT * 0.75 : 1.5 + (dT - 2) * 1.5;
+      }
+      if (ndg2030?.food_vulnerability != null) {
+        // >0.5 vuln adds up to +2; below 0.35 subtracts up to -1 (improving systems)
+        const fv = ndg2030.food_vulnerability;
+        if (fv > 0.5) climateKick += Math.min(2, (fv - 0.5) * 8);
+        else if (fv < 0.35) climateKick -= Math.min(1, (0.35 - fv) * 4);
+      }
+      climateKick = Math.max(-1, Math.min(5, climateKick));
+      c._f2030ClimateKick = Math.round(climateKick * 10) / 10;
+      f2030Adj += climateKick;
+
+      f2030Adj = Math.max(-3, Math.min(10, Math.round(f2030Adj * 10) / 10));
       c.f2030 = Math.max(0, Math.min(100, Math.round(c._f2030Structural + f2030Adj)));
       c._f2030Adj = f2030Adj;
     }
@@ -12278,6 +12406,31 @@ function openPanel(c, skipDrilldown) {
         liveShocks.push(`<b style="color:#d27a3e">Low flow</b> · ${a.us_river} <span style="color:var(--t3)">(USGS)</span>`);
       } else if (a.us_flow_anomaly === 'high') {
         liveShocks.push(`<b style="color:#3e8ec4">High flow</b> · ${a.us_river} <span style="color:var(--t3)">(USGS)</span>`);
+      }
+      // ── v20.27 sourced-structural anchors. Only shown when extreme. ─────
+      const infRow = LIVE.inform?.[c.iso];
+      if (infRow && infRow.inform_risk != null && infRow.inform_risk >= 7.5) {
+        liveShocks.push(`<b style="color:#c44b3c">${infRow.inform_risk.toFixed(1)}/10</b> INFORM humanitarian risk <span style="color:var(--t3)">(JRC)</span>`);
+      }
+      const wgiRow = LIVE.wgi?.[c.iso];
+      if (wgiRow?.rule_of_law?.value != null && wgiRow.rule_of_law.value <= -1.0) {
+        liveShocks.push(`<b style="color:#c44b3c">${wgiRow.rule_of_law.value.toFixed(2)}</b> rule of law (−2.5 worst) <span style="color:var(--t3)">(WB WGI)</span>`);
+      }
+      const lpiRow = LIVE.lpi?.[c.iso];
+      if (lpiRow?.overall?.value != null && lpiRow.overall.value <= 2.3) {
+        liveShocks.push(`<b style="color:#d27a3e">${lpiRow.overall.value.toFixed(2)}/5</b> logistics index <span style="color:var(--t3)">(WB LPI)</span>`);
+      }
+      const ccpRow = LIVE.cckp?.[c.iso];
+      if (ccpRow?.proj_temp_change_c != null && ccpRow.proj_temp_change_c >= 2.0) {
+        liveShocks.push(`<b style="color:#c44b3c">+${ccpRow.proj_temp_change_c.toFixed(1)}°C</b> projected by 2050 <span style="color:var(--t3)">(WB CCKP)</span>`);
+      }
+      const ndgRow = LIVE.ndgain?.[c.iso];
+      if (ndgRow?.food_vulnerability != null && ndgRow.food_vulnerability >= 0.55) {
+        liveShocks.push(`<b style="color:#d27a3e">${ndgRow.food_vulnerability.toFixed(2)}</b> food-system climate exposure <span style="color:var(--t3)">(ND-GAIN)</span>`);
+      }
+      const aquRow = LIVE.aqueduct?.[c.iso];
+      if (aquRow?.water_stress?.cat != null && aquRow.water_stress.cat >= 3) {
+        liveShocks.push(`<b style="color:#c44b3c">${aquRow.water_stress.label || 'High'}</b> water stress <span style="color:var(--t3)">(WRI Aqueduct)</span>`);
       }
       if (items.length === 0 && liveShocks.length === 0) {
         anchEl.style.display = 'none';
@@ -14975,9 +15128,9 @@ function renderMethodologyTab() {
         <div style="padding-left:52px">+ <span style="color:#c47a3c">(Supplier Concentration)</span> × 0.18</div>
         <div style="padding-left:52px">+ <span style="color:#c9a957">(Production Trend)</span> × 0.14</div>
         <div style="padding-left:52px">+ <span style="color:#c9a957">(Food Inflation)</span> × 0.14</div>
-        <div style="padding-left:52px">+ <span style="color:#6ba36b">(Climate Vulnerability)</span> × 0.09</div>
-        <div style="padding-left:52px">+ <span style="color:#6ba36b">(Conflict / Logistics)</span> × 0.09</div>
-        <div style="padding-left:52px">+ <span style="color:#8aa6c4">(Supply-Chain Exposure, trade)</span> × 0.08</div>
+        <div style="padding-left:52px">+ <span style="color:#6ba36b">(Climate Vulnerability)</span> × 0.09 <span style="color:var(--t3);font-size:11px;">← 60% sourced (ND-GAIN + Aqueduct + CCKP)</span></div>
+        <div style="padding-left:52px">+ <span style="color:#6ba36b">(Conflict / Logistics)</span> × 0.09 <span style="color:var(--t3);font-size:11px;">← 60% sourced (INFORM + WGI + LPI)</span></div>
+        <div style="padding-left:52px">+ <span style="color:#8aa6c4">(Supply-Chain Exposure, trade)</span> × 0.08 <span style="color:var(--t3);font-size:11px;">← modeled from FBS + Comtrade + PSD</span></div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
         ${[
@@ -14990,9 +15143,9 @@ function renderMethodologyTab() {
           {w:'14%',label:'Food Inflation',col:'#c9a957',
            desc:'Annual food CPI change. Live-sourced from WFP HungerMap → Eurostat HICP → FAOSTAT food CPI → World Bank CPI fallback. Captures affordability deterioration. 100 = >60% inflation.'},
           {w:'9%',label:'Climate Vulnerability',col:'#6ba36b',
-           desc:'ND-GAIN Country Index 2023 vulnerability sub-score. Captures exposure and sensitivity of food/water/health systems to climate hazards.'},
+           desc:'v20.27 — 60% sourced composite (ND-GAIN food_vulnerability × 0.45 + Aqueduct drought_risk × 0.20 + Aqueduct water_stress × 0.15 + CCKP projected temp Δ × 0.20), 40% heritage. Captures exposure of food/water systems to climate hazards.'},
           {w:'9%',label:'Conflict / Logistics',col:'#6ba36b',
-           desc:'Composite of ACLED 2023 conflict intensity and World Bank LPI 2023 (logistics performance). High conflict + poor logistics = 100.'},
+           desc:'v20.27 — 60% sourced composite (INFORM Risk × 0.45 + WGI Rule of Law × 0.25 + LPI Overall × 0.20 + INFORM lack_coping_capacity × 0.10), 40% heritage. High composite humanitarian risk + weak rule of law + poor logistics = 100.'},
           {w:'8%',label:'Supply-Chain Exposure (trade) · v20.2',col:'#8aa6c4',
            desc:'NEW. Weighted trade-import dependency across staple commodities, premium-adjusted for supplier concentration. Captures sourcing risk distinct from caloric reliance. Why it matters: the Netherlands has 0% rice in its diet but 95% of rice it consumes is imported — caloric view would call this "low risk" but supply-chain view correctly flags it.'},
         ].map(c=>`
@@ -15053,6 +15206,9 @@ function renderMethodologyTab() {
           + fire (0–2)
           + air_quality (0–1)
           + us_water (0–2)
+          <br>+ inform_amp (0–3) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— INFORM ≥ 7.5</span>
+          + governance_drag (0–2) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— WGI rule of law ≤ −1.0</span>
+          + psd_shortfall (0–3) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— USDA PSD staple production gap</span>
           − humanitarian_response (0–2)
         </div>
         <div style="padding-left:18px;color:var(--t3);font-size:11px;font-family:'Geist',sans-serif;margin-top:8px;">
@@ -15073,6 +15229,7 @@ function renderMethodologyTab() {
         <br><b style="color:var(--t1)">v20.1.</b> Food-inflation signal now reads from the freshest available source per country: WFP HungerMap (crisis countries) &gt; Eurostat HICP (EU monthly) &gt; FAOSTAT food CPI (global annual) &gt; World Bank headline CPI fallback.
         <br><b style="color:var(--t1)">v20.2.</b> Added <b>Supply-Chain Exposure</b> as a 7th structural sub-component (weight 8%). Captures TRADE import dependency, distinct from caloric reliance. Resolves the "Netherlands shows 0% rice dependency despite importing $481M of rice annually" class of issue. Commodity rows in country panels now display <b>both caloric share AND trade dependency</b>. Existing weights re-balanced (28/18/14/14/9/9/8 = 100). Country FDRS values may shift by up to ±7 points; relative rankings preserved.
         <br><b style="color:var(--t1)">v20.5–v20.25.</b> Per-metric provenance system added (see card below). Pipelines added: FAOSTAT FBS (caloric shares for 174 countries), FAOSTAT TCL (observed net food trade ~190 countries), WB WDI bulk (20 structural indicators), WB WGI (6 governance indicators), WB WFSO (food-security outlook), USDA PSD (observed staples production/imports/exports for wheat/rice/corn/soybeans), ND-GAIN climate, WRI Aqueduct water risk, EU JRC INFORM risk. Static-link helpers for FAO GIEWS, FEWS NET, WFP ACR, USDA GAIN. Cron cadence moved from daily 06:00 UTC to every 6h. Source-health pill now shows last-refresh age in human terms.
+        <br><b style="color:var(--t1)">v20.26–v20.27.</b> Pipelines added: WB LPI (logistics performance), UNDP HDI (human development), WB CCKP (climate projections). Calculations wiring: <b>structural FDRS climate component</b> (c[4]) now derived 60% from ND-GAIN food_vulnerability + Aqueduct drought/water_stress + CCKP projected temp Δ, 40% from heritage. <b>Conflict/logistics component</b> (c[5]) now derived 60% from INFORM risk + WGI rule_of_law + LPI overall + INFORM lack_coping_capacity, 40% from heritage. <b>Nowcast Δ</b> extended with INFORM amplifier (+0-3), governance drag (+0-2), USDA PSD shortfall (+0-3). <b>2030 forecast</b> climate kick replaced with sourced CCKP temp Δ + ND-GAIN food vulnerability (capped +5). All overlays preserve the heritage values on c._cOriginal / c._fdrsRaw / c._f2030Structural for reference.
       </div>
     </div>
 
@@ -15266,8 +15423,8 @@ function renderMethodologyTab() {
         ${[
           {step:'01',title:'Baseline from FAO-OECD Outlook',
            body:'Production and consumption projections 2023–2032 from the FAO-OECD Agricultural Outlook provide the starting trajectory. Each country’s supply balance in 2030 sets the baseline import dependency component.'},
-          {step:'02',title:'Climate Adjustment',
-           body:'ND-GAIN forward projections and IPCC AR6 regional crop yield scenarios (SSP2-4.5) adjust the baseline. High-vulnerability countries (Sub-Saharan Africa, South Asia, MENA) receive upward adjustments of 5–15 FDRS points.'},
+          {step:'02',title:'Climate Adjustment (v20.27 — sourced)',
+           body:'WB CCKP CMIP6 ensemble projected temperature delta to 2050 (SSP2-4.5) + ND-GAIN food-vulnerability score combined into a climate kick. <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">climate_kick = piecewise(temp_Δ) + max(0, (food_vuln − 0.5) × 8)</code>, capped at +5 points. Replaces the prior heuristic IPCC regional-yield placeholder.'},
           {step:'03',title:'Demographic Scaling',
            body:'UN WPP medium-scenario population growth is applied to consumption. Countries with >2% annual population growth face increasing import dependency unless production growth matches pace.'},
           {step:'04',title:'Policy & Geopolitical Overlay',
@@ -16384,6 +16541,27 @@ async function fetchAINarrative(iso, forceRefresh, targetElId) {
   if (a.fx_currency_shock) liveShocks.push(`currency collapse (${a.fx_currency} ${a.fx_90d_change_pct}% vs USD in 90d)`);
   if (a.food_inflation_pct != null && a.food_inflation_pct > 15) liveShocks.push(`food inflation ${a.food_inflation_pct}% (above 15% threshold)`);
   if (a.pm25_flag) liveShocks.push(`PM2.5 ${a.pm25_latest} µg/m³ above WHO target`);
+  // v20.27 — structural shock anchors so the narrative reflects sourced inputs
+  const infRow = LIVE.inform?.[c.iso];
+  if (infRow?.inform_risk != null && infRow.inform_risk >= 7.5) {
+    liveShocks.push(`INFORM humanitarian risk ${infRow.inform_risk.toFixed(1)}/10 (JRC)`);
+  }
+  const wgiRow = LIVE.wgi?.[c.iso];
+  if (wgiRow?.rule_of_law?.value != null && wgiRow.rule_of_law.value <= -1.0) {
+    liveShocks.push(`rule-of-law score ${wgiRow.rule_of_law.value.toFixed(2)} (WB WGI, -2.5 worst)`);
+  }
+  const ccpRow = LIVE.cckp?.[c.iso];
+  if (ccpRow?.proj_temp_change_c != null && ccpRow.proj_temp_change_c >= 2.0) {
+    liveShocks.push(`+${ccpRow.proj_temp_change_c.toFixed(1)}°C projected by 2050 (WB CCKP)`);
+  }
+  const ndgRow = LIVE.ndgain?.[c.iso];
+  if (ndgRow?.food_vulnerability != null && ndgRow.food_vulnerability >= 0.55) {
+    liveShocks.push(`ND-GAIN food-vulnerability ${ndgRow.food_vulnerability.toFixed(2)}`);
+  }
+  const aquRow = LIVE.aqueduct?.[c.iso];
+  if (aquRow?.water_stress?.cat != null && aquRow.water_stress.cat >= 3) {
+    liveShocks.push(`Aqueduct water stress ${aquRow.water_stress.label || 'high'}`);
+  }
   const liveShocksStr = liveShocks.length ? liveShocks.join('; ') : 'none currently flagged';
   const adj = c._fdrsAdj || 0;
   const adjStr = adj > 0 ? `+${adj}` : `${adj}`;

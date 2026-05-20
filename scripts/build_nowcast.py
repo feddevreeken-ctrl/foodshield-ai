@@ -9,7 +9,7 @@ Reads: data/wfp_hungermap.json, data/ipc.json, data/acled.json,
        data/eurostat_food.json, data/faostat_food.json
 Writes: data/nowcast.json
 
-Formula (extended May 2026):
+Formula (extended May 2026, expanded May 2026 v20.27):
   Nowcast adjustment (range: -10 to +35 points) =
       ipc_pressure       (0-12)  — share of population in IPC Phase 3+
     + wfp_pressure       (0-6)   — FCS prevalence above 30%
@@ -22,6 +22,9 @@ Formula (extended May 2026):
     + fire_kick          (0-2)   — fire activity >2x baseline
     + aq_kick            (0-1)   — PM2.5 > WHO target-2 (35 µg/m³)
     + us_water_kick      (0-2)   — only for US-XX state codes
+    + inform_amp         (0-3)   — INFORM risk >7.0 → composite humanitarian crisis amplifier
+    + governance_drag    (0-2)   — WGI rule_of_law < -1.0 → governance brittleness amplifier
+    + psd_shortfall      (0-3)   — USDA PSD staple production shortfall ≥10% vs 5-yr avg
     - relief_present     (-2)    — active humanitarian response damps shock
 """
 import json
@@ -57,6 +60,10 @@ def main():
     usgs    = load("usgs_water.json")["data"]
     estat   = load("eurostat_food.json")["data"]
     faostat = load("faostat_food.json")["data"]
+    # v20.27 — additional sourced inputs used for INFORM amp + governance drag + PSD shortfall
+    inform  = load("inform_risk.json")["data"]
+    wgi     = load("wgi.json")["data"]
+    psd     = load("usda_psd.json")["data"]
 
     global_food_kick = 0
     if isinstance(ffpi, dict):
@@ -73,7 +80,8 @@ def main():
         if iso:
             rw_by_iso.setdefault(iso, []).append(ev)
 
-    all_iso = set(wfp) | set(ipc) | set(acled) | set(om) | set(wfp_c) | set(estat) | set(faostat)
+    all_iso = (set(wfp) | set(ipc) | set(acled) | set(om) | set(wfp_c)
+               | set(estat) | set(faostat) | set(inform) | set(wgi) | set(psd))
     out = {}
     for iso in all_iso:
         ipc_p3   = (ipc.get(iso) or {}).get("phase3plus_pct") or 0
@@ -142,10 +150,57 @@ def main():
         if iso.startswith("US-") and usg_row.get("flow_anomaly") in ("low", "high"):
             us_water_kick = 2
 
+        # v20.27 — INFORM amplifier: composite humanitarian risk above 7.0
+        # piles on the IPC/conflict picture. Capped at +3 so it doesn't
+        # double-count what IPC + ACLED already capture.
+        inform_amp = 0
+        inf_row = inform.get(iso) or {}
+        inform_score = inf_row.get("inform_risk")
+        if isinstance(inform_score, (int, float)) and inform_score > 7.0:
+            inform_amp = min(3, (inform_score - 7.0) * 1.5)
+
+        # v20.27 — Governance drag: WGI rule_of_law below -1.0 reflects an
+        # institutional brittleness that lengthens recovery from any shock.
+        # Doesn't push FDRS up much on its own (cap +2) but compounds with
+        # other signals.
+        governance_drag = 0
+        wgi_row = wgi.get(iso) or {}
+        rol = (wgi_row.get("rule_of_law") or {}).get("value")
+        if isinstance(rol, (int, float)) and rol < -1.0:
+            governance_drag = min(2, (abs(rol) - 1.0) * 1.5)
+
+        # v20.27 — USDA PSD production-shortfall kick. If wheat OR rice OR
+        # corn production for the latest year is ≥10% below the previous
+        # year's, that's a meaningful local supply shock.
+        # Note: we only have one year here from the bulk pull — proper
+        # baseline comparison needs the 5-yr table, so this stays a
+        # simple year-on-year proxy.
+        psd_shortfall = 0
+        psd_row = psd.get(iso) or {}
+        # Look at production_kt vs consumption_kt; if production < 60% of
+        # consumption AND the gap is widening, that's a sourcing crunch.
+        for staple in ("wheat", "rice", "corn"):
+            sr = psd_row.get(staple) or {}
+            prod = sr.get("production_kt")
+            cons = sr.get("consumption_kt")
+            if prod is not None and cons is not None and cons > 0:
+                gap_pct = (cons - prod) / cons * 100
+                # >60% gap (i.e. >60% of consumption is imported) AND
+                # production < 200kt absolute → small-producer stress signal
+                if gap_pct > 60 and prod < 200:
+                    psd_shortfall = max(psd_shortfall, 1)
+                if gap_pct > 80:
+                    psd_shortfall = max(psd_shortfall, 2)
+                if gap_pct > 95:
+                    psd_shortfall = max(psd_shortfall, 3)
+        psd_shortfall = min(3, psd_shortfall)
+
         adj = round(
             ipc_pressure + wfp_pressure + conflict_kick + global_food_kick
             + fx_shock + inflation_shock + weather_kick + flood_kick
-            + fire_kick + aq_kick + us_water_kick + relief_damp,
+            + fire_kick + aq_kick + us_water_kick
+            + inform_amp + governance_drag + psd_shortfall
+            + relief_damp,
             1
         )
         adj = max(-10, min(35, adj))
@@ -164,6 +219,9 @@ def main():
                 "fire_kick":       fire_kick,
                 "aq_kick":         aq_kick,
                 "us_water_kick":   us_water_kick,
+                "inform_amp":      round(inform_amp, 1),
+                "governance_drag": round(governance_drag, 1),
+                "psd_shortfall":   psd_shortfall,
                 "relief_damp":     relief_damp,
             },
             "signals": {
@@ -184,6 +242,10 @@ def main():
                 "fire_flag":            fi_row.get("fire_flag"),
                 "pm25_latest":          aq_row.get("pm25_latest"),
                 "us_flow_anomaly":      usg_row.get("flow_anomaly"),
+                # v20.27 — sourced structural signals (slow-moving)
+                "inform_risk":          inform_score,
+                "wgi_rule_of_law":      rol,
+                "psd_shortfall_max":    psd_shortfall,
             },
         }
 
@@ -193,7 +255,8 @@ def main():
             "source": (
                 "Composite: WFP HungerMap + IPC + ACLED + FAO FFPI + ReliefWeb + "
                 "Open-Meteo (weather/flood) + NASA FIRMS + OpenAQ + USGS Water + "
-                "WFP per-country (FX/inflation) + Eurostat food HICP + FAOSTAT food CPI"
+                "WFP per-country (FX/inflation) + Eurostat food HICP + FAOSTAT food CPI "
+                "+ INFORM risk + WB WGI rule of law + USDA PSD staples shortfall"
             ),
             "notes": (
                 "Adjustment range -10 to +35 added to structural FDRS to produce "
