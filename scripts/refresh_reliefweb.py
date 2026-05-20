@@ -20,7 +20,10 @@ Output: data/reliefweb_alerts.json
 from _common import env, http_get, write_json
 
 URL = "https://api.reliefweb.int/v2/reports"
-DEFAULT_APPNAME = "foodshield-ai-fv"  # Replace with your approved appname
+# v20.23 — registered May 2026, approved by ReliefWeb. The name was adjusted
+# by their team to fit naming standards (hyphens, lowercase, alphanumeric).
+# The env var override still wins so deployments can rotate without code edits.
+DEFAULT_APPNAME = "vreeken-foodshield-7k3n"
 
 
 def main():
