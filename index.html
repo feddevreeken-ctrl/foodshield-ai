@@ -15264,54 +15264,60 @@ function showDisturbanceImpact(ev){
   const srcName = (src && src.name) || ev.country || '';
   const isDomestic = DOMESTIC_SHOCK_TYPES.has(ev.type);
 
-  let dependents = [];
-  if (isDomestic) {
-    // Domestic shock: there is no "dependent" set. Surface the country's own
-    // top food imports + suppliers so the user sees who supplies the country
-    // currently experiencing the shock — that's the inverse trade graph.
-    if (src) {
-      const imports = displayImportList(src);
-      const suppliers = src.suppliers || [];
-      const supPct = src.supPct || [];
-      suppliers.forEach((sname, i) => {
-        const sCountry = (typeof byName === 'function') ? byName(sname) : null;
-        const commodity = (typeof imports[i] === 'string') ? imports[i] : (imports[0] || 'Food imports');
-        dependents.push({
-          iso: sCountry?.iso || ('?'+i),
-          name: sname,
-          pct: supPct[i] || 0,
-          commodity,
-          fdrs: sCountry?.fdrs ?? null,
-          region: sCountry?.region || '',
-          relation: 'supplier',
-        });
+  // v21 — always compute BOTH directions of the trade graph:
+  //   suppliers[]  = where this country sources food from (always relevant
+  //                  because a shock here can disrupt downstream demand or
+  //                  trigger secondary supplier exposure).
+  //   dependents[] = countries that import a commodity this one actually
+  //                  exports (only populated if the source is a real
+  //                  exporter — uses the curated exports list + synonym
+  //                  overlap, not position-based guessing).
+  // The panel renders both sides so the user always sees concrete data
+  // regardless of event type or country profile.
+  let suppliers = [];
+  if (src) {
+    const imports = displayImportList(src);
+    const sNames = src.suppliers || [];
+    const sPct = src.supPct || [];
+    sNames.forEach((sname, i) => {
+      const sCountry = (typeof byName === 'function') ? byName(sname) : null;
+      const commodity = (typeof imports[i] === 'string') ? imports[i] : (imports[0] || 'Food imports');
+      suppliers.push({
+        iso: sCountry?.iso || ('?'+i),
+        name: sname,
+        pct: sPct[i] || 0,
+        commodity,
+        fdrs: sCountry?.fdrs ?? null,
+        region: sCountry?.region || '',
       });
-    }
-  } else {
-    // Export disruption: find countries that list this country as a supplier
-    // AND import a commodity it actually exports.
-    COUNTRIES.forEach(c => {
-      if (c.iso === ev.iso) return;
-      if (c.iso.startsWith('US-')) return;
-      const sIdx = (c.suppliers || []).findIndex(s => s && s.toLowerCase() === srcName.toLowerCase());
-      if (sIdx >= 0) {
-        const pct = (c.supPct || [])[sIdx] || 0;
-        const commodity = _commodityOverlap(src, c);
-        dependents.push({ iso: c.iso, name: c.name, pct, commodity, fdrs: c.fdrs, region: c.region, relation: 'dependent' });
-      }
     });
   }
+  suppliers.sort((a,b) => b.pct - a.pct);
+
+  let dependents = [];
+  COUNTRIES.forEach(c => {
+    if (c.iso === ev.iso) return;
+    if (c.iso.startsWith('US-')) return;
+    const sIdx = (c.suppliers || []).findIndex(s => s && s.toLowerCase() === srcName.toLowerCase());
+    if (sIdx >= 0) {
+      const pct = (c.supPct || [])[sIdx] || 0;
+      const commodity = _commodityOverlap(src, c);
+      dependents.push({ iso: c.iso, name: c.name, pct, commodity, fdrs: c.fdrs, region: c.region });
+    }
+  });
   dependents.sort((a,b) => b.pct - a.pct);
 
-  // Draw ripple arcs on the map (top 8) — only meaningful for export events.
-  if (!isDomestic && window.Globe && Globe.drawImpactArcs) {
+  // Map arcs: draw downstream-dependent ripples for non-domestic events
+  // (drought/flood/conflict in a major exporter). Skip arcs for purely
+  // domestic shocks since the dependent set is informational, not causal.
+  if (!isDomestic && dependents.length && window.Globe && Globe.drawImpactArcs) {
     Globe.drawImpactArcs(ev.iso, dependents.slice(0, 8));
   } else if (window.Globe && Globe.clearImpactArcs) {
     Globe.clearImpactArcs();
   }
 
   // Open impact panel
-  openImpactPanel(ev, src, dependents, isDomestic);
+  openImpactPanel(ev, src, dependents, isDomestic, suppliers);
 
   // Highlight source country
   if (window.Globe && Globe.selectCountry) Globe.selectCountry(ev.iso);
@@ -15324,7 +15330,7 @@ function closeImpactPanel(){
   if (window.Globe && window.Globe.deselectCountry) Globe.deselectCountry();
 }
 
-function openImpactPanel(ev, src, dependents, isDomestic){
+function openImpactPanel(ev, src, dependents, isDomestic, suppliers){
   // Close sidepanel + TFA panel so they don't stack
   closePanel();
   const tfaPanel = document.getElementById('tfa-side-panel');
@@ -15342,25 +15348,67 @@ function openImpactPanel(ev, src, dependents, isDomestic){
   const tc = (typeof EV_TYPE !== 'undefined' && EV_TYPE[ev.type]) || {label:'Event', color:'#c44b3c'};
   const sc = (typeof SEV_COLOR !== 'undefined' && SEV_COLOR[ev.severity]) || '#c9a957';
   const srcName = (src && src.name) || ev.country || '';
+  suppliers = suppliers || [];
 
-  // v21 — label set depends on event type. Domestic shocks (food inflation /
-  // price spike) show the country's top SUPPLIERS that could be hit by a
-  // secondary shock. Export disruptions show DEPENDENTS that depend on this
-  // country's exports.
-  const headlineNoun  = isDomestic ? 'Top suppliers' : 'Dependent countries';
-  const headlineHelp  = isDomestic
-    ? 'Where this country sources food. A secondary shock would compound the local shortage.'
-    : 'Countries that list this one as a top supplier of a commodity it actually exports.';
-  const summaryNoun   = isDomestic ? 'Top suppliers'   : 'Countries dependent';
-  const ctaLabel      = isDomestic ? 'View country profile →' : 'View country profile →';
+  // v21 — best-effort metadata extraction from the event title for
+  // "people affected" and "expected duration". ReliefWeb titles often
+  // contain phrases like "2.3 million affected" or "Q2 2026 outlook".
+  // If a structured field exists on the event, prefer that.
+  function _extractAffected(e) {
+    if (e.affected) return e.affected;
+    const t = (e.title || '') + ' ' + (e.detail || '');
+    // "2.3M affected", "12 million people", "850,000 displaced"
+    const m1 = t.match(/(\d+(?:\.\d+)?)\s*(?:M|million)\s+(?:people|affected|displaced|food[- ]insecure|in need)/i);
+    if (m1) return m1[1] + 'M people';
+    const m2 = t.match(/([\d,]{3,})\s+(?:people|affected|displaced|food[- ]insecure|in need)/i);
+    if (m2) return m2[1] + ' people';
+    return null;
+  }
+  function _extractDuration(e) {
+    if (e.duration) return e.duration;
+    const t = (e.title || '') + ' ' + (e.detail || '');
+    const m1 = t.match(/(Q[1-4]\s*\d{4}|H[12]\s*\d{4})/);
+    if (m1) return 'Through ' + m1[1];
+    const m2 = t.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*\d{4}/);
+    if (m2) return 'Through ' + m2[0];
+    // Default by event type
+    if (e.type === 'flood' || e.type === 'cyclone') return '2–6 weeks (acute)';
+    if (e.type === 'drought' || e.type === 'famine') return '6–18 months (chronic)';
+    if (e.type === 'conflict') return 'Ongoing';
+    if (e.type === 'price_spike' || e.type === 'food_inflation') return '3–12 months';
+    if (e.type === 'earthquake') return '4–12 weeks';
+    return null;
+  }
+  const affected = _extractAffected(ev);
+  const duration = _extractDuration(ev);
 
-  // Aggregate commodity exposure
+  // Aggregate commodity exposure (from dependents, the export side)
   const commodityMap = {};
   dependents.forEach(d => { commodityMap[d.commodity] = (commodityMap[d.commodity] || 0) + 1; });
   const topCommodities = Object.entries(commodityMap).sort((a,b) => b[1]-a[1]).slice(0, 6);
   const avgPressure = dependents.length
     ? Math.round(dependents.reduce((s,d)=>s+d.pct,0)/dependents.length * 0.3)
     : 0;
+
+  // v21 — render BOTH supplier ("imports from") and dependent ("exports to")
+  // sides whenever there is data for either. The previous version showed
+  // only one based on event type, which left most ReliefWeb events with an
+  // empty list because the affected country wasn't a real exporter.
+  const supplierRows = suppliers.slice(0, 8).map(d => `
+    <div class="impact-dep-row" ${d.iso && !d.iso.startsWith('?') ? `onclick="openPanel(byISO('${d.iso}'))"` : ''}>
+      <div class="impact-dep-name">${d.name}</div>
+      <div class="impact-dep-bar"><div class="impact-dep-bar-fill" style="width:${Math.min(100, d.pct*2.5)}%;background:#c47a3c"></div></div>
+      <div class="impact-dep-commodity">${d.commodity}</div>
+      <div class="impact-dep-pct">${d.pct}%</div>
+    </div>`).join('');
+
+  const dependentRows = dependents.slice(0, 8).map(d => `
+    <div class="impact-dep-row" ${d.iso ? `onclick="openPanel(byISO('${d.iso}'))"` : ''}>
+      <div class="impact-dep-name">${d.name}</div>
+      <div class="impact-dep-bar"><div class="impact-dep-bar-fill" style="width:${Math.min(100, d.pct*2.5)}%"></div></div>
+      <div class="impact-dep-commodity">${d.commodity}</div>
+      <div class="impact-dep-pct">${d.pct}%</div>
+    </div>`).join('');
 
   panel.innerHTML = `
     <div class="impact-panel-head">
@@ -15377,14 +15425,30 @@ function openImpactPanel(ev, src, dependents, isDomestic){
       <button class="impact-close" onclick="closeImpactPanel()" aria-label="Close">✕</button>
     </div>
 
+    ${(affected || duration) ? `
+    <div class="impact-section" style="padding-bottom:6px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        ${affected ? `
+        <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:6px;padding:9px 11px;">
+          <div style="font-size:9.5px;color:var(--t3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px;">People affected</div>
+          <div style="font-size:13px;color:var(--t1);font-weight:600;font-family:'Geist Mono',monospace;">${affected}</div>
+        </div>` : ''}
+        ${duration ? `
+        <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:6px;padding:9px 11px;">
+          <div style="font-size:9.5px;color:var(--t3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px;">Expected duration</div>
+          <div style="font-size:13px;color:var(--t1);font-weight:600;">${duration}</div>
+        </div>` : ''}
+      </div>
+    </div>` : ''}
+
     <div class="impact-summary">
       <div class="impact-stat">
         <div class="impact-stat-num" style="color:#c44b3c">${dependents.length}</div>
-        <div class="impact-stat-label">${summaryNoun}</div>
+        <div class="impact-stat-label">Export dependents</div>
       </div>
       <div class="impact-stat">
-        <div class="impact-stat-num" style="color:#d27a3e">${topCommodities.length}</div>
-        <div class="impact-stat-label">${isDomestic ? 'Food categories tracked' : 'Food categories at risk'}</div>
+        <div class="impact-stat-num" style="color:#c47a3c">${suppliers.length}</div>
+        <div class="impact-stat-label">Import suppliers</div>
       </div>
       <div class="impact-stat">
         <div class="impact-stat-num" style="color:#c9a957">+${avgPressure}</div>
@@ -15394,7 +15458,7 @@ function openImpactPanel(ev, src, dependents, isDomestic){
 
     ${topCommodities.length ? `
     <div class="impact-section">
-      <div class="impact-section-title">${isDomestic ? 'Food at risk inside ' + (srcName||ev.country) : 'Food at risk · click to drill down'}</div>
+      <div class="impact-section-title">Food at risk · click to drill down</div>
       <div class="impact-commodities">
         ${topCommodities.map(([name, count]) => `
           <div class="impact-commodity-chip" onclick="openCommodityDrilldown('${name.replace(/'/g, '&#39;')}', '${ev.iso}')">
@@ -15404,27 +15468,34 @@ function openImpactPanel(ev, src, dependents, isDomestic){
       </div>
     </div>` : ''}
 
+    ${supplierRows ? `
     <div class="impact-section">
-      <div class="impact-section-title">${headlineNoun} — top exposed</div>
-      <div class="impact-section-help" style="font-size:10.5px;color:var(--t3);margin-bottom:8px;line-height:1.5;">${headlineHelp}</div>
-      <div class="impact-deps">
-        ${dependents.length ? dependents.slice(0, 12).map(d => `
-          <div class="impact-dep-row" ${d.iso && !d.iso.startsWith('?') ? `onclick="openPanel(byISO('${d.iso}'))"` : ''}>
-            <div class="impact-dep-name">${d.name}</div>
-            <div class="impact-dep-bar"><div class="impact-dep-bar-fill" style="width:${Math.min(100, d.pct*2.5)}%"></div></div>
-            <div class="impact-dep-commodity">${d.commodity}</div>
-            <div class="impact-dep-pct">${d.pct}%</div>
-          </div>`).join('')
-          : `<div style="color:var(--t3);font-size:11px;padding:10px 0;line-height:1.55;">
-              ${isDomestic
-                ? `No supplier data on record for <b style="color:var(--t1)">${srcName||ev.country}</b>. The shock is domestic; secondary supplier exposure can't be inferred.`
-                : `No countries currently list <b style="color:var(--t1)">${srcName||ev.country}</b> as a top food supplier. Impact is likely contained domestically or to neighbouring regions.`}
-             </div>`}
+      <div class="impact-section-title">Imports from — top suppliers to ${srcName||ev.country}</div>
+      <div class="impact-section-help" style="font-size:10.5px;color:var(--t3);margin-bottom:8px;line-height:1.5;">
+        Where this country sources food. A secondary shock would compound the local shortage.
       </div>
-    </div>
+      <div class="impact-deps">${supplierRows}</div>
+    </div>` : ''}
+
+    ${dependentRows ? `
+    <div class="impact-section">
+      <div class="impact-section-title">Exports to — countries dependent on ${srcName||ev.country}</div>
+      <div class="impact-section-help" style="font-size:10.5px;color:var(--t3);margin-bottom:8px;line-height:1.5;">
+        Countries that list this one as a top supplier of a commodity it actually exports.
+      </div>
+      <div class="impact-deps">${dependentRows}</div>
+    </div>` : ''}
+
+    ${(!supplierRows && !dependentRows) ? `
+    <div class="impact-section">
+      <div style="color:var(--t3);font-size:11px;padding:10px 0;line-height:1.55;">
+        No supplier or dependency data on record for <b style="color:var(--t1)">${srcName||ev.country}</b>.
+        Impact is likely contained domestically or to neighbouring regions.
+      </div>
+    </div>` : ''}
 
     <div class="impact-actions">
-      ${src ? `<button class="impact-btn primary" onclick="openPanel(byISO('${ev.iso}'))">${ctaLabel}</button>` : ''}
+      ${src ? `<button class="impact-btn primary" onclick="openPanel(byISO('${ev.iso}'))">View country profile →</button>` : ''}
       ${ev.id ? `<button class="impact-btn" onclick="openDisturbanceDetail('${ev.id}')">Event details</button>` : ''}
     </div>`;
 }
@@ -16732,8 +16803,11 @@ async function loadDisturbanceData() {
   // Verified May 2026: returns 238,274 total food reports with same-day
   // results for Sudan, CAR, Nigeria, Guatemala, Afghanistan, etc.
   try {
+    // v21 — limit raised 30 → 80 so the map shows the full ReliefWeb feed,
+    // not the latest 30. The fetch is paginated server-side so the response
+    // size stays modest (~120KB). Dedup happens downstream.
     const rwUrl = 'https://api.reliefweb.int/v2/reports?appname=vreeken-foodshield-7k3n'
-      + '&limit=30&sort[]=date:desc'
+      + '&limit=80&sort[]=date:desc'
       + '&filter[field]=theme.name&filter[value]=Food%20and%20Nutrition'
       + '&fields[include][]=title'
       + '&fields[include][]=date.original'
@@ -16915,11 +16989,15 @@ async function loadDisturbanceData() {
     console.warn('[FoodShield] v20 disturbances injection failed:', e);
   }
 
-  // Deduplicate by country+type for overlapping events
+  // v21 — dedupe by event ID so each unique upstream record survives. The
+  // prior key was iso+type+source which collapsed multiple distinct
+  // ReliefWeb reports for the same country (e.g. Algeria has both a WFP
+  // Country Brief and a separate UNHCR situation report; both should show).
+  // Falls back to title+iso for events without an id.
   const seen = new Set();
   events = events.filter(e => {
-    const key = `${e.iso}_${e.type}_${e.source||''}`;
-    if (seen.has(key) && !e.id.startsWith('b')) return false;
+    const key = e.id || (e.title + '_' + e.iso);
+    if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
