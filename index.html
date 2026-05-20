@@ -9053,6 +9053,80 @@ function faoGiewsLinkHTML(iso3) {
   </div>`;
 }
 
+// v20.24 — Pipeline 10: FEWS NET Country Pages.
+// Static iso3 → URL slug. FEWS NET covers ~36 presence countries with
+// monthly IPC-style food-security classifications. The probe (May 2026)
+// confirmed the shapefile API exists but requires geopandas — too heavy
+// for our 6h cron. The /countries/{slug} pages are always current and
+// the canonical reader entry point.
+const FEWSNET_COUNTRIES = {
+  // sub-Saharan Africa
+  AGO: 'angola', BFA: 'burkina-faso', BDI: 'burundi', CMR: 'cameroon',
+  CAF: 'central-african-republic', TCD: 'chad', COD: 'democratic-republic-congo',
+  ETH: 'ethiopia', GIN: 'guinea', KEN: 'kenya', LBR: 'liberia',
+  MDG: 'madagascar', MWI: 'malawi', MLI: 'mali', MRT: 'mauritania',
+  MOZ: 'mozambique', NER: 'niger', NGA: 'nigeria', RWA: 'rwanda',
+  SEN: 'senegal', SOM: 'somalia', SSD: 'south-sudan', SDN: 'sudan',
+  TZA: 'tanzania', UGA: 'uganda', ZMB: 'zambia', ZWE: 'zimbabwe',
+  // Central America
+  GTM: 'guatemala', HND: 'honduras', SLV: 'el-salvador', NIC: 'nicaragua',
+  // Other priority
+  YEM: 'yemen', AFG: 'afghanistan', TJK: 'tajikistan', HTI: 'haiti',
+  LBN: 'lebanon',
+};
+function fewsnetLinkHTML(iso3) {
+  const slug = FEWSNET_COUNTRIES[iso3];
+  if (!slug) return '';
+  const url = `https://fews.net/countries/${slug}`;
+  return `<div style="font-size:10.5px;margin-top:6px;">
+    <a href="${url}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">Read FEWS NET food security analysis ↗</a>
+    <span style="color:var(--t3);font-size:9.5px;margin-left:6px;">monthly IPC-style classifications from USAID-funded field network</span>
+  </div>`;
+}
+
+// v20.24 — Pipeline 11: USDA GAIN attaché reports.
+// Static iso3 → FAS internal numeric country ID (Drupal taxonomy term).
+// FAS publishes GAIN reports weekly across ~80 countries. The search URL
+// pattern is stable; only the country ID needs lookup. IDs scraped May 2026
+// from /data/search?f[0]=field_report_type:Attach%C3%A9+Reports+(GAIN)
+// then iterating each country filter to record its numeric ID.
+const USDA_GAIN_COUNTRY_ID = {
+  // Major commodity producers + importers FAS publishes weekly on
+  AUS: 11,  ARG: 9,   BRA: 32,  CAN: 41,  CHN: 47,  IND: 96,  IDN: 97,
+  JPN: 102, KOR: 109, MEX: 130, NLD: 144, NZL: 147, PHL: 158, RUS: 168,
+  ZAF: 178, ESP: 184, THA: 198, TUR: 205, UKR: 207, GBR: 53,  USA: 211,
+  VNM: 215, DEU: 64,  FRA: 78,  ITA: 100,
+  // North Africa / Middle East
+  DZA: 6,   EGY: 70,  ETH: 73,  IRN: 98,  IRQ: 99,  ISR: 101, JOR: 103,
+  KWT: 110, LBN: 117, MAR: 137, SAU: 173, ARE: 209, YEM: 222, OMN: 154,
+  QAT: 165, BHR: 23,
+  // Latin America + Caribbean
+  CHL: 46,  COL: 50,  CRI: 54,  CUB: 56,  DOM: 67,  ECU: 69,  SLV: 71,
+  GTM: 88,  HND: 93,  NIC: 148, PAN: 156, PRY: 162, PER: 157, URY: 213,
+  VEN: 216, JAM: 105,
+  // Asia
+  BGD: 18,  PAK: 155, LKA: 188, MMR: 142, KHM: 38,  LAO: 113, NPL: 145,
+  TWN: 195, MYS: 124, SGP: 180, HKG: 91,
+  // Europe
+  POL: 161, ROU: 167, BGR: 33,  HUN: 95,  CZE: 60,  GRC: 86,  PRT: 163,
+  BEL: 24,  AUT: 12,  CHE: 187, DNK: 62,  FIN: 76,  IRL: 100, NOR: 153,
+  SWE: 186, SRB: 175,
+  // Africa
+  KEN: 107, NGA: 150, GHA: 81,  CIV: 51,  SEN: 176, SDN: 185, AGO: 8,
+  TZA: 200, UGA: 208, ZAF: 178, ZMB: 224, ZWE: 226, MOZ: 141, SOM: 183,
+  CMR: 39,
+};
+function usdaGainLinkHTML(iso3) {
+  const id = USDA_GAIN_COUNTRY_ID[iso3];
+  if (id == null) return '';
+  // The %5B / %5D escapes are required for Drupal's filter[] params in the URL bar.
+  const url = `https://www.fas.usda.gov/data/search?f%5B0%5D=field_report_type:Attach%C3%A9+Reports+(GAIN)&f%5B1%5D=field_countries:${id}`;
+  return `<div style="font-size:10.5px;margin-top:6px;">
+    <a href="${url}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">Read USDA GAIN attaché reports ↗</a>
+    <span style="color:var(--t3);font-size:9.5px;margin-left:6px;">weekly commodity intelligence from FAS field posts</span>
+  </div>`;
+}
+
 // v20.22 — Pipeline 8: WRI Aqueduct water risk card.
 // Five 0-5 categorical scores (water stress, water depletion, drought, riverine
 // flood, coastal flood). Category bucket maps to label; -1 = arid/no-data
@@ -11970,6 +12044,12 @@ function openPanel(c, skipDrilldown) {
     // v20.22: FAO GIEWS Country Brief link (Pipeline 7).
     // Returns empty for countries not in the GIEWS ~80-country set.
     (typeof faoGiewsLinkHTML === 'function' ? faoGiewsLinkHTML(c.iso) : '') +
+    // v20.24: FEWS NET country page link (Pipeline 10).
+    // Returns empty for countries outside the ~36-country FEWS NET presence list.
+    (typeof fewsnetLinkHTML === 'function' ? fewsnetLinkHTML(c.iso) : '') +
+    // v20.24: USDA GAIN attaché reports search link (Pipeline 11).
+    // Returns empty for countries without a Drupal numeric ID mapped.
+    (typeof usdaGainLinkHTML === 'function' ? usdaGainLinkHTML(c.iso) : '') +
     // v20.18: WB WDI Structural Indicators card (Pipeline 4).
     // Returns empty string when the country has no WDI bulk coverage (rare).
     (typeof wdiStructuralCardHTML === 'function' ? wdiStructuralCardHTML(c.iso) : '') +
