@@ -33,6 +33,8 @@ import refresh_wb_wfso
 import refresh_worldbank_bulk
 import refresh_usda_psd
 import refresh_ndgain
+import refresh_aqueduct
+import refresh_inform
 import build_countries_dataset
 import build_nowcast
 import build_source_manifest
@@ -60,6 +62,8 @@ STEPS = [
     ("FAOSTAT net food trade", refresh_net_food_trade.main),
     ("USDA PSD",            refresh_usda_psd.main),
     ("ND-GAIN climate",     refresh_ndgain.main),
+    ("WRI Aqueduct water",  refresh_aqueduct.main),
+    ("INFORM risk index",   refresh_inform.main),
     ("WB WDI bulk",         refresh_worldbank_bulk.main),
     ("WB WFSO",             refresh_wb_wfso.main),
     ("Countries dataset",   build_countries_dataset.main),

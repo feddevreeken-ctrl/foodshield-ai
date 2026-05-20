@@ -8891,6 +8891,12 @@ const LIVE = {
   // v20.20 — Pipeline 6: ND-GAIN climate vulnerability + readiness.
   // Format: {iso3: {gain_index, vulnerability, readiness, food_vulnerability, year, ...}}
   ndgain: null,
+  // v20.22 — Pipeline 8: WRI Aqueduct 4.0 water risk (5 indicators per country).
+  // Format: {iso3: {water_stress: {score, cat, label}, drought_risk: {...}, ...}}
+  aqueduct: null,
+  // v20.22 — Pipeline 9: EU JRC INFORM Risk Index.
+  // Format: {iso3: {inform_risk, hazard_exposure, vulnerability, lack_coping_capacity, rank, ...}}
+  inform: null,
   meta: { loaded_at: null, sources_ok: 0, sources_failed: 0, headline_status: null },
 };
 
@@ -9020,6 +9026,114 @@ function wfpAcrLinkHTML(iso3) {
     <a href="${url}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">Read WFP 2025 Annual Country Report ↗</a>
     <span style="color:var(--t3);font-size:9.5px;margin-left:6px;">operational narrative from WFP country office</span>
   </div>`;
+}
+
+// v20.22 — Pipeline 7: FAO GIEWS Country Briefs.
+// Static iso3 set — GIEWS covers ~80 food-insecure countries. We link to the
+// always-current FAO page rather than scraping; the URL pattern is stable.
+// Per the May 2026 probe, FAO has no public RSS/JSON for this. A static set
+// is the right approach: low maintenance, zero risk of breaking on FAO HTML
+// changes. Re-verify the country list annually.
+const FAO_GIEWS_COUNTRIES = new Set([
+  'AFG','BGD','BFA','BDI','CAF','TCD','COL','COD','COG','PRK','DJI','DOM',
+  'ECU','SLV','ERI','SWZ','ETH','GTM','GIN','GNB','HTI','HND','IND','IDN',
+  'IRN','IRQ','KEN','KGZ','LAO','LSO','LBR','LBY','MDG','MWI','MLI','MRT',
+  'MEX','MMR','NPL','NIC','NER','NGA','PAK','PSE','PNG','PRY','PER','PHL',
+  'RWA','SLE','SOM','SSD','LKA','SDN','SYR','TJK','TZA','TLS','UGA','UKR',
+  'VEN','VNM','YEM','ZMB','ZWE','MOZ','EGY','MAR','TUN','DZA','AGO','CMR',
+  'CIV','GMB','GHA','SEN','TGO','BEN','GNQ','STP','CPV','COM',
+]);
+function faoGiewsLinkHTML(iso3) {
+  if (!FAO_GIEWS_COUNTRIES.has(iso3)) return '';
+  const url = `https://www.fao.org/giews/countrybrief/country.jsp?code=${iso3}`;
+  const pdfUrl = `https://www.fao.org/giews/countrybrief/country/${iso3}/pdf/${iso3}.pdf`;
+  return `<div style="font-size:10.5px;margin-top:6px;">
+    <a href="${url}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">Read FAO GIEWS Country Brief ↗</a>
+    <span style="color:var(--t3);font-size:9.5px;margin-left:6px;">quarterly food-security situation from FAO field offices · <a href="${pdfUrl}" target="_blank" rel="noopener" style="color:var(--t3);text-decoration:underline;">PDF</a></span>
+  </div>`;
+}
+
+// v20.22 — Pipeline 8: WRI Aqueduct water risk card.
+// Five 0-5 categorical scores (water stress, water depletion, drought, riverine
+// flood, coastal flood). Category bucket maps to label; -1 = arid/no-data
+// (distinct from 0 = Low).
+function aqueductCardHTML(iso3) {
+  const row = LIVE.aqueduct?.[iso3];
+  if (!row) return '';
+  const catColor = (cat) => cat == null || cat < 0 ? 'var(--t3)' :
+    cat === 0 ? '#6ba36b' :
+    cat === 1 ? '#c9a957' :
+    cat === 2 ? '#d27a3e' :
+    cat === 3 ? '#c44b3c' : '#a82d20';
+  const indicators = [
+    { key: 'water_stress',    label: 'Water stress',          tip: 'Ratio of total water withdrawals to renewable supply (WRI bws). 0 = Low, 4 = Extremely High.' },
+    { key: 'water_depletion', label: 'Water depletion',       tip: 'Ratio of consumptive water use to renewable supply (WRI bwd). Captures groundwater stress.' },
+    { key: 'drought_risk',    label: 'Drought risk',          tip: 'Composite drought hazard + exposure + vulnerability (WRI drr).' },
+    { key: 'flood_risk',      label: 'Riverine flood risk',   tip: 'Population + assets exposed to riverine flooding (WRI rfr).' },
+    { key: 'coastal_flood',   label: 'Coastal flood risk',    tip: 'Exposure to coastal storm surge + sea-level rise (WRI cfr).' },
+  ];
+  const rows = indicators.map(spec => {
+    const ind = row[spec.key];
+    if (!ind || ind.cat == null) return '';
+    if (ind.cat < 0) return `<div class="sp-row" title="${spec.tip}"><span class="k">${spec.label}</span><span class="v" style="color:var(--t3);">arid / no data</span></div>`;
+    const lab = (ind.label || '').replace(/\s*\([^)]*\)$/, '');
+    return `<div class="sp-row" title="${spec.tip}">
+      <span class="k">${spec.label}</span>
+      <span class="v" style="color:${catColor(ind.cat)};">${lab || `cat ${ind.cat}`}</span>
+    </div>`;
+  }).filter(Boolean).join('');
+  if (!rows) return '';
+  return `
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Water risk (WRI Aqueduct 4.0)</div>
+        <span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">WRI · sourced</span>
+      </div>
+      ${rows}
+      <div style="font-size:9.5px;color:var(--t3);margin-top:6px;">baseline scenario · WRI Aqueduct 4.0</div>
+    </div>`;
+}
+
+// v20.22 — Pipeline 9: EU JRC INFORM Risk Index card.
+// Composite humanitarian risk 0-10 + 3 sub-dimensions. Higher = worse.
+function informCardHTML(iso3) {
+  const row = LIVE.inform?.[iso3];
+  if (!row || row.inform_risk == null) return '';
+  const col = (v) => v == null ? 'var(--t3)' :
+    v < 2.0 ? '#6ba36b' :
+    v < 3.5 ? '#c9a957' :
+    v < 5.0 ? '#d27a3e' :
+    v < 6.5 ? '#c44b3c' : '#a82d20';
+  const fmt = (v) => v == null ? '—' : Number(v).toFixed(1);
+  const rankStr = row.rank ? ` · rank #${row.rank}` : '';
+  const trendStr = row.trend ? ` · ${row.trend}` : '';
+  const rows = [
+    `<div class="sp-row" title="INFORM Risk composite: 0-10 humanitarian risk. Combines hazard/exposure, vulnerability, and lack of coping capacity. Higher = greater risk.">
+      <span class="k">INFORM Risk</span>
+      <span class="v" style="color:${col(row.inform_risk)};">${fmt(row.inform_risk)}/10${rankStr}</span>
+    </div>`,
+    row.hazard_exposure != null ? `<div class="sp-row" title="Hazard & Exposure: natural + human-induced hazards × population exposed.">
+      <span class="k">Hazard & exposure</span>
+      <span class="v" style="color:${col(row.hazard_exposure)};">${fmt(row.hazard_exposure)}</span>
+    </div>` : '',
+    row.vulnerability != null ? `<div class="sp-row" title="Vulnerability: socio-economic conditions + vulnerable groups.">
+      <span class="k">Vulnerability</span>
+      <span class="v" style="color:${col(row.vulnerability)};">${fmt(row.vulnerability)}</span>
+    </div>` : '',
+    row.lack_coping_capacity != null ? `<div class="sp-row" title="Lack of Coping Capacity: institutional + infrastructure deficits.">
+      <span class="k">Lack of coping capacity</span>
+      <span class="v" style="color:${col(row.lack_coping_capacity)};">${fmt(row.lack_coping_capacity)}</span>
+    </div>` : '',
+  ].filter(Boolean).join('');
+  return `
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">INFORM Risk Index${trendStr}</div>
+        <span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">JRC · sourced</span>
+      </div>
+      ${rows}
+      <div style="font-size:9.5px;color:var(--t3);margin-top:6px;">${row.year || 'latest'} · EU Joint Research Centre</div>
+    </div>`;
 }
 
 // v20.18 — Pipeline 4: WB WDI Structural Indicators card.
@@ -9433,6 +9547,18 @@ async function loadLiveData() {
     const ndgainEnv = await _fetchData('ndgain');
     LIVE.ndgain = (ndgainEnv && (ndgainEnv.data || ndgainEnv)) || {};
   } catch (e) { LIVE.ndgain = {}; }
+
+  // v20.22 — Pipeline 8: WRI Aqueduct 4.0 water risk per country.
+  try {
+    const aquaEnv = await _fetchData('aqueduct');
+    LIVE.aqueduct = (aquaEnv && (aquaEnv.data || aquaEnv)) || {};
+  } catch (e) { LIVE.aqueduct = {}; }
+
+  // v20.22 — Pipeline 9: EU JRC INFORM Risk Index per country.
+  try {
+    const informEnv = await _fetchData('inform_risk');
+    LIVE.inform = (informEnv && (informEnv.data || informEnv)) || {};
+  } catch (e) { LIVE.inform = {}; }
 
   // v20.5 provenance scaffold — fetch the per-metric override file. Schema is documented
   // in data/countries.json. Any country with verified fields here will have those merged
@@ -11841,13 +11967,20 @@ function openPanel(c, skipDrilldown) {
     // wfpAcrLinkHTML returns empty string when the country isn't in the WFP_ACR_2025 map.
     (typeof wfsoCardHTML === 'function' ? wfsoCardHTML(c.iso) : '') +
     (typeof wfpAcrLinkHTML === 'function' ? wfpAcrLinkHTML(c.iso) : '') +
+    // v20.22: FAO GIEWS Country Brief link (Pipeline 7).
+    // Returns empty for countries not in the GIEWS ~80-country set.
+    (typeof faoGiewsLinkHTML === 'function' ? faoGiewsLinkHTML(c.iso) : '') +
     // v20.18: WB WDI Structural Indicators card (Pipeline 4).
     // Returns empty string when the country has no WDI bulk coverage (rare).
     (typeof wdiStructuralCardHTML === 'function' ? wdiStructuralCardHTML(c.iso) : '') +
     // v20.20: ND-GAIN climate adaptation card (Pipeline 6).
     // Returns empty when ND-GAIN doesn't cover this country (Taiwan, Kosovo,
     // Palestine, most non-UN microstates).
-    (typeof ndgainCardHTML === 'function' ? ndgainCardHTML(c.iso) : '');
+    (typeof ndgainCardHTML === 'function' ? ndgainCardHTML(c.iso) : '') +
+    // v20.22: WRI Aqueduct water risk card (Pipeline 8).
+    (typeof aqueductCardHTML === 'function' ? aqueductCardHTML(c.iso) : '') +
+    // v20.22: EU JRC INFORM Risk Index card (Pipeline 9).
+    (typeof informCardHTML === 'function' ? informCardHTML(c.iso) : '');
 
   document.getElementById('sp-ai').textContent = c.ai;
 

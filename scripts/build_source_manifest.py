@@ -170,6 +170,20 @@ SOURCES = [
         "cadence": "6h fetch / annual upstream",
         "mode": "reference",
     },
+    {
+        "key": "aqueduct",
+        "file": "aqueduct.json",
+        "label": "WRI Aqueduct 4.0 water risk",
+        "cadence": "6h fetch / 3-5yr upstream",
+        "mode": "reference",
+    },
+    {
+        "key": "inform_risk",
+        "file": "inform_risk.json",
+        "label": "EU JRC INFORM Risk Index",
+        "cadence": "6h fetch / annual upstream",
+        "mode": "reference",
+    },
 ]
 
 
