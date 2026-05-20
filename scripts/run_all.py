@@ -36,6 +36,9 @@ import refresh_ndgain
 import refresh_aqueduct
 import refresh_inform
 import refresh_wgi
+import refresh_lpi
+import refresh_hdi
+import refresh_cckp
 import build_countries_dataset
 import build_nowcast
 import build_source_manifest
@@ -66,6 +69,9 @@ STEPS = [
     ("WRI Aqueduct water",  refresh_aqueduct.main),
     ("INFORM risk index",   refresh_inform.main),
     ("WB WGI governance",   refresh_wgi.main),
+    ("WB LPI logistics",    refresh_lpi.main),
+    ("UNDP HDI",            refresh_hdi.main),
+    ("WB CCKP climate",     refresh_cckp.main),
     ("WB WDI bulk",         refresh_worldbank_bulk.main),
     ("WB WFSO",             refresh_wb_wfso.main),
     ("Countries dataset",   build_countries_dataset.main),

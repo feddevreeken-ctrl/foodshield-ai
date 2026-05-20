@@ -191,6 +191,27 @@ SOURCES = [
         "cadence": "6h fetch / annual upstream",
         "mode": "reference",
     },
+    {
+        "key": "lpi",
+        "file": "lpi.json",
+        "label": "WB Logistics Performance Index",
+        "cadence": "6h fetch / biennial upstream",
+        "mode": "reference",
+    },
+    {
+        "key": "hdi",
+        "file": "hdi.json",
+        "label": "UNDP Human Development Index",
+        "cadence": "6h fetch / annual upstream",
+        "mode": "reference",
+    },
+    {
+        "key": "cckp",
+        "file": "cckp.json",
+        "label": "WB Climate Change Knowledge Portal",
+        "cadence": "6h fetch / multi-year upstream",
+        "mode": "reference",
+    },
 ]
 
 
