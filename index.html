@@ -13087,7 +13087,7 @@ function renderCountryTab() {
         <button class="ai-refresh-btn" onclick="fetchAINarrative('${c.iso}', true, 'ct-ai-live-text-${c.iso}')">↻ Refresh</button>
       </div>
       <div id="ct-ai-live-text-${c.iso}" class="ai-narrative-text" style="color:var(--t3);font-style:italic;">Generating analysis…</div>
-      <div class="ai-narrative-meta">Powered by OpenRouter · Llama 3.1 8B · Free tier</div>
+      <div class="ai-narrative-meta">Deterministic synthesis from FDRS components + live shocks · no LLM</div>
     </div>
 
     <!-- TOP COMPANIES IN THIS COUNTRY -->
@@ -14368,7 +14368,7 @@ const INSTRUCTIONS = [
   },
   {
     icon: '🤖', title: 'AI Risk Narratives',
-    body: 'Each country profile includes an <b>AI-generated risk brief</b> summarising the key drivers, historical trend and 2030 outlook. Narratives are generated from the country\'s actual FDRS data. For live AI responses powered by Llama 3.1, add an OpenRouter API key to the source.'
+    body: 'Each country profile includes a <b>deterministic risk brief</b> that synthesises FDRS components, historical trend, active live shocks, and 2030 outlook from the actual sourced data layer — no LLM, no API call. Every claim in the narrative is traceable to a specific signal in the source-health table.'
   },
   {
     icon: '🔬', title: 'Methodology',
@@ -15724,7 +15724,7 @@ function renderMethodologyTab() {
         ${[
           {icon:'📉',title:'FDRS Historical Tracking (2018–2025)',
            body:'Every country profile now shows an 8-year FDRS timeline back-projected from the current score using trend direction, production data, and known global shock overlays (2020 COVID, 2022 Ukraine war, 2023 El Niño). Computed with <code style="font-size:10px;background:var(--bg1);padding:1px 4px;border-radius:3px;">getFDRSHistory()</code>.'},
-          {icon:'🤖',title:'AI Risk Narratives via OpenRouter',
+          {icon:'🤖',title:'Deterministic AI risk narratives',
            body:'Country profiles include a deterministic brief that synthesises FDRS components, historical trend, live shocks, and 2030 outlook from sourced data — no LLM. Live LLM integration was removed in v20.32 because embedding any API key in this static page would expose it to every visitor; if you want LLM responses in your own deployment, route them through a serverless proxy.'},
           {icon:'📊',title:'Live Market Data Tab',
            body:'Real-time global food security dashboard: commodity spot prices (CBOT wheat, corn, ICE sugar, BMD palm oil), FAO Food Price Index, risk distribution doughnut, high-alert country watch list, and live ranking of the 10 most vulnerable countries. Pulls from World Bank public API where available.'},
@@ -16847,8 +16847,10 @@ function renderFDRSEvents(containerId, c) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// v14 FEATURE 2: LIVE AI NARRATIVES via OpenRouter (free tier)
-// Model: meta-llama/llama-3.1-8b-instruct:free
+// COUNTRY RISK NARRATIVE — deterministic synthesis from sourced FDRS data
+// Originally built v14 with optional OpenRouter LLM. LLM path removed v20.32
+// because any client-side API key would leak to every visitor. The template
+// produces honest, audit-trail-attached prose from the live data layer.
 // ════════════════════════════════════════════════════════════════════════════
 
 const _aiNarrativeCache = {};
@@ -17475,34 +17477,9 @@ function renderTopCompaniesForCountry(c) {
 // v14: FDRS History chart in Forecast tab (add timeline context)
 // ════════════════════════════════════════════════════════════════════════════
 
-// Override mkProdChart to also draw the historical FDRS timeline on forecast
-const _origRenderForecastTab = typeof renderForecastTab === 'function' ? renderForecastTab : null;
-
-function renderForecastTabV14() {
-  if (_origRenderForecastTab) _origRenderForecastTab();
-  // After original renders, inject FDRS history
-  const c = byISO(document.getElementById('forecast-sel')?.value);
-  if (!c) return;
-  setTimeout(() => {
-    const existingCard = document.getElementById('fdrs-history-forecast');
-    if (!existingCard) {
-      const forecastBody = document.getElementById('forecast-body');
-      if (!forecastBody) return;
-      const histDiv = document.createElement('div');
-      histDiv.className = 'card';
-      histDiv.id = 'fdrs-history-forecast';
-      histDiv.innerHTML = `
-        <div class="card-title"><span class="card-marker"></span> FDRS Historical Trend · 2018–2025</div>
-        <div style="height:180px;"><canvas id="fdrs-hist-fc"></canvas></div>`;
-      forecastBody.insertBefore(histDiv, forecastBody.children[1]);
-      setTimeout(() => {
-        destroyChart('fdrs-hist-fc');
-        chartInstances['fdrs-hist-fc'] = mkFDRSHistoryChart('fdrs-hist-fc', c);
-      }, 80);
-    }
-  }, 150);
-}
-
+// v20.33 — removed dead `renderForecastTabV14` patch-over function.
+// It was defined but never called. The active patch is below — it wraps
+// renderForecastTab via the function-replacement pattern.
 // Hook into renderForecastTab
 if (typeof renderForecastTab === 'function') {
   const _orig = renderForecastTab;
