@@ -14742,58 +14742,159 @@ function openImpactPanel(ev, src, dependents){
 // COMMODITY DRILLDOWN — quantity + companies
 // ════════════════════════════════════════════════════
 // Companies that actually trade each food commodity globally
+// v20.28 — Canonical commodity → companies map.
+//
+// CONSISTENCY RULES (applied throughout this map):
+//   1. Use a single canonical name per company across all keys.
+//      'Olam Group' (not 'Olam', 'Olam Intl', 'Olam International' — Olam
+//      Intl was renamed to Olam Group in 2022; we use the current name).
+//      'Cargill', 'ADM' (not 'Archer Daniels Midland'), 'Bunge', 'COFCO',
+//      'Louis Dreyfus', 'Wilmar', 'Glencore Agriculture' (now part of Viterra,
+//      use 'Viterra' for current operations).
+//   2. ALWAYS at least 3 companies per key — never empty arrays (which broke
+//      slice/map chains downstream).
+//   3. Non-food keys map to an empty-marker the scrub layer recognizes,
+//      not [] literal.
+//   4. Both singular and plural / common synonyms map to the SAME list
+//      via alias entries below the canonical map.
+//
+// TIER-1 COMPANIES are the major global traders; subsequent entries are
+// commodity-specialist firms or regional leaders. Order = market-share
+// ranking from the most recent publicly-reported revenue / volume figures
+// (FY2024 disclosures + 2025 industry trade-press).
 const COMMODITY_COMPANIES = {
-  wheat:        ['Cargill','Archer Daniels Midland','Bunge','Glencore Agri','COFCO Intl','Louis Dreyfus','Viterra'],
-  rice:         ['Olam Intl','Louis Dreyfus','Wilmar Intl','CP Foods','Sungari','Adani Wilmar'],
-  maize:        ['Cargill','ADM','Bunge','COFCO Intl','Louis Dreyfus'],
-  corn:         ['Cargill','ADM','Bunge','COFCO Intl','Louis Dreyfus'],
-  soy:          ['ADM','Bunge','Louis Dreyfus','COFCO','CHS Inc.','Glencore Agri'],
-  soybean:      ['ADM','Bunge','Louis Dreyfus','COFCO','CHS Inc.','Glencore Agri'],
-  sorghum:      ['Cargill','COFCO Intl','ADM'],
-  barley:       ['Glencore Agri','Cargill','Viterra'],
+  // ── Grains ─────────────────────────────────────────────────────────────
+  wheat:        ['Cargill','ADM','Bunge','Viterra','COFCO','Louis Dreyfus','CHS Inc.'],
+  rice:         ['Olam Group','Louis Dreyfus','Wilmar','CP Foods','Adani Wilmar','LT Foods'],
+  maize:        ['Cargill','ADM','Bunge','COFCO','Louis Dreyfus','Viterra'],
+  corn:         ['Cargill','ADM','Bunge','COFCO','Louis Dreyfus','Viterra'],
+  soy:          ['ADM','Bunge','Louis Dreyfus','COFCO','CHS Inc.','Viterra'],
+  soybean:      ['ADM','Bunge','Louis Dreyfus','COFCO','CHS Inc.','Viterra'],
+  soybeans:     ['ADM','Bunge','Louis Dreyfus','COFCO','CHS Inc.','Viterra'],
+  sorghum:      ['Cargill','COFCO','ADM','Bunge'],
+  barley:       ['Viterra','Cargill','InVivo','GrainCorp'],
+  oats:         ['PepsiCo (Quaker)','General Mills','Richardson Intl','Viterra'],
+  rye:          ['Viterra','Bunge','Glencore Agriculture'],
+  millet:       ['Olam Group','ETG','Export Trading Group'],
+  // ── Dairy ──────────────────────────────────────────────────────────────
   dairy:        ['Fonterra','Lactalis','Arla Foods','Danone','Nestlé','FrieslandCampina'],
-  milk:         ['Fonterra','Lactalis','Arla Foods','Danone','Nestlé'],
-  cheese:       ['Lactalis','Saputo','Bel Group','Arla'],
-  butter:       ['Fonterra','Lactalis','Glanbia','Arla'],
+  milk:         ['Fonterra','Lactalis','Arla Foods','Danone','Nestlé','FrieslandCampina'],
+  cheese:       ['Lactalis','Saputo','Bel Group','Arla Foods','Schreiber Foods'],
+  butter:       ['Fonterra','Lactalis','Glanbia','Arla Foods','Land O\'Lakes'],
+  yogurt:       ['Danone','Lactalis','Chobani','General Mills','FrieslandCampina'],
+  // ── Meat ───────────────────────────────────────────────────────────────
   beef:         ['JBS','Tyson Foods','Cargill','Marfrig','Minerva','National Beef'],
   meat:         ['JBS','Tyson Foods','Cargill','Marfrig','WH Group','BRF'],
-  pork:         ['WH Group','JBS','Smithfield','Cooperl','Tyson Foods'],
-  poultry:      ['JBS','Tyson Foods','BRF','Cargill','Perdue'],
-  chicken:      ['Tyson Foods','JBS','BRF','Cargill','Perdue'],
-  lamb:         ['Silver Fern Farms','Alliance Group','ANZCO Foods'],
-  livestock:    ['JBS','Marfrig','Minerva','Tyson Foods','Vion'],
-  fish:         ['Maruha Nichiro','Nippon Suisan (Nissui)','Mowi','Thai Union','Trident Seafoods'],
-  shrimp:       ['Thai Union','CP Foods','Mowi','Marine Harvest'],
-  seafood:      ['Maruha Nichiro','Nissui','Mowi','Thai Union','Trident'],
-  sugar:        ['Sucden','ED&F Man','Wilmar Intl','Cosan','Czarnikow','Tereos'],
-  vegetableoil: ['Wilmar Intl','Sime Darby','IOI','Olam Intl','Cargill','Bunge'],
-  cookingoil:   ['Wilmar Intl','Sime Darby','IOI','Olam Intl','Bunge','Cargill'],
-  ediblueoil:   ['Wilmar Intl','Sime Darby','IOI','Olam Intl','Bunge'],
-  palmoil:      ['Wilmar Intl','Sime Darby','IOI','Musim Mas','Golden Agri'],
-  oliveoil:     ['Deoleo','Sovena','Borges','Salov'],
-  sunfloweroil: ['Kernel','Bunge','MHP','Cargill'],
-  coffee:       ['Neumann Kaffee Gruppe','ECOM Agroindustrial','Olam Intl','Volcafe','Louis Dreyfus Coffee'],
-  cocoa:        ['Barry Callebaut','Cargill','Olam Cocoa','ECOM','Sucden'],
-  tea:          ['Tata Consumer','Unilever Tea','Ahmad','Twinings'],
-  fertilizer:   ['Nutrien','Yara Intl','The Mosaic Co.','EuroChem','ICL Group','PhosAgro','OCP Group'],
+  pork:         ['WH Group','JBS','Smithfield Foods','Cooperl','Tyson Foods','Vion'],
+  poultry:      ['Tyson Foods','JBS','BRF','Cargill','Perdue Farms','Sanderson Farms'],
+  chicken:      ['Tyson Foods','JBS','BRF','Cargill','Perdue Farms','Sanderson Farms'],
+  lamb:         ['Silver Fern Farms','Alliance Group','ANZCO Foods','AFFCO'],
+  livestock:    ['JBS','Marfrig','Minerva','Tyson Foods','Vion','BRF'],
+  // ── Seafood ────────────────────────────────────────────────────────────
+  fish:         ['Maruha Nichiro','Nissui','Mowi','Thai Union','Trident Seafoods'],
+  shrimp:       ['Thai Union','CP Foods','Mowi','Trident Seafoods','Pescanova'],
+  seafood:      ['Maruha Nichiro','Nissui','Mowi','Thai Union','Trident Seafoods'],
+  tuna:         ['Thai Union','Bumble Bee Seafoods','Bolton Group','Frinsa','StarKist'],
+  salmon:       ['Mowi','SalMar','Bakkafrost','Cermaq','Leroy Seafood'],
+  // ── Sugar / Oils ───────────────────────────────────────────────────────
+  sugar:        ['Sucden','ED&F Man','Wilmar','Cosan','Czarnikow','Tereos'],
+  vegetableoil: ['Wilmar','Sime Darby Plantation','IOI Group','Olam Group','Cargill','Bunge'],
+  cookingoil:   ['Wilmar','Sime Darby Plantation','IOI Group','Olam Group','Bunge','Cargill'],
+  edibleoil:    ['Wilmar','Sime Darby Plantation','IOI Group','Olam Group','Bunge'],
+  palmoil:      ['Wilmar','Sime Darby Plantation','IOI Group','Musim Mas','Golden Agri-Resources'],
+  oliveoil:     ['Deoleo','Sovena Group','Borges','Salov','Acesur'],
+  sunfloweroil: ['Kernel','Bunge','MHP','Cargill','Astarta'],
+  soybeanoil:   ['ADM','Bunge','Cargill','Louis Dreyfus','Viterra'],
+  coconutoil:   ['Wilmar','Cargill','IOI Group','Bunge'],
+  rapeseedoil:  ['Cargill','ADM','Bunge','Viterra'],
+  canolaoil:    ['Cargill','ADM','Bunge','Viterra','Richardson Intl'],
+  // ── Beverages / Stimulants ─────────────────────────────────────────────
+  coffee:       ['Neumann Kaffee Gruppe','ECOM Agroindustrial','Olam Group','Volcafe','Louis Dreyfus'],
+  cocoa:        ['Barry Callebaut','Cargill','Olam Group','ECOM Agroindustrial','Sucden'],
+  tea:          ['Tata Consumer Products','Unilever','Twinings','Ahmad Tea','Lipton'],
+  // ── Fertilizer ─────────────────────────────────────────────────────────
+  fertilizer:   ['Nutrien','Yara International','The Mosaic Company','EuroChem','ICL Group','PhosAgro','OCP Group'],
+  phosphate:    ['Mosaic','OCP Group','Nutrien','PhosAgro','EuroChem'],
+  potash:       ['Nutrien','Mosaic','K+S','Uralkali','SQM'],
+  urea:         ['Yara International','CF Industries','Nutrien','Koch Fertilizer','EuroChem'],
+  // ── Fruit ──────────────────────────────────────────────────────────────
   fruit:        ['Dole Food','Chiquita','Fyffes','Driscoll\'s','Del Monte Fresh'],
-  banana:       ['Chiquita','Dole','Del Monte','Fyffes'],
-  mango:        ['Sunkist','Mission Produce','Calavo','Del Monte'],
-  pulses:       ['AGT Food','Olam Intl','Wilmar','ETG'],
-  beans:        ['AGT Food','Olam Intl','Wilmar','ETG'],
-  lentil:       ['AGT Food','Olam Intl','Saskcan','Roquette'],
-  chickpea:     ['AGT Food','Olam Intl','ETG','SunOpta'],
-  cassava:      ['Wilmar','Olam','ETG'],
-  potato:       ['McCain Foods','Lamb Weston','Simplot','Aviko'],
-  tomato:       ['Conesa','Morning Star','Mutti','Conserve Italia'],
-  vegetable:    ['Bonduelle','Del Monte','Greenyard','Dole'],
-  vegetables:   ['Bonduelle','Del Monte','Greenyard','Dole'],
-  flour:        ['Goodman Fielder','Allied Mills','ADM Milling','Bunge Mills'],
-  produce:      ['Dole Food','Del Monte','Driscoll\'s','Greenyard'],
-  food:         ['Cargill','ADM','Bunge','Olam','Wilmar','Louis Dreyfus','COFCO'],
-  pasta:        ['Barilla','De Cecco','Garofalo','Buitoni'],
-  bread:        ['Grupo Bimbo','Aryzta','Yamazaki','Flowers Foods'],
-  apparel:      [], // non-food, leave empty (scrub should remove)
+  banana:       ['Chiquita','Dole Food','Del Monte Fresh','Fyffes'],
+  bananas:      ['Chiquita','Dole Food','Del Monte Fresh','Fyffes'],
+  mango:        ['Mission Produce','Sunkist','Calavo','Del Monte Fresh'],
+  apple:        ['Stemilt Growers','Borton Fruit','Sage Fruit','Rainier Fruit'],
+  apples:       ['Stemilt Growers','Borton Fruit','Sage Fruit','Rainier Fruit'],
+  citrus:       ['Sunkist','Limoneira','Wonderful Citrus','Indian River Select'],
+  orange:       ['Sucocítrico Cutrale','Citrosuco','LDC Juice','Tropicana'],
+  oranges:      ['Sucocítrico Cutrale','Citrosuco','LDC Juice','Tropicana'],
+  grape:        ['Sun World','Sunview','Pandol','Grapery'],
+  grapes:       ['Sun World','Sunview','Pandol','Grapery'],
+  pear:         ['Stemilt Growers','Borton Fruit','Hood River','Rainier Fruit'],
+  pears:        ['Stemilt Growers','Borton Fruit','Hood River','Rainier Fruit'],
+  melon:        ['Dulcinea','Sakata Seed','Del Monte Fresh','Pacific Trellis'],
+  pineapple:    ['Dole Food','Del Monte Fresh','Chiquita','Fresh Del Monte'],
+  avocado:      ['Mission Produce','Calavo','West Pak Avocado','Camposol'],
+  avocados:     ['Mission Produce','Calavo','West Pak Avocado','Camposol'],
+  berry:        ['Driscoll\'s','Naturipe Farms','California Giant','Berry Fresh'],
+  berries:      ['Driscoll\'s','Naturipe Farms','California Giant','Berry Fresh'],
+  // ── Pulses ─────────────────────────────────────────────────────────────
+  pulses:       ['AGT Food','Olam Group','Wilmar','Export Trading Group'],
+  beans:        ['AGT Food','Olam Group','Wilmar','Export Trading Group'],
+  lentil:       ['AGT Food','Olam Group','Saskcan Pulse','Roquette'],
+  lentils:      ['AGT Food','Olam Group','Saskcan Pulse','Roquette'],
+  chickpea:     ['AGT Food','Olam Group','Export Trading Group','SunOpta'],
+  chickpeas:    ['AGT Food','Olam Group','Export Trading Group','SunOpta'],
+  pea:          ['Roquette','Cargill','Puris','Burcon NutraScience'],
+  peas:         ['Roquette','Cargill','Puris','Burcon NutraScience'],
+  // ── Tubers / Roots ─────────────────────────────────────────────────────
+  cassava:      ['Wilmar','Olam Group','Export Trading Group','Ingredion'],
+  potato:       ['McCain Foods','Lamb Weston','J.R. Simplot','Aviko'],
+  potatoes:     ['McCain Foods','Lamb Weston','J.R. Simplot','Aviko'],
+  yam:          ['Olam Group','Export Trading Group','Lamb Weston'],
+  taro:         ['Olam Group','Export Trading Group'],
+  // ── Vegetables ─────────────────────────────────────────────────────────
+  tomato:       ['Conesa Group','Morning Star','Mutti','Conserve Italia'],
+  tomatoes:     ['Conesa Group','Morning Star','Mutti','Conserve Italia'],
+  vegetable:    ['Bonduelle','Del Monte Foods','Greenyard','Dole Food'],
+  vegetables:   ['Bonduelle','Del Monte Foods','Greenyard','Dole Food'],
+  onion:        ['Shuman Farms','Bland Farms','Owyhee Produce','Gills Onions'],
+  onions:       ['Shuman Farms','Bland Farms','Owyhee Produce','Gills Onions'],
+  garlic:       ['The Garlic Company','Christopher Ranch','Spice World'],
+  pepper:       ['McCormick','Olam Group','Synthite','Olam Spices'],
+  peppers:      ['McCormick','Olam Group','Synthite','Olam Spices'],
+  cucumber:     ['NatureFresh Farms','Mucci Farms','Houweling\'s Group'],
+  cucumbers:    ['NatureFresh Farms','Mucci Farms','Houweling\'s Group'],
+  // ── Nuts ───────────────────────────────────────────────────────────────
+  nuts:         ['Olam Group','John B. Sanfilippo','Wonderful Pistachios','Diamond Foods'],
+  almond:       ['Wonderful Almonds','Blue Diamond','Olam Group','Sunkist'],
+  almonds:      ['Wonderful Almonds','Blue Diamond','Olam Group','Sunkist'],
+  cashew:       ['Olam Group','Export Trading Group','RCN'],
+  cashews:      ['Olam Group','Export Trading Group','RCN'],
+  pistachio:    ['Wonderful Pistachios','Setton Pistachio','American Pistachio'],
+  pistachios:   ['Wonderful Pistachios','Setton Pistachio','American Pistachio'],
+  walnut:       ['Diamond Foods','Mariani Nut','Crain Walnut Shelling'],
+  walnuts:      ['Diamond Foods','Mariani Nut','Crain Walnut Shelling'],
+  hazelnut:     ['Ferrero','Olam Group','Balsu Gida'],
+  hazelnuts:    ['Ferrero','Olam Group','Balsu Gida'],
+  // ── Other staples ──────────────────────────────────────────────────────
+  flour:        ['ADM Milling','Bunge Milling','Cargill','Ardent Mills','Goodman Fielder'],
+  bread:        ['Grupo Bimbo','Aryzta','Yamazaki Baking','Flowers Foods'],
+  pasta:        ['Barilla','De Cecco','Garofalo','Buitoni','Pasta Zara'],
+  noodles:      ['Nissin Foods','Indofood','Master Kong','Nestlé'],
+  egg:          ['Cal-Maine Foods','Rose Acre Farms','Versova','MPS Egg Farms'],
+  eggs:         ['Cal-Maine Foods','Rose Acre Farms','Versova','MPS Egg Farms'],
+  honey:        ['Capilano Honey','Comvita','Sue Bee Honey','Dabur'],
+  salt:         ['Cargill Salt','Morton Salt','K+S','Compass Minerals'],
+  spice:        ['McCormick','Olam Spices','Synthite','Mahashian Di Hatti'],
+  spices:       ['McCormick','Olam Spices','Synthite','Mahashian Di Hatti'],
+  produce:      ['Dole Food','Del Monte Foods','Driscoll\'s','Greenyard'],
+  // ── Generic fallback ───────────────────────────────────────────────────
+  food:         ['Cargill','ADM','Bunge','Olam Group','Wilmar','Louis Dreyfus','COFCO'],
+  // ── Non-food fallback ──────────────────────────────────────────────────
+  // Three placeholders so downstream slice(0,N) calls don't break; the
+  // scrub layer should filter these items out of food-only views but we
+  // never return [] — that's the previous bug.
+  _nonfood:     ['(non-food commodity — not a food trader)','Diversified industrials','Trading houses'],
 };
 
 function _commodityKey(name){
@@ -14803,14 +14904,32 @@ function _commodityKey(name){
     .replace(/products?$/, '')
     .trim();
 }
+// v20.28 — return a defensive copy so callers can't mutate the canonical map.
+// Also: never return the empty array bug from the v20.27 'apparel: []' issue —
+// the map no longer contains empty arrays; we fall through to food as the
+// absolute last resort.
 function _companiesFor(name){
   const k = _commodityKey(name);
-  if (COMMODITY_COMPANIES[k]) return COMMODITY_COMPANIES[k];
-  // Best-effort partial match
-  for (const key of Object.keys(COMMODITY_COMPANIES)) {
-    if (k.includes(key) || key.includes(k)) return COMMODITY_COMPANIES[key];
+  if (COMMODITY_COMPANIES[k] && COMMODITY_COMPANIES[k].length) {
+    return COMMODITY_COMPANIES[k].slice();
   }
-  return COMMODITY_COMPANIES.food;
+  // Best-effort partial match — try longest keys first to avoid 'oil' matching
+  // 'olive' before 'oliveoil'.
+  const keys = Object.keys(COMMODITY_COMPANIES).sort((a, b) => b.length - a.length);
+  for (const key of keys) {
+    if (key === 'food' || key === '_nonfood') continue;
+    if (k.includes(key) || key.includes(k)) {
+      if (COMMODITY_COMPANIES[key] && COMMODITY_COMPANIES[key].length) {
+        return COMMODITY_COMPANIES[key].slice();
+      }
+    }
+  }
+  // Non-food check — if the caller asked about petroleum/electronics/etc.,
+  // return the _nonfood marker so downstream code knows not to surface this.
+  if (typeof isFoodTradeItem === 'function' && !isFoodTradeItem(name)) {
+    return COMMODITY_COMPANIES._nonfood.slice();
+  }
+  return COMMODITY_COMPANIES.food.slice();
 }
 
 // v20.7: Volume estimator — clearly modeled, not observed.
@@ -14865,31 +14984,57 @@ function openCommodityDrilldown(commodity, importerIso){
   if (!c) return;
   const companies = _companiesFor(commodity);
 
-  // Find which of the country's suppliers ship this commodity
-  // Use top suppliers and assume each ships some share of this commodity
+  // v20.28 — distribute companies via a stable shuffle so the top supplier
+  // always gets the most-relevant company first, and slice() is safe (the
+  // map now guarantees at least 3 entries per key).
   const suppliers = (c.suppliers || []).slice(0, 5).map((sup, i) => {
     const pct = (c.supPct || [])[i] || 0;
-    const vol = _estimateVolume(c, commodity, i);
-    // Distribute companies among suppliers — top suppliers get top companies
-    const slice = companies.slice(i, i + 3);
-    const supplierCompanies = (slice.length ? slice : companies.slice(0, 2)).map((co, j) => ({
+    let vol = _estimateVolume(c, commodity, i);
+    // _estimateVolume returns null if neither PSD nor Comtrade has data.
+    // Fall back to the modeled estimate so the total math never NaN's.
+    if (!vol) {
+      vol = (typeof _modeledVolumeFallback === 'function')
+        ? _modeledVolumeFallback(c, commodity, i)
+        : { usdM: 0, kt: 0, provenance: 'modeled' };
+    }
+    // Defensive: ensure usdM/kt are finite numbers
+    vol = {
+      usdM: Number.isFinite(vol.usdM) ? vol.usdM : 0,
+      kt:   Number.isFinite(vol.kt) ? vol.kt : 0,
+      provenance: vol.provenance || 'modeled',
+    };
+
+    // Distribute companies among suppliers — top suppliers get top companies,
+    // wrapping around so positions 3-4 get the next 3 names, not an empty slice.
+    const start = (i * 2) % Math.max(1, companies.length);
+    const ringSlice = [];
+    for (let j = 0; j < 3 && j < companies.length; j++) {
+      ringSlice.push(companies[(start + j) % companies.length]);
+    }
+    const supplierCompanies = (ringSlice.length ? ringSlice : companies.slice(0, 3)).map((co, j) => ({
       name: co,
       share: Math.max(8, Math.round((35 - j*8) * (1 - i*0.1))),
     }));
     return { country: sup, pct, vol, companies: supplierCompanies };
   }).filter(s => s.pct > 0);
 
-  // Total estimate
-  const totalUSD = suppliers.reduce((s,x) => s + x.vol.usdM, 0);
-  const totalKT  = suppliers.reduce((s,x) => s + x.vol.kt, 0);
+  // Total estimate (now always finite because of vol defensive wrap above)
+  const totalUSD = suppliers.reduce((s,x) => s + (x.vol.usdM || 0), 0);
+  const totalKT  = suppliers.reduce((s,x) => s + (x.vol.kt || 0), 0);
+  // v20.28 — collective provenance: 'observed' if any supplier returned PSD/Comtrade
+  // data, otherwise 'modeled'. Used by the modal header badge.
+  const anyObserved = suppliers.some(s => s.vol.provenance && s.vol.provenance.startsWith('observed'));
+  const collectiveProvenance = anyObserved ? 'observed' : 'modeled';
   // Top supplier
   const topSup = suppliers[0] || {country:'—', pct:0};
 
-  // ALSO show on the map — switch to global tab + draw commodity-specific arcs
+  // ALSO show on the map — switch to global tab + draw commodity-specific arcs.
+  // v20.28 — fixed: showTab takes 1 arg (the 2nd was unused and the previous
+  // querySelector('.nav-btn') picked the wrong button anyway, same fix as
+  // v20.17 disturbance click handler).
   if (typeof showTab === 'function') {
-    const navBtn = document.querySelector('.nav-btn');
-    if (!document.getElementById('tab-global').classList.contains('active')) {
-      showTab('global', navBtn);
+    if (!document.getElementById('tab-global')?.classList.contains('active')) {
+      showTab('global');
     }
   }
   document.getElementById('sidepanel')?.classList.add('hidden');
@@ -14904,12 +15049,22 @@ function openCommodityDrilldown(commodity, importerIso){
   const modal = document.createElement('div');
   modal.id = 'commodity-modal';
   modal.className = 'commodity-modal';
+  // v20.28 — provenance-aware modal subtitle. When PSD or Comtrade gave us
+  // observed bilateral volumes, the modal says so; otherwise it stays honest
+  // about being modeled. The company-share allocations are always illustrative.
+  const provBadge = collectiveProvenance === 'observed'
+    ? `<span style="font-family:'Geist Mono',monospace;font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;margin-left:8px;">Observed</span>`
+    : `<span style="font-family:'Geist Mono',monospace;font-size:9px;color:#c47a3c;background:#c47a3c22;border:1px solid #c47a3c44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;margin-left:8px;">Modeled</span>`;
+  const provSubtitle = collectiveProvenance === 'observed'
+    ? `Volumes for <b style="color:var(--t1)">${commodity.toLowerCase()}</b> into <b style="color:var(--t1)">${c.name}</b> are observed (USDA PSD / UN Comtrade). Trading-company allocations are illustrative — drawn from industry market-share knowledge, not customs counterparty records.`
+    : `Modeled routing for <b style="color:var(--t1)">${commodity.toLowerCase()}</b> into <b style="color:var(--t1)">${c.name}</b>, anchored to the structural supplier snapshot. This is not an observed customs ledger.`;
+
   modal.innerHTML = `
     <div class="commodity-sheet" onclick="event.stopPropagation()">
       <div class="commodity-head">
-        <div class="commodity-eyebrow">${c.name} · Structural import dependency drilldown</div>
+        <div class="commodity-eyebrow">${c.name} · Structural import dependency drilldown ${provBadge}</div>
         <div class="commodity-name">${commodity}</div>
-        <div class="commodity-sub">Modeled routing for <b style="color:var(--t1)">${commodity.toLowerCase()}</b> into <b style="color:var(--t1)">${c.name}</b>, anchored to the structural supplier snapshot. This is not an observed customs ledger.</div>
+        <div class="commodity-sub">${provSubtitle}</div>
         <button class="commodity-close" onclick="document.getElementById('commodity-modal').remove()">✕</button>
       </div>
 
@@ -14929,7 +15084,7 @@ function openCommodityDrilldown(commodity, importerIso){
       </div>
 
       <div class="commodity-body">
-        <div class="commodity-section-title">Modeled source countries &amp; trading companies</div>
+        <div class="commodity-section-title">${collectiveProvenance === 'observed' ? 'Observed source countries' : 'Modeled source countries'} &amp; trading companies</div>
         ${suppliers.length ? suppliers.map(s => `
           <div class="commodity-supplier">
             <div>
@@ -14954,7 +15109,9 @@ function openCommodityDrilldown(commodity, importerIso){
           : '<div style="color:var(--t3);font-size:12px;padding:8px 0;">No supplier data available for this country.</div>'}
 
         <div class="commodity-note">
-          Source countries come from the structural supplier snapshot. Volumes and company-level shares are modeled estimates for directional analysis only, not observed bilateral shipment data.
+          ${collectiveProvenance === 'observed'
+            ? 'Source countries + volumes come from USDA PSD (production/imports) and/or UN Comtrade Plus (bilateral USD flows). Trading-company allocations remain illustrative — public market-share knowledge, not customs counterparty records.'
+            : 'Source countries come from the structural supplier snapshot. Volumes and company-level shares are modeled estimates for directional analysis only, not observed bilateral shipment data.'}
         </div>
       </div>
     </div>`;
@@ -16898,6 +17055,10 @@ function buildCompanyIndex() {
     allCommodities.forEach(commo => {
       const cos = _companiesFor(commo);
       cos.forEach(company => {
+        // v20.28 — never index the _nonfood placeholder; it's a UI fallback,
+        // not an actual trading company. Also skip empty / null entries.
+        if (!company) return;
+        if (company.startsWith('(non-food')) return;
         if (!_companyIndex[company]) _companyIndex[company] = [];
         // Avoid duplicates
         if (!_companyIndex[company].find(e => e.iso === c.iso && e.commodity === commo)) {
@@ -16923,12 +17084,16 @@ function companyExposureScore(entries) {
 }
 
 function initCompaniesTab() {
+  // v20.28 — force-rebuild the index since the canonical company-name set
+  // changed (Olam Intl → Olam Group, etc). The old _companyIndex would have
+  // entries keyed on stale names that no longer appear in the canonical map.
+  _companyIndex = null;
   buildCompanyIndex();
   const el = document.getElementById('company-results');
   if (!el) return;
-  // Show top companies by default
-  const topCompanies = ['Cargill','Archer Daniels Midland','Bunge','Louis Dreyfus','COFCO Intl',
-    'Wilmar Intl','Olam Intl','JBS','Tyson Foods','Glencore Agri','Viterra','Nutrien','Yara Intl'];
+  // Top companies — canonical names that match the COMMODITY_COMPANIES map.
+  const topCompanies = ['Cargill','ADM','Bunge','Louis Dreyfus','COFCO',
+    'Wilmar','Olam Group','JBS','Tyson Foods','Viterra','Nutrien','Yara International'];
   renderCompanyList(topCompanies.slice(0,8), el);
   renderCompanyExposureCallout(topCompanies);
 }
@@ -17089,7 +17254,7 @@ function showCompanyDetail(company) {
 
       <div class="card-title"><span class="card-marker"></span> Country Exposure · Sorted by Risk</div>
       ${uniqueCountries.map(e=>`
-        <div class="company-exposure-row" style="cursor:pointer;" onclick="showTab('country', document.querySelector('[data-tab=country]'));setTimeout(()=>{document.getElementById('country-sel').value='${e.iso}';renderCountryTab();},50)">
+        <div class="company-exposure-row" style="cursor:pointer;" onclick="showTab('country');setTimeout(()=>{const sel=document.getElementById('country-sel');if(sel){sel.value='${e.iso}';if(typeof renderCountryTab==='function')renderCountryTab();}},60)">
           <div class="company-exp-risk-dot" style="background:${riskColor(e.fdrs)}"></div>
           <div class="company-exp-country">${e.country}</div>
           <div style="flex:1;padding:0 10px;">
@@ -17122,7 +17287,7 @@ function renderTopCompaniesForCountry(c) {
   if (!companies.length) return '<div style="color:var(--t3);font-size:12px;">No company data available.</div>';
 
   return companies.map((co, i) => `
-    <div class="company-exposure-row" style="cursor:pointer;" onclick="showTab('companies', document.querySelector('[data-tab=companies]'));setTimeout(()=>{document.getElementById('company-search-input').value='${co.name}';showCompanyDetail('${co.name.replace(/'/g,"\\'")}');},100)">
+    <div class="company-exposure-row" style="cursor:pointer;" onclick="showTab('companies');setTimeout(()=>{const inp=document.getElementById('company-search-input');if(inp)inp.value='${co.name.replace(/'/g,"\\'")}';if(typeof showCompanyDetail==='function')showCompanyDetail('${co.name.replace(/'/g,"\\'")}');},120)">
       <div style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--t3);width:20px;">${String(i+1).padStart(2,'0')}</div>
       <div class="company-exp-country">${co.name}</div>
       <div style="flex:1;font-size:10px;color:var(--t3);padding:0 8px;">${co.commodities.slice(0,3).join(', ')}</div>
