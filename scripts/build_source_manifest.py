@@ -192,6 +192,13 @@ SOURCES = [
         "mode": "reference",
     },
     {
+        "key": "daily_summary",
+        "file": "daily_summary.json",
+        "label": "FoodShield daily 'what changed' summary",
+        "cadence": "6h derived",
+        "mode": "live",
+    },
+    {
         "key": "lpi",
         "file": "lpi.json",
         "label": "WB Logistics Performance Index",

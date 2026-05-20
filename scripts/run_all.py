@@ -42,6 +42,7 @@ import refresh_cckp
 import build_countries_dataset
 import build_nowcast
 import build_source_manifest
+import build_daily_summary
 
 
 STEPS = [
@@ -76,6 +77,7 @@ STEPS = [
     ("WB WFSO",             refresh_wb_wfso.main),
     ("Countries dataset",   build_countries_dataset.main),
     ("Nowcast build",       build_nowcast.main),
+    ("Daily summary",       build_daily_summary.main),
     ("Source manifest",     build_source_manifest.main),
 ]
 

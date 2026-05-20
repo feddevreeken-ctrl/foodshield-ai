@@ -76,9 +76,12 @@ def main():
     for code, (key, label) in INDICATORS.items():
         print(f"[INFO] WGI {code} — {label}")
         try:
+            # v20.29 — pull 15 years instead of just the most-recent value.
+            # That powers the sparkline + lets us show 'change since 2010'
+            # context on country panels. WGI data is annual since 2002.
             r = http_get(
                 BASE.format(code=code),
-                params={"format": "json", "mrv": 1, "per_page": 500},
+                params={"format": "json", "date": "2010:2026", "per_page": 5000},
                 timeout=45,
                 retries=3,
             )
@@ -92,7 +95,9 @@ def main():
             failures.append(code)
             continue
         rows = data[1] or []
-        kept = 0
+        # v20.29 — group by ISO3 then sort by year asc so we can store a
+        # compact (year,value) series for sparklines.
+        per_iso = {}
         for row in rows:
             iso3 = (row.get("countryiso3code") or "").strip().upper()
             val = row.get("value")
@@ -104,19 +109,39 @@ def main():
                 y = int(year) if year else None
             except (TypeError, ValueError):
                 continue
+            if y is None:
+                continue
+            per_iso.setdefault(iso3, {"_country_name": None, "obs": [], "_country_row": row}).get("obs").append((y, v))
+            if not per_iso[iso3]["_country_name"]:
+                cn = row.get("country", {})
+                if isinstance(cn, dict):
+                    per_iso[iso3]["_country_name"] = cn.get("value")
+
+        kept = 0
+        for iso3, payload in per_iso.items():
+            obs = sorted(payload["obs"], key=lambda x: x[0])
+            if not obs:
+                continue
+            latest_year, latest_val = obs[-1]
             country_slot = out.setdefault(iso3, {
-                "country": row.get("country", {}).get("value") if isinstance(row.get("country"), dict) else None,
+                "country": payload["_country_name"],
                 "source": "World Bank Worldwide Governance Indicators",
                 "source_url": "https://www.worldbank.org/en/publication/worldwide-governance-indicators",
                 "quality_flag": "sourced",
             })
-            country_slot[key] = {"value": v, "year": y, "label": label}
-            # Track the overall most-recent year across this country's indicators
+            country_slot[key] = {
+                "value": latest_val,
+                "year": latest_year,
+                "label": label,
+                # Compact series: list of [year, value]. Trim to last 15 entries
+                # to keep the JSON small.
+                "series": obs[-15:],
+            }
             existing_year = country_slot.get("year")
-            if existing_year is None or (y is not None and y > existing_year):
-                country_slot["year"] = y
+            if existing_year is None or latest_year > existing_year:
+                country_slot["year"] = latest_year
             kept += 1
-        print(f"  [OK] {code}: {kept} country rows")
+        print(f"  [OK] {code}: {kept} country rows (with series)")
 
     if failures:
         print(f"[WARN] {len(failures)} indicator(s) failed: {failures}")
