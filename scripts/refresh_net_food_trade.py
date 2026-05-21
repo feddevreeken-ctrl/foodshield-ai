@@ -158,13 +158,26 @@ def main():
                     return norm[key]
             return None
 
-        COL_ITEM_CODE = _find_col("Item Code", "ItemCode", "Item Code (CPC)")
+        # v21 — TCL ships TWO Item-Code columns: legacy "Item Code" (numeric, 1841/1842 etc)
+        # and "Item Code (CPC)" (string, e.g. "FB"). We want the legacy numeric one.
+        # The helper above normalises away "(cpc)" so both map to the same key — force
+        # the legacy column explicitly here by looking it up by exact name.
+        COL_ITEM_CODE = "Item Code" if "Item Code" in actual_headers else _find_col("Item Code", "ItemCode")
         COL_ELEMENT_CODE = _find_col("Element Code", "ElementCode")
         COL_YEAR = _find_col("Year")
         COL_VALUE = _find_col("Value")
         COL_AREA = _find_col("Area", "Country", "Country or Area")
         COL_AREA_CODE = _find_col("Area Code", "AreaCode")
         COL_FLAG = _find_col("Flag")
+        COL_ITEM_NAME = "Item" if "Item" in actual_headers else _find_col("Item", "Commodity")
+        print(f"[INFO] Resolved columns: item_code={COL_ITEM_CODE!r} element={COL_ELEMENT_CODE!r} year={COL_YEAR!r} value={COL_VALUE!r} area={COL_AREA!r} item_name={COL_ITEM_NAME!r}")
+
+        # v21 — additional defensive net: also accept by item NAME, in case
+        # FAO renames codes between releases. Tracking codes-we-actually-see so
+        # we can correct ITEMS_OF_INTEREST if 1841/1842 disappeared.
+        TARGET_ITEM_NAMES = {"food, total", "agricultural products, total", "food", "agricultural products"}
+        _seen_codes = {}
+        _MAX_CODE_SAMPLES = 12
 
         missing_cols = [name for name, col in [
             ("Item Code", COL_ITEM_CODE), ("Element Code", COL_ELEMENT_CODE),
@@ -184,8 +197,15 @@ def main():
                 print(f"  [progress] {rows_seen} rows scanned, {rows_kept} kept, "
                       f"{len(by_country)} countries so far")
 
-            ic = _int(row.get(COL_ITEM_CODE))
-            if ic not in ITEMS_OF_INTEREST:
+            ic = _int(row.get(COL_ITEM_CODE)) if COL_ITEM_CODE else None
+            item_name = (row.get(COL_ITEM_NAME) or "").strip().lower() if COL_ITEM_NAME else ""
+            # Accept either code-match (legacy 1841/1842) OR exact name-match.
+            # If neither matches, sample first few codes we see for diagnostics.
+            code_match = ic in ITEMS_OF_INTEREST
+            name_match = item_name in TARGET_ITEM_NAMES
+            if not (code_match or name_match):
+                if ic is not None and len(_seen_codes) < _MAX_CODE_SAMPLES:
+                    _seen_codes.setdefault(ic, item_name or '?')
                 continue
             ec = _int(row.get(COL_ELEMENT_CODE))
             if ec not in (ELEMENT_IMPORT_VAL, ELEMENT_EXPORT_VAL):
@@ -219,6 +239,8 @@ def main():
 
     print(f"[INFO] Parsed {rows_seen} rows total, kept {rows_kept} relevant, "
           f"covering {len(by_country)} countries")
+    if rows_kept == 0 and _seen_codes:
+        print(f"[INFO] No matches. Sample item codes seen in CSV: {dict(list(_seen_codes.items())[:12])}")
 
     # For each country, pick the most recent year where we have BOTH
     # import and export for item 1842 (preferred). Fall back to 1841 if 1842 is missing.

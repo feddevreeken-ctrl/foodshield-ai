@@ -53,14 +53,16 @@ from _common import http_get, write_json
 # CCKP API base (CMIP6 timeseries endpoint)
 CCKP_BASE = "https://cckpapi.worldbank.org/cckp/v1"
 
-# Historical mean temperature 1991-2020 (ERA5)
-URL_HIST_TEMP = CCKP_BASE + "/era5-x0.25_timeseries_tas_timeseries_annual_1991-2020_mean_historical_era5-x0.25_mean/{iso3}"
-# Projected temperature 2040-2059 SSP2-4.5 (CMIP6 ensemble)
-URL_PROJ_TEMP = CCKP_BASE + "/cmip6-x1.0_timeseries_tas_timeseries_annual_2040-2059_median_ssp245_ensemble_all_mean/{iso3}"
-# Projected precipitation 2040-2059 SSP2-4.5
-URL_PROJ_PR = CCKP_BASE + "/cmip6-x1.0_timeseries_pr_timeseries_annual_2040-2059_median_ssp245_ensemble_all_mean/{iso3}"
-# Historical precip baseline (for % change calculation)
-URL_HIST_PR = CCKP_BASE + "/era5-x0.25_timeseries_pr_timeseries_annual_1991-2020_mean_historical_era5-x0.25_mean/{iso3}"
+# v21 — CCKP API now requires 12 path segments (per error message returned in
+# workflow run #19, 2026-05-21):
+#   {collection}_{type}_{variable}_{product}_{aggregation}_{period}_{percentile}
+#   _{scenario}_{model}_{model-calculation}_{grid}_{statistic}/{geo_code}
+# Old URLs had 10 segments — missing percentile + grid. Added "median" and
+# "country" defaults; mean→mean for statistic.
+URL_HIST_TEMP = CCKP_BASE + "/era5-x0.25_timeseries_tas_timeseries_annual_1991-2020_median_historical_era5-x0.25_mean_country_mean/{iso3}"
+URL_PROJ_TEMP = CCKP_BASE + "/cmip6-x1.0_timeseries_tas_timeseries_annual_2040-2059_median_ssp245_ensemble_all_country_mean/{iso3}"
+URL_PROJ_PR   = CCKP_BASE + "/cmip6-x1.0_timeseries_pr_timeseries_annual_2040-2059_median_ssp245_ensemble_all_country_mean/{iso3}"
+URL_HIST_PR   = CCKP_BASE + "/era5-x0.25_timeseries_pr_timeseries_annual_1991-2020_median_historical_era5-x0.25_mean_country_mean/{iso3}"
 
 THROTTLE_SECONDS = 0.15   # be polite to WB CDN
 

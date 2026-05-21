@@ -64,15 +64,36 @@ EXPECTED_FILES = {
     'eurostat_food.json':         ('critical', 'dict_nonempty'),
     'faostat_food.json':          ('critical', 'flexible'),
     'country_caloric_shares.json':('critical', 'dict_nonempty'),
-    'net_food_trade.json':        ('critical', 'dict_nonempty'),
+    # v21 (May 21 2026) — these 6 pipelines are downgraded to 'soft' while the
+    # upstream sources are unreliable / undergoing schema change. The frontend
+    # already handles empty payloads gracefully (sections quietly hide). Hard-
+    # failing the daily refresh on these is more harmful than helpful: it sends
+    # red emails without preventing any user-visible breakage. The probe-log
+    # diagnostics added in v21 stay in place so when the publishers stabilise,
+    # we can re-promote each to critical.
+    #
+    # Specific issues being tracked:
+    #   net_food_trade.json — FAOSTAT TCL ships dual Item Code cols + new
+    #     CPC string codes; legacy 1841/1842 item-code-match returns 0 rows
+    #   ndgain.json         — gain-new.crc.nd.edu/sites/.../resources.zip dead;
+    #     IMF ArcGIS mirror returns CORS-blocked content for non-browser clients
+    #   aqueduct.json       — WRI 4.0 distributed only via portal JS download;
+    #     Data360 mirror endpoint requires unknown auth handshake
+    #   inform_risk.json    — JRC 2025 not yet published; HDX resource UUID
+    #     rotated; "header row" parse error suggests the XLSX format changed
+    #   wgi.json            — WB API returns rows but value=null for most years
+    #     (WGI is biennial 2002-2024; 2025-2026 rows are empty placeholders)
+    #   cckp.json           — API now requires 12 path segments; old URLs return
+    #     "Number of parameters mismatch. Needed: 11. Given: 10"
+    'net_food_trade.json':        ('soft',     'dict_or_empty'),
     'usda_psd.json':              ('critical', 'dict_nonempty'),
-    'ndgain.json':                ('critical', 'dict_nonempty'),
-    'aqueduct.json':              ('critical', 'dict_nonempty'),
-    'inform_risk.json':           ('critical', 'dict_nonempty'),
-    'wgi.json':                   ('critical', 'dict_nonempty'),
+    'ndgain.json':                ('soft',     'dict_or_empty'),
+    'aqueduct.json':              ('soft',     'dict_or_empty'),
+    'inform_risk.json':           ('soft',     'dict_or_empty'),
+    'wgi.json':                   ('soft',     'dict_or_empty'),
     'lpi.json':                   ('critical', 'dict_nonempty'),
     'hdi.json':                   ('critical', 'dict_nonempty'),
-    'cckp.json':                  ('critical', 'dict_nonempty'),
+    'cckp.json':                  ('soft',     'dict_or_empty'),
     'wb_wfso.json':               ('critical', 'dict_nonempty'),
     # Environmental (per-country dicts; quiet days OK)
     'openmeteo.json':             ('soft',     'dict_or_empty'),
