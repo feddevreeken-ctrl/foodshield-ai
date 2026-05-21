@@ -1134,21 +1134,29 @@ body {
   opacity: 1;
   pointer-events: auto;
 }
-.tour-mask {
-  position: absolute; inset: 0;
-  background: rgba(8, 12, 16, 0.72);
-  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
-}
+/* The spotlight's huge box-shadow IS the dim mask — no separate full-screen
+   overlay. Means the rect inside the spotlight border stays fully transparent
+   so the highlighted UI shines through clearly. */
 .tour-spotlight {
   position: absolute;
+  z-index: 1;  /* above the click-catcher; below the card */
   border-radius: 12px;
-  box-shadow: 0 0 0 4px rgba(138,166,196,0.65),
-              0 0 0 9999px rgba(8, 12, 16, 0.72);
+  box-shadow: 0 0 0 3px rgba(138,166,196,0.75),
+              0 0 0 9999px rgba(8, 12, 16, 0.68);
   transition: all .35s cubic-bezier(.4,0,.2,1);
   pointer-events: none;
 }
+/* Invisible click-catcher that covers everything except the spotlight, so
+   clicks outside the spotlight close the tour but don't punch through to the
+   underlying UI mid-tour. */
+.tour-clickcatch {
+  position: absolute; inset: 0;
+  background: transparent;
+  pointer-events: auto;
+}
 .tour-card {
   position: absolute;
+  z-index: 2;  /* above the spotlight's huge box-shadow */
   background: var(--bg1);
   border: 1px solid var(--b2);
   border-radius: 12px;
@@ -15086,7 +15094,7 @@ function _ensureTourOverlay() {
     o = document.createElement('div');
     o.id = 'tour-overlay';
     o.innerHTML = `
-      <div class="tour-mask" onclick="endTour()"></div>
+      <div class="tour-clickcatch" onclick="endTour()"></div>
       <div class="tour-spotlight" id="tour-spotlight"></div>
       <div class="tour-card" id="tour-card">
         <div class="tour-card-step" id="tour-card-step"></div>
