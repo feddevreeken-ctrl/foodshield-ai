@@ -1019,40 +1019,113 @@ body {
   box-sizing: border-box;
 }
 #instructions-modal.instr-modal-hidden { display: none !important; }
+/* v22 — wider sheet to accommodate the 2-column hero (left text + right visual) */
 .instr-sheet {
   background: var(--bg1);
   border: 1px solid var(--b2);
   border-radius: 16px;
   width: 100%;
-  max-width: 680px;
-  max-height: 88vh;
+  max-width: 1140px;
+  max-height: 92vh;
   overflow-y: auto;
   position: relative;
   display: flex;
   flex-direction: column;
 }
+/* v22 — head is now a 2-column grid (text left, dashboard screenshot right) */
 .instr-head {
-  padding: 26px 28px 18px;
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
   border-bottom: 1px solid var(--b1);
-  position: sticky; top: 0;
   background: var(--bg1);
-  z-index: 1;
   border-radius: 16px 16px 0 0;
   flex-shrink: 0;
+  min-height: 480px;
+  position: relative;
+}
+@media (max-width: 900px) {
+  .instr-head { grid-template-columns: 1fr; min-height: auto; }
+}
+.instr-head-text {
+  padding: 48px 44px 32px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.instr-head-visual {
+  background: var(--bg0);
+  border-left: 1px solid var(--b1);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  perspective: 1200px;
+}
+@media (max-width: 900px) {
+  .instr-head-visual { display: none; }
 }
 .instr-close {
   position: absolute; top: 14px; right: 14px;
   background: var(--bg3); border: 1px solid var(--b2);
   color: var(--t2); width: 30px; height: 30px;
   border-radius: 7px; cursor: pointer; font-size: 14px;
+  z-index: 2;
 }
 .instr-eyebrow {
-  font-size: 10px; color: var(--accent); font-weight: 600;
-  text-transform: uppercase; letter-spacing: .14em; margin-bottom: 8px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px; color: var(--t3); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .16em; margin-bottom: 18px;
 }
-.instr-title { font-size: 26px; font-weight: 500; color: var(--t1); line-height: 1.2; letter-spacing: -0.01em; font-family: 'Instrument Serif', serif; font-weight: 400; }
+.instr-eyebrow b { color: var(--accent); font-weight: 600; }
+/* v22 — bigger title for the new wider layout */
+.instr-title {
+  font-family: 'Instrument Serif', serif;
+  font-size: 52px;
+  font-weight: 400;
+  color: var(--t1);
+  line-height: 1.05;
+  letter-spacing: -0.015em;
+  margin-bottom: 24px;
+}
 .instr-title em { color: var(--accent); font-style: italic; }
-.instr-sub { font-size: 12.5px; color: var(--t2); margin-top: 8px; line-height: 1.6; max-width: 560px; }
+@media (max-width: 1100px) { .instr-title { font-size: 42px; } }
+@media (max-width: 900px) { .instr-title { font-size: 36px; } }
+.instr-sub {
+  font-size: 15px; color: var(--t2);
+  line-height: 1.65; max-width: 520px;
+  margin-bottom: 18px;
+}
+.instr-sub b { color: var(--t1); font-weight: 500; }
+
+/* v22 — tilted dashboard product-shot in the hero visual */
+.instr-dash-frame {
+  background: var(--bg0);
+  border: 1px solid var(--b2);
+  border-radius: 10px;
+  box-shadow: 0 25px 70px rgba(0,0,0,0.65);
+  width: 100%;
+  max-width: 480px;
+  overflow: hidden;
+  transform: rotateY(-12deg) rotateX(4deg) translateX(8px);
+  transform-origin: center;
+  transition: transform .4s cubic-bezier(.4,0,.2,1);
+}
+.instr-head-visual:hover .instr-dash-frame {
+  transform: rotateY(-8deg) rotateX(2deg) translateX(4px);
+}
+.instr-dash-bar {
+  height: 28px; background: var(--bg1);
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 12px; border-bottom: 1px solid var(--b1);
+}
+.instr-dash-bar-dot { width: 7px; height: 7px; border-radius: 50%; }
+.instr-dash-bar-url {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9.5px; color: var(--t3);
+  margin-left: 10px;
+}
 
 /* Path cards in welcome modal */
 .instr-paths {
@@ -5271,15 +5344,65 @@ input[type="email"]:focus {
 <!-- Instructions modal -->
 <div id="instructions-modal" class="instr-modal-hidden">
   <div class="instr-sheet" onclick="event.stopPropagation()">
+    <button class="instr-close" onclick="closeInstructions()" aria-label="Close Quick Start" title="Close">✕</button>
+    <!-- v22 — Hero head: 2-column (text left, tilted dashboard screenshot right) -->
     <div class="instr-head">
-      <button class="instr-close" onclick="closeInstructions()" aria-label="Close Quick Start" title="Close">✕</button>
-      <div class="instr-eyebrow">✱ Quick Start · by Fedde Vreeken</div>
-      <div class="instr-title" id="instr-title-id">How fragile is the world's <em>food supply</em> right now?</div>
-      <div class="instr-sub">FoodShield AI scores every country on how exposed it is to food shocks — from wheat shortages to droughts to conflict — using 33 live data feeds (FAO, USDA, WFP, World Bank, NASA), refreshed every 6 hours. Pick a starting point, or take the 90-second tour.</div>
-      <a href="https://www.linkedin.com/in/feddevreeken" target="_blank" rel="noopener" class="instr-linkedin">
-        <svg viewBox="0 0 24 24" fill="currentColor" style="width:11px;height:11px;"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
-        Connect on LinkedIn ↗
-      </a>
+      <div class="instr-head-text">
+        <div class="instr-eyebrow">✱ Quick Start · <b>by Fedde Vreeken</b></div>
+        <div class="instr-title" id="instr-title-id">How fragile is the<br>world's <em>food supply</em><br>right now?</div>
+        <div class="instr-sub"><b>FoodShield AI</b> scores every country on how exposed it is to food shocks — from wheat shortages to droughts to conflict — using 33 live data feeds (FAO, USDA, WFP, World Bank, NASA), refreshed every 6 hours. Pick a starting point, or take the 90-second tour.</div>
+        <a href="https://www.linkedin.com/in/feddevreeken" target="_blank" rel="noopener" class="instr-linkedin">
+          <svg viewBox="0 0 24 24" fill="currentColor" style="width:11px;height:11px;"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+          Connect on LinkedIn ↗
+        </a>
+      </div>
+      <div class="instr-head-visual" aria-hidden="true">
+        <div class="instr-dash-frame">
+          <div class="instr-dash-bar">
+            <span class="instr-dash-bar-dot" style="background:#c44b3c"></span>
+            <span class="instr-dash-bar-dot" style="background:#c9a957"></span>
+            <span class="instr-dash-bar-dot" style="background:#6ba36b"></span>
+            <span class="instr-dash-bar-url">foodshield-ai-fv.vercel.app</span>
+          </div>
+          <svg viewBox="0 0 520 320" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;">
+            <rect width="520" height="320" fill="#0a0a0c"/>
+            <g transform="translate(40, 50)">
+              <path d="M30,35 L55,28 L80,32 L95,40 L100,55 L92,65 L75,68 L55,62 L40,55 Z" fill="#6ba36b" opacity=".82"/>
+              <path d="M85,90 L100,85 L108,105 L102,135 L92,155 L85,140 L80,115 Z" fill="#9cc299" opacity=".82"/>
+              <path d="M180,40 L210,35 L230,40 L228,55 L210,60 L188,55 Z" fill="#6ba36b" opacity=".82"/>
+              <path d="M232,30 L320,28 L355,38 L350,55 L320,60 L260,55 L235,50 Z" fill="#c9a957" opacity=".82"/>
+              <path d="M195,70 L235,68 L245,90 L240,130 L225,150 L205,148 L195,120 L188,95 Z" fill="#d23a2a" opacity=".88"/>
+              <path d="M232,62 L260,60 L268,78 L250,82 L235,75 Z" fill="#e07a2e" opacity=".88"/>
+              <path d="M285,68 L320,70 L325,90 L312,100 L295,95 L285,82 Z" fill="#e0b94a" opacity=".82"/>
+              <path d="M330,52 L380,50 L388,72 L370,82 L335,78 L325,65 Z" fill="#c9a957" opacity=".82"/>
+              <path d="M345,90 L370,88 L378,108 L362,118 L350,108 Z" fill="#e0b94a" opacity=".82"/>
+              <path d="M360,140 L395,138 L408,155 L398,170 L370,168 L355,158 Z" fill="#6ba36b" opacity=".82"/>
+              <circle cx="195" cy="105" r="4" fill="#8e1f17"/>
+              <circle cx="245" cy="80" r="3.5" fill="#8e1f17"/>
+              <circle cx="225" cy="120" r="3" fill="#d23a2a"/>
+            </g>
+            <g transform="translate(40, 270)">
+              <rect x="0" y="6" width="14" height="6" rx="1.5" fill="#6ba36b"/>
+              <rect x="20" y="6" width="14" height="6" rx="1.5" fill="#e0b94a"/>
+              <rect x="40" y="6" width="14" height="6" rx="1.5" fill="#e07a2e"/>
+              <rect x="60" y="6" width="14" height="6" rx="1.5" fill="#d23a2a"/>
+              <rect x="80" y="6" width="14" height="6" rx="1.5" fill="#8e1f17"/>
+              <text x="100" y="11.5" fill="#6a685e" font-family="Geist Mono, monospace" font-size="7">RESILIENT → SEVERE</text>
+            </g>
+            <rect x="370" y="50" width="135" height="170" rx="6" fill="#14141a" stroke="#2a2a34" stroke-width="0.5"/>
+            <text x="380" y="68" fill="#9a988f" font-family="Geist Mono, monospace" font-size="7">YEMEN</text>
+            <text x="380" y="92" fill="#d23a2a" font-family="Geist, sans-serif" font-size="24" font-weight="700">79</text>
+            <text x="380" y="104" fill="#9a988f" font-family="Geist Mono, monospace" font-size="6.5">/100 · SEVERE</text>
+            <rect x="380" y="116" width="120" height="2" rx="1" fill="#1f1f27"/>
+            <rect x="380" y="116" width="95" height="2" rx="1" fill="#d23a2a"/>
+            <text x="380" y="135" fill="#6a685e" font-family="Geist Mono, monospace" font-size="6">TOP IMPORTS</text>
+            <text x="380" y="148" fill="#ebe9e2" font-family="Geist, sans-serif" font-size="8">Wheat · Rice</text>
+            <text x="380" y="160" fill="#ebe9e2" font-family="Geist, sans-serif" font-size="8">Sugar · Oil</text>
+            <text x="380" y="180" fill="#6a685e" font-family="Geist Mono, monospace" font-size="6">SUPPLIERS</text>
+            <text x="380" y="193" fill="#ebe9e2" font-family="Geist, sans-serif" font-size="8">AUS · RUS · IND</text>
+          </svg>
+        </div>
+      </div>
     </div>
 
     <!-- Path cards -->
@@ -17486,38 +17609,63 @@ async function loadDisturbanceData() {
   }
 
   // ── v20 daily-refresh feeds → disturbance events ─────────────────────────
-  // Each flag in the nowcast becomes a disturbance card on the live tab.
+  // v21 — Two filters added per user feedback (May 21 2026): the Open-Meteo
+  // wet_flag was firing on countries like the Netherlands where the capital
+  // city had a routine spring-rain week vs a dry 30-day baseline, surfacing
+  // as "Heavy rainfall — Netherlands" on the disturbance feed even though
+  // there was no actual flooding event. Two fixes:
+  //   (a) Skip Open-Meteo anomalies for resilient food-secure countries
+  //       (FDRS < 40) unless the anomaly is extreme. Routine weather at
+  //       capital cities of resilient countries is noise, not a disturbance.
+  //   (b) Rename "Heavy rainfall" → "Wet anomaly" so the label honestly
+  //       describes what the flag measures (a statistical anomaly, NOT a
+  //       confirmed flooding event). Real flood events still come through
+  //       Open-Meteo Flood (river discharge) and GDACS.
+  const _omRisky = (co) => (co && typeof co.fdrs === 'number' && co.fdrs >= 40);
   try {
-    // Open-Meteo: droughts, wet anomalies, heat extremes
+    // Open-Meteo: droughts, wet anomalies, heat extremes (capital-city signal)
     for (const [iso, row] of Object.entries(LIVE.openmeteo || {})) {
       const co = byISO(iso); if (!co) continue;
       const ll = (typeof COUNTRY_LL !== 'undefined') ? (COUNTRY_LL[iso] || [0,0]) : [0,0];
+
+      // Drought signal — kept for resilient countries too because drought is
+      // a strong predictor even for big exporters (think 2022 US Plains).
       if (row.drought_flag) {
         events.push({
           id: 'om_drought_' + iso, type: 'drought', severity: 'high',
           title: `Drought signal — ${co.name}`, country: co.name, iso,
           lat: ll[0], lng: ll[1],
-          detail: `7-day precipitation ${row.precip_anomaly_pct}% vs 30-day baseline; surface soil moisture ${row.soil_moisture_7d}. Crop stress likely if persistent.`,
+          detail: `7-day precipitation ${row.precip_anomaly_pct}% vs 30-day baseline at capital; surface soil moisture ${row.soil_moisture_7d}. Crop stress likely if persistent. Note: capital-city signal, not country-wide.`,
           source: 'Open-Meteo', date: new Date().toISOString().slice(0,10), live: true,
           url: 'https://open-meteo.com/',
         });
       } else if (row.wet_flag) {
-        events.push({
-          id: 'om_wet_' + iso, type: 'flood', severity: 'medium',
-          title: `Heavy rainfall — ${co.name}`, country: co.name, iso,
-          lat: ll[0], lng: ll[1],
-          detail: `7-day precipitation +${row.precip_anomaly_pct}% vs 30-day baseline. Watch for flooding in low-lying agricultural areas.`,
-          source: 'Open-Meteo', date: new Date().toISOString().slice(0,10), live: true,
-        });
+        // v21 — only surface wet anomaly if (a) the country is structurally
+        // at-risk (FDRS >= 40) OR (b) the anomaly is extreme (>200%).
+        const extreme = (row.precip_anomaly_pct || 0) > 200;
+        if (_omRisky(co) || extreme) {
+          events.push({
+            id: 'om_wet_' + iso, type: 'flood', severity: extreme ? 'high' : 'medium',
+            title: `Wet anomaly — ${co.name}`, country: co.name, iso,
+            lat: ll[0], lng: ll[1],
+            detail: `Statistical anomaly only: 7-day precipitation +${row.precip_anomaly_pct}% vs 30-day baseline at the capital. This does NOT confirm flooding — it flags a country worth checking. River-discharge floods come via Open-Meteo Flood; declared disasters via GDACS.`,
+            source: 'Open-Meteo', date: new Date().toISOString().slice(0,10), live: true,
+          });
+        }
       }
+      // Heat anomaly — same filter as wet: skip for resilient countries
+      // unless extreme (>5°C above baseline).
       if (row.heat_flag) {
-        events.push({
-          id: 'om_heat_' + iso, type: 'drought', severity: 'medium',
-          title: `Heat anomaly — ${co.name}`, country: co.name, iso,
-          lat: ll[0], lng: ll[1],
-          detail: `7-day mean temperature +${row.temp_anomaly_c}°C vs 30-day baseline. Heat stress on crops and livestock.`,
-          source: 'Open-Meteo', date: new Date().toISOString().slice(0,10), live: true,
-        });
+        const extremeHeat = (row.temp_anomaly_c || 0) > 5;
+        if (_omRisky(co) || extremeHeat) {
+          events.push({
+            id: 'om_heat_' + iso, type: 'drought', severity: extremeHeat ? 'high' : 'medium',
+            title: `Heat anomaly — ${co.name}`, country: co.name, iso,
+            lat: ll[0], lng: ll[1],
+            detail: `Capital-city temperature +${row.temp_anomaly_c}°C vs 30-day baseline. Heat stress on crops and livestock if widespread.`,
+            source: 'Open-Meteo', date: new Date().toISOString().slice(0,10), live: true,
+          });
+        }
       }
     }
     // Open-Meteo Flood — river discharge spikes
@@ -18009,19 +18157,9 @@ function toggleDisturbanceMode() {
 const _origRender = renderDisturbancesTab;
 window.renderDisturbancesTab = async function() {
   await _origRender.call(this);
-  // Add disturbance mode toggle button to map overlay if not present
-  if (!document.getElementById('dist-mode-btn') && window.Globe && Globe.state && Globe.state.map) {
-    const btn = document.createElement('button');
-    btn.id = 'dist-mode-btn';
-    btn.textContent = '⚠ Disturbance Mode';
-    btn.style.cssText = `position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:1000;
-      padding:6px 14px;background:var(--bg2);border:1px solid var(--b2);color:var(--t2);
-      font-family:'Geist',sans-serif;font-size:11.5px;font-weight:500;border-radius:20px;
-      cursor:pointer;transition:all .2s;white-space:nowrap;`;
-    btn.onclick = toggleDisturbanceMode;
-    document.getElementById('map-wrap').style.position = 'relative';
-    document.getElementById('map-wrap').appendChild(btn);
-  }
+  // v21 — removed the floating "⚠ Disturbance Mode" pill button per design
+  // request. The map already has a clearer "Live disturbances" toggle in the
+  // top-right; a second floating button was redundant and felt like a debug UI.
   // Draw markers when events are loaded
   if (disturbanceEvents.length) renderPulseMarkers();
 };
