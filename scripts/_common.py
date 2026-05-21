@@ -22,8 +22,26 @@ UA = "FoodShield-AI/21 (+https://foodshield-ai-fv.vercel.app)"
 DEFAULT_TIMEOUT = 30
 
 
-def http_get(url, *, params=None, headers=None, timeout=DEFAULT_TIMEOUT, retries=3, backoff=2):
-    """GET with retries and a polite User-Agent. Returns requests.Response or raises."""
+def http_get(url, *, params=None, headers=None, timeout=DEFAULT_TIMEOUT, retries=3, backoff=2, patient=False):
+    """GET with retries and a polite User-Agent. Returns requests.Response or raises.
+
+    Args:
+        retries:  number of attempts before raising.
+        backoff:  exponential base — sleep = backoff ** attempt seconds.
+        patient:  if True, override retries/backoff with a much more patient
+                  schedule (5 attempts, sleeps of 15s / 30s / 60s / 120s) for
+                  big bulk downloads from flaky mirrors. Workflow run #17
+                  (May 21 2026) saw 7 simultaneous bulk-download failures
+                  from CCKP, ND-GAIN, INFORM, Aqueduct, WGI, WDI, FAOSTAT TCL
+                  in the same 30-min window — short retries don't ride out
+                  partial-outage windows that long. Patient mode covers
+                  ~4 minutes of upstream flapping.
+    """
+    if patient:
+        retries = max(retries, 5)
+        sleeps = [15, 30, 60, 120]  # used for attempts 1..4 (attempt 0 has no sleep before)
+    else:
+        sleeps = None  # falls back to backoff**attempt
     hdrs = {"User-Agent": UA, "Accept": "application/json"}
     if headers:
         hdrs.update(headers)
@@ -36,7 +54,11 @@ def http_get(url, *, params=None, headers=None, timeout=DEFAULT_TIMEOUT, retries
         except Exception as e:
             last_exc = e
             if attempt < retries - 1:
-                time.sleep(backoff ** attempt)
+                if sleeps is not None:
+                    delay = sleeps[min(attempt, len(sleeps) - 1)]
+                else:
+                    delay = backoff ** attempt
+                time.sleep(delay)
     raise RuntimeError(f"GET {url} failed after {retries} attempts: {last_exc}")
 
 

@@ -109,7 +109,8 @@ def _extract_mean(payload):
 
 def _fetch_one(url, iso3):
     try:
-        r = http_get(url.format(iso3=iso3.lower()), timeout=30, retries=2)
+        # CCKP CSVs are big + flaky; patient retry rides out partial outages (run #17, May 21 2026).
+        r = http_get(url.format(iso3=iso3.lower()), timeout=30, retries=2, patient=True)
         return _extract_mean(r.json())
     except Exception:
         return None

@@ -76,7 +76,7 @@ from refresh_faostat_fbs import FAO_AREA_TO_ISO3, NAME_TO_ISO3
 def main():
     print(f"[INFO] FAOSTAT TCL bulk download → {BULK_URL}")
     try:
-        r = http_get(BULK_URL, timeout=300, headers={"Accept": "application/zip,*/*"})
+        r = http_get(BULK_URL, timeout=300, headers={"Accept": "application/zip,*/*"}, patient=True)
     except Exception as e:
         write_json(
             "net_food_trade.json", {},

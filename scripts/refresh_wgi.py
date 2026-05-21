@@ -84,6 +84,7 @@ def main():
                 params={"format": "json", "date": "2010:2026", "per_page": 5000},
                 timeout=45,
                 retries=3,
+                patient=True,  # ride out WB API hiccups (run #17, May 21 2026)
             )
         except Exception as e:
             print(f"  [warn] {code} fetch failed: {e}")

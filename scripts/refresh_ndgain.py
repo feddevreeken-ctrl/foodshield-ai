@@ -72,7 +72,7 @@ def main():
     used_url = None
     for url in URLS:
         try:
-            r = http_get(url, timeout=120, headers={"Accept": "application/zip,*/*"}, retries=2)
+            r = http_get(url, timeout=120, headers={"Accept": "application/zip,*/*"}, retries=2, patient=True)
             if r.content and len(r.content) > 10_000:
                 zip_bytes = r.content
                 used_url = url

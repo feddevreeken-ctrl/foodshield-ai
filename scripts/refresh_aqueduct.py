@@ -87,7 +87,7 @@ def main():
     used_url = None
     for url in URLS:
         try:
-            r = http_get(url, timeout=120, retries=2)
+            r = http_get(url, timeout=120, retries=2, patient=True)
             if r.text and len(r.text) > 1000:
                 text = r.text
                 used_url = url

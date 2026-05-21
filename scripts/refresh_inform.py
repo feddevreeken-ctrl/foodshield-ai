@@ -77,7 +77,7 @@ def main():
     used_url = None
     for url in (*JRC_URLS, HDX_CSV_FALLBACK):
         try:
-            r = http_get(url, timeout=120, retries=2)
+            r = http_get(url, timeout=120, retries=2, patient=True)
             if r.content and len(r.content) > 5_000:
                 xlsx_bytes = r.content
                 used_url = url

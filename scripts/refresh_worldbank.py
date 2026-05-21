@@ -29,7 +29,8 @@ BASE = "https://api.worldbank.org/v2/country/all/indicator/{ind}"
 
 def fetch_indicator(ind):
     """World Bank API returns paginated; mrv=1 gives most recent value per country."""
-    r = http_get(BASE.format(ind=ind), params={"format": "json", "mrv": 1, "per_page": 400}, timeout=45)
+    # patient=True so a single WB API hiccup doesn't tank the indicator (run #17, May 21 2026 — 5 of 7 critical-fail bulk feeds were WB-family).
+    r = http_get(BASE.format(ind=ind), params={"format": "json", "mrv": 1, "per_page": 400}, timeout=45, patient=True)
     data = r.json()
     if not isinstance(data, list) or len(data) < 2:
         return []
