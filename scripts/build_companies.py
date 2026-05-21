@@ -98,8 +98,12 @@ DISPLAY_NAMES = {
     "Tyson Foods":                                 "Tyson Foods",
     "Nutrien Ltd.":                                "Nutrien",
     "Yara International ASA":                      "Yara International",
+    "Yara International":                          "Yara International",
     "Viterra Limited":                             "Viterra",
+    "Viterra Limited (pre-merger standalone entity)": "Viterra",
     "COFCO International Limited":                 "COFCO",
+    "COFCO":                                       "COFCO",
+    "COFCO International":                         "COFCO",
 }
 
 

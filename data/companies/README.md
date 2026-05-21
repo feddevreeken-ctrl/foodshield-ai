@@ -96,15 +96,15 @@ with schema:
 | Bunge | partial | 6 | 18 | listed (NYSE: BG); ⚠ pre-Viterra-merger 10-K; FY2025 refresh will materially expand |
 | Wilmar | partial | 5 | 20 | listed (SGX: F34); palm + sugar + soy crush coverage best-in-class for palm |
 | Olam Group | partial | 6 | 27 | listed (SGX: VC2 + OG7); ofi + Olam Agri split documented; cocoa+coffee strongest |
-| LDC (Louis Dreyfus) | not started | — | — | private; partial ESG report available |
-| COFCO | not started | — | — | partial English ESG disclosures |
-| JBS | not started | — | — | listed; meatpacking |
-| Tyson Foods | not started | — | — | listed; US-focused, 10-K |
-| Nutrien | not started | — | — | listed; fertilizer |
-| Yara International | not started | — | — | listed OSL; fertilizer |
-| Viterra | not started | — | — | merged into Bunge July 2025; assets now under Bunge.json |
+| LDC (Louis Dreyfus) | partial | 7 | 34 | private; comprehensive country-page disclosures across all 7 business lines |
+| COFCO | partial | 6 | 26 | state-owned; English disclosures from cofcointernational.com only — Chinese domestic footprint excluded |
+| JBS | partial | 6 | 22 | listed (B3: JBSS3 + NYSE: JBS); Pilgrim's Pride sub-entity covered; Smithfield correction noted |
+| Tyson Foods | partial | 6 | 14 | listed (NYSE: TSN); US-domestic dominant, modest international footprint |
+| Nutrien | partial | 4 | 12 | listed (NYSE/TSX: NTR); fertilizer producer + ag retail; 2025 divestitures documented |
+| Yara International | partial | 5 | 27 | listed (OSE: YAR); nitrogen + NPK; 2022-2025 European plant closures + Finland divestiture noted |
+| Viterra | historical_pre_merger | 7 | 26 | private (pre-merger); acquired by Bunge July 2025; standalone footprint preserved for reference |
 
-**Current totals: 5 / 12 companies, 26 commodities, 87 cited country claims.**
+**Current totals: 12 / 12 companies, 67 commodities, 248 cited country claims.** ✅
 
 ## Priority order
 
