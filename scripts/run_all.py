@@ -51,6 +51,7 @@ import build_countries_dataset
 import build_nowcast
 import build_source_manifest
 import build_daily_summary
+import build_companies
 
 
 # v20.32 — (label, fn, expected_output_file). The third field is what the
@@ -89,6 +90,7 @@ STEPS = [
     ("Nowcast build",          build_nowcast.main,              "nowcast.json"),
     ("Daily summary",          build_daily_summary.main,        "daily_summary.json"),
     ("Source manifest",        build_source_manifest.main,      "source_manifest.json"),
+    ("Companies aggregate",    build_companies.main,            "companies.json"),
 ]
 
 

@@ -83,6 +83,7 @@ EXPECTED_FILES = {
     'nowcast.json':               ('critical', 'dict_nonempty'),
     'daily_summary.json':         ('critical', 'object'),
     'source_manifest.json':       ('critical', 'object'),
+    'companies.json':             ('soft',     'dict_or_empty'),  # built from local data/companies/*.json
 }
 
 # Threshold: this many or more 'critical' failures → exit 1
