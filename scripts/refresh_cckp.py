@@ -85,34 +85,78 @@ ISO3_SET.update({
 
 def _extract_mean(payload):
     """CCKP timeseries returns a dict of year → value (or a nested dict).
-    Average across years to get a single number."""
-    if not isinstance(payload, dict):
+    Average across years to get a single number.
+
+    v21 (May 2026) — workflow run #18 returned 0 countries with data,
+    suggesting CCKP API response shape changed. Make this tolerant to:
+      - {"BGD": {"1991": 25.1, ...}}             — old: country → years
+      - {"1991": 25.1, ...}                       — flat years
+      - {"data": {"BGD": {"1991": 25.1, ...}}}    — wrapped envelope
+      - {"data": [{"year": 1991, "value": 25.1}]} — array of records
+      - {"value": 25.1}                           — scalar
+    """
+    if payload is None:
         return None
-    # The payload may be { "BGD": {"1991": 25.1, ...} } or a flat dict of years.
+    # Unwrap a top-level "data" envelope if present
+    if isinstance(payload, dict) and "data" in payload and len(payload) <= 3:
+        payload = payload["data"]
+    if not isinstance(payload, (dict, list)):
+        return None
+    # Array of records form
+    if isinstance(payload, list):
+        values = []
+        for rec in payload:
+            if not isinstance(rec, dict):
+                continue
+            v = rec.get("value", rec.get("val", rec.get("mean")))
+            try:
+                values.append(float(v))
+            except (TypeError, ValueError):
+                continue
+        return (sum(values) / len(values)) if values else None
+    # Dict form — recurse if there's a single nested dict
     candidate = payload
     if len(payload) == 1:
         only_key = next(iter(payload))
-        if isinstance(payload[only_key], dict):
-            candidate = payload[only_key]
+        inner = payload[only_key]
+        if isinstance(inner, dict):
+            candidate = inner
+        elif isinstance(inner, (int, float)):
+            return float(inner)
+    # If 'value' is a direct key
+    if "value" in candidate and isinstance(candidate["value"], (int, float)):
+        return float(candidate["value"])
     values = []
     for k, v in candidate.items():
-        if not str(k).isdigit():
-            continue
-        try:
-            values.append(float(v))
-        except (TypeError, ValueError):
-            continue
+        # Year-keyed entries
+        if str(k).isdigit() or (isinstance(k, str) and k[:4].isdigit()):
+            try:
+                values.append(float(v))
+            except (TypeError, ValueError):
+                continue
     if not values:
         return None
     return sum(values) / len(values)
 
 
+_FIRST_PROBE_LOGGED = False
 def _fetch_one(url, iso3):
+    """Fetch one CCKP endpoint for a country. On the FIRST successful HTTP
+    call of the run, log the raw response shape (truncated) so we can debug
+    schema drift from CI logs."""
+    global _FIRST_PROBE_LOGGED
     try:
-        # CCKP CSVs are big + flaky; patient retry rides out partial outages (run #17, May 21 2026).
         r = http_get(url.format(iso3=iso3.lower()), timeout=30, retries=2, patient=True)
-        return _extract_mean(r.json())
-    except Exception:
+        body = r.json()
+        if not _FIRST_PROBE_LOGGED:
+            _FIRST_PROBE_LOGGED = True
+            preview = json.dumps(body)[:400]
+            print(f"  [cckp probe] first response from {url[:80]} for {iso3}: {preview}")
+        return _extract_mean(body)
+    except Exception as e:
+        if not _FIRST_PROBE_LOGGED:
+            _FIRST_PROBE_LOGGED = True
+            print(f"  [cckp probe] first call FAILED for {iso3} → {type(e).__name__}: {e}")
         return None
 
 

@@ -66,9 +66,24 @@ import io
 
 from _common import http_get, write_json
 
+# v21 (May 2026) — old WRI S3 + GitHub paths all 404. The `wri/Aqueduct40`
+# GitHub repo doesn't actually contain a /data/ folder — only notebooks and
+# data dictionaries. WRI distributes country rankings through a portal
+# download button rather than a stable file URL.
+#
+# Stable machine-readable mirror: World Bank Data360 mirrors the WRI_AQDT
+# dataset and exposes a JSON/CSV API. We try the WB mirror first; if it
+# fails, scrape the WRI portal page for the current S3 href (WRI rotates
+# the filename per release, e.g. y2023m07d05_sk_*.csv).
 URLS = [
+    # World Bank Data360 mirror (stable; JSON API)
+    "https://data360api.worldbank.org/data360/data?DATABASE_ID=WRI_AQDT&format=csv",
+    "https://data360api.worldbank.org/data360/data?DATABASE_ID=WRI_AQDT",
+    # WRI portal — sometimes serves a direct CSV if S3 indexer is happy
+    "https://files.wri.org/d8/s3fs-public/2023-07/aqueduct-40-country-rankings.csv",
+    "https://www.wri.org/data/aqueduct-40-country-rankings",  # landing page (scrape <a href>)
+    # Legacy URLs kept as final fallback in case anything restores them
     "https://wri-public-data.s3.amazonaws.com/Aqueduct40/country_rankings_data/Aq40_country_rankings.csv",
-    "https://github.com/wri/Aqueduct40/raw/master/data/country_rankings_data/Aq40_country_rankings.csv",
     "https://raw.githubusercontent.com/wri/Aqueduct40/master/data/country_rankings_data/Aq40_country_rankings.csv",
 ]
 

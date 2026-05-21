@@ -139,32 +139,71 @@ def main():
         # FAOSTAT bulk CSVs are utf-8 with possible latin-1 stragglers in country names
         text_stream = io.TextIOWrapper(f, encoding="utf-8", errors="replace", newline="")
         reader = csv.DictReader(text_stream)
+
+        # v21 — defensive column-name lookup. FAO has shipped slightly different
+        # column header conventions over time ("Item Code" vs "Item Code (CPC)"
+        # vs "Item_Code"). Build a case-insensitive header → value resolver so
+        # a single rename in the bulk feed doesn't silently zero-out our kept-
+        # row counter (which is exactly what happened in workflow run #18).
+        actual_headers = reader.fieldnames or []
+        print(f"[INFO] CSV headers: {actual_headers}")
+
+        def _find_col(*candidates):
+            """Return the actual column name that matches any candidate (case+space tolerant)."""
+            norm = {h.lower().replace(" ", "").replace("_", "").replace("(cpc)", "").strip(): h
+                    for h in actual_headers}
+            for c in candidates:
+                key = c.lower().replace(" ", "").replace("_", "").strip()
+                if key in norm:
+                    return norm[key]
+            return None
+
+        COL_ITEM_CODE = _find_col("Item Code", "ItemCode", "Item Code (CPC)")
+        COL_ELEMENT_CODE = _find_col("Element Code", "ElementCode")
+        COL_YEAR = _find_col("Year")
+        COL_VALUE = _find_col("Value")
+        COL_AREA = _find_col("Area", "Country", "Country or Area")
+        COL_AREA_CODE = _find_col("Area Code", "AreaCode")
+        COL_FLAG = _find_col("Flag")
+
+        missing_cols = [name for name, col in [
+            ("Item Code", COL_ITEM_CODE), ("Element Code", COL_ELEMENT_CODE),
+            ("Year", COL_YEAR), ("Value", COL_VALUE), ("Area", COL_AREA),
+        ] if col is None]
+        if missing_cols:
+            write_json(
+                "net_food_trade.json", {},
+                source="FAOSTAT TCL",
+                notes=f"CSV header mismatch — could not resolve columns: {missing_cols}. Headers seen: {actual_headers[:20]}"
+            )
+            return
+
         for row in reader:
             rows_seen += 1
             if rows_seen % 500000 == 0:
                 print(f"  [progress] {rows_seen} rows scanned, {rows_kept} kept, "
                       f"{len(by_country)} countries so far")
 
-            ic = _int(row.get("Item Code"))
+            ic = _int(row.get(COL_ITEM_CODE))
             if ic not in ITEMS_OF_INTEREST:
                 continue
-            ec = _int(row.get("Element Code"))
+            ec = _int(row.get(COL_ELEMENT_CODE))
             if ec not in (ELEMENT_IMPORT_VAL, ELEMENT_EXPORT_VAL):
                 continue
 
             # Drop missing / suppressed flags. Keep A (official), E (estimate),
             # I (imputed), X (international estimate). Skip M (missing), - (none).
-            flag = (row.get("Flag") or "").strip()
+            flag = (row.get(COL_FLAG) or "").strip() if COL_FLAG else ""
             if flag in ("M", "-"):
                 continue
 
-            year = _int(row.get("Year"))
-            value = _num(row.get("Value"))
+            year = _int(row.get(COL_YEAR))
+            value = _num(row.get(COL_VALUE))
             if year is None or value is None:
                 continue
 
-            area_name = (row.get("Area") or "").strip()
-            ac = _int(row.get("Area Code"))
+            area_name = (row.get(COL_AREA) or "").strip()
+            ac = _int(row.get(COL_AREA_CODE)) if COL_AREA_CODE else None
             iso3 = NAME_TO_ISO3.get(area_name) or FAO_AREA_TO_ISO3.get(ac)
             if not iso3:
                 continue

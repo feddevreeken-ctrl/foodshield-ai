@@ -58,24 +58,33 @@ from datetime import datetime
 
 from _common import http_get, write_json
 
-# Candidate URLs in order. JRC filenames are versioned (v0XX); we guess a few
-# plausible ones based on the May 2026 release window. HDX mirror is stable.
+# v21 (May 2026) — INFORM 2026 edition not yet published; latest confirmed
+# is INFORM_Risk_2024_v067.xlsx. JRC bumps versions throughout the year; we
+# try the latest known + a span of years/versions, then fall through to HDX
+# (whose resource UUID is stable across reuploads) and the World Bank mirror.
 JRC_URLS = [
+    # Latest confirmed (2024 v067)
+    "https://drmkc.jrc.ec.europa.eu/Portals/0/InfoRM/2024/INFORM_Risk_2024_v067.xlsx",
+    # 2025 candidates (in case it's published mid-2026)
+    "https://drmkc.jrc.ec.europa.eu/Portals/0/InfoRM/2025/INFORM_Risk_2025_v067.xlsx",
+    "https://drmkc.jrc.ec.europa.eu/Portals/0/InfoRM/2025/INFORM_Risk_2025_v068.xlsx",
+    "https://drmkc.jrc.ec.europa.eu/Portals/0/InfoRM/2025/INFORM_Risk_2025_v070.xlsx",
+    "https://drmkc.jrc.ec.europa.eu/Portals/0/InfoRM/2025/INFORM_Risk_2025.xlsx",
+    # 2026 (speculative, kept in case JRC publishes during our cron window)
     "https://drmkc.jrc.ec.europa.eu/Portals/0/InfoRM/2026/INFORM_Risk_2026_v067.xlsx",
-    "https://drmkc.jrc.ec.europa.eu/Portals/0/InfoRM/2026/INFORM_Risk_2026_v068.xlsx",
-    "https://drmkc.jrc.ec.europa.eu/Portals/0/InfoRM/2026/INFORM_Risk_2026_v070.xlsx",
-    "https://drmkc.jrc.ec.europa.eu/Portals/0/InfoRM/2026/INFORM_Risk_2026_v071.xlsx",
     "https://drmkc.jrc.ec.europa.eu/Portals/0/InfoRM/2026/INFORM_Risk_2026.xlsx",
 ]
-HDX_BASE = "https://data.humdata.org/dataset/inform-risk-index-2021"  # human-facing dataset page
-# HDX serves resources via /api/3/action/package_show — we attempt direct CSV mirror as well
-HDX_CSV_FALLBACK = "https://data.humdata.org/dataset/4b860b3f-7c45-43a9-b9c5-23a7a9fa45e1/resource/13a55b78-aa9b-4f5b-99b8-c6a4f54168f8/download/inform-risk-2026.xlsx"
+HDX_BASE = "https://data.humdata.org/dataset/inform-risk-index-2021"  # human-facing dataset page (slug stable)
+# HDX stable resource URL (canonical 2024 file, UUID confirmed via HDX API)
+HDX_CSV_FALLBACK = "https://data.humdata.org/dataset/inform-risk-index-2021/resource/603e40eb-a620-47e2-b8ac-e51961c7d661/download/inform_risk_2024_v067.xlsx"
+# World Bank mirror — static path, no version churn
+WB_MIRROR = "https://thedocs.worldbank.org/en/doc/cf8eee7ff5029398f75e897b342e7320-0050122023/related/DRMKC-INFORM.xlsx"
 
 
 def main():
     xlsx_bytes = None
     used_url = None
-    for url in (*JRC_URLS, HDX_CSV_FALLBACK):
+    for url in (*JRC_URLS, HDX_CSV_FALLBACK, WB_MIRROR):
         try:
             r = http_get(url, timeout=120, retries=2, patient=True)
             if r.content and len(r.content) > 5_000:

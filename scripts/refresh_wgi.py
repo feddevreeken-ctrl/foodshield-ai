@@ -73,6 +73,8 @@ INDICATORS = {
 def main():
     out = {}
     failures = []
+    # v21 — one-shot diagnostic flag for the first row's shape (see below)
+    main._logged_shape = False
     for code, (key, label) in INDICATORS.items():
         print(f"[INFO] WGI {code} — {label}")
         try:
@@ -81,7 +83,11 @@ def main():
             # context on country panels. WGI data is annual since 2002.
             r = http_get(
                 BASE.format(code=code),
-                params={"format": "json", "date": "2010:2026", "per_page": 5000},
+                # v21 — widened range to 2005:2026. WGI publishes annually with
+                # a 1-2 year lag, so requesting a tight 2010:2026 range can
+                # return 0 rows if the WB API serves only 2022-2024 data for
+                # that window. 2005 start gives a safe floor.
+                params={"format": "json", "date": "2005:2026", "per_page": 20000},
                 timeout=45,
                 retries=3,
                 patient=True,  # ride out WB API hiccups (run #17, May 21 2026)
@@ -91,11 +97,24 @@ def main():
             failures.append(code)
             continue
         data = r.json()
+        # v21 (May 2026) — workflow run #18 wrote 0 countries from WGI even
+        # though all 6 indicators "fetched OK". Add a one-time probe so the
+        # next failure shows us exactly what the WB API is returning.
         if not isinstance(data, list) or len(data) < 2:
-            print(f"  [warn] {code} unexpected response shape")
+            preview = (str(data)[:300]) if data is not None else 'None'
+            print(f"  [warn] {code} unexpected response shape: {preview}")
             failures.append(code)
             continue
         rows = data[1] or []
+        if not rows:
+            page_meta = data[0] if isinstance(data[0], dict) else {}
+            print(f"  [warn] {code} returned 0 rows. Page meta: {page_meta}")
+            failures.append(code)
+            continue
+        # Log the first row to see what shape WB API is shipping (once per run)
+        if rows and not main._logged_shape:
+            main._logged_shape = True
+            print(f"  [wgi probe] first row keys: {list(rows[0].keys())} sample: {str(rows[0])[:300]}")
         # v20.29 — group by ISO3 then sort by year asc so we can store a
         # compact (year,value) series for sparklines.
         per_iso = {}

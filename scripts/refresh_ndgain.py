@@ -55,13 +55,22 @@ import zipfile
 
 from _common import http_get, write_json
 
-# ND-GAIN download URLs to try in order. The first is the historical canonical
-# link from the previous CRC mirror; the others are reasonable guesses based on
-# the published filename pattern. If none work, we write an empty payload with
-# a clear note — the workflow keeps going.
+# ND-GAIN download URLs to try in order.
+# v21 (May 2026) — old `gain.nd.edu/sites/default/files/resources.zip` returns
+# 404. ND-GAIN migrated data hosting to `gain-new.crc.nd.edu`. The new
+# download page (https://gain-new.crc.nd.edu/about/download) serves the ZIP
+# via a JS button rather than a stable href, so we try the most likely
+# filenames in sequence and fall back to the IMF mirror (ArcGIS Hub, exposes
+# CSV/GeoJSON) when all direct attempts 404.
 URLS = [
+    "https://gain-new.crc.nd.edu/sites/default/files/resources.zip",
+    "https://gain-new.crc.nd.edu/sites/default/files/nd_gain_countryindex.zip",
+    "https://gain-new.crc.nd.edu/sites/default/files/resources-v2.zip",
     "https://gain-new.crc.nd.edu/api/v1/resources/zip",
     "https://gain-new.crc.nd.edu/download/resources.zip",
+    # IMF Climate Data mirror — ArcGIS Hub CSV export (stable, no auth)
+    "https://services3.arcgis.com/Jdnp1TjADvSDxMAX/arcgis/rest/services/ND_GAIN_Country_Index/FeatureServer/0/query?where=1%3D1&outFields=*&f=csv",
+    # Legacy host kept as last fallback
     "https://gain.nd.edu/sites/default/files/resources.zip",
 ]
 
