@@ -18,7 +18,7 @@
 <meta property="og:title" content="FoodShield AI — Global Food Resilience Monitor">
 <meta property="og:description" content="Open-data food-security risk dashboard tracking 195 countries + 50 US states across 33 public pipelines. FDRS scores, climate vulnerability, trade dependency, live disturbances.">
 <meta property="og:url" content="https://foodshield-ai-fv.vercel.app/">
-<meta property="og:image" content="https://foodshield-ai-fv.vercel.app/og-cover.png">
+<meta property="og:image" content="https://foodshield-ai-fv.vercel.app/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="FoodShield AI — global food-security risk dashboard">
@@ -27,7 +27,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="FoodShield AI — Global Food Resilience Monitor">
 <meta name="twitter:description" content="Open-data food-security risk dashboard tracking 195 countries + 50 US states across 33 public pipelines.">
-<meta name="twitter:image" content="https://foodshield-ai-fv.vercel.app/og-cover.png">
+<meta name="twitter:image" content="https://foodshield-ai-fv.vercel.app/og-image.png">
 
 <!-- JSON-LD: WebSite + Organization. Helps Google build the knowledge panel
      and enables sitelinks search box. Country-specific JSON-LD would require
@@ -50,7 +50,7 @@
       "@id": "https://foodshield-ai-fv.vercel.app/#org",
       "name": "FoodShield AI",
       "url": "https://foodshield-ai-fv.vercel.app/",
-      "logo": "https://foodshield-ai-fv.vercel.app/og-cover.png"
+      "logo": "https://foodshield-ai-fv.vercel.app/og-image.png"
     },
     {
       "@type": "Dataset",
@@ -1121,6 +1121,51 @@ body {
   margin-top: 4px;
 }
 .instr-path-featured .instr-path-cta { color: var(--accent); }
+
+/* v21 — First-visit hint tooltip. Shown after the user closes the Quick
+   Start modal, ONCE per browser. Points at the map with a small wave +
+   directs them to either click or search. Auto-dismisses after 8s. */
+.first-hint {
+  position: fixed;
+  bottom: 80px; left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--bg1);
+  border: 1px solid var(--accent-dim);
+  border-radius: 12px;
+  padding: 12px 18px 12px 14px;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--t1);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.45), 0 0 0 4px rgba(138,166,196,0.08);
+  z-index: 9000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .35s ease, transform .35s cubic-bezier(.4,0,.2,1);
+}
+.first-hint.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+.first-hint-wave {
+  font-size: 18px;
+  animation: hintWave 1.8s ease-in-out 2;
+  transform-origin: 70% 70%;
+}
+@keyframes hintWave {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(14deg); }
+  40% { transform: rotate(-8deg); }
+  60% { transform: rotate(10deg); }
+  80% { transform: rotate(-4deg); }
+}
+.first-hint-text { line-height: 1.4; }
+.first-hint-text b { color: var(--accent); font-weight: 500; }
+.first-hint-close {
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--t3); font-size: 14px; padding: 2px 6px; margin-left: 4px;
+  border-radius: 4px;
+}
+.first-hint-close:hover { background: var(--bg2); color: var(--t1); }
 
 /* v21 — Acronym tooltips. Wrap any acronym in <abbr class="ac" title="…">
    for a dotted underline + native browser tooltip. Plain CSS, no JS needed
@@ -4725,7 +4770,7 @@ input[type="email"]:focus {
   <button class="subnav-btn" data-tab="country" data-sub-group="explore" onclick="showTab('country',this)">Country</button>
   <button class="subnav-btn" data-tab="trade" data-sub-group="explore" onclick="showTab('trade',this)">Trade Flows</button>
   <button class="subnav-btn" data-tab="commodities" data-sub-group="explore" onclick="showTab('commodities',this)">Commodities</button>
-  <button class="subnav-btn" data-tab="companies" data-sub-group="explore" onclick="showTab('companies',this)">Companies</button>
+  <button class="subnav-btn" data-tab="companies" data-sub-group="explore" onclick="showTab('companies',this)" title="Trader exposure to country-level food disruption risk — modeled from publicly known commodity specialisations, not customs records.">Trader Exposure<span class="subnav-modeled-pill" style="display:inline-block;margin-left:6px;padding:1px 5px;font-family:'Geist Mono',monospace;font-size:8.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#c47a3c;background:rgba(196,122,60,0.14);border:1px solid rgba(196,122,60,0.35);border-radius:3px;">modeled</span></button>
   <!-- Analyze -->
   <button class="subnav-btn" data-tab="score" data-sub-group="analyze" onclick="showTab('score',this)">Score &amp; Ranking</button>
   <button class="subnav-btn" data-tab="compare" data-sub-group="analyze" onclick="showTab('compare',this)">Compare</button>
@@ -5170,14 +5215,32 @@ input[type="email"]:focus {
   <div id="tab-companies" class="tab-page">
     <div class="content-page">
       <div class="page-header">
-        <div class="page-eyebrow">Supplier Intelligence</div>
-        <div class="page-title">The companies behind <em>global food flows</em></div>
-        <div class="page-sub">Search any food company by name. Each gets an Exposure Score — a weighted average of FDRS across every country it sources from.</div>
+        <div class="page-eyebrow">Trader Exposure · <span style="color:#c47a3c;">Modeled</span></div>
+        <div class="page-title">Which traders are <em>exposed</em> to which risks?</div>
+        <div class="page-sub">For each major commodity trader (Cargill, ADM, Bunge, LDC, COFCO, Wilmar, Olam, JBS, Tyson, Nutrien, Yara, Viterra), we compute an indicative Exposure Score: the average Food Disruption Risk of every country that imports or exports the commodities they're publicly known to trade.</div>
       </div>
+
+      <!-- v21 — Honest banner. The Companies tab uses industry-knowledge mapping,
+           not customs counterparty records (which aren't publicly available for
+           privately-held traders like Cargill/Bunge/LDC). Surfacing this prominently
+           rather than burying it in a tooltip. -->
+      <div style="background:linear-gradient(180deg, rgba(196,122,60,0.08), rgba(196,122,60,0.03)); border:1px solid rgba(196,122,60,0.35); border-radius:10px; padding:14px 18px; margin-bottom:24px;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+          <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#c47a3c;"></span>
+          <span style="font-family:'Geist Mono',monospace; font-size:10.5px; font-weight:700; letter-spacing:0.14em; color:#c47a3c; text-transform:uppercase;">Methodology note · read this first</span>
+        </div>
+        <div style="font-size:12.5px; color:var(--t2); line-height:1.65;">
+          This view <b style="color:var(--t1)">does not show actual customs records</b> for individual traders. Cargill, Bunge, ADM, LDC etc. are privately held and don't publish country-level sourcing data. What you see is a <b style="color:var(--t1)">modeled exposure</b>: for each company, we use publicly known commodity specialisations (e.g. Cargill trades wheat, maize, soy globally) and weight the Food Disruption Risk of countries that import/export those commodities. Useful as a directional risk-screen; <b style="color:var(--t1)">not</b> a counterparty-level supply-chain map.
+          <div style="margin-top:8px; font-size:11.5px; color:var(--t3);">
+            We're building genuine sourcing data from annual reports + ESG/CDP disclosures for the top 12 traders — once that's in, this tab will be re-labelled <i>sourced</i>. Until then it stays <i style="color:#c47a3c;">modeled / illustrative</i>.
+          </div>
+        </div>
+      </div>
+
       <!-- Top exposure callout — auto-computed -->
       <div id="company-exposure-callout" class="co-callout"></div>
       <div class="companies-search-wrap" style="margin:0 0 24px;">
-        <input id="company-search-input" type="text" placeholder="Search company or supplier name…"
+        <input id="company-search-input" type="text" placeholder="Search a trader (e.g. Cargill, Bunge, COFCO…)"
           oninput="onCompanySearch(this.value)"
           style="width:100%;max-width:480px;padding:10px 16px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:14px;outline:none;">
       </div>
@@ -15042,6 +15105,42 @@ function closeInstructions() {
       localStorage.removeItem('foodshield_skip_intro');
     }
   } catch(e) {}
+  // v21 — first-visit hint. Show once per browser, only on first close
+  // (not when re-opening the modal from the bottom-bar Quick Start button).
+  try {
+    if (!localStorage.getItem('foodshield_hint_shown')) {
+      localStorage.setItem('foodshield_hint_shown', '1');
+      setTimeout(showFirstHint, 400);
+    }
+  } catch(e) {}
+}
+
+// v21 — First-visit floating hint, dismissed by user or after 8s.
+function showFirstHint() {
+  let el = document.getElementById('first-hint');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'first-hint';
+    el.className = 'first-hint';
+    el.innerHTML = `
+      <span class="first-hint-wave" aria-hidden="true">👋</span>
+      <span class="first-hint-text">Try <b>clicking a country</b> on the map, or use the <b>search bar</b> to look one up.</span>
+      <button class="first-hint-close" onclick="dismissFirstHint()" aria-label="Dismiss hint">×</button>
+    `;
+    document.body.appendChild(el);
+  }
+  requestAnimationFrame(() => el.classList.add('show'));
+  // auto-dismiss after 8s — enough time to actually read, not so long it nags
+  clearTimeout(window._firstHintTimer);
+  window._firstHintTimer = setTimeout(dismissFirstHint, 8000);
+}
+
+function dismissFirstHint() {
+  const el = document.getElementById('first-hint');
+  if (!el) return;
+  el.classList.remove('show');
+  setTimeout(() => el.remove(), 400);
+  clearTimeout(window._firstHintTimer);
 }
 
 // (instructions auto-open merged into main init below)
@@ -18463,8 +18562,8 @@ function renderCompanyExposureCallout(companyNames) {
 
   if (!scored.length) { host.innerHTML = ''; return; }
   host.innerHTML = `
-    <div class="co-callout-eyebrow">⚠ Highest exposure right now</div>
-    <div class="co-callout-title">Three traders moving food into <em>vulnerable countries</em></div>
+    <div class="co-callout-eyebrow">⚠ Highest modeled exposure</div>
+    <div class="co-callout-title">Three traders whose commodities <em>overlap</em> with the most vulnerable importers</div>
     <div class="co-callout-grid">
       ${scored.map((s,i) => `
         <div class="co-callout-card" onclick="showCompanyDetail('${s.name.replace(/'/g,"&#39;")}')">
@@ -18571,17 +18670,17 @@ function showCompanyDetail(company) {
     <div class="card" style="margin-bottom:14px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:16px;">
         <div>
-          <div class="eyebrow" style="margin-bottom:4px;">Company Profile</div>
+          <div class="eyebrow" style="margin-bottom:4px;">Company Profile <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#c47a3c;background:rgba(196,122,60,0.14);border:1px solid rgba(196,122,60,0.35);padding:1px 5px;border-radius:3px;margin-left:6px;letter-spacing:.06em;text-transform:uppercase;" title="Country mapping is modeled from publicly-known commodity specialisations, not customs records.">modeled</span></div>
           <h3 style="font-size:20px;font-weight:700;letter-spacing:-.02em;">${company}</h3>
-          <div style="font-size:12px;color:var(--t3);margin-top:4px;">
-            Active in ${uniqueCountries.length} countries across ${[...new Set(uniqueCountries.map(e=>e.region))].length} regions
+          <div style="font-size:12px;color:var(--t3);margin-top:4px;" title="Modeled overlap based on commodities this company publicly trades and countries that import/export those commodities. Not customs counterparty records.">
+            Commodity overlap with ${uniqueCountries.length} countries across ${[...new Set(uniqueCountries.map(e=>e.region))].length} regions
           </div>
           <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;">
             ${uniqueCommodities.slice(0,6).map(c=>`<span style="background:var(--bg3);border:1px solid var(--b2);border-radius:12px;padding:2px 8px;font-size:10px;color:var(--t3)">${c}</span>`).join('')}
           </div>
         </div>
         <div style="text-align:center;flex-shrink:0;">
-          <div style="font-size:10px;color:var(--t3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em;">Portfolio Exposure</div>
+          <div style="font-size:10px;color:var(--t3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em;" title="Modeled exposure: avg Food Disruption Risk of countries the company's commodity-mix touches. Not weighted by actual sourcing volume.">Modeled Exposure</div>
           <div style="font-size:36px;font-weight:700;font-family:'Geist Mono',monospace;color:${expCol}">${expScore}</div>
           <div style="font-size:11px;color:${expCol}">${riskLabel(expScore)}</div>
         </div>
