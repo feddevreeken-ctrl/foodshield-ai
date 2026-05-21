@@ -1057,9 +1057,15 @@ body {
 /* Path cards in welcome modal */
 .instr-paths {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
   padding: 0 28px 20px;
+}
+@media (max-width: 900px) {
+  .instr-paths { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 540px) {
+  .instr-paths { grid-template-columns: 1fr; }
 }
 .instr-path {
   background: var(--bg2);
@@ -1115,6 +1121,85 @@ body {
   margin-top: 4px;
 }
 .instr-path-featured .instr-path-cta { color: var(--accent); }
+
+/* v21 — Interactive product tour overlay (launched from Quick Start modal).
+   A dim background covers everything except the highlighted target;
+   a card floats next to the target with copy + Next/Skip/Back. */
+#tour-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  pointer-events: none;
+  opacity: 0; transition: opacity .25s;
+}
+#tour-overlay.tour-on {
+  opacity: 1;
+  pointer-events: auto;
+}
+.tour-mask {
+  position: absolute; inset: 0;
+  background: rgba(8, 12, 16, 0.72);
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+}
+.tour-spotlight {
+  position: absolute;
+  border-radius: 12px;
+  box-shadow: 0 0 0 4px rgba(138,166,196,0.65),
+              0 0 0 9999px rgba(8, 12, 16, 0.72);
+  transition: all .35s cubic-bezier(.4,0,.2,1);
+  pointer-events: none;
+}
+.tour-card {
+  position: absolute;
+  background: var(--bg1);
+  border: 1px solid var(--b2);
+  border-radius: 12px;
+  padding: 18px 20px 16px;
+  max-width: 340px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  transition: all .35s cubic-bezier(.4,0,.2,1);
+}
+.tour-card-step {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9.5px; font-weight: 600; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--t3); margin-bottom: 6px;
+}
+.tour-card-title {
+  font-family: 'Instrument Serif', serif;
+  font-size: 22px; font-weight: 400; color: var(--t1);
+  line-height: 1.18; margin-bottom: 8px;
+}
+.tour-card-body {
+  font-size: 12.5px; color: var(--t2); line-height: 1.55;
+  margin-bottom: 14px;
+}
+.tour-card-body em { color: var(--accent); font-style: normal; }
+.tour-card-actions {
+  display: flex; align-items: center; gap: 8px;
+  justify-content: space-between;
+}
+.tour-card-progress {
+  font-size: 10.5px; color: var(--t3);
+  font-family: 'Geist Mono', monospace;
+}
+.tour-card-buttons { display: flex; gap: 6px; }
+.tour-btn {
+  font-size: 11.5px; font-weight: 500;
+  padding: 6px 12px; border-radius: 6px;
+  background: transparent; border: 1px solid var(--b2);
+  color: var(--t2); cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.tour-btn:hover { border-color: var(--b3); color: var(--t1); }
+.tour-btn-primary {
+  background: var(--accent); border-color: var(--accent);
+  color: var(--bg0);
+}
+.tour-btn-primary:hover {
+  background: var(--accent); color: var(--bg0); filter: brightness(1.08);
+}
+@media (max-width: 640px) {
+  .tour-card { max-width: calc(100vw - 32px); }
+  .tour-card-title { font-size: 19px; }
+}
 
 /* "The full guide" divider */
 .instr-divider {
@@ -5101,8 +5186,8 @@ input[type="email"]:focus {
     <div class="instr-head">
       <button class="instr-close" onclick="closeInstructions()" aria-label="Close Quick Start" title="Close">✕</button>
       <div class="instr-eyebrow">✱ Quick Start · by Fedde Vreeken</div>
-      <div class="instr-title" id="instr-title-id">What worries you about <em>food security</em>?</div>
-      <div class="instr-sub">FoodShield AI tracks dependency, resilience and vulnerability for 195 countries plus all 50 US states using live FAO, USDA, WFP and GDACS data. Pick a starting point — or scroll for the full guide.</div>
+      <div class="instr-title" id="instr-title-id">How fragile is the world's <em>food supply</em> right now?</div>
+      <div class="instr-sub">FoodShield AI scores every country on how exposed it is to food shocks — from wheat shortages to droughts to conflict — using 33 live data feeds (FAO, USDA, WFP, World Bank, NASA), refreshed every 6 hours. Pick a starting point, or take the 90-second tour.</div>
       <a href="https://www.linkedin.com/in/feddevreeken" target="_blank" rel="noopener" class="instr-linkedin">
         <svg viewBox="0 0 24 24" fill="currentColor" style="width:11px;height:11px;"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
         Connect on LinkedIn ↗
@@ -5111,27 +5196,34 @@ input[type="email"]:focus {
 
     <!-- Path cards -->
     <div class="instr-paths">
+      <div class="instr-path instr-path-featured" onclick="closeInstructions(); setTimeout(startTour, 250);">
+        <div class="instr-path-badge">New</div>
+        <div class="instr-path-icon">▶</div>
+        <div class="instr-path-eyebrow">Path 1</div>
+        <div class="instr-path-title">Take the tour</div>
+        <div class="instr-path-desc">90 seconds. We'll walk you through the map, a country, a commodity, and a what-if scenario.</div>
+        <div class="instr-path-cta">Start the walkthrough →</div>
+      </div>
       <div class="instr-path" onclick="closeInstructions(); document.getElementById('search-box')?.focus();">
         <div class="instr-path-icon">◷</div>
-        <div class="instr-path-eyebrow">Path 1</div>
-        <div class="instr-path-title">Find your country</div>
-        <div class="instr-path-desc">See its Food Dependency Score, biggest import risks and supplier exposure.</div>
-        <div class="instr-path-cta">Search a country →</div>
-      </div>
-      <div class="instr-path instr-path-featured" onclick="closeInstructions(); showTab('scenario');">
-        <div class="instr-path-badge">Featured</div>
-        <div class="instr-path-icon">⌖</div>
         <div class="instr-path-eyebrow">Path 2</div>
-        <div class="instr-path-title">Run a what-if</div>
-        <div class="instr-path-desc">Stress-test the food system with a real shock — wheat embargo, harvest failure, conflict.</div>
-        <div class="instr-path-cta">Open Scenario Simulator →</div>
+        <div class="instr-path-title">Look up a country</div>
+        <div class="instr-path-desc">See its risk score, where its food comes from, and the biggest shocks hitting it right now.</div>
+        <div class="instr-path-cta">Search a country →</div>
       </div>
       <div class="instr-path" onclick="closeInstructions(); showTab('commodities');">
         <div class="instr-path-icon">◯</div>
         <div class="instr-path-eyebrow">Path 3</div>
-        <div class="instr-path-title">Pick a commodity</div>
-        <div class="instr-path-desc">Trace where wheat, soy, palm oil or fertiliser comes from — and what could disrupt it.</div>
+        <div class="instr-path-title">Follow a commodity</div>
+        <div class="instr-path-desc">Trace wheat, rice, soy, palm oil or fertiliser from producers to importers — and the chokepoints between.</div>
         <div class="instr-path-cta">Browse commodities →</div>
+      </div>
+      <div class="instr-path" onclick="closeInstructions(); showTab('scenario');">
+        <div class="instr-path-icon">⌖</div>
+        <div class="instr-path-eyebrow">Path 4</div>
+        <div class="instr-path-title">Run a what-if</div>
+        <div class="instr-path-desc">Stress-test the system with a real shock — wheat embargo, drought, conflict — and see who breaks first.</div>
+        <div class="instr-path-cta">Open simulator →</div>
       </div>
     </div>
 
@@ -14933,6 +15025,169 @@ function closeInstructions() {
 // (instructions auto-open merged into main init below)
 
 // ════════════════════════════════════════════════════
+// v21 — INTERACTIVE PRODUCT TOUR (launched from Quick Start)
+// ════════════════════════════════════════════════════
+// Lightweight 7-step walkthrough designed for business audiences who don't
+// know what FDRS, IPC, or "supplier exposure" mean. Each step highlights a
+// real UI element + provides plain-English framing. No external libs.
+const TOUR_STEPS = [
+  {
+    selector: '#map-wrap',
+    title: 'The world food-risk map',
+    body: 'Every country is colour-coded by its <em>Food Disruption Risk Score</em> (FDRS) — green is resilient, red is severe. The score blends 33 live data feeds (imports, climate, conflict, logistics, prices) into one number you can scan in seconds.',
+  },
+  {
+    selector: '#map-legend',
+    title: 'Five tiers, 0–100',
+    body: 'Resilient (green) to Severe (dark red). A country sits in a tier based on its structural fundamentals plus the live shocks hitting it right now.',
+  },
+  {
+    selector: '#search-box',
+    title: 'Look up any country',
+    body: 'Search for any of the 195 countries (plus all 50 US states). Or just click a country on the map — same result.',
+  },
+  {
+    selector: '.subnav-btn[data-tab="commodities"]',
+    title: 'Follow the food itself',
+    body: 'Switch to Commodities to trace wheat, rice, maize, soy, palm oil or fertiliser from producers to importers. Useful for spotting chokepoints — e.g. how much of the world\'s wheat exports flow through the Black Sea.',
+  },
+  {
+    selector: '.subnav-btn[data-tab="scenario"]',
+    title: 'Stress-test the system',
+    body: 'The Scenario Simulator lets you pull a real lever — wheat embargo, drought, conflict spike — and watch which countries take the biggest hit. Designed for "what would actually happen if…" questions.',
+  },
+  {
+    selector: '.subnav-btn[data-tab="methodology"]',
+    title: 'Everything is sourced',
+    body: 'Open Methodology to see exactly which data feeds power each score, what\'s live vs modelled, and where the gaps are. The whole point is transparency — no black box.',
+  },
+  {
+    selector: '#bb-status-dot',
+    title: 'Live health for 33 feeds',
+    body: 'A green dot means every data source is fresh. If one upstream feed (e.g. FAO\'s server) is slow, it shows here. Click it to see source-by-source health.',
+  },
+];
+
+let _tourIdx = 0;
+let _tourResizeHandler = null;
+let _tourEscHandler = null;
+
+function startTour() {
+  _tourIdx = 0;
+  // Make sure we're on the Global Map tab so step 1 has a target
+  try { showTab('global'); } catch(e) {}
+  _ensureTourOverlay();
+  setTimeout(() => _renderTourStep(), 50);
+}
+
+function _ensureTourOverlay() {
+  let o = document.getElementById('tour-overlay');
+  if (!o) {
+    o = document.createElement('div');
+    o.id = 'tour-overlay';
+    o.innerHTML = `
+      <div class="tour-mask" onclick="endTour()"></div>
+      <div class="tour-spotlight" id="tour-spotlight"></div>
+      <div class="tour-card" id="tour-card">
+        <div class="tour-card-step" id="tour-card-step"></div>
+        <div class="tour-card-title" id="tour-card-title"></div>
+        <div class="tour-card-body" id="tour-card-body"></div>
+        <div class="tour-card-actions">
+          <div class="tour-card-progress" id="tour-card-progress"></div>
+          <div class="tour-card-buttons">
+            <button class="tour-btn" onclick="endTour()">Skip</button>
+            <button class="tour-btn" id="tour-back" onclick="_tourGo(-1)">Back</button>
+            <button class="tour-btn tour-btn-primary" id="tour-next" onclick="_tourGo(1)">Next →</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(o);
+  }
+  o.classList.add('tour-on');
+  if (!_tourResizeHandler) {
+    _tourResizeHandler = () => _positionTourStep();
+    window.addEventListener('resize', _tourResizeHandler);
+    window.addEventListener('scroll', _tourResizeHandler, true);
+  }
+  if (!_tourEscHandler) {
+    _tourEscHandler = (e) => { if (e.key === 'Escape') endTour(); };
+    document.addEventListener('keydown', _tourEscHandler);
+  }
+}
+
+function _renderTourStep() {
+  const step = TOUR_STEPS[_tourIdx];
+  if (!step) { endTour(); return; }
+  document.getElementById('tour-card-step').textContent = `Step ${_tourIdx + 1} of ${TOUR_STEPS.length}`;
+  document.getElementById('tour-card-title').textContent = step.title;
+  document.getElementById('tour-card-body').innerHTML = step.body;
+  document.getElementById('tour-card-progress').textContent =
+    `${String(_tourIdx + 1).padStart(2,'0')} / ${String(TOUR_STEPS.length).padStart(2,'0')}`;
+  document.getElementById('tour-back').style.visibility = _tourIdx === 0 ? 'hidden' : 'visible';
+  document.getElementById('tour-next').textContent =
+    _tourIdx === TOUR_STEPS.length - 1 ? 'Finish ✓' : 'Next →';
+  _positionTourStep();
+}
+
+function _positionTourStep() {
+  const step = TOUR_STEPS[_tourIdx];
+  if (!step) return;
+  const target = document.querySelector(step.selector);
+  const spot = document.getElementById('tour-spotlight');
+  const card = document.getElementById('tour-card');
+  if (!target || !spot || !card) return;
+  const r = target.getBoundingClientRect();
+  const pad = 8;
+  spot.style.left = (r.left - pad) + 'px';
+  spot.style.top  = (r.top - pad) + 'px';
+  spot.style.width  = (r.width + pad*2) + 'px';
+  spot.style.height = (r.height + pad*2) + 'px';
+  // Position card: prefer below the target, but flip above if near bottom edge.
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const cardW = Math.min(340, vw - 32);
+  const cardH = card.offsetHeight || 200;
+  let left = r.left + r.width/2 - cardW/2;
+  left = Math.max(16, Math.min(left, vw - cardW - 16));
+  let top;
+  if (r.bottom + cardH + 24 < vh) {
+    top = r.bottom + 16;
+  } else if (r.top - cardH - 24 > 0) {
+    top = r.top - cardH - 16;
+  } else {
+    top = Math.max(16, vh - cardH - 16);
+  }
+  card.style.left = left + 'px';
+  card.style.top  = top + 'px';
+  // Scroll target into view if needed
+  if (r.top < 0 || r.bottom > vh) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(_positionTourStep, 300);
+  }
+}
+
+function _tourGo(delta) {
+  _tourIdx += delta;
+  if (_tourIdx >= TOUR_STEPS.length) { endTour(); return; }
+  if (_tourIdx < 0) _tourIdx = 0;
+  _renderTourStep();
+}
+
+function endTour() {
+  const o = document.getElementById('tour-overlay');
+  if (o) o.classList.remove('tour-on');
+  if (_tourResizeHandler) {
+    window.removeEventListener('resize', _tourResizeHandler);
+    window.removeEventListener('scroll', _tourResizeHandler, true);
+    _tourResizeHandler = null;
+  }
+  if (_tourEscHandler) {
+    document.removeEventListener('keydown', _tourEscHandler);
+    _tourEscHandler = null;
+  }
+}
+
+
+// ════════════════════════════════════════════════════
 // CHART HELPERS
 // ════════════════════════════════════════════════════
 const CHART_DEFAULTS = {
@@ -18938,9 +19193,13 @@ function showCommodityDetail(key) {
     </a>
   </div>
   <div class="bb-center">
-    <button class="bb-btn" onclick="openInstructions()">
+    <button class="bb-btn" onclick="openInstructions()" title="Quick Start menu — pick a path or take the 90-second tour">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-      Instructions
+      Quick Start
+    </button>
+    <button class="bb-btn" onclick="startTour()" title="Take the 90-second interactive walkthrough">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      Take the tour
     </button>
     <button class="bb-btn" onclick="showTab('methodology',document.querySelector('.nav-btn:nth-child(7)'))">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
