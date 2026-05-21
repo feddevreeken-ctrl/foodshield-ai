@@ -89,20 +89,22 @@ with schema:
 
 ## Status
 
-| Company | Status | Notes |
-|---------|--------|-------|
-| Cargill | scaffolded | template + first cites populated |
-| ADM | not started | listed; 10-K available |
-| Bunge | not started | listed; 10-K available |
-| LDC (Louis Dreyfus) | not started | private; partial ESG report |
-| COFCO | not started | partial English ESG disclosures |
-| Wilmar | not started | listed SGX; ESG strong |
-| Olam Group | not started | listed SGX; ESG strong (best in class) |
-| JBS | not started | listed; meatpacking |
-| Tyson Foods | not started | listed; US-focused, 10-K |
-| Nutrien | not started | listed; fertilizer |
-| Yara International | not started | listed OSL; fertilizer |
-| Viterra | not started | private (Glencore + CPPIB); partial |
+| Company | Status | Commodities | Country claims | Notes |
+|---------|--------|-------------|----------------|-------|
+| Cargill | partial | 5 | 11 | private; based on Cargill ESG dashboards + soy/palm/cocoa supplier lists |
+| ADM | scaffolded | 4 | 11 | listed (NYSE: ADM); 10-K segment data + location asset map |
+| Bunge | partial | 6 | 18 | listed (NYSE: BG); ⚠ pre-Viterra-merger 10-K; FY2025 refresh will materially expand |
+| Wilmar | partial | 5 | 20 | listed (SGX: F34); palm + sugar + soy crush coverage best-in-class for palm |
+| Olam Group | partial | 6 | 27 | listed (SGX: VC2 + OG7); ofi + Olam Agri split documented; cocoa+coffee strongest |
+| LDC (Louis Dreyfus) | not started | — | — | private; partial ESG report available |
+| COFCO | not started | — | — | partial English ESG disclosures |
+| JBS | not started | — | — | listed; meatpacking |
+| Tyson Foods | not started | — | — | listed; US-focused, 10-K |
+| Nutrien | not started | — | — | listed; fertilizer |
+| Yara International | not started | — | — | listed OSL; fertilizer |
+| Viterra | not started | — | — | merged into Bunge July 2025; assets now under Bunge.json |
+
+**Current totals: 5 / 12 companies, 26 commodities, 87 cited country claims.**
 
 ## Priority order
 
