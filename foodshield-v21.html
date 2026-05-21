@@ -15035,46 +15035,111 @@ function closeInstructions() {
 // ════════════════════════════════════════════════════
 // v21 — INTERACTIVE PRODUCT TOUR (launched from Quick Start)
 // ════════════════════════════════════════════════════
-// Lightweight 7-step walkthrough designed for business audiences who don't
-// know what FDRS, IPC, or "supplier exposure" mean. Each step highlights a
-// real UI element + provides plain-English framing. No external libs.
+// Designed for business audiences who don't know what FDRS / IPC / "supplier
+// exposure" mean. Each step DRIVES the dashboard (opens tabs, opens a real
+// country panel, switches views) and highlights what to look at — not just
+// the nav button. The user finishes the tour having actually seen the product.
+//
+// Each step has:
+//   selector       — CSS selector for the spotlight target
+//   title, body    — plain-English copy
+//   before()       — optional setup (switch tab, open panel) before spotlight
+//                    can return a Promise or number ms-delay before spotlight
 const TOUR_STEPS = [
   {
     selector: '#map-wrap',
     title: 'The world food-risk map',
-    body: 'Every country is colour-coded by its <em>Food Disruption Risk Score</em> (FDRS) — green is resilient, red is severe. The score blends 33 live data feeds (imports, climate, conflict, logistics, prices) into one number you can scan in seconds.',
+    body: 'Every country is colour-coded by its <em>Food Disruption Risk Score</em> — green is resilient, red is severe. The score blends 33 live data feeds (imports, climate, conflict, logistics, prices) into one number you can scan in seconds.',
+    before: () => { try { showTab('global'); } catch(e){} closePanelIfOpen(); return 300; },
   },
   {
     selector: '#map-legend',
     title: 'Five tiers, 0–100',
     body: 'Resilient (green) to Severe (dark red). A country sits in a tier based on its structural fundamentals plus the live shocks hitting it right now.',
+    before: () => { try { showTab('global'); } catch(e){} closePanelIfOpen(); return 200; },
   },
   {
-    selector: '#search-box',
-    title: 'Look up any country',
-    body: 'Search for any of the 195 countries (plus all 50 US states). Or just click a country on the map — same result.',
+    selector: '#sidepanel',
+    title: 'Click any country for a deep brief',
+    body: 'Watch — we just opened <em>Egypt</em>. You\'d normally click a country on the map or use search. Each brief shows the risk score, where the country\'s food comes from, live shocks affecting it, and an AI-written summary.',
+    before: () => {
+      try { showTab('global'); } catch(e){}
+      try { selectCountry('EGY'); } catch(e){}
+      return 600;
+    },
   },
   {
-    selector: '.subnav-btn[data-tab="commodities"]',
-    title: 'Follow the food itself',
-    body: 'Switch to Commodities to trace wheat, rice, maize, soy, palm oil or fertiliser from producers to importers. Useful for spotting chokepoints — e.g. how much of the world\'s wheat exports flow through the Black Sea.',
+    selector: '#sp-score',
+    title: 'The headline score',
+    body: 'Egypt sits in the upper range. Why? It imports ~62% of its wheat — mostly from the Black Sea — while servicing a 110m-person population. That structural exposure plus live FX stress drives the number.',
+    before: () => 250,
   },
   {
-    selector: '.subnav-btn[data-tab="scenario"]',
+    selector: '#sp-imports',
+    title: 'Where the food actually comes from',
+    body: 'Top suppliers per commodity, drawn from UN Comtrade. This is the actionable piece — if Russia\'s wheat exports drop, you can see immediately which countries take the biggest hit.',
+    before: () => {
+      // Scroll panel content to bring imports section into view
+      const sp = document.getElementById('sidepanel');
+      const imp = document.getElementById('sp-imports');
+      if (sp && imp) {
+        imp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return 500;
+    },
+  },
+  {
+    selector: '#tab-commodities',
+    title: 'Follow a commodity end-to-end',
+    body: 'Switch to the Commodities tab — now you\'re looking at it from the other angle. Pick wheat, rice, maize, soy, palm oil, sugar, coffee, fertiliser… and trace producers → importers → chokepoints.',
+    before: () => {
+      closePanelIfOpen();
+      try { showTab('commodities'); } catch(e){}
+      return 500;
+    },
+  },
+  {
+    selector: '#tab-disturbances',
+    title: 'Live disturbances feed',
+    body: 'Food-relevant shocks happening right now — pulled from ReliefWeb, GDACS, NASA FIRMS, ACLED. Click any event to see which countries\' food supply it threatens and which commodities are at risk.',
+    before: () => {
+      try { showTab('disturbances'); } catch(e){}
+      return 500;
+    },
+  },
+  {
+    selector: '#tab-scenario',
     title: 'Stress-test the system',
-    body: 'The Scenario Simulator lets you pull a real lever — wheat embargo, drought, conflict spike — and watch which countries take the biggest hit. Designed for "what would actually happen if…" questions.',
+    body: 'Pull a real lever — a wheat embargo, a drought in India, a Suez closure — and the simulator shows which countries break first. The "what would actually happen if…" tool.',
+    before: () => {
+      try { showTab('scenario'); } catch(e){}
+      return 500;
+    },
   },
   {
-    selector: '.subnav-btn[data-tab="methodology"]',
+    selector: '#tab-methodology',
     title: 'Everything is sourced',
     body: 'Open Methodology to see exactly which data feeds power each score, what\'s live vs modelled, and where the gaps are. The whole point is transparency — no black box.',
+    before: () => {
+      try { showTab('methodology'); } catch(e){}
+      return 500;
+    },
   },
   {
     selector: '#bb-status-dot',
     title: 'Live health for 33 feeds',
-    body: 'A green dot means every data source is fresh. If one upstream feed (e.g. FAO\'s server) is slow, it shows here. Click it to see source-by-source health.',
+    body: 'Green dot = every data source is fresh. If FAO\'s server is slow or USDA returns an error, it shows here. Click it for source-by-source health and last-refresh timestamps.',
+    before: () => 100,
   },
 ];
+
+// Helper used by tour: close country side-panel without leaving any state behind
+function closePanelIfOpen() {
+  const sp = document.getElementById('sidepanel');
+  if (sp && !sp.classList.contains('hidden')) {
+    try { closePanel(); } catch(e) { sp.classList.add('hidden'); }
+  }
+}
 
 let _tourIdx = 0;
 let _tourResizeHandler = null;
@@ -15126,6 +15191,7 @@ function _ensureTourOverlay() {
 function _renderTourStep() {
   const step = TOUR_STEPS[_tourIdx];
   if (!step) { endTour(); return; }
+  // Update the card copy immediately so users see progress while before() runs
   document.getElementById('tour-card-step').textContent = `Step ${_tourIdx + 1} of ${TOUR_STEPS.length}`;
   document.getElementById('tour-card-title').textContent = step.title;
   document.getElementById('tour-card-body').innerHTML = step.body;
@@ -15134,7 +15200,22 @@ function _renderTourStep() {
   document.getElementById('tour-back').style.visibility = _tourIdx === 0 ? 'hidden' : 'visible';
   document.getElementById('tour-next').textContent =
     _tourIdx === TOUR_STEPS.length - 1 ? 'Finish ✓' : 'Next →';
-  _positionTourStep();
+
+  // Run the per-step `before` hook (switches tab, opens country panel, etc.)
+  // It can return either a Promise OR a number of ms to wait before
+  // positioning the spotlight. Default delay: 200ms.
+  let delay = 200;
+  if (typeof step.before === 'function') {
+    try {
+      const r = step.before();
+      if (r && typeof r.then === 'function') {
+        r.then(() => _positionTourStep());
+        return;
+      }
+      if (typeof r === 'number') delay = r;
+    } catch(e) { console.warn('Tour before() failed:', e); }
+  }
+  setTimeout(_positionTourStep, delay);
 }
 
 function _positionTourStep() {
@@ -15146,10 +15227,26 @@ function _positionTourStep() {
   if (!target || !spot || !card) return;
   const r = target.getBoundingClientRect();
   const pad = 8;
-  spot.style.left = (r.left - pad) + 'px';
-  spot.style.top  = (r.top - pad) + 'px';
-  spot.style.width  = (r.width + pad*2) + 'px';
-  spot.style.height = (r.height + pad*2) + 'px';
+  // For huge targets (entire tab content), cap the spotlight to the visible
+  // portion of the viewport so the card has somewhere to land and the user's
+  // eye is drawn to one region, not "everything".
+  const vw0 = window.innerWidth, vh0 = window.innerHeight;
+  let sx = r.left - pad, sy = r.top - pad;
+  let sw = r.width + pad*2, sh = r.height + pad*2;
+  const isHuge = sw > vw0 * 0.7 || sh > vh0 * 0.7;
+  if (isHuge) {
+    // Clip to viewport; the spotlight will frame the visible region of the
+    // tab content rather than try to encompass the whole scrollable area.
+    const left = Math.max(sx, 16);
+    const top  = Math.max(sy, 80);
+    const right = Math.min(sx + sw, vw0 - 16);
+    const bottom = Math.min(sy + sh, vh0 - 100);
+    sx = left; sy = top; sw = right - left; sh = bottom - top;
+  }
+  spot.style.left = sx + 'px';
+  spot.style.top  = sy + 'px';
+  spot.style.width  = sw + 'px';
+  spot.style.height = sh + 'px';
   // Position card: prefer below the target, but flip above if near bottom edge.
   const vw = window.innerWidth, vh = window.innerHeight;
   const cardW = Math.min(340, vw - 32);
@@ -15192,6 +15289,10 @@ function endTour() {
     document.removeEventListener('keydown', _tourEscHandler);
     _tourEscHandler = null;
   }
+  // Leave the user on the Global map with the Egypt panel closed, so they
+  // start fresh. (If they liked Egypt they can search for it again.)
+  closePanelIfOpen();
+  try { showTab('global'); } catch(e) {}
 }
 
 
