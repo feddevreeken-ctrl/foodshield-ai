@@ -12912,10 +12912,22 @@ function resetTradeFlowsButton() {
 // ════════════════════════════════════════════════════
 // Map functions are handled by foodshield-globe.js (D3 orthographic globe)
 
+// v22 — non-UN-member territories tracked for completeness (Taiwan, Hong Kong,
+// Greenland, Kosovo, US/UK overseas territories, etc). We exclude these from
+// the "Countries tracked" overlay stat so the number aligns with the
+// canonical "195 countries" the rest of the UI references (193 UN members +
+// 2 UN observer states minus Vatican which we don't track separately).
+const NON_UN_TERRITORIES = new Set([
+  'ABW','ASM','BMU','CYM','FRO','GRL','GUM','IMN','MAF','MNP',
+  'NCL','NIU','PRI','PYF','TWN','VIR','XKX'
+]);
+
 function updateOverlayStats() {
-  const sovereign = COUNTRIES.filter(c=>!c.iso.startsWith('US-'));
+  const sovereign = COUNTRIES.filter(c =>
+    !c.iso.startsWith('US-') && !NON_UN_TERRITORIES.has(c.iso)
+  );
   const n    = sovereign.length;
-  const vuln = sovereign.filter(c=>c.fdrs>75).length;
+  const vuln = sovereign.filter(c => c.fdrs > 75).length;
   const avg  = Math.round(sovereign.reduce((s,c)=>s+c.fdrs,0)/n);
   document.getElementById('msp-countries').textContent = n;
   document.getElementById('msp-vulnerable').textContent = vuln;
