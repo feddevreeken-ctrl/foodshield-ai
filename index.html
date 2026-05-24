@@ -5200,7 +5200,7 @@ input[type="email"]:focus {
         <div class="page-title">What this <em>is</em>, and what it isn't.</div>
         <div class="page-sub">
           <b style="color:var(--t1)">FoodShield AI is an open-data dashboard that scores every country on its exposure to food-supply disruption.</b>
-          Most of the inputs are <b style="color:#6ba36b">sourced</b> directly from public datasets (FAO, USDA, World Bank, WFP, ACLED, NASA, ND-GAIN, INFORM). A smaller share is <b style="color:var(--accent)">modeled</b> — most visibly the trade-dependency overlays in commodity views and the illustrative company sourcing shares — and is labelled as such on every metric.
+          Every metric carries a small provenance badge so readers can audit the input class at a glance. The five categories: <b style="color:#6ba36b">sourced</b> (fetched live from FAO, USDA, World Bank, WFP, ACLED, NASA, ND-GAIN, INFORM, IPC, etc.), <b style="color:#7c9fcf">manual</b> (curated from a primary publication, refreshed by hand), <b style="color:var(--accent)">modeled</b> (computed from observed inputs — e.g. trade-dependency overlays), <b style="color:#c47a3c">curated</b> (legacy heritage value awaiting re-derivation), and <b style="color:#c44b3c">illustrative</b> (plausible example with no upstream data — e.g. company sourcing shares).
           It is built for <b style="color:var(--t1)">procurement, supply-chain, and risk professionals</b> who need a fast read on country-level food-system fragility before a deeper dive.
           Two things <b>not to trust blindly</b>: the modeled trade-dependency view (it is a directional screen, not an audited customs record) and the company sourcing shares (illustrative — major traders don't publish per-country tonnage).
         </div>
@@ -10344,6 +10344,9 @@ const FOOD_TRADE_BLOCKLIST = [
   'machinery','equipment','electronic','consumer goods','vehicle','automotive','aircraft',
   'textile','apparel','garment','knitwear','clothing','cotton','wool','leather','jute','hides',
   'cement','plastic','chemical','phosphate','phosphates',
+  // Agri-INPUTS (fertilizer / fertiliser) are not food. They're risk-relevant
+  // for production cost but belong in their own bucket, not "Top Food Imports".
+  'fertilizer','fertilizers','fertiliser','fertilisers','urea','potash','ammonia',
   'pharmaceutical','medicine','medicines','drug','opium','qat','khat','tobacco',
   'timber','jade','teak','charcoal','rubber','services','tourism',
   'semiconductor','chip','software','hardware','furniture','glass','paper','printing','sand'
@@ -10362,9 +10365,14 @@ function dedupeLabels(items) {
 }
 function isFoodTradeItem(label) {
   if (!label) return false;
-  const l = String(label).toLowerCase();
-  // Vegetable / olive / palm / cooking / edible oils ARE food — keep them.
-  if (/\b(vegetable|olive|palm|cooking|edible|sunflower|soybean|coconut|rapeseed|canola)\s+oil/.test(l)) return true;
+  const l = String(label).toLowerCase().trim();
+  // Vegetable / olive / palm / cooking / edible / sunflower / soybean / coconut /
+  // rapeseed / canola oils ARE food — explicit allow-list, keep them.
+  if (/\b(vegetable|olive|palm|cooking|edible|sunflower|soybean|coconut|rapeseed|canola|peanut|groundnut|sesame|fish)\s+oil/.test(l)) return true;
+  // Bare "Oil" is ambiguous (crude vs cooking) — reject. Anything that has
+  // "oil" as its full label or only modifier without a food prefix doesn't
+  // make it through "Top Food Imports".
+  if (l === 'oil' || l === 'oils' || l === 'edible oils') return l !== 'oil' && l !== 'oils'; // edible oils → true, bare oil/oils → false
   return !FOOD_TRADE_BLOCKLIST.some(b => l.includes(b));
 }
 function structuralImportList(c) {
@@ -14648,10 +14656,10 @@ function renderForecastWhy(c, delta, trendUp, futureCol, todayCol){
         </div>
         <div class="fc-method-list">
           <div><span class="fc-method-step">01</span><span><b style="color:var(--t1)">Baseline</b> · FAO–OECD Outlook 2023–2032 production / consumption</span></div>
-          <div><span class="fc-method-step">02</span><span><b style="color:var(--t1)">Climate adjust</b> · ND-GAIN + IPCC AR6 regional yield projections</span></div>
+          <div><span class="fc-method-step">02</span><span><b style="color:var(--t1)">Climate adjust</b> · ${ac('ND-GAIN')} + IPCC AR6 regional yield projections</span></div>
           <div><span class="fc-method-step">03</span><span><b style="color:var(--t1)">Demographic scale</b> · UN WPP medium-scenario population</span></div>
-          <div><span class="fc-method-step">04</span><span><b style="color:var(--t1)">Geopolitical overlay</b> · ACLED conflict + active sanctions</span></div>
-          <div><span class="fc-method-step">05</span><span><b style="color:var(--t1)">Back-test</b> · validated against realized input series (FAO supply/demand, WB CPI, ACLED). FDRS itself is not an observed public time series.</span></div>
+          <div><span class="fc-method-step">04</span><span><b style="color:var(--t1)">Geopolitical overlay</b> · ${ac('ACLED')} conflict + active sanctions</span></div>
+          <div><span class="fc-method-step">05</span><span><b style="color:var(--t1)">Back-test</b> · validated against realized input series (${ac('FAO')} supply/demand, WB CPI, ACLED). FDRS itself is not an observed public time series.</span></div>
           <div><span class="fc-method-step">06</span><span><b style="color:var(--t1)">Uncertainty</b> · ±${band} pt band, recalibrated annually</span></div>
         </div>
       </div>
@@ -15282,8 +15290,8 @@ function renderAboutTab() {
           give me a coherent picture.
         </p>
         <p style="margin:0 0 14px;">
-          FAO has a price index. WFP has a hunger map. World Bank has trade data. NASA has fire
-          and weather data. ACLED has conflict events. Each of these is excellent on its own.
+          ${ac('FAO')} has a price index. ${ac('WFP')} has a hunger map. World Bank has trade data. ${ac('NASA')} has fire
+          and weather data. ${ac('ACLED')} has conflict events. Each of these is excellent on its own.
           None of them, by themselves, answers the simplest question I had:
           <em style="color:var(--t1);font-style:italic;">if something goes wrong in country X
           tomorrow, who gets hurt — and how badly?</em>
@@ -15741,7 +15749,7 @@ const TOUR_STEPS = [
   {
     selector: '#tab-forecast',
     title: 'Forecast to 2030',
-    body: 'Project each country\'s risk trajectory out to 2030 — blending climate (CCKP), adaptive capacity (ND-GAIN) and structural fundamentals. For planning, not just today\'s headlines.',
+    body: `Project each country's risk trajectory out to 2030 — blending climate (${ac('CCKP')}), adaptive capacity (${ac('ND-GAIN')}) and structural fundamentals. For planning, not just today's headlines.`,
     before: () => {
       try { showTab('forecast'); } catch(e){}
       return 500;
@@ -17096,10 +17104,10 @@ function renderMethodologyTab() {
       <div class="card-title"><span class="card-marker"></span> Structural FDRS vs Nowcast FDRS · in one paragraph</div>
       <div style="font-size:13px;color:var(--t2);line-height:1.8;">
         We publish two views of FDRS. <b style="color:var(--t1)">Structural FDRS</b> is the slow-moving
-        seven-component composite — rebuilt as new data vintages drop (FAO, USDA, ND-GAIN, ACLED, World Bank).
+        seven-component composite — rebuilt as new data vintages drop (${ac('FAO')}, ${ac('USDA')}, ${ac('ND-GAIN')}, ${ac('ACLED')}, World Bank).
         It answers <em>"how exposed is this country in steady state?"</em>
         <b style="color:var(--accent)">Nowcast FDRS</b> layers a bounded adjustment
-        (Δ<sub>nowcast</sub>, range −10 to +35) on top, driven by live signals — IPC phase shifts,
+        (Δ<sub>nowcast</sub>, range −10 to +35) on top, driven by live signals — ${ac('IPC')} phase shifts,
         ACLED conflict spikes, FAO Food Price Index, ReliefWeb alerts, weather/flood/fire signals, USDA PSD shortfalls.
         It answers <em>"what's moving right now?"</em> Country panels show both, so you can see how much of
         a high score is structural vs acute. Full Δ-signal list and a worked example are further down this page.
@@ -17190,17 +17198,17 @@ function renderMethodologyTab() {
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
         ${[
           {w:'28%',label:'Import Dependency (caloric)',col:'#c44b3c',
-           desc:'Share of national caloric supply imported. From FAO Food Balance Sheets. CALORIC view — what fraction of food eaten comes from abroad. Distinct from trade volume (see Supply-Chain Exposure).'},
+           desc:`Share of national caloric supply imported. From ${ac('FAO')} Food Balance Sheets. CALORIC view — what fraction of food eaten comes from abroad. Distinct from trade volume (see Supply-Chain Exposure).`},
           {w:'18%',label:'Supplier Concentration',col:'#c47a3c',
            desc:'Herfindahl-Hirschman Index (HHI) of the top-5 import source countries. 100 = single-source monopoly; 0 = perfectly diversified.'},
           {w:'14%',label:'Production Trend',col:'#c9a957',
-           desc:'5-year CAGR of domestic food production (USDA PSD 2018-2024). Negative trends score higher. Normalized against global peers.'},
+           desc:`5-year CAGR of domestic food production (${ac('USDA')} ${ac('PSD')} 2018-2024). Negative trends score higher. Normalized against global peers.`},
           {w:'14%',label:'Food Inflation',col:'#c9a957',
-           desc:'Annual food CPI change. Live-sourced from WFP HungerMap → Eurostat HICP → FAOSTAT food CPI → World Bank CPI fallback. Captures affordability deterioration. 100 = >60% inflation.'},
+           desc:`Annual food CPI change. Live-sourced from ${ac('WFP')} HungerMap → Eurostat HICP → ${ac('FAO')}STAT food CPI → World Bank CPI fallback. Captures affordability deterioration. 100 = >60% inflation.`},
           {w:'9%',label:'Climate Vulnerability',col:'#6ba36b',
-           desc:'v20.27 — 60% sourced composite (ND-GAIN food_vulnerability × 0.45 + Aqueduct drought_risk × 0.20 + Aqueduct water_stress × 0.15 + CCKP projected temp Δ × 0.20), 40% heritage. Captures exposure of food/water systems to climate hazards.'},
+           desc:`v20.27 — 60% sourced composite (${ac('ND-GAIN')} food_vulnerability × 0.45 + Aqueduct drought_risk × 0.20 + Aqueduct water_stress × 0.15 + ${ac('CCKP')} projected temp Δ × 0.20), 40% heritage. Captures exposure of food/water systems to climate hazards.`},
           {w:'9%',label:'Conflict / Logistics',col:'#6ba36b',
-           desc:'v20.27 — 60% sourced composite (INFORM Risk × 0.45 + WGI Rule of Law × 0.25 + LPI Overall × 0.20 + INFORM lack_coping_capacity × 0.10), 40% heritage. High composite humanitarian risk + weak rule of law + poor logistics = 100.'},
+           desc:`v20.27 — 60% sourced composite (${ac('INFORM')} Risk × 0.45 + ${ac('WGI')} Rule of Law × 0.25 + ${ac('LPI')} Overall × 0.20 + INFORM lack_coping_capacity × 0.10), 40% heritage. High composite humanitarian risk + weak rule of law + poor logistics = 100.`},
           {w:'8%',label:'Supply-Chain Exposure (trade) · v20.2',col:'#8aa6c4',
            desc:'NEW. Weighted trade-import dependency across staple commodities, premium-adjusted for supplier concentration. Captures sourcing risk distinct from caloric reliance. Why it matters: the Netherlands has 0% rice in its diet but 95% of rice it consumes is imported — caloric view would call this "low risk" but supply-chain view correctly flags it.'},
         ].map(c=>`
@@ -18521,11 +18529,11 @@ function renderDisturbanceSidebar() {
     const wfpCount = (LIVE.wfp ? Object.keys(LIVE.wfp).length : 0) + (LIVE.ipc ? Object.keys(LIVE.ipc).length : 0);
     const faoOk = (faoStatus.status === 'ok');
     const sources = [
-      { name:'GDACS', desc:'UN Disaster Alerts', ok: SOURCE_STATUSES.gdacs.ok, count: SOURCE_STATUSES.gdacs.count },
+      { name:ac('GDACS'), desc:'UN Disaster Alerts', ok: SOURCE_STATUSES.gdacs.ok, count: SOURCE_STATUSES.gdacs.count },
       { name:'ReliefWeb', desc:'Humanitarian DB', ok: SOURCE_STATUSES.reliefweb.ok, count: SOURCE_STATUSES.reliefweb.count },
-      { name:'WFP / IPC', desc:'Hunger intelligence', ok: wfpOk, count: wfpCount },
+      { name:`${ac('WFP')} / ${ac('IPC')}`, desc:'Hunger intelligence', ok: wfpOk, count: wfpCount },
       { name:'FEWS NET', desc:'Early Warning (curated, no live feed)', ok: null, count: 0 },
-      { name:'FAO FFPI', desc:'Food Price Index', ok: faoOk, count: faoOk ? 1 : 0 },
+      { name:`${ac('FAO')} ${ac('FFPI')}`, desc:'Food Price Index', ok: faoOk, count: faoOk ? 1 : 0 },
     ];
     srcEl.innerHTML = sources.map(s=>`
       <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--b1);">
@@ -19915,13 +19923,13 @@ function renderCompareTab() {
               };
               const aquCol = v => v == null ? 'var(--t3)' : v >= 3 ? '#c44b3c' : v === 2 ? '#d27a3e' : v === 1 ? '#c9a957' : '#6ba36b';
               return [
-                sec('Diet composition (FAOSTAT FBS · 2023)'),
-                r('Wheat caloric share', 'FBS', fmtPct, c => c.w, fbsCol),
+                sec(`Diet composition (${ac('FAO')}STAT ${ac('FBS')} · 2023)`),
+                r('Wheat caloric share', ac('FBS'), fmtPct, c => c.w, fbsCol),
                 r('Rice caloric share', 'FBS', fmtPct, c => c.r, fbsCol),
                 r('Maize caloric share', 'FBS', fmtPct, c => c.m, fbsCol),
 
-                sec('Trade (FAOSTAT TCL · UN Comtrade · USDA PSD)'),
-                r('Net food trade', 'FAO TCL', v => v == null ? '—' : (v >= 0 ? '+' : '') + (v/1000).toFixed(1) + 'B USD',
+                sec(`Trade (FAOSTAT TCL · UN ${ac('Comtrade')} · ${ac('USDA')} ${ac('PSD')})`),
+                r('Net food trade', `${ac('FAO')} TCL`, v => v == null ? '—' : (v >= 0 ? '+' : '') + (v/1000).toFixed(1) + 'B USD',
                   c => c.net,
                   v => v == null ? 'var(--t3)' : v > 5000 ? '#6ba36b' : v > 0 ? '#9cc299' : v > -2000 ? '#c9a957' : v > -10000 ? '#d27a3e' : '#c44b3c'),
                 r('Wheat production', 'USDA PSD', v => v == null ? '—' : v.toLocaleString() + ' kt',
@@ -19931,13 +19939,13 @@ function renderCompareTab() {
                 r('Corn production', 'USDA PSD', v => v == null ? '—' : v.toLocaleString() + ' kt',
                   c => LIVE.psd?.[c.iso]?.corn?.production_kt ?? null),
 
-                sec('Economy (WB WDI · 2024)'),
+                sec(`Economy (WB ${ac('WDI')} · 2024)`),
                 r('GDP per capita', 'WB WDI', fmtUSD, c => LIVE.wdi_bulk?.[c.iso]?.['NY.GDP.PCAP.CD']?.value ?? null),
                 r('Ag % of GDP', 'WB WDI', fmtPct, c => LIVE.wdi_bulk?.[c.iso]?.['NV.AGR.TOTL.ZS']?.value ?? null),
                 r('Food % of imports', 'WB WDI', fmtPct, c => LIVE.wdi_bulk?.[c.iso]?.['TM.VAL.FOOD.ZS.UN']?.value ?? null),
                 r('Cereal yield (kg/ha)', 'WB WDI', v => v == null ? '—' : Math.round(v).toLocaleString(), c => LIVE.wdi_bulk?.[c.iso]?.['AG.YLD.CREL.KG']?.value ?? null),
 
-                sec('Human development (UNDP HDI · 2023)'),
+                sec(`Human development (UNDP ${ac('HDI')} · 2023)`),
                 r('HDI composite (0-1)', 'UNDP', fmtNum2, c => LIVE.hdi?.[c.iso]?.hdi?.value ?? null, hdiCol),
                 r('Life expectancy (yr)', 'UNDP', fmtNum1, c => LIVE.hdi?.[c.iso]?.le?.value ?? null),
                 r('GII gender inequality', 'UNDP', fmtNum2, c => LIVE.hdi?.[c.iso]?.gii?.value ?? null, ndgCol),
@@ -19947,23 +19955,23 @@ function renderCompareTab() {
                 r('Child stunting %', 'WB WDI', fmtPct, c => LIVE.wdi_bulk?.[c.iso]?.['SH.STA.STNT.ZS']?.value ?? null, fbsCol),
                 r('Child wasting %', 'WB WDI', fmtPct, c => LIVE.wdi_bulk?.[c.iso]?.['SH.STA.WAST.ZS']?.value ?? null, fbsCol),
 
-                sec('Governance (WB WGI · 2024)'),
+                sec(`Governance (WB ${ac('WGI')} · 2024)`),
                 r('Rule of law', 'WB WGI', fmtSigned, c => LIVE.wgi?.[c.iso]?.rule_of_law?.value ?? null, wgiCol),
                 r('Government effectiveness', 'WB WGI', fmtSigned, c => LIVE.wgi?.[c.iso]?.gov_effectiveness?.value ?? null, wgiCol),
                 r('Control of corruption', 'WB WGI', fmtSigned, c => LIVE.wgi?.[c.iso]?.control_corruption?.value ?? null, wgiCol),
                 r('Political stability', 'WB WGI', fmtSigned, c => LIVE.wgi?.[c.iso]?.political_stability?.value ?? null, wgiCol),
 
-                sec('Logistics (WB LPI · 2023)'),
+                sec(`Logistics (WB ${ac('LPI')} · 2023)`),
                 r('LPI overall (1-5)', 'WB LPI', fmtNum2, c => LIVE.lpi?.[c.iso]?.overall?.value ?? null, lpiCol),
                 r('Customs efficiency', 'WB LPI', fmtNum2, c => LIVE.lpi?.[c.iso]?.customs?.value ?? null, lpiCol),
                 r('Infrastructure', 'WB LPI', fmtNum2, c => LIVE.lpi?.[c.iso]?.infrastructure?.value ?? null, lpiCol),
 
-                sec('Humanitarian risk (EU JRC INFORM · 2026)'),
+                sec(`Humanitarian risk (EU JRC ${ac('INFORM')} · 2026)`),
                 r('INFORM Risk (0-10)', 'JRC', fmtNum1, c => LIVE.inform?.[c.iso]?.inform_risk ?? null, informCol),
                 r('Hazard & exposure', 'JRC', fmtNum1, c => LIVE.inform?.[c.iso]?.hazard_exposure ?? null, informCol),
                 r('Lack of coping capacity', 'JRC', fmtNum1, c => LIVE.inform?.[c.iso]?.lack_coping_capacity ?? null, informCol),
 
-                sec('Climate (ND-GAIN · WRI Aqueduct · WB CCKP)'),
+                sec(`Climate (${ac('ND-GAIN')} · WRI Aqueduct · WB ${ac('CCKP')})`),
                 r('ND-GAIN food vulnerability', 'ND-GAIN', fmtNum2, c => LIVE.ndgain?.[c.iso]?.food_vulnerability ?? null, ndgCol),
                 r('ND-GAIN composite (0-100)', 'ND-GAIN', fmtInt, c => LIVE.ndgain?.[c.iso]?.gain_index ?? null,
                   v => v == null ? 'var(--t3)' : v >= 60 ? '#6ba36b' : v >= 45 ? '#c9a957' : v >= 35 ? '#d27a3e' : '#c44b3c'),
@@ -19974,7 +19982,7 @@ function renderCompareTab() {
                   c => LIVE.cckp?.[c.iso]?.proj_temp_change_c ?? null, tempCol),
 
                 sec('Live signals (today)'),
-                r('IPC Phase 3+ population %', 'WFP HungerMap', fmtPct,
+                r(`${ac('IPC')} Phase 3+ population %`, `${ac('WFP')} HungerMap`, fmtPct,
                   c => LIVE.ipc?.[c.iso]?.phase3plus_pct ?? null,
                   v => v == null ? 'var(--t3)' : v > 30 ? '#c44b3c' : v > 15 ? '#d27a3e' : v > 5 ? '#c9a957' : '#6ba36b'),
                 r('Food inflation %/yr', 'HungerMap > Eurostat', fmtPct,
