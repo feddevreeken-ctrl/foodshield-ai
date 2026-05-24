@@ -5333,7 +5333,7 @@ input[type="email"]:focus {
       <button class="instr-close" onclick="closeInstructions()" aria-label="Close Quick Start" title="Close">✕</button>
       <div class="instr-eyebrow">✱ Quick Start · by Fedde Vreeken</div>
       <div class="instr-title" id="instr-title-id">How fragile is the world's <em>food supply</em> right now?</div>
-      <div class="instr-sub">FoodShield AI scores every country on how exposed it is to food shocks — from wheat shortages to droughts to conflict — using 33 live data feeds (FAO, USDA, WFP, World Bank, NASA), refreshed every 6 hours. Pick a starting point, or take the 90-second tour.</div>
+      <div class="instr-sub">FoodShield AI scores every country on how exposed it is to food shocks — from wheat shortages to droughts to conflict — using 33 data pipelines (FAO, USDA, WFP, World Bank, NASA, ACLED, ND-GAIN, IPC), refreshed every 6 hours. Pick a starting point, or take the 90-second tour.</div>
       <a href="https://www.linkedin.com/in/feddevreeken" target="_blank" rel="noopener" class="instr-linkedin">
         <svg viewBox="0 0 24 24" fill="currentColor" style="width:11px;height:11px;"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
         Connect on LinkedIn ↗
@@ -10476,15 +10476,14 @@ function updateLiveStatusUI() {
 
   const summary = sourceManifestSummary();
   if (summary) {
-    // v21 — manifest counts JSON-emitting pipelines only (29). Add 4 static
-    // deep-link helpers (FAO GIEWS, FEWS NET, WFP ACR, USDA GAIN) which are
-    // always-healthy manual snapshots, so the headline reads 33 total.
-    const STATIC_HELPERS = 4;
-    const manifestHealthy = (summary.ok_sources || 0) + (summary.manual_sources || 0);
+    // v21.x — manifest now includes the 4 static deep-link helpers (FAO GIEWS,
+    // FEWS NET, WFP ACR, USDA GAIN) in total_sources directly. Use the manifest's
+    // healthy_sources field (or recompute) without double-counting helpers.
     const issues  = (summary.degraded_sources || 0) + (summary.setup_required_sources || 0) + (summary.failed_sources || 0);
-    const manifestTotal = summary.total_sources || (manifestHealthy + issues);
-    const healthy = manifestHealthy + STATIC_HELPERS;
-    const total   = manifestTotal + STATIC_HELPERS;
+    const healthy = summary.healthy_sources != null
+      ? summary.healthy_sources
+      : (summary.ok_sources || 0) + (summary.manual_sources || 0);
+    const total   = summary.total_sources || (healthy + issues);
     const color = issues === 0 ? '#6ba36b' : issues <= 3 ? '#c9a957' : '#c44b3c';
     const age = formatAge(summary.loaded_at);
     // v20.30 — compact label. The full status (X/Y healthy · age) shows in
@@ -10548,7 +10547,7 @@ function showLiveStatusDialog() {
         <div style="display:flex;align-items:baseline;gap:10px;min-width:0;">
           <div style="font-size:13px;font-weight:700;color:var(--t1);letter-spacing:-.01em;">Data status</div>
           <div style="font-size:10.5px;color:var(--t3);">
-            ${summary ? `${(summary.ok_sources || 0) + (summary.manual_sources || 0) + 4}/${(summary.total_sources || 0) + 4} healthy (incl. 4 static deep-link helpers)` : 'loading'}
+            ${summary ? `${(summary.healthy_sources != null ? summary.healthy_sources : (summary.ok_sources || 0) + (summary.manual_sources || 0))}/${summary.total_sources || 0} healthy · 33 pipelines (incl. 4 static deep-link helpers)` : 'loading'}
             ${summary && summary.loaded_at ? ` · ${formatAge(summary.loaded_at) || formatSnapshotTime(summary.loaded_at)}` : ''}
           </div>
         </div>
@@ -13398,6 +13397,22 @@ function openPanel(c, skipDrilldown) {
   // Score (nowcast-adjusted, with structural baseline shown below)
   document.getElementById('sp-score').textContent    = c.fdrs;
   document.getElementById('sp-score').style.color    = col;
+  // v21.x — concise score tooltip surfaces the structural/nowcast split right
+  // on the headline number (reviewer requested one-line "Structural N + N nowcast = N").
+  (function setScoreTooltip(){
+    const el = document.getElementById('sp-score');
+    if (!el) return;
+    const struct = c._fdrsStructural;
+    const adj = c._fdrsAdj;
+    if (struct != null && adj != null && adj !== 0) {
+      const sign = adj > 0 ? '+' : '';
+      el.title = `Structural ${struct} ${sign}${adj} nowcast = ${c.fdrs}/100. Click the score breakdown below for the full math.`;
+    } else if (struct != null) {
+      el.title = `Structural FDRS ${struct}/100 · no live signal change. See methodology for the formula.`;
+    } else {
+      el.title = `Food Disruption Risk Score ${c.fdrs}/100 (0 = resilient, 100 = severe).`;
+    }
+  })();
   const badge = document.getElementById('sp-badge');
   badge.style.cssText = riskBadgeStyle(c.fdrs);
   badge.textContent   = riskLabel(c.fdrs);
@@ -15614,7 +15629,7 @@ const TOUR_STEPS = [
   {
     selector: '#map-wrap',
     title: 'The world food-risk map',
-    body: 'Every country is colour-coded by its <em>Food Disruption Risk Score</em> — green is resilient, red is severe. The score blends 33 live data feeds (imports, climate, conflict, logistics, prices) into one number you can scan in seconds.',
+    body: 'Every country is colour-coded by its <em>Food Disruption Risk Score</em> — green is resilient, red is severe. The score blends 33 data pipelines (imports, climate, conflict, logistics, prices) into one number you can scan in seconds.',
     before: () => { try { showTab('global'); } catch(e){} closePanelIfOpen(); return 300; },
   },
   {
