@@ -84,12 +84,39 @@ COMMODITY_TO_KEY = {
 
 # PSD attribute IDs we care about. Use string-match on Attribute_Description as
 # the primary filter (IDs occasionally renumber); IDs kept here for reference.
+#
+# WHY MULTIPLE KEYS PER METRIC (May 2026 fix):
+# The USDA PSD bulk CSV inconsistently labels imports/exports. For grains the
+# header is `MY Imports` / `MY Exports`, but for rice/oilseeds many rows use
+# bare `Imports` / `Exports` or `Total Imports` / `Total Exports`. Earlier
+# versions of this script only matched `MY Imports`/`MY Exports`, which caused
+# imports_kt/exports_kt to be zero across all countries — forcing the frontend
+# into heuristic fallback in commodityTradeDependency(). Each entry below
+# resolves to the same internal key, so any label captures the value.
 ATTR_KEYS = {
-    "Production":            ("production_kt", 28),
-    "MY Imports":            ("imports_kt",    57),
-    "MY Exports":            ("exports_kt",    86),
-    "Domestic Consumption":  ("consumption_kt", 130),
-    "Ending Stocks":         ("stocks_kt",     176),
+    # Production
+    "Production":                       ("production_kt", 28),
+    # Imports — accept every label USDA emits for imported volume
+    "MY Imports":                       ("imports_kt",    57),
+    "Imports":                          ("imports_kt",    57),
+    "Total Imports":                    ("imports_kt",    57),
+    "Imports for Domestic Consumption": ("imports_kt",    57),
+    "Imports - Calendar Year":          ("imports_kt",    57),
+    "TY Imports":                       ("imports_kt",    57),
+    # Exports — same treatment
+    "MY Exports":                       ("exports_kt",    86),
+    "Exports":                          ("exports_kt",    86),
+    "Total Exports":                    ("exports_kt",    86),
+    "Exports - Calendar Year":          ("exports_kt",    86),
+    "TY Exports":                       ("exports_kt",    86),
+    # Consumption — only true aggregate consumption labels (not sub-components
+    # like Feed Dom. Consumption or FSI Consumption, which would shadow the
+    # full total)
+    "Domestic Consumption":             ("consumption_kt", 130),
+    "Total Consumption":                ("consumption_kt", 130),
+    "Domestic Use":                     ("consumption_kt", 130),
+    # Stocks
+    "Ending Stocks":                    ("stocks_kt",     176),
 }
 
 # FAS 2-char code → ISO3. PSD uses ISO 3166-1 alpha-2 for most countries with
@@ -230,6 +257,26 @@ def main():
                   f"corn_prod={corn.get('production_kt', 'n/a')}, "
                   f"rice_prod={rice.get('production_kt', 'n/a')}")
 
+    # Pipeline-health counters — surfaced in workflow log so we notice when
+    # the parser stops capturing imports/exports (the May-2026 regression).
+    n_imp = sum(
+        1 for c in by_country.values()
+        if any(isinstance(v, dict) and "imports_kt" in v for v in c.values())
+    )
+    n_exp = sum(
+        1 for c in by_country.values()
+        if any(isinstance(v, dict) and "exports_kt" in v for v in c.values())
+    )
+    n_prod = sum(
+        1 for c in by_country.values()
+        if any(isinstance(v, dict) and "production_kt" in v for v in c.values())
+    )
+    print(f"[INFO] PSD captured imports for {n_imp} countries, exports for {n_exp} countries")
+    print(f"[INFO] PSD captured production for {n_prod} countries (total countries: {len(by_country)})")
+    if n_imp == 0 or n_exp == 0:
+        print("[WARN] imports_kt or exports_kt count is ZERO — frontend will fall back to "
+              "heuristic dependency. Check ATTR_KEYS labels vs current PSD CSV header.")
+
     write_json(
         "usda_psd.json",
         by_country,
@@ -238,7 +285,8 @@ def main():
             f"Observed production / imports / exports / consumption / stocks per country "
             f"per staple per marketing year. Latest marketing year per (country, commodity, "
             f"attribute). Values in 1000 metric tonnes. Commodities: wheat, rice (milled), "
-            f"corn, soybeans. {len(by_country)} countries covered. "
+            f"corn, soybeans. {len(by_country)} countries covered; "
+            f"imports captured for {n_imp}, exports for {n_exp}. "
             f"Source refreshes monthly on WASDE release day; cron pulls every 6h but "
             f"upstream data rarely changes between WASDE windows."
         ),

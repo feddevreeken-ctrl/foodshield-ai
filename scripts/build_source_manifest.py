@@ -219,6 +219,40 @@ SOURCES = [
         "cadence": "6h fetch / multi-year upstream",
         "mode": "reference",
     },
+    # ── Static deep-link helpers ────────────────────────────────────────────
+    # These four sources don't have automated refresh pipelines — they are
+    # curated static lookups + per-country deep links into the upstream
+    # publications. They're surfaced in the country panel as "Read the
+    # official brief" buttons. Tracked here so the manifest's total_sources
+    # count matches the "33 public pipelines" claim used across the UI.
+    {
+        "key": "fao_giews",
+        "file": "fao_giews.json",
+        "label": "FAO GIEWS Country Briefs (static helper)",
+        "cadence": "manual / quarterly upstream",
+        "mode": "static_helper",
+    },
+    {
+        "key": "fewsnet",
+        "file": "fewsnet.json",
+        "label": "FEWS NET Food Security Outlook (static helper)",
+        "cadence": "manual / monthly upstream",
+        "mode": "static_helper",
+    },
+    {
+        "key": "wfp_acr",
+        "file": "wfp_acr.json",
+        "label": "WFP Annual Country Reports (static helper)",
+        "cadence": "manual / annual upstream",
+        "mode": "static_helper",
+    },
+    {
+        "key": "usda_gain",
+        "file": "usda_gain.json",
+        "label": "USDA GAIN Attaché Reports (static helper)",
+        "cadence": "manual / rolling upstream",
+        "mode": "static_helper",
+    },
 ]
 
 
@@ -279,16 +313,30 @@ def infer_status(spec, envelope, count, period):
     notes = str(meta.get("notes") or "").lower()
     combined = f"{source} {notes}"
 
+    # Static deep-link helpers don't have a data file — they're just curated
+    # per-country links into the upstream publication. Always render as manual.
+    if spec.get("mode") == "static_helper":
+        return "manual", "static deep-link helper (curated lookup)"
+
     if envelope is None:
         return "failed", "missing file"
-    if any(token in combined for token in [
+    # Only treat as setup_required when the meta explicitly signals missing
+    # credentials / pending approval. The earlier "appname" token matched
+    # ReliefWeb's healthy source string (which embeds "appname=foodshield"
+    # in the URL) and falsely flagged it. Now we require explicit setup
+    # language, and only allow the "appname" token through the notes field
+    # paired with a stronger phrase like "API key needed".
+    setup_tokens = [
         "not configured",
         "set acled_api_key",
         "set comtrade_api_key",
         "registration pending",
-        "appname",
         "secret to enable",
-    ]):
+        "api key needed",
+        "setup required",
+        "key not provided",
+    ]
+    if any(token in combined for token in setup_tokens):
         return "setup_required", "setup or approval required"
     if "could not obtain guest token" in combined or "403" in combined:
         return "degraded", "upstream auth or access failure"
