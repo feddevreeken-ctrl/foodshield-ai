@@ -12590,6 +12590,19 @@ function updatePageTitle() {
 
 function showTab(tab, btn) {
   const group = TAB_GROUPS[tab] || 'explore';
+  // v22 — Clear stale pulse markers from the map when switching tabs. The
+  // Disturbances list-tab used to auto-paint these and they survived tab
+  // switches, leaving phantom yellow rings on the Global Map. The canonical
+  // way to overlay disturbances is the in-map "Live disturbances" toggle —
+  // which sets aria-pressed="true". If that's not on, no pulse markers
+  // should be visible anywhere.
+  try {
+    const distToggle = document.getElementById('map-dist-toggle');
+    const overlayOn = distToggle && distToggle.getAttribute('aria-pressed') === 'true';
+    if (!overlayOn && typeof clearPulseMarkers === 'function') {
+      clearPulseMarkers();
+    }
+  } catch(e) {}
   document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.subnav-btn').forEach(b => b.classList.remove('active'));
@@ -18227,8 +18240,11 @@ window.renderDisturbancesTab = async function() {
   // v21 — removed the floating "⚠ Disturbance Mode" pill button per design
   // request. The map already has a clearer "Live disturbances" toggle in the
   // top-right; a second floating button was redundant and felt like a debug UI.
-  // Draw markers when events are loaded
-  if (disturbanceEvents.length) renderPulseMarkers();
+  // v22 — DO NOT auto-paint pulse markers when entering the Disturbances tab.
+  // Markers would persist on the map even after switching back to Global Map,
+  // showing fake-looking circles the user never asked for. The canonical way
+  // to overlay disturbances on the map is the in-map "Live disturbances"
+  // toggle button — keep these two views independent.
 };
 
 
