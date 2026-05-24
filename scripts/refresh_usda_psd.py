@@ -102,17 +102,27 @@ FAS_TO_ISO3 = {
     "PL": "POL", "RO": "ROU", "HU": "HUN", "ES": "ESP", "IT": "ITA",
     "TR": "TUR", "IN": "IND", "CH": "CHN", "TH": "THA", "VM": "VNM",
     "MX": "MEX", "ID": "IDN", "ML": "MLI", "ET": "ETH", "EG": "EGY",
-    "KR": "KOR", "JA": "JPN", "BG": "BGR", "PK": "PAK", "PH": "PHL",
+    "KR": "KOR", "JA": "JPN", "BG": "BGD", "PK": "PAK", "PH": "PHL",
     "MY": "MYS", "BD": "BGD", "NG": "NGA", "ZA": "ZAF", "RP": "PHL",
     "MM": "MMR", "LA": "LAO", "KH": "KHM",
-    # Other importers we track
-    "BU": "BFA", "ER": "ERI", "SO": "SOM", "SU": "SDN", "SD": "SDN",
+    # FAS code "BU" is Bulgaria (NOT Burkina Faso). Burkina Faso is "UV".
+    # FAS code "ES" is El Salvador (NOT Spain). Spain is "SP".
+    # FAS code "RS" is Russia (NOT Serbia). Serbia is "RB" or "RI".
+    # These were the source of the BGR/Bangladesh, ESP/El Salvador, SRB/Russia swap bugs.
+    "BU": "BGR",  # Bulgaria
+    "UV": "BFA",  # Burkina Faso (Upper Volta — historical USDA code)
+    "ES": "SLV",  # El Salvador (not Spain)
+    "SP": "ESP",  # Spain
+    "RS": "RUS",  # Russia (USDA Foreign Agricultural Service code)
+    "RB": "SRB",  # Serbia
+    "RI": "SRB",  # Serbia (alternate)
+    "ER": "ERI", "SO": "SOM", "SU": "SDN", "SD": "SDN",
     "YM": "YEM", "AF": "AFG", "IR": "IRN", "IZ": "IRQ", "SY": "SYR",
     "DJ": "DJI", "LY": "LBY", "MO": "MAR", "TS": "TUN", "AG": "DZA",
     "CO": "COL", "PE": "PER", "VE": "VEN", "EC": "ECU", "BO": "BOL",
     "CL": "CHL", "PA": "PAN", "GT": "GTM", "HO": "HND", "NU": "NIC",
-    "ES_": "SLV", "CR": "CRI", "JM": "JAM", "CU": "CUB", "DR": "DOM",
-    "AL": "ALB", "MK": "MKD", "BK": "BIH", "RS": "SRB", "MJ": "MNE",
+    "CR": "CRI", "JM": "JAM", "CU": "CUB", "DR": "DOM",
+    "AL": "ALB", "MK": "MKD", "BK": "BIH", "MJ": "MNE",
     "EN": "EST", "LH": "LTU", "LG": "LVA", "FI": "FIN", "SW": "SWE",
     "DA": "DNK", "NL": "NLD", "BE": "BEL", "AT": "AUT", "EZ": "CZE",
     "SI": "SVN", "SK": "SVK", "GR": "GRC", "PO": "PRT", "IC": "ISL",

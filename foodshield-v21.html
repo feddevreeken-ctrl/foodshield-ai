@@ -13086,7 +13086,9 @@ function tfaShowFlows() {
       const pct = (c.supPct || [])[i] || 0;
       // If a specific commodity is chosen, only keep suppliers that matter for it
       const commo = commodity || importItems[i] || 'Food products';
-      const vol = _estimateVolume(c, commo, i) || _modeledVolumeFallback(c, commo, i);
+      // Pass supplier NAME so _estimateVolume can match observed Comtrade data correctly
+      // (legacy c.suppliers list is NOT aligned by index with Comtrade top_suppliers).
+      const vol = _estimateVolume(c, commo, i, sup) || _modeledVolumeFallback(c, commo, i);
       const companies = _companiesFor(commo);
       const supplierCompanies = companies.slice(i, i + 3).map((co, j) => ({
         name: co, share: Math.max(8, Math.round((35 - j*8) * (1 - i*0.1))),
@@ -13109,7 +13111,7 @@ function tfaShowFlows() {
     const suppliers = dests.map((dest, i) => {
       const pct = [35, 25, 18, 12, 7, 3][i] || 5;
       const commo = commodity || exportItems[i] || 'Agricultural goods';
-      const vol = _estimateVolume(c, commo, i) || _modeledVolumeFallback(c, commo, i);
+      const vol = _estimateVolume(c, commo, i, dest) || _modeledVolumeFallback(c, commo, i);
       const companies = _companiesFor(commo);
       const supplierCompanies = companies.slice(0, 3).map((co, j) => ({
         name: co, share: Math.max(8, Math.round((35 - j*8) * (1 - i*0.1))),
@@ -16757,8 +16759,11 @@ function _companiesFor(name){
 // v20.7: Volume estimator — clearly modeled, not observed.
 // First try real Comtrade observation; only fall back to model when we have nothing.
 // The return shape now carries a `provenance` field so the UI can label it honestly.
-function _estimateVolume(country, commodity, supplierIdx){
-  // Try observed Comtrade staples data first (covers ~25 priority countries × 4 staples)
+function _estimateVolume(country, commodity, supplierIdx, supplierName){
+  // Try observed Comtrade staples data first (covers ~25 priority countries × 4 staples).
+  // CRITICAL: match by supplier NAME, not array index. The legacy c.suppliers list and
+  // the observed Comtrade top_suppliers list are NOT aligned by position. Using index
+  // would attach Comtrade share X to the wrong country name and badge it OBS · COMTRADE.
   const commLower = (commodity || '').toLowerCase();
   const obsKey = /wheat/.test(commLower) ? 'wheat'
               : /rice/.test(commLower) ? 'rice'
@@ -16768,7 +16773,20 @@ function _estimateVolume(country, commodity, supplierIdx){
   if (obsKey && LIVE && LIVE.comtrade) {
     const row = (LIVE.comtrade[country.iso] || {})[obsKey];
     if (row && row.total_usd_m != null) {
-      const supShare = ((row.top_suppliers || [])[supplierIdx] || {}).share_pct;
+      // Find the supplier in Comtrade's observed list by NAME match.
+      const supName = (supplierName || '').toLowerCase().trim();
+      let supShare = null;
+      if (supName) {
+        const ts = (row.top_suppliers || []);
+        // Try exact match first, then partial (e.g. "USA" matches "United States of America")
+        const exact = ts.find(s => (s.country || s.name || '').toLowerCase().trim() === supName);
+        const partial = !exact && ts.find(s => {
+          const n = (s.country || s.name || '').toLowerCase();
+          return n.includes(supName) || supName.includes(n);
+        });
+        const match = exact || partial;
+        if (match) supShare = match.share_pct;
+      }
       if (supShare != null) {
         return {
           usdM: Math.round(row.total_usd_m * supShare / 100),
@@ -16777,7 +16795,8 @@ function _estimateVolume(country, commodity, supplierIdx){
           provenance: 'observed',
         };
       }
-      // Total exists but no supplier-level breakdown — return aggregate without share
+      // Supplier name doesn't match any observed Comtrade supplier — fall through to
+      // aggregate-only (don't claim observed bilateral share we can't verify).
       return {
         usdM: Math.round(row.total_usd_m),
         kt: row.total_kt != null ? Math.round(row.total_kt) : null,
@@ -16821,7 +16840,7 @@ function openCommodityDrilldown(commodity, importerIso){
   // map now guarantees at least 3 entries per key).
   const suppliers = (c.suppliers || []).slice(0, 5).map((sup, i) => {
     const pct = (c.supPct || [])[i] || 0;
-    let vol = _estimateVolume(c, commodity, i);
+    let vol = _estimateVolume(c, commodity, i, sup);
     // _estimateVolume returns null if neither PSD nor Comtrade has data.
     // Fall back to the modeled estimate so the total math never NaN's.
     if (!vol) {
@@ -18450,15 +18469,23 @@ function renderDisturbanceSidebar() {
       </div>`).join('');
   }
 
-  // Sources panel
+  // Sources panel — pull WFP/IPC + FAO FPMA status from the source_manifest so
+  // we don't claim feeds are healthy when they're degraded/empty.
   const srcEl = document.getElementById('dist-sources');
   if (srcEl) {
+    const manifestSrc = (LIVE.manifest && LIVE.manifest.sources) || {};
+    const wfpStatus = manifestSrc.wfp_hungermap || manifestSrc.wfp || {};
+    const ipcStatus = manifestSrc.ipc || {};
+    const faoStatus = manifestSrc.fao_ffpi || {};
+    const wfpOk = (wfpStatus.status === 'ok') || (ipcStatus.status === 'ok');
+    const wfpCount = (LIVE.wfp ? Object.keys(LIVE.wfp).length : 0) + (LIVE.ipc ? Object.keys(LIVE.ipc).length : 0);
+    const faoOk = (faoStatus.status === 'ok');
     const sources = [
       { name:'GDACS', desc:'UN Disaster Alerts', ok: SOURCE_STATUSES.gdacs.ok, count: SOURCE_STATUSES.gdacs.count },
       { name:'ReliefWeb', desc:'Humanitarian DB', ok: SOURCE_STATUSES.reliefweb.ok, count: SOURCE_STATUSES.reliefweb.count },
-      { name:'WFP / IPC', desc:'Famine Intelligence', ok: true, count: 3 },
+      { name:'WFP / IPC', desc:'Hunger intelligence', ok: wfpOk, count: wfpCount },
       { name:'FEWS NET', desc:'Early Warning (curated, no live feed)', ok: null, count: 0 },
-      { name:'FAO FPMA', desc:'Food Price Monitor', ok: true, count: 1 },
+      { name:'FAO FFPI', desc:'Food Price Index', ok: faoOk, count: faoOk ? 1 : 0 },
     ];
     srcEl.innerHTML = sources.map(s=>`
       <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--b1);">
@@ -18471,28 +18498,49 @@ function renderDisturbanceSidebar() {
       </div>`).join('');
   }
 
-  // Food prices panel (FAO food price index — static but realistic)
+  // Food prices panel — read live FAO Food Price Index from data/fao_ffpi.json.
+  // No hardcoded fallback: if the file isn't loaded we hide the panel rather than
+  // show stale numbers that contradict our own served snapshot.
   const priceEl = document.getElementById('dist-prices');
   if (priceEl) {
-    const now = new Date();
-    const month = now.toLocaleString('en', {month:'long', year:'numeric'});
-    // FAO FPI as of early 2026 — approximate values
-    const commodities = [
-      { name:'Cereals Index', val:117.3, chg:+2.1, trend:'↑' },
-      { name:'Vegetable Oils', val:134.8, chg:-1.4, trend:'↓' },
-      { name:'Dairy', val:126.5, chg:+0.8, trend:'↑' },
-      { name:'Meat', val:120.1, chg:-0.2, trend:'→' },
-      { name:'Sugar', val:109.4, chg:-3.1, trend:'↓' },
-    ];
-    priceEl.innerHTML = `
-      <div style="font-size:10px;color:var(--t3);margin-bottom:10px;">${month} · FAO Food Price Index (2014–2016 = 100)</div>
-      ${commodities.map(c=>`
-        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--b1);">
-          <span style="font-size:11.5px;color:var(--t2);flex:1;">${c.name}</span>
-          <span style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--t1);">${c.val}</span>
-          <span style="font-size:11px;font-weight:600;color:${c.chg>0?'#c44b3c':c.chg<0?'#6ba36b':'var(--t3)'};">${c.trend} ${c.chg>0?'+':''}${c.chg}%</span>
-        </div>`).join('')}
-      <div style="font-size:10px;color:var(--t3);margin-top:8px;">Source: FAO GIEWS. Next update: June 2026.</div>`;
+    const ffpi = LIVE.fao_ffpi || null;
+    // Expected shape: { latest: { period, cereals, oils, dairy, meat, sugar },
+    //                   previous: same shape (for delta) }
+    const latest = ffpi && (ffpi.latest || ffpi.current || null);
+    const prev = ffpi && (ffpi.previous || ffpi.prior || null);
+    if (latest && latest.cereals != null) {
+      const fmt = (cur, prv) => {
+        if (cur == null) return { val: '—', chg: null };
+        const chg = (prv != null) ? +(cur - prv).toFixed(1) : null;
+        return { val: cur.toFixed(1), chg };
+      };
+      const rows = [
+        { name:'Cereals Index',  ...fmt(latest.cereals,  prev && prev.cereals) },
+        { name:'Vegetable Oils', ...fmt(latest.oils,     prev && prev.oils) },
+        { name:'Dairy',          ...fmt(latest.dairy,    prev && prev.dairy) },
+        { name:'Meat',           ...fmt(latest.meat,     prev && prev.meat) },
+        { name:'Sugar',          ...fmt(latest.sugar,    prev && prev.sugar) },
+      ];
+      const period = latest.period || latest.month || new Date().toLocaleString('en', {month:'long', year:'numeric'});
+      priceEl.innerHTML = `
+        <div style="font-size:10px;color:var(--t3);margin-bottom:10px;">${period} · FAO Food Price Index (2014–2016 = 100) <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#6ba36b;background:#6ba36b18;padding:1px 4px;border-radius:3px;margin-left:6px;letter-spacing:.04em;text-transform:uppercase;">live</span></div>
+        ${rows.map(c=>{
+          const trend = c.chg == null ? '' : (c.chg > 0 ? '↑' : c.chg < 0 ? '↓' : '→');
+          const sign = c.chg == null ? '' : (c.chg > 0 ? '+' : '');
+          return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--b1);">
+            <span style="font-size:11.5px;color:var(--t2);flex:1;">${c.name}</span>
+            <span style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--t1);">${c.val}</span>
+            <span style="font-size:11px;font-weight:600;color:${c.chg==null?'var(--t3)':c.chg>0?'#c44b3c':c.chg<0?'#6ba36b':'var(--t3)'};">${trend}${trend?' ':''}${sign}${c.chg==null?'':c.chg+'%'}</span>
+          </div>`;
+        }).join('')}
+        <div style="font-size:10px;color:var(--t3);margin-top:8px;">Source: <a href="https://www.fao.org/worldfoodsituation/foodpricesindex/en/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">FAO FFPI</a> · refreshed every 6h.</div>`;
+    } else {
+      priceEl.innerHTML = `
+        <div style="font-size:10px;color:var(--t3);text-align:center;padding:14px 8px;">
+          FAO Food Price Index data not loaded.
+          <a href="?tab=datastatus" style="color:var(--accent);text-decoration:underline;">See Data Status →</a>
+        </div>`;
+    }
   }
 }
 
