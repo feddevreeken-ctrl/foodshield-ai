@@ -20236,6 +20236,15 @@ function showCommodityDetail(key) {
   _activeCommodity = key;
   const meta = COMMODITY_META.find(c => c.key === key);
   if (!meta) return;
+  // v21.x — read live Pink Sheet price the same way the card grid does so the
+  // drilldown header price matches the card price (fixes "$403 on the card vs
+  // $442 in the drilldown" reported by reviewers). Falls back to the legacy
+  // baseline price + a 'baseline' badge when no live series is loaded.
+  const live = (typeof commodityLivePrice === 'function') ? commodityLivePrice(key) : null;
+  const headerPrice = live ? live.price : (meta.price + ' <span style="font-size:9.5px;color:var(--accent);background:var(--accent)18;padding:1px 4px;border-radius:3px;margin-left:4px;letter-spacing:.04em;text-transform:uppercase;">baseline</span>');
+  const headerChg   = live ? live.chg : meta.chg;
+  const headerChgDir = live ? live.chgDir : meta.chgDir;
+  const headerNote  = live ? live.note : (meta.note + ' · baseline');
 
   // v21 — broaden importer/exporter detection via synonyms. Each commodity has
   // a list of accepted terms (Corn = corn|maize, Cattle = cattle|beef|livestock).
@@ -20261,8 +20270,8 @@ function showCommodityDetail(key) {
           <div style="font-size:12px;color:var(--t3);">${meta.desc}</div>
         </div>
         <div style="margin-left:auto;text-align:right;">
-          <div style="font-size:22px;font-weight:600;font-family:'Geist Mono',monospace;color:var(--t1)">${meta.price}</div>
-          <div style="font-size:12px;color:${meta.chgDir>0?'#c44b3c':'#6ba36b'}">${meta.chg} · ${meta.note}</div>
+          <div style="font-size:22px;font-weight:600;font-family:'Geist Mono',monospace;color:var(--t1)">${headerPrice}</div>
+          <div style="font-size:12px;color:${headerChgDir>0?'#c44b3c':'#6ba36b'}">${headerChg} · ${headerNote}</div>
         </div>
       </div>
 
