@@ -20261,27 +20261,50 @@ function showCommodityDetail(key) {
   const detail = document.getElementById('commodity-detail');
   if (!detail) return;
 
+  // v21 — pull pink-sheet history (if any) for the sparkline rendered below.
+  const _seriesKey = (typeof COMMODITY_PINK_KEY === 'object') ? COMMODITY_PINK_KEY[key] : null;
+  const _series = _seriesKey ? (LIVE?.pink_sheet?.series?.[_seriesKey]) : null;
+  const _history = (_series && Array.isArray(_series.history) && _series.history.length >= 4) ? _series.history : null;
+  const _sparkBlock = _history ? `
+        <div id="commodity-sparkline-wrap" style="grid-column:1 / -1;margin-top:6px;padding-top:14px;border-top:1px dashed var(--b2);">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:4px;">
+            <div class="eyebrow">Monthly price · last ${_history.length} months · WB Pink Sheet</div>
+            <div style="font-size:10px;color:var(--t3);font-family:'Geist Mono',monospace;">${_series.unit || ''}</div>
+          </div>
+          <canvas id="commodity-sparkline" width="640" height="60" style="width:100%;height:60px;display:block;"></canvas>
+          <div id="commodity-sparkline-range" style="display:flex;justify-content:space-between;font-size:10px;color:var(--t3);font-family:'Geist Mono',monospace;margin-top:4px;"></div>
+        </div>` : '';
+
   detail.innerHTML = `
     <div class="card" style="margin-bottom:0;">
-      <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;flex-wrap:wrap;">
+      <div style="display:grid;grid-template-columns:auto 1fr auto;gap:14px 14px;align-items:center;margin-bottom:20px;">
         <div style="font-size:32px;">${meta.icon}</div>
         <div>
           <div style="font-size:20px;font-weight:700;color:var(--t1);">${meta.key}</div>
           <div style="font-size:12px;color:var(--t3);">${meta.desc}</div>
         </div>
-        <div style="margin-left:auto;text-align:right;">
+        <div style="text-align:right;">
           <div style="font-size:22px;font-weight:600;font-family:'Geist Mono',monospace;color:var(--t1)">${headerPrice}</div>
           <div style="font-size:12px;color:${headerChgDir>0?'#c44b3c':'#6ba36b'}">${headerChg} · ${headerNote}</div>
         </div>
+        ${_sparkBlock}
       </div>
 
       ${(function(){
         // v20.7 item 4: separate observed-trade flows from modeled dependency
+        // v21 expansion: now covers palm oil, sugar, coffee, cocoa, fertilizer
+        // and cattle/beef in addition to the four staples.
         const commLower = key.toLowerCase();
         const obsKey = /wheat/.test(commLower) ? 'wheat'
                     : /rice/.test(commLower) ? 'rice'
                     : /maize|corn/.test(commLower) ? 'maize'
                     : /soy/.test(commLower) ? 'soybeans'
+                    : /palm/.test(commLower) ? 'palm_oil'
+                    : /sugar/.test(commLower) ? 'sugar'
+                    : /coffee/.test(commLower) ? 'coffee'
+                    : /cocoa|cacao/.test(commLower) ? 'cocoa'
+                    : /fertilizer|fertiliser|urea/.test(commLower) ? 'fertilizer'
+                    : /cattle|beef|bovine/.test(commLower) ? 'beef'
                     : null;
         if (!obsKey || !LIVE.comtrade) return '';
         const obs = [];
@@ -20361,6 +20384,73 @@ function showCommodityDetail(key) {
     </div>`;
 
   detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // v21 — render sparkline after the modal HTML is in the DOM. Defer so the
+  // canvas exists and (usually) Chart.js is loaded via the page-wide prewarm.
+  if (_history) {
+    setTimeout(() => {
+      const cvs = document.getElementById('commodity-sparkline');
+      const rng = document.getElementById('commodity-sparkline-range');
+      if (!cvs) return;
+      const labels = _history.map(p => p.month);
+      const values = _history.map(p => Number(p.value));
+      // Render min/max range labels with months for quick context.
+      let minV = Infinity, maxV = -Infinity, minIdx = 0, maxIdx = 0;
+      values.forEach((v, i) => {
+        if (v < minV) { minV = v; minIdx = i; }
+        if (v > maxV) { maxV = v; maxIdx = i; }
+      });
+      if (rng) {
+        const fmt = (v) => '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
+        rng.innerHTML = `<span>min ${fmt(minV)} · ${labels[minIdx]}</span><span>max ${fmt(maxV)} · ${labels[maxIdx]}</span>`;
+      }
+      const accent = (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#8aa6c4').trim();
+      // Build a translucent fill from accent rgb.
+      const hex = accent.replace('#','');
+      const r = parseInt(hex.slice(0,2),16) || 138;
+      const g = parseInt(hex.slice(2,4),16) || 166;
+      const b = parseInt(hex.slice(4,6),16) || 196;
+      const fill = `rgba(${r},${g},${b},0.15)`;
+      const cfg = {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            data: values,
+            borderColor: accent,
+            backgroundColor: fill,
+            borderWidth: 1.5,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            fill: true,
+            tension: 0.25,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
+          scales: {
+            x: { display: false },
+            y: { display: false, beginAtZero: false },
+          },
+          interaction: { mode: null },
+          elements: { line: { borderJoinStyle: 'round' } },
+        },
+      };
+      if (typeof window._safeChart === 'function') {
+        window._safeChart(cvs.getContext('2d'), cfg);
+      } else if (typeof window.loadChartJS === 'function') {
+        window.loadChartJS().then(() => { new window.Chart(cvs.getContext('2d'), cfg); }).catch(() => {});
+      }
+    }, 60);
+  } else {
+    // Defensive: if a stale canvas is in the DOM from a prior commodity that
+    // had history, hide the entire wrap so we don't show an empty box.
+    const stale = document.getElementById('commodity-sparkline-wrap');
+    if (stale) stale.style.display = 'none';
+  }
 }
 
 </script>

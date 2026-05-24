@@ -30,6 +30,12 @@ Commodity HS codes:
   1005  Maize / corn
   1006  Rice
   1201  Soybeans
+  1511  Palm oil
+  1701  Sugar (cane / beet, raw or refined)
+  0901  Coffee
+  1801  Cocoa beans (raw)
+  3102  Nitrogenous fertilizers (covers urea)
+  0201  Bovine meat, fresh/chilled
 """
 import time
 from collections import defaultdict
@@ -66,7 +72,22 @@ M49_TO_ISO3 = {
     826:"GBR",834:"TZA",840:"USA",854:"BFA",858:"URY",860:"UZB",862:"VEN",882:"WSM",
     887:"YEM",894:"ZMB",
 }
-COMMODITIES = {"1001": "wheat", "1005": "maize", "1006": "rice", "1201": "soybeans"}
+COMMODITIES = {
+    "1001": "wheat",
+    "1005": "maize",
+    "1006": "rice",
+    "1201": "soybeans",
+    # v21 expansion (May 2026): six more commodities so the drilldown can
+    # show observed bilateral trade for palm oil, sugar, coffee, cocoa, fertilizer
+    # and beef. ~25 importers × 10 commodities = 250 calls/day, still under the
+    # free-tier 500/day quota.
+    "1511": "palm_oil",
+    "1701": "sugar",
+    "0901": "coffee",
+    "1801": "cocoa",
+    "3102": "fertilizer",
+    "0201": "beef",
+}
 
 # Free tier rate limit: appears to be ~1 request per second.
 # Sleep generously between calls and back off hard on 429.

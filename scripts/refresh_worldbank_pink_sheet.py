@@ -114,10 +114,12 @@ def latest_points(data_rows, col_idx):
             continue
         points.append((month, val))
     if not points:
-        return None, None
+        return None, None, []
     latest = points[-1]
     previous = points[-2] if len(points) > 1 else None
-    return latest, previous
+    # Retain the last 60 months (or however many exist) for sparkline rendering.
+    history = points[-60:]
+    return latest, previous, history
 
 
 def main():
@@ -143,7 +145,7 @@ def main():
         if source_code not in col_by_code:
             continue
         idx = col_by_code[source_code]
-        latest, previous = latest_points(data_rows, idx)
+        latest, previous, history = latest_points(data_rows, idx)
         if not latest:
             continue
         latest_month, latest_value = latest
@@ -160,6 +162,10 @@ def main():
             "latest_value": round(latest_value, 3),
             "previous_value": round(previous_value, 3) if previous_value is not None else None,
             "change_mom_pct": change,
+            # Last ≤60 monthly points for sparkline rendering in the commodity drilldown.
+            "history": [
+                {"month": m, "value": round(v, 3)} for (m, v) in history
+            ],
         }
 
     if not out:
