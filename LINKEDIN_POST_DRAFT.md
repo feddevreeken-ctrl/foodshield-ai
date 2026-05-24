@@ -12,7 +12,7 @@ I'm a student at Erasmus University in Rotterdam, not a food-security expert. I 
 
 The data exists. FAO has prices. WFP has hunger. World Bank has trade. NASA has satellite weather. ACLED has conflict events. Each of them is excellent. None of them, by themselves, answers that question.
 
-So I started wiring them together. One pipeline became three. Three became ten. It ended up at 33 public data feeds, refreshing every six hours, covering 195 countries and all 50 US states, distilled into a single 0-100 score with every input traceable to its source.
+So I started wiring them together. One pipeline became three. Three became ten. It ended up at 33 public data feeds, refreshing every six hours, covering 193 countries and all 50 US states, distilled into a single 0-100 score with every input traceable to its source.
 
 Three things surprised me while building it:
 
@@ -38,7 +38,7 @@ I'm a student at Erasmus University Rotterdam, not a food-security expert. I bui
 
 The data exists. FAO. WFP. World Bank. NASA. ACLED. UN Comtrade. Each excellent. None of them, by itself, answers that question.
 
-So I wired them together — 33 public data feeds, refreshing every six hours, covering 195 countries plus all 50 US states. One 0-100 risk score, every input traceable.
+So I wired them together — 33 public data feeds, refreshing every six hours, covering 193 countries plus all 50 US states. One 0-100 risk score, every input traceable.
 
 Three things surprised me:
 → Food trade is more concentrated than I expected. A few suppliers feed most of the countries in crisis.
@@ -59,7 +59,7 @@ I'm a student at Erasmus University Rotterdam, not a food-security expert. I jus
 
 The data exists across FAO, WFP, World Bank, NASA, ACLED, Comtrade. Each is excellent. None of them, alone, answers that question.
 
-So I wired them together: 33 data feeds, every 6h, 195 countries, one risk score.
+So I wired them together: 33 data feeds, every 6h, 193 countries, one risk score.
 
 https://foodshield-ai-fv.vercel.app/
 
