@@ -4783,11 +4783,12 @@ input[type="email"]:focus {
   <!-- Analyze -->
   <button class="subnav-btn" data-tab="score" data-sub-group="analyze" onclick="showTab('score',this)">Score &amp; Ranking</button>
   <button class="subnav-btn" data-tab="compare" data-sub-group="analyze" onclick="showTab('compare',this)">Compare</button>
-  <button class="subnav-btn" data-tab="forecast" data-sub-group="analyze" onclick="showTab('forecast',this)">Forecast 2030</button>
+  <button class="subnav-btn" data-tab="forecast" data-sub-group="analyze" onclick="showTab('forecast',this)" title="Modeled 2030 outlook — scenarios under a moderate baseline, not predictions.">2030 Modeled Outlook</button>
   <button class="subnav-btn" data-tab="scenario" data-sub-group="analyze" onclick="showTab('scenario',this)">Scenario Simulator<span class="subnav-shock-pill">Live shock</span></button>
   <!-- Live -->
   <button class="subnav-btn" data-tab="disturbances" data-sub-group="live" onclick="showTab('disturbances',this)" title="Full list of live food-security disturbances with sources, dates, severity.">Disturbances</button>
   <button class="subnav-btn" data-tab="livedata" data-sub-group="live" onclick="showTab('livedata',this)">Live Data</button>
+  <button class="subnav-btn" data-tab="datastatus" data-sub-group="live" onclick="showTab('datastatus',this)" title="Per-source health, last refresh and what each pipeline feeds — full audit of the live data layer.">Data Status<span class="subnav-audit-pill" id="datastatus-pill-count" style="display:none;margin-left:6px;padding:1px 5px;font-family:'Geist Mono',monospace;font-size:8.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#6ba36b;background:rgba(107,163,107,0.14);border:1px solid rgba(107,163,107,0.35);border-radius:3px;"></span></button>
   <!-- About -->
   <button class="subnav-btn" data-tab="methodology" data-sub-group="about" onclick="showTab('methodology',this)">Methodology</button>
   <button class="subnav-btn" data-tab="about" data-sub-group="about" onclick="showTab('about',this)">About</button>
@@ -5107,14 +5108,23 @@ input[type="email"]:focus {
     <div class="content-page">
       <div class="page-header" style="display:flex;align-items:flex-end;gap:20px;">
         <div>
-          <div class="page-eyebrow">Projection</div>
-          <div class="page-title">Where will <em>pressure build</em>?</div>
-          <div class="page-sub">Trend projections to 2030 — demographic growth, climate stress, and food-supply gaps.</div>
+          <div class="page-eyebrow">Modeled outlook</div>
+          <div class="page-title">Where will <em>pressure build</em> by 2030?</div>
+          <div class="page-sub">Modeled 2030 scenarios — demographic growth, climate stress, and food-supply gaps under a moderate baseline.</div>
         </div>
         <div class="country-pill-row" style="margin-left:auto;">
           <label>Country</label>
           <select class="fs-select" id="forecast-sel" onchange="renderForecastTab()" style="font-size:12.5px;padding:8px 28px 8px 12px;"></select>
         </div>
+      </div>
+      <div style="background:var(--bg0);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:12px 16px;margin:0 0 18px;font-size:11.5px;color:var(--t2);line-height:1.7;">
+        <b style="color:var(--t1)">Modeled scenarios — not predictions.</b>
+        These numbers show what the FDRS model produces if today's trends continue under a <b>moderate baseline</b>
+        (no major new shock, current climate trajectory SSP2-4.5, current trade policy, UN WPP medium-variant population).
+        They are <em>not</em> econometric forecasts of where each country will actually be in 2030 — they are the model's
+        projection under one specific set of assumptions. Layer shocks on top in the
+        <b style="color:var(--accent)">Scenario Simulator</b>; see the
+        <b style="color:var(--accent)">Methodology</b> page for inputs and the uncertainty band.
       </div>
       <div id="forecast-body" class="fade-in"></div>
     </div>
@@ -5124,10 +5134,35 @@ input[type="email"]:focus {
   <div id="tab-scenario" class="tab-page">
     <div class="content-page">
       <div class="page-header">
-        <div class="page-eyebrow">Stress test</div>
+        <div class="page-eyebrow">Illustrative stress test</div>
         <div class="page-title">Scenario <em>simulator</em></div>
-        <div class="page-sub">Model food shock scenarios and identify the most exposed countries.</div>
+        <div class="page-sub">Layer food-shock scenarios and see which countries shift most. Uses deterministic formulas tied to each country's exposure — direction and rough magnitude, not an econometric forecast.</div>
       </div>
+      <div style="background:var(--bg0);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:12px 16px;margin:0 0 18px;font-size:11.5px;color:var(--t2);line-height:1.7;">
+        <b style="color:var(--t1)">Illustrative stress-test — not a forecast.</b>
+        Each shock applies a deterministic formula to every country's structural exposure
+        (e.g. <i>wheat-shock impact</i> ≈ wheat dependency × shock size × supplier-concentration multiplier).
+        Shocks stack additively. The output shows the <em>direction and rough magnitude</em> of who would move and by how much under that hypothetical — it is not a probabilistic forecast, and the absolute point shifts should not be treated as precise predictions. Calibrated against historical analogues (2010 Russia ban, 2022 Black Sea blockade, 2008 rice export bans). Expand <b style="color:var(--accent)">How this works</b> below for the per-shock formulas.
+      </div>
+      <details style="background:var(--bg2);border:1px solid var(--b1);border-radius:8px;margin:0 0 18px;font-size:11.5px;color:var(--t2);">
+        <summary style="padding:10px 14px;cursor:pointer;color:var(--t1);font-weight:500;list-style:none;display:flex;align-items:center;gap:8px;">
+          <span style="color:var(--accent);">▸</span> How this works — per-shock formulas
+        </summary>
+        <div style="padding:0 14px 14px;line-height:1.75;border-top:1px solid var(--b1);padding-top:12px;">
+          Each shock applies a closed-form impact to each country's FDRS, then sums. All inputs come from observed exposure (FAO FBS caloric shares, USDA PSD trade flows, Comtrade supplier concentration, WB food-CPI, WFP HungerMap, IMF FX).
+          <div style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--t2);background:var(--bg0);border:1px solid var(--b1);border-radius:6px;padding:10px 12px;margin-top:10px;line-height:1.85;">
+            <div><b style="color:var(--t1)">Wheat-export halt</b> &nbsp;Δ = wheat_dep × shock_size × supplier_conc_mult</div>
+            <div><b style="color:var(--t1)">Supplier ban</b> &nbsp;Δ = top_supplier_share × ban_severity × import_dep</div>
+            <div><b style="color:var(--t1)">FX collapse</b> &nbsp;Δ = depreciation_pct × food_import_share × food_CPI_passthrough</div>
+            <div><b style="color:var(--t1)">Fertilizer surge</b> &nbsp;Δ = N+P+K_import_dep × price_shock × ag_intensity</div>
+            <div><b style="color:var(--t1)">Drought / heatwave</b> &nbsp;Δ = ND-GAIN_climate_vuln × yield_loss_pct × calorie_share_of_affected_crop</div>
+            <div><b style="color:var(--t1)">Logistics chokepoint</b> &nbsp;Δ = LPI_dep × route_share × closure_duration</div>
+          </div>
+          <div style="margin-top:10px;color:var(--t3);font-size:11px;">
+            Severity sliders linearly scale each shock's contribution. Population, supplier mix and elasticities are held constant — this is a short-horizon shock test, not a long-run projection. For 2030 trajectory, use the Modeled Outlook tab.
+          </div>
+        </div>
+      </details>
       <div id="scenario-body" class="fade-in"></div>
     </div>
   </div>
@@ -5163,12 +5198,12 @@ input[type="email"]:focus {
       <div class="page-header">
         <div class="page-eyebrow">About FoodShield AI</div>
         <div class="page-title">Food security is an <em>underpublicised</em> systemic risk.</div>
-        <div class="page-sub">FoodShield AI exists to make global food-system fragility legible — to anyone, not just specialists. One score, 193 countries + 50 US states, 33 public data pipelines refreshed every 6 hours, no paywall. Every metric is labeled <b style="color:#6ba36b">sourced</b>, <b style="color:#7c9fcf">manual</b>, or <b style="color:var(--accent)">modeled</b> so readers can audit the foundation under each number.</div>
+        <div class="page-sub">FoodShield AI combines public food-security datasets, live humanitarian/disaster feeds, and modeled country risk scores so global food-system fragility is legible to anyone, not just specialists. 193 countries + 50 US states, 33 data pipelines (live, sourced, manual, and modeled mix) refreshing on a 6-hour cycle, no paywall. Every metric is labeled <b style="color:#6ba36b">sourced</b>, <b style="color:#7c9fcf">manual</b>, or <b style="color:var(--accent)">modeled</b> so readers can audit the foundation under each number — see the Data Status page for live source health.</div>
       </div>
       <!-- Stat strip -->
       <div class="about-stats">
         <div class="about-stat"><div class="about-stat-num">193</div><div class="about-stat-lab">countries<br>+ 50 US states</div></div>
-        <div class="about-stat"><div class="about-stat-num">33</div><div class="about-stat-lab">public data pipelines<br>refreshed every 6h</div></div>
+        <div class="about-stat" style="cursor:pointer;" onclick="showTab('datastatus',document.querySelector('.subnav-btn[data-tab=&quot;datastatus&quot;]'));" title="Open the full Data Status audit page — per-source health for every pipeline."><div class="about-stat-num">33</div><div class="about-stat-lab">public data pipelines<br>refreshed every 6h <span style="color:var(--accent);font-size:10px;">audit&nbsp;&#8599;</span></div></div>
         <div class="about-stat"><div class="about-stat-num">8 yrs</div><div class="about-stat-lab">modeled backcast<br>(since 2018)</div></div>
         <div class="about-stat"><div class="about-stat-num">11</div><div class="about-stat-lab">nowcast sub-signals</div></div>
       </div>
@@ -5273,6 +5308,21 @@ input[type="email"]:focus {
         <button class="live-refresh-btn" onclick="refreshLiveData()">↻ Refresh</button>
       </div>
       <div id="live-data-body"></div>
+    </div>
+  </div>
+
+  <!-- DATA STATUS / AUDIT TAB (v21.x) — auditable view of every source -->
+  <div id="tab-datastatus" class="tab-page">
+    <div class="content-page">
+      <div class="page-header">
+        <div class="page-eyebrow" style="display:flex;align-items:center;gap:8px;">
+          <span style="width:7px;height:7px;border-radius:50%;background:#6ba36b;display:inline-block;" id="datastatus-eyebrow-dot"></span>
+          Audit · live source health
+        </div>
+        <div class="page-title">Data <em>Status</em></div>
+        <div class="page-sub">Every public pipeline that feeds FoodShield — what it provides, when it last refreshed, whether it is healthy right now. Read from <code style="font-size:11px;background:var(--bg1);padding:1px 6px;border-radius:3px;">data/source_manifest.json</code>, regenerated on every refresh cycle.</div>
+      </div>
+      <div id="datastatus-body" class="fade-in"></div>
     </div>
   </div>
 
@@ -5387,8 +5437,8 @@ const COUNTRIES = [
  exports:["Gold","Sesame","Livestock","Gum arabic","Cotton"],
  exportDests:["Egypt","UAE","Saudi Arabia","China","India"],
  suppliers:["Saudi Arabia","UAE","Egypt","Turkey","WFP"],supPct:[28,24,20,16,12],
- ai:"Sudan's civil war, which erupted in April 2023, has triggered the world's largest displacement crisis. As of September 2025 (IPC), 21.2M people (45% of population) face IPC Phase 3+, including 375,000 in Catastrophe (Phase 5) and 6.3M in Emergency (Phase 4). Famine confirmed in El Fasher and Kadugli, with 20+ additional areas at famine risk. 11.5M+ displaced (8.6M internal, ~3M cross-border). Sorghum output halved; the Sudanese pound has collapsed.",
- risk:"Active civil war + FX collapse + sorghum production halved",
+ ai:"Sudan's civil war, which erupted in April 2023, has triggered the world's largest displacement crisis. As of September 2025 (IPC), 21.2M people (45% of population) face IPC Phase 3+, including 375,000 in Catastrophe (Phase 5) and 6.3M in Emergency (Phase 4). Famine confirmed in El Fasher and Kadugli, with 20+ additional areas at famine risk. 11.5M+ displaced (8.6M internal, ~3M cross-border). Per FAO GIEWS, 2024 cereal production rebounded ~60%+ above the very low 2023 output (favourable rains in producing areas), but conflict has destroyed grain stocks and disrupted distribution — the rebound has not translated into food security. The Sudanese pound has collapsed.",
+ risk:"Active civil war + FX collapse + grain distribution destroyed despite 2024 production rebound",
  resp:"Immediate ceasefire & humanitarian access · Emergency food aid scaling · Post-conflict agricultural reconstruction · Donor-funded seed distribution",
  trend:{years:[2018,2019,2020,2021,2022,2023,2024,2030],
    production:[7200,7100,6800,6400,4200,2900,3100,2400],
@@ -5404,7 +5454,7 @@ const COUNTRIES = [
  exports:["Crude oil","Coffee","Fish","Qat","Honey"],
  exportDests:["China","UAE","Saudi Arabia","Oman","India"],
  suppliers:["Australia","Russia","India","UAE","WFP"],supPct:[28,25,20,15,12],
- ai:"Yemen imports 90%+ of its wheat through Hodeidah port — a persistent conflict flashpoint. After 11+ years of war, the riyal has collapsed. As of 2025 IPC, 17M+ people face Phase 3+; projected to reach 18.1M (Sept 2025–Feb 2026), including 5.2M in Emergency (Phase 4) and ~41,000 in Catastrophe (Phase 5). Houthi Red Sea attacks since late 2023 continue to disrupt shipping insurance and import logistics.",
+ ai:"Yemen imports 90%+ of its wheat through Hodeidah port — a persistent conflict flashpoint. After 11+ years of war, the riyal hit record lows in mid-2025 (>30% YoY depreciation). Per FAO GIEWS (September 2025), 18.1M people (52% of population) face IPC Phase 3+, including 5.5M in Emergency (Phase 4). The 2025 cereal harvest was ~400K tonnes — about 15% below the 5-year average. Houthi Red Sea attacks since late 2023 continue to disrupt shipping insurance and import logistics.",
  risk:"Port chokepoint (Hodeidah) + ongoing conflict + near-total import reliance",
  resp:"Protect Hodeidah port access · Scale emergency food aid · Red Sea shipping insurance mechanisms · Post-conflict reconstruction",
  trend:{years:[2018,2019,2020,2021,2022,2023,2024,2030],
@@ -5421,7 +5471,7 @@ const COUNTRIES = [
  exports:["Livestock","Charcoal","Bananas","Fish","Hides"],
  exportDests:["UAE","Oman","India","Saudi Arabia","Yemen"],
  suppliers:["Oman","UAE","India","Kenya","WFP"],supPct:[30,25,20,15,10],
- ai:"Somalia has one of the world's highest climate vulnerability scores per ND-GAIN (2024). After four consecutive failed rainy seasons, a national drought emergency was declared in November 2025. 6.5M+ people (1 in 4 Somalis) now face IPC Phase 3+, including 2M+ in Emergency (Phase 4). 1.8M children under 5 are projected to suffer acute malnutrition in 2026. WFP funding cuts have forced reductions in food assistance from 2M+ to ~600,000 people.",
+ ai:"Somalia has one of the world's highest climate vulnerability scores per ND-GAIN (2024). After the failed October–December 2025 *Deyr* rains — with *Deyr* cereal output 75% below average (lowest on record) — per IPC, 6.5M people (33% — 1 in 3 Somalis) face Phase 3+ in February–March 2026, including ~2M in Phase 4 (50% higher than October–December 2025). 1.8M children under 5 are projected to suffer acute malnutrition in 2026. WFP funding cuts have forced reductions in food assistance from 2M+ to ~600,000 people.",
  risk:"Full import dependency + active conflict (al-Shabaab) + worst-in-world climate vulnerability",
  resp:"Emergency humanitarian aid · Pastoral livelihood support · Drought-resilient seed programs · Port security at Mogadishu/Berbera",
  trend:{years:[2018,2019,2020,2021,2022,2023,2024,2030],
@@ -5610,7 +5660,7 @@ const COUNTRIES = [
  exports:["Coffee","Sesame","Oilseeds","Cut flowers","Leather"],
  exportDests:["Somalia","Switzerland","Netherlands","USA","Saudi Arabia"],
  suppliers:["Russia","Ukraine","Saudi Arabia","China","India"],supPct:[30,20,18,16,16],
- ai:"Ethiopia — the world's most populous landlocked country (~130M people) — is experiencing converging crises. The Tigray conflict (2020–2022) displaced 2M+ and destroyed northern agricultural infrastructure. The Amhara and Oromia insurgencies remain active in 2025. Ongoing drought and continued spillover from Sudan keep ~15M+ people in acute food insecurity per recent IPC analyses.",
+ ai:"Ethiopia — the world's most populous landlocked country (~130M people) — is experiencing converging crises. The Tigray conflict (2020–2022) displaced 2M+ and destroyed northern agricultural infrastructure. The Amhara and Oromia insurgencies remain active in 2025. Per FAO GIEWS, the 2025 main *Meher* cereal harvest was favorable in western producing regions, with food security improving there. However, pastoral areas in southern Oromiya, Somali, and Afar are deteriorating into early 2026 after failed *Deyr/Hageya* rains. Continued spillover from Sudan's war is an additional stressor.",
  risk:"Landlocked + active conflict displacement + drought + fastest-growing import dependency in Africa",
  resp:"Expand irrigation in Rift Valley · Conflict resolution and farmer resettlement in Tigray · East Africa regional grain reserve · Fertilizer import diversification",
  trend:{years:[2018,2019,2020,2021,2022,2023,2024,2030],
@@ -5712,7 +5762,7 @@ const COUNTRIES = [
  exports:["Rice","Textiles","Leather","Surgical instruments","Cement"],
  exportDests:["USA","China","UAE","UK","Germany"],
  suppliers:["Russia","Ukraine","Malaysia","Indonesia","UAE"],supPct:[28,22,20,18,12],
- ai:"Pakistan faces persistent climate-food stress. The 2022 monsoon floods submerged 33% of the country and destroyed 45% of crops. Wheat output for 2025–26 is forecast at 28.4 MMT (down ~10% YoY), likely requiring ~$1.5B in imports. Annual CPI inflation has cooled to 5–7% by early 2026 from 38% in 2023 under the IMF program. Pakistan continues structural wheat-sector reform under IMF commitments through 2026.",
+ ai:"Pakistan faces persistent climate-food stress. The 2022 monsoon floods submerged 33% of the country and destroyed 45% of crops. Per FAO, 2025 wheat production reached ~29 MMT (8% below 2024's record, still slightly above the 5-year average). A wheat import ban has been in effect since July 2024, with 2025/26 import requirements projected at just 1.1 MMT (well below the 5-year average) thanks to carryover from the record 2024 harvest. Government procurement resumed and 2026 wheat plantings are above-average. Wheat flour prices surged 50–90% July 2025–January 2026 after monsoon flood losses. Annual CPI inflation has cooled to 5–7% by early 2026 from 38% in 2023 under the IMF program.",
  risk:"FX crisis + 2022 mega-floods (33% of country submerged) + climate vulnerability rising",
  resp:"IMF program stabilization · Flood-resilient agricultural investment · Edible oil self-sufficiency drive · Climate-adapted seed distribution",
  trend:{years:[2018,2019,2020,2021,2022,2023,2024,2030],
@@ -5845,13 +5895,13 @@ const COUNTRIES = [
 
 {iso:"LBN",name:"Lebanon",region:"Middle East",
  fdrs:72,c:[80,72,78,90,55,65],f2030:76,
- w:95,r:100,m:60,net:-3200,fi:220,
- imports:["Wheat","Petroleum","Livestock","Pharmaceuticals","Consumer goods"],
+ w:95,r:100,m:60,net:-3200,fi:15,
+ imports:["Wheat","Livestock","Vegetable oil","Sugar","Dairy products"],
  exports:["Gold (re-export)","Jewelry","Chemicals","Machinery","Vegetables"],
  exportDests:["UAE","Saudi Arabia","France","Syria","Jordan"],
  suppliers:["Ukraine","Russia","Australia","India","Turkey"],supPct:[40,22,18,12,8],
- ai:"Lebanon's food system collapsed alongside its economy. The 2020 Beirut port explosion destroyed the country's main grain silos (120,000 MT capacity) and 85% of grain reserves. The currency has lost 98% of its value since 2019, food inflation exceeded 220% in 2023, and 80% of the population lives below the poverty line. Full import dependency with near-zero FX reserves is a severe structural crisis.",
- risk:"Economic collapse + 98% currency collapse + Beirut grain silo explosion + 220% food inflation",
+ ai:"Lebanon's food system collapsed alongside its economy. The 2020 Beirut port explosion destroyed the country's main grain silos (120,000 MT capacity) and 85% of grain reserves. The currency lost 98% of its value since 2019; food inflation has now cooled to ~15% by Dec 2025 (from 255% in 2023 and 37% in 2024) following dollarization of the CPI basket and exchange-rate stabilization, but absolute price levels remain crushing. Per IPC, 874K people are in Phase 3+ Nov 2025–Mar 2026. The 2025 cereal harvest fell to a record-low 90,000 tonnes (~50% below the 5-year average) due to drought and conflict damage.",
+ risk:"Record-low 2025 cereal harvest + 874K in IPC Phase 3+ + structural FX/poverty crisis despite inflation cooling",
  resp:"Emergency grain storage reconstruction · IMF program · Wheat silo replacement · Regional supplier diversification · Agricultural sector revitalization",
  trend:{years:[2018,2019,2020,2021,2022,2023,2024,2030],
    production:[800,780,720,680,650,620,630,580],
@@ -5918,8 +5968,8 @@ const COUNTRIES = [
  exports:["Gold","Cotton","Livestock","Salt","Mango"],
  exportDests:["UAE","Switzerland","China","Burkina Faso","Senegal"],
  suppliers:["Senegal","Ivory Coast","Russia","China","UAE"],supPct:[30,22,20,18,10],
- ai:"Mali is deeply landlocked and has been in a near-continuous security crisis since 2012 (Tuareg rebellion, jihadist insurgency, two military coups). ACLED ranks Mali among the highest conflict-intensity countries globally. Wagner Group presence since 2021 has further destabilized rural areas. 2.5M+ people face acute food insecurity. Millet and sorghum are the main staples, but drought vulnerability in the Sahel is extreme.",
- risk:"Landlocked + jihadist insurgency + two military coups + Sahel drought + Wagner Group destabilization",
+ ai:"Mali is deeply landlocked and has been in a near-continuous security crisis since 2012 (Tuareg rebellion, jihadist insurgency, two military coups). ACLED ranks Mali among the highest conflict-intensity countries globally. Africa Corps (formerly Wagner) presence since 2021 has further destabilized rural areas. Per Cadre Harmonisé, ~1.52M people (7%) were projected in Phase 3+ during the June–August 2025 lean season, including ~64K in Emergency and ~2,600 in Catastrophe (Phase 5) in Ménaka Region. 2024 cereal output was 5% above the 5-year average (10.4 MMT). Millet and sorghum are the main staples, but drought vulnerability in the Sahel is extreme.",
+ risk:"Landlocked + jihadist insurgency + two coups + ~2,600 in Catastrophe in Ménaka + Sahel drought",
  resp:"Regional Sahel security coalition (G5 Sahel) · Emergency humanitarian access · Millet production support · ECOWAS grain reserve access",
  trend:{years:[2018,2019,2020,2021,2022,2023,2024,2030],
    production:[4000,4200,4100,4300,4000,3800,3900,4200],
@@ -6604,7 +6654,7 @@ const COUNTRIES = [
  exports:["Gold","Cotton","Sesame","Shea butter","Livestock"],
  exportDests:["Switzerland","Singapore","South Africa","Belgium","Ghana"],
  suppliers:["Ivory Coast","Ghana","France","Togo","China"],supPct:[30,22,18,18,12],
- ai:"Burkina Faso has experienced two military coups (2022) and faces the fastest-growing jihadist insurgency in the Sahel. ACLED records the highest conflict intensity in West Africa. 50%+ of the country's territory is outside government control. 4.7M people are acutely food insecure. The country is doubly landlocked and lost French military support after the coup.",
+ ai:"Burkina Faso has experienced two military coups (2022) and faces the fastest-growing jihadist insurgency in the Sahel. ACLED records the highest conflict intensity in West Africa. Large parts of the north and east are outside effective state control. Per Cadre Harmonisé, ~2.7M people (12%) faced Phase 3+ in the 2024 lean season, with ~423K in Emergency; 2M+ affected by armed group blockades (Djibo town blockaded since 2022, ~300K people). The 2024 cereal harvest was 20% above the 5-year average (6.1 MMT), but logistics constraints from blockades prevent food from reaching insecure populations. The country is doubly landlocked and lost French military support after the coup.",
  risk:"Jihadist insurgency (worst in Sahel) + two coups + 50% territory ungoverned + climate extreme",
  resp:"Sahel security coalition · Emergency WFP access · Humanitarian corridors · Agricultural input support for accessible zones",
  trend:{years:[2018,2019,2020,2021,2022,2023,2024,2030],
@@ -6655,8 +6705,8 @@ const COUNTRIES = [
  exports:["Crude oil","Sesame","Teak","Gold","Livestock"],
  exportDests:["China","UAE","Japan","USA","Sudan"],
  suppliers:["Uganda","Kenya","Sudan","Ethiopia","WFP"],supPct:[30,25,22,13,10],
- ai:"South Sudan has been in near-continuous civil war since independence in 2011. Per the IPC September 2025 analysis, 5.97M people (42% of population) face IPC Phase 3+, including 1.3M in Emergency (Phase 4) and ~28K in Catastrophe (Phase 5); projected to rise to 7.55M during the April–July 2026 lean season. Spillover from Sudan's war, floods, droughts, and macroeconomic instability are the main drivers. Infrastructure is essentially absent.",
- risk:"Highest food insecurity share globally (60%) + chronic civil war + catastrophic flooding cycles + absent infrastructure",
+ ai:"South Sudan has been in near-continuous civil war since independence in 2011. Per IPC, 7.7M people (57% of population) faced Phase 3+ during the April–July 2025 lean season — about 10% higher than a year earlier — including ~83,000 in Catastrophe (Phase 5) with risk of famine in Nasir and Ulang counties (Upper Nile). 666,000 returnees from Sudan have arrived, 39K of them already in Phase 5. Spillover from Sudan's war, floods, droughts, and macroeconomic instability are the main drivers. Infrastructure is essentially absent.",
+ risk:"57% of population in IPC Phase 3+ + risk of famine in Upper Nile + 666K returnees from Sudan + absent infrastructure",
  resp:"Peace agreement enforcement · Emergency WFP scaling · Flood early warning system · Oil revenue transparent governance",
  trend:{years:[2018,2019,2020,2021,2022,2023,2024,2030],
    production:[800,780,750,720,690,660,670,580],
@@ -10499,6 +10549,247 @@ function showLiveStatusDialog() {
   document.body.appendChild(modal);
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// v21.x — DATA STATUS / AUDIT TAB
+// Full-page auditable view of every public pipeline that feeds FoodShield.
+// Reads from LIVE.manifest (which is loaded from data/source_manifest.json on
+// page boot). Linked from the main subnav, the footer Data-status link, the
+// methodology Live Data Pipeline accordion, and the homepage hero.
+// ════════════════════════════════════════════════════════════════════════════
+
+// What each source feeds — narrative descriptions to help reviewers connect
+// a JSON file back to the user-facing surface. Keyed by manifest source-key.
+const DATASTATUS_FEEDS = {
+  wfp_hungermap: 'Global hunger snapshot · feeds country panel consumption % + alert flags',
+  wfp_country:   'Per-country FX 90d, food inflation, child stunting/wasting · feeds nowcast Δ',
+  ipc:           'IPC Phase 3+ classifications · feeds country panel + crisis flags',
+  worldbank_wdi: 'Most-recent-value-per-indicator World Bank WDI · structural FDRS reference',
+  worldbank_pink_sheet: 'Monthly commodity benchmarks · powers Live Data + commodity cards',
+  fao_ffpi:      'FAO Food Price Index · the headline number on Live Data tab',
+  eurostat_food: 'EU 27 monthly food HICP · food-inflation signal for European countries',
+  faostat_food:  'Global annual food CPI · fallback inflation signal outside EU + WFP coverage',
+  reliefweb_alerts: 'Humanitarian alerts (Food & Nutrition theme) · Disturbances tab',
+  acled:         'Conflict events + fatalities · nowcast conflict amplifier',
+  comtrade_staples: 'Bilateral staples trade flows · Trade Flow Atlas + commodity exposure',
+  feeding_america_states: 'US state food-insecurity % · USA country detail',
+  openmeteo:     'Past-14-day precipitation + temperature anomaly · weather extremes signal',
+  openmeteo_flood: 'River discharge anomalies for flood-exposed countries · flood signal',
+  usgs_water:    '17 major US river gages · drought/flood signal for US',
+  openaq:        'PM2.5 background air quality · labour & crop stress signal',
+  nasa_firms:    'Active fire detection over cropland · disturbance signal',
+  wb_wfso:       'World Bank Food Security Outlook (baseline + downside projections)',
+  net_food_trade: 'FAOSTAT net agri-food trade balance · country panel + commodity rows',
+  worldbank_bulk: '20 structural indicators × ~201 countries · structural FDRS inputs',
+  worldbank_wgi: '6 governance indicators · structural FDRS conflict/logistics component',
+  worldbank_lpi: 'World Bank Logistics Performance Index · structural FDRS conflict/logistics',
+  undp_hdi:      'UNDP HDI + sub-indices · structural FDRS context',
+  worldbank_cckp: 'World Bank Climate Change Knowledge Portal · 2030 forecast climate kick',
+  ndgain:        'ND-GAIN climate vulnerability + readiness · structural FDRS climate',
+  aqueduct:      'WRI Aqueduct 4.0 water-stress, drought, flood risk · structural FDRS climate',
+  inform:        'EU JRC INFORM Risk Index · structural FDRS amplifier',
+  usda_psd:      'USDA PSD observed production/imports/exports for staples · commodity panel',
+  faostat_fbs:   'FAOSTAT Food Balance Sheets · caloric shares of wheat/rice/maize per country',
+  fao_giews:     'FAO GIEWS quarterly country briefs · country-panel deep-link (static)',
+  fewsnet:       'FEWS NET IPC-style classifications · country-panel deep-link (static)',
+  wfp_acr:       'WFP Annual Country Reports · country-panel deep-link (static)',
+  usda_gain:     'USDA GAIN attaché reports · commodity-panel deep-link (static)',
+};
+
+function dataStatusFeedsDescription(key, row) {
+  return DATASTATUS_FEEDS[key]
+    || row?.notes
+    || row?.source
+    || 'Reference data — see source notes.';
+}
+
+// Pipeline mode → human-readable type label + colour token.
+function dataStatusTypeMeta(mode) {
+  const m = (mode || '').toLowerCase();
+  if (m === 'live')      return { label: 'live',     color: '#6ba36b' };
+  if (m === 'market')    return { label: 'live',     color: '#6ba36b' };
+  if (m === 'forecast')  return { label: 'sourced',  color: '#7c9fcf' };
+  if (m === 'reference') return { label: 'sourced',  color: '#7c9fcf' };
+  if (m === 'trade')     return { label: 'sourced',  color: '#7c9fcf' };
+  if (m === 'manual')    return { label: 'manual',   color: '#7c9fcf' };
+  return { label: mode || 'data', color: 'var(--t3)' };
+}
+
+// Compute the next 6h refresh boundary (00 / 06 / 12 / 18 UTC) as HH:MM UTC.
+function nextRefreshUTC() {
+  const now = new Date();
+  const h = now.getUTCHours();
+  const nextSlot = [0, 6, 12, 18, 24].find(s => s > h);
+  const d = new Date(now);
+  d.setUTCHours(nextSlot, 0, 0, 0);
+  return d.toISOString().slice(11, 16) + ' UTC';
+}
+
+function renderDataStatusTab() {
+  const host = document.getElementById('datastatus-body');
+  if (!host) return;
+
+  const manifest = LIVE.manifest;
+  if (!manifest) {
+    host.innerHTML = `
+      <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:10px;padding:24px;color:var(--t3);font-size:13px;text-align:center;">
+        Source manifest still loading… <button onclick="renderDataStatusTab()" style="background:transparent;color:var(--accent);border:none;cursor:pointer;text-decoration:underline;">Retry</button>
+      </div>`;
+    return;
+  }
+
+  const summary = manifest.summary || {};
+  const sources = manifest.sources || {};
+  const entries = Object.entries(sources);
+  const total = summary.total_sources || entries.length;
+  const healthy = (summary.ok_sources || 0) + (summary.manual_sources || 0);
+  const degraded = summary.degraded_sources || 0;
+  const setupReq = summary.setup_required_sources || 0;
+  const failed   = summary.failed_sources || 0;
+
+  const issues = degraded + setupReq + failed;
+  const summaryColor = issues === 0 ? '#6ba36b' : issues <= 3 ? '#c9a957' : '#c44b3c';
+
+  const lastRefreshAge = formatAge(summary.loaded_at) || '—';
+  const lastRefreshAbs = summary.loaded_at ? formatSnapshotTime(summary.loaded_at) : 'unknown';
+  const nextRefresh    = nextRefreshUTC();
+
+  // Sort: issues first, then by label
+  const sorted = entries.slice().sort((a, b) => {
+    const order = { failed: 0, degraded: 1, setup_required: 2, manual: 3, ok: 4 };
+    const ao = order[a[1]?.status] ?? 9;
+    const bo = order[b[1]?.status] ?? 9;
+    return ao - bo || (a[1]?.label || a[0]).localeCompare(b[1]?.label || b[0]);
+  });
+
+  const rows = sorted.map(([key, row]) => {
+    const typeMeta = dataStatusTypeMeta(row.mode);
+    const statusColor = sourceStatusColor(row.status);
+    const statusLabel = sourceStatusLabel(row.status);
+    const age = row.generated_at ? (formatAge(row.generated_at) || 'just now') : '—';
+    const ageTitle = row.generated_at ? formatSnapshotTime(row.generated_at) : 'no snapshot yet';
+    const feeds = dataStatusFeedsDescription(key, row);
+    const reason = row.reason && row.reason !== 'healthy' ? ` · ${row.reason}` : '';
+    return `
+      <tr style="border-bottom:1px solid var(--b1);">
+        <td style="padding:11px 14px;vertical-align:top;">
+          <div style="font-size:12.5px;font-weight:600;color:var(--t1);line-height:1.35;">${row.label || key}</div>
+          <div style="font-size:10.5px;color:var(--t3);margin-top:3px;font-family:'Geist Mono',monospace;">${row.cadence || 'snapshot'}${reason}</div>
+        </td>
+        <td style="padding:11px 14px;vertical-align:top;white-space:nowrap;">
+          <span style="display:inline-block;padding:2px 7px;font-family:'Geist Mono',monospace;font-size:9.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${typeMeta.color};background:${typeMeta.color}22;border:1px solid ${typeMeta.color}55;border-radius:3px;">${typeMeta.label}</span>
+        </td>
+        <td style="padding:11px 14px;vertical-align:top;white-space:nowrap;font-family:'Geist Mono',monospace;font-size:11px;color:var(--t2);" title="${ageTitle}">${age}</td>
+        <td style="padding:11px 14px;vertical-align:top;white-space:nowrap;">
+          <span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:${statusColor};">
+            <span style="width:7px;height:7px;border-radius:50%;background:${statusColor};display:inline-block;"></span>
+            ${statusLabel}
+          </span>
+        </td>
+        <td style="padding:11px 14px;vertical-align:top;font-size:11.5px;color:var(--t2);line-height:1.5;">${feeds}</td>
+      </tr>`;
+  }).join('');
+
+  host.innerHTML = `
+    <!-- Summary strip -->
+    <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:12px;padding:18px 22px;margin-bottom:18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:18px;align-items:center;">
+      <div>
+        <div style="font-size:10.5px;color:var(--t3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;">Health</div>
+        <div style="display:flex;align-items:baseline;gap:8px;">
+          <span style="font-family:'Geist Mono',monospace;font-size:26px;font-weight:700;color:${summaryColor};">${healthy}</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:14px;color:var(--t3);">/ ${total}</span>
+          <span style="font-size:11.5px;color:var(--t2);">sources healthy</span>
+        </div>
+        <div style="font-size:10.5px;color:var(--t3);margin-top:4px;">
+          ${degraded > 0 ? `<span style="color:#c9a957">${degraded} degraded</span>` : ''}${degraded > 0 && (setupReq > 0 || failed > 0) ? ' · ' : ''}${setupReq > 0 ? `<span style="color:#d27a3e">${setupReq} setup-required</span>` : ''}${setupReq > 0 && failed > 0 ? ' · ' : ''}${failed > 0 ? `<span style="color:#c44b3c">${failed} failed</span>` : ''}${issues === 0 ? 'All feeds nominal' : ''}
+        </div>
+      </div>
+      <div>
+        <div style="font-size:10.5px;color:var(--t3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;">Last full refresh</div>
+        <div style="font-family:'Geist Mono',monospace;font-size:18px;font-weight:600;color:var(--t1);" title="${lastRefreshAbs}">${lastRefreshAge}</div>
+        <div style="font-size:10.5px;color:var(--t3);margin-top:4px;">${lastRefreshAbs}</div>
+      </div>
+      <div>
+        <div style="font-size:10.5px;color:var(--t3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;">Next scheduled refresh</div>
+        <div style="font-family:'Geist Mono',monospace;font-size:18px;font-weight:600;color:var(--t1);">${nextRefresh}</div>
+        <div style="font-size:10.5px;color:var(--t3);margin-top:4px;">Cron runs 00 / 06 / 12 / 18 UTC</div>
+      </div>
+      <div>
+        <div style="font-size:10.5px;color:var(--t3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;">Manifest</div>
+        <div><a href="/data/source_manifest.json" target="_blank" rel="noopener" style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--accent);text-decoration:none;">source_manifest.json &#8599;</a></div>
+        <div style="font-size:10.5px;color:var(--t3);margin-top:4px;">Raw machine-readable file</div>
+      </div>
+    </div>
+
+    <!-- Audit table -->
+    <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:12px;overflow:hidden;margin-bottom:18px;">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--b1);background:var(--bg0);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--t1);">All ${total} data pipelines</div>
+          <div style="font-size:10.5px;color:var(--t3);margin-top:2px;">Ordered with attention-needed items first. Click the JSON link above for the raw manifest.</div>
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead>
+            <tr style="background:var(--bg0);border-bottom:1px solid var(--b2);">
+              <th style="padding:10px 14px;text-align:left;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--t3);font-weight:600;">Source</th>
+              <th style="padding:10px 14px;text-align:left;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--t3);font-weight:600;">Type</th>
+              <th style="padding:10px 14px;text-align:left;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--t3);font-weight:600;">Last refreshed</th>
+              <th style="padding:10px 14px;text-align:left;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--t3);font-weight:600;">Status</th>
+              <th style="padding:10px 14px;text-align:left;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--t3);font-weight:600;">What it feeds</th>
+            </tr>
+          </thead>
+          <tbody>${rows || '<tr><td colspan="5" style="padding:24px;color:var(--t3);text-align:center;font-size:12px;">No sources in manifest.</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Status legend / plain-language explainer -->
+    <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:12px;padding:18px 22px;margin-bottom:18px;">
+      <div style="font-size:10.5px;color:var(--t3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:12px;">What each status means</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;font-size:11.5px;line-height:1.6;color:var(--t2);">
+        <div>
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#6ba36b;"></span><b style="color:var(--t1);">Healthy</b></div>
+          Last refresh returned a populated payload. Monthly or annual upstreams can stay healthy even if today did not change the value &mdash; the cadence column tells you how often the underlying source updates.
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#7c9fcf;"></span><b style="color:var(--t1);">Manual snapshot</b></div>
+          Hand-maintained annual or one-off snapshot of an official public release (e.g. Feeding America Map the Meal Gap). Not refreshed by the 6h cron &mdash; re-imported when a new release is published.
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#c9a957;"></span><b style="color:var(--t1);">Degraded</b></div>
+          The fetch ran but returned empty or fewer countries than expected &mdash; usually upstream API outage or schema drift. FoodShield falls back to the structural FDRS for that dimension; nothing is fabricated.
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#d27a3e;"></span><b style="color:var(--t1);">Setup required</b></div>
+          The pipeline needs an API key or registration approval that has not been completed on the deployment running this build (e.g. ACLED, NASA FIRMS, OpenAQ). Source code is wired and ready; just no credentials.
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#c44b3c;"></span><b style="color:var(--t1);">Failed</b></div>
+          The fetch raised an uncaught error in the last refresh and wrote a <code style="font-size:10.5px;background:var(--bg0);padding:1px 5px;border-radius:3px;">*_FAILED.json</code> stub. Workflow continues; affected signals are dropped from the nowcast until the next successful run.
+        </div>
+      </div>
+    </div>
+
+    <!-- Cron + provenance footnote -->
+    <div style="background:var(--bg0);border:1px solid var(--b1);border-left:3px solid var(--accent);border-radius:0 10px 10px 0;padding:14px 18px;font-size:11.5px;color:var(--t2);line-height:1.7;">
+      <b style="color:var(--t1);">How this page is generated.</b> A GitHub Actions workflow runs every 6 hours (00 / 06 / 12 / 18 UTC), fetches each public source above, writes a JSON snapshot to <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">/data</code>, then runs <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">scripts/build_source_manifest.py</code> to emit the manifest you see here. The frontend reloads the manifest on every page visit with <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">cache: 'no-store'</code> so the status is always the latest committed snapshot, not a stale CDN copy.
+    </div>`;
+
+  // Update the subnav pill count
+  const pill = document.getElementById('datastatus-pill-count');
+  if (pill) {
+    pill.textContent = `${healthy}/${total}`;
+    pill.style.display = 'inline-block';
+    pill.style.color = summaryColor;
+    pill.style.background = summaryColor + '24';
+    pill.style.borderColor = summaryColor + '55';
+  }
+  // Update the eyebrow dot
+  const eyeDot = document.getElementById('datastatus-eyebrow-dot');
+  if (eyeDot) eyeDot.style.background = summaryColor;
+}
+
 // v20.11 — bypass any intermediate cache. Vercel/edge/browser used to hold onto
 // data/*.json for hours; the workflow refreshes daily but users saw stale numbers
 // (e.g. legacy_curated food inflation on countries where Eurostat / WFP HungerMap
@@ -10892,6 +11183,10 @@ async function loadLiveData() {
   }
   // v20.4: refresh the status-pill from the manifest now that LIVE.manifest is loaded
   if (typeof updateLiveStatusUI === 'function') updateLiveStatusUI();
+  // v21.x: if the Data Status tab is currently visible, re-render it now that the manifest is loaded
+  if (typeof renderDataStatusTab === 'function' && document.getElementById('tab-datastatus')?.classList.contains('active')) {
+    try { renderDataStatusTab(); } catch (e) { console.warn('[FoodShield] renderDataStatusTab failed:', e); }
+  }
 
   // ── US States — replace state FDRS with Feeding America MMG food-insecurity scaling ──
   // Maps state food-insecurity % (5%-25% range) onto FDRS-equivalent (0-100), blended 70/30
@@ -12631,6 +12926,7 @@ function showTab(tab, btn) {
   if (tab==='livedata')  initLiveDataTab();
   if (tab==='compare')   initCompareTab();
   if (tab==='commodities') initCommoditiesTab();
+  if (tab==='datastatus') renderDataStatusTab();
 
   // v20.34 — sync URL (skip if we're in the middle of applying URL state)
   if (!URL_STATE._applying && tab !== URL_STATE._last.tab) {
@@ -13255,7 +13551,7 @@ function openPanel(c, skipDrilldown) {
   const tCol  = c.f2030 > c.fdrs ? '#c44b3c' : '#6ba36b';
   document.getElementById('sp-forecast').innerHTML =
     `<span class="trend-arrow" style="color:${tCol}">${trend}</span>
-     <span style="color:#9a988f">2030 forecast: </span>
+     <span style="color:#9a988f" title="Modeled scenario under a moderate baseline — not a prediction.">2030 modeled: </span>
      <b style="color:${riskColor(c.f2030)}">${c.f2030}</b>`;
 
   // Score bar
@@ -13595,9 +13891,9 @@ function renderCountryTab() {
         <div class="ct-hero-score-meta">
           <div class="ct-hero-score-label"><abbr class="ac" title="Food Disruption Risk Score — 0–100 composite measuring how exposed a country is to food shocks (imports, climate, conflict, logistics, prices).">Food Disruption Risk</abbr> · /100</div>
           <div class="risk-badge" style="${riskBadgeStyle(c.fdrs)}">${riskLabel(c.fdrs)}</div>
-          <div class="ct-hero-forecast">
+          <div class="ct-hero-forecast" title="Modeled scenario under a moderate baseline — not a prediction. See Forecast tab.">
             <span class="trend-arrow" style="color:${trendCol}">${trendUp?'▲':'▼'}</span>
-            2030 forecast <span class="mono" style="color:${riskColor(c.f2030)}">${c.f2030}</span>
+            2030 modeled <span class="mono" style="color:${riskColor(c.f2030)}">${c.f2030}</span>
             <span class="ct-hero-forecast-delta" style="color:${trendCol}">${trendUp?'+':''}${c.f2030 - c.fdrs}</span>
           </div>
         </div>
@@ -13724,8 +14020,8 @@ function renderCountryTab() {
           <div class="ct-ai-text">${c.risk}</div>
         </div>
         <div>
-          <div class="ct-ai-subhead">2030 outlook</div>
-          <div class="ct-ai-text" style="color:${riskColor(c.f2030)}">FDRS → ${c.f2030} / 100 ${trendUp?'▲ deteriorating':'▼ stable / improving'}</div>
+          <div class="ct-ai-subhead">2030 modeled outlook</div>
+          <div class="ct-ai-text" style="color:${riskColor(c.f2030)}">FDRS → ${c.f2030} / 100 ${trendUp?'▲ deteriorating':'▼ stable / improving'} <span style="color:var(--t3);font-size:10px;">· modeled</span></div>
         </div>
       </div>
       <div class="ct-ai-actions">
@@ -14305,7 +14601,7 @@ function renderForecastTab() {
       <div class="fc-global-card fc-global-newvuln">
         <div class="fc-global-eyebrow">⚠ New vulnerable by 2030</div>
         <div class="fc-global-num">${newlyVuln}</div>
-        <div class="fc-global-cap">countries projected to enter the vulnerable risk band for the first time</div>
+        <div class="fc-global-cap">countries the model would push into the vulnerable risk band for the first time</div>
       </div>
     </div>
 
@@ -14318,9 +14614,9 @@ function renderForecastTab() {
       </div>
       <div class="fc-hero-arrow">${trendUp ? '▶' : '▶'}</div>
       <div class="fc-hero-side" style="background:linear-gradient(135deg,rgba(0,0,0,0),rgba(0,0,0,0.18))">
-        <div class="fc-hero-eyebrow" style="color:${trendCol}">2030 forecast · ${trendUp?'▲':'▼'} ${trendUp?'+':''}${delta} pts</div>
+        <div class="fc-hero-eyebrow" style="color:${trendCol}">2030 modeled · ${trendUp?'▲':'▼'} ${trendUp?'+':''}${delta} pts</div>
         <div class="fc-hero-num" style="color:${futureCol}">${c.f2030}</div>
-        <div class="fc-hero-label">${riskLabel(c.f2030)} · ${trendUp?'deteriorating':'stable / improving'}</div>
+        <div class="fc-hero-label">${riskLabel(c.f2030)} · ${trendUp?'deteriorating':'stable / improving'} <span style="color:var(--t3);font-size:10px;">· modeled</span></div>
       </div>
     </div>
 
@@ -14368,8 +14664,8 @@ function renderForecastTab() {
       <div class="ct-ai-eyebrow" style="color:${futureCol}"><span class="ct-ai-asterisk">✱</span> AI Trend Interpretation</div>
       <p class="ct-ai-body">
         ${trendUp
-          ? `If current trends continue, <strong style="color:var(--t1)">${c.name}</strong>'s Food Disruption Risk Score is projected to rise from <strong style="color:${todayCol}">${c.fdrs}</strong> today to <strong style="color:${futureCol}">${c.f2030}</strong> by 2030. The primary driver is ${c.risk.split('+')[0].trim().toLowerCase()}. ${c.f2030>88?'This trajectory risks crossing into <em>Severe</em> territory before 2030.':c.f2030>75?'This trajectory risks crossing into <em>Vulnerable</em> territory before 2030.':'This represents a meaningful deterioration in food system resilience.'}`
-          : `<strong style="color:var(--t1)">${c.name}</strong> is on a stable or improving trajectory. Current FDRS of <strong style="color:${todayCol}">${c.fdrs}</strong> is projected to remain at <strong style="color:${futureCol}">${c.f2030}</strong> by 2030. The country's main food system strengths are holding.`}
+          ? `Under the moderate baseline, <strong style="color:var(--t1)">${c.name}</strong>'s modeled Food Disruption Risk Score rises from <strong style="color:${todayCol}">${c.fdrs}</strong> today to <strong style="color:${futureCol}">${c.f2030}</strong> by 2030. The primary driver in the model is ${c.risk.split('+')[0].trim().toLowerCase()}. ${c.f2030>88?'On this trajectory the model would cross into <em>Severe</em> territory before 2030.':c.f2030>75?'On this trajectory the model would cross into <em>Vulnerable</em> territory before 2030.':'The model implies a meaningful deterioration in food-system resilience.'} <span style="color:var(--t3);font-size:11px;">Modeled outlook — not a forecast.</span>`
+          : `Under the moderate baseline, <strong style="color:var(--t1)">${c.name}</strong> stays on a stable or improving trajectory in the model. Current FDRS of <strong style="color:${todayCol}">${c.fdrs}</strong> stays near <strong style="color:${futureCol}">${c.f2030}</strong> by 2030. The model treats the country's main food-system strengths as holding. <span style="color:var(--t3);font-size:11px;">Modeled outlook — not a forecast.</span>`}
       </p>
       <div class="ct-ai-grid">
         <div>
@@ -15065,8 +15361,8 @@ const INSTRUCTIONS = [
     body: 'Go to <b>Scenario Simulator</b> and pick one or more shocks (drought, conflict, fertilizer spike…). Tune severity with the slider. Switch to <b>Single country</b> mode to focus on specific nations. Hit <b>Run simulation</b> to see which countries cross risk thresholds and by how much.'
   },
   {
-    icon: '📈', title: 'Forecast 2030',
-    body: 'The <b>Forecast 2030</b> tab projects FDRS trajectories to 2030 using trend extrapolation across production, climate and geopolitical data. Compare countries and identify which are on a worsening path before conditions deteriorate.'
+    icon: '📈', title: '2030 Modeled Outlook',
+    body: 'The <b>2030 Modeled Outlook</b> tab projects FDRS trajectories to 2030 under a moderate baseline (no major new shock, current climate trajectory, current trade policy). These are <em>modeled scenarios — not predictions</em>: they show what the model produces if today\'s trends continue. Use them to identify worsening trajectories before conditions deteriorate, then stress them in the Scenario Simulator.'
   },
   {
     icon: '⚖️', title: 'Country Comparison',
@@ -15107,6 +15403,7 @@ function renderInstructionsBody() {
     'Live Disturbances': 'livedata',
     'Scenario Simulator': 'scenario',
     'Forecast 2030': 'forecast',
+    '2030 Modeled Outlook': 'forecast',
     'Country Comparison': 'compare',
     'Commodity Drill-Down': 'commodities',
     'Company Risk Tracker': 'companies',
@@ -16914,6 +17211,13 @@ function renderMethodologyTab() {
         builds the composite <code style="font-size:11px;background:var(--bg1);padding:1px 6px;border-radius:3px;">nowcast.json</code>
         and a per-feed status file <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">source_manifest.json</code>,
         commits the diff and triggers a Vercel redeploy. The frontend reloads each snapshot on every page visit; click the live-status pill at the top right to inspect per-source health and last-refresh age.
+      </div>
+      <!-- v21.x — prominent link to the full audit page from inside the accordion -->
+      <div style="margin-bottom:16px;">
+        <a href="#" onclick="event.preventDefault();showTab('datastatus',document.querySelector('.subnav-btn[data-tab=&quot;datastatus&quot;]'));" style="display:inline-flex;align-items:center;gap:8px;padding:10px 16px;background:var(--accent);color:var(--bg0);font-size:12px;font-weight:600;border-radius:6px;text-decoration:none;letter-spacing:.01em;">
+          Open the full Data Status audit page &nbsp;&#8599;
+        </a>
+        <span style="margin-left:10px;font-size:11px;color:var(--t3);">Per-source health, last-refresh age, status colour coding, and what each feed powers.</span>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:16px;">
         ${[
@@ -19903,9 +20207,10 @@ function showCommodityDetail(key) {
       <svg viewBox="0 0 24 24" fill="currentColor" style="width:11px;height:11px;"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.69-3.87-1.54-3.87-1.54-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.68 1.25 3.34.96.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.18 1.18a11.04 11.04 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.58.23 2.75.12 3.04.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.05.78 2.13 0 1.54-.01 2.78-.01 3.16 0 .31.21.67.8.56C20.21 21.38 23.5 17.08 23.5 12c0-6.35-5.15-11.5-11.5-11.5z"/></svg>
       Source
     </a>
-    <!-- v20.30 — discreet 'Data status' link. Same modal as the topbar pill,
-         but reachable from the footer where it doesn't dominate the chrome. -->
-    <a class="bb-contact" href="#" onclick="event.preventDefault();showLiveStatusDialog()" title="Per-source health of all 33 data pipelines">
+    <!-- v20.30 — discreet 'Data status' link. v21.x — now routes to the
+         dedicated Data Status tab (full audit page) rather than the small
+         modal; the modal is still reachable via the topbar pill. -->
+    <a class="bb-contact" href="#" onclick="event.preventDefault();showTab('datastatus',document.querySelector('.subnav-btn[data-tab=&quot;datastatus&quot;]'));" title="Open the full Data Status audit page">
       <span id="bb-status-dot" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#6ba36b;margin-right:3px;vertical-align:middle;"></span>
       Data status
     </a>
