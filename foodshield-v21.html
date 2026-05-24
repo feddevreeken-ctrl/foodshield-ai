@@ -1189,6 +1189,12 @@ abbr.ac:hover, .ac:hover {
   pointer-events: none;
   opacity: 0; transition: opacity .25s;
 }
+/* v22 — belt-and-braces: when the overlay loses .tour-on, force every child
+   to pointer-events:none so the click-catcher can't keep blocking the map.
+   The DOM-removal in endTour() also handles this, but if anything keeps the
+   overlay element around (e.g. browser bug) this guarantees clicks unfreeze. */
+#tour-overlay:not(.tour-on),
+#tour-overlay:not(.tour-on) * { pointer-events: none !important; }
 #tour-overlay.tour-on {
   opacity: 1;
   pointer-events: auto;
@@ -4777,6 +4783,7 @@ input[type="email"]:focus {
   <button class="subnav-btn" data-tab="forecast" data-sub-group="analyze" onclick="showTab('forecast',this)">Forecast 2030</button>
   <button class="subnav-btn" data-tab="scenario" data-sub-group="analyze" onclick="showTab('scenario',this)">Scenario Simulator<span class="subnav-shock-pill">Live shock</span></button>
   <!-- Live -->
+  <button class="subnav-btn" data-tab="disturbances" data-sub-group="live" onclick="showTab('disturbances',this)" title="Live food-security disturbances (conflicts, droughts, floods, currency shocks) from ReliefWeb, GDACS, WFP HungerMap, NASA FIRMS, Open-Meteo and USGS.">Disturbances</button>
   <button class="subnav-btn" data-tab="livedata" data-sub-group="live" onclick="showTab('livedata',this)">Live Data</button>
   <!-- About -->
   <button class="subnav-btn" data-tab="methodology" data-sub-group="about" onclick="showTab('methodology',this)">Methodology</button>
@@ -15281,11 +15288,25 @@ const TOUR_STEPS = [
     before: () => { try { showTab('global'); } catch(e){} closePanelIfOpen(); return 200; },
   },
   {
-    // v21 — new step: Live disturbances toggle on the map
+    // v22 — Live disturbances toggle. Briefly activate it so the user sees
+    // the overlay dots appear on the map (instead of just staring at a button).
     selector: '#map-dist-toggle',
-    title: 'Live disturbances on the map',
-    body: 'Toggle this to overlay live shocks — droughts, conflicts, floods, currency crises — directly onto the map. Each dot is a real event from ReliefWeb, GDACS, NASA FIRMS, WFP HungerMap, ACLED, USGS or Open-Meteo.',
-    before: () => { try { showTab('global'); } catch(e){} closePanelIfOpen(); return 250; },
+    title: 'Live disturbances · toggle on the map',
+    body: 'This button overlays live shocks on the map — droughts, conflicts, floods, currency crises. We just clicked it ON: red dots appear over the affected countries. Click it OFF to return to the clean choropleth.',
+    before: () => {
+      try { showTab('global'); } catch(e){}
+      closePanelIfOpen();
+      // Auto-activate the toggle so the user SEES the disturbance dots
+      setTimeout(() => {
+        const btn = document.getElementById('map-dist-toggle');
+        if (btn && btn.getAttribute('aria-pressed') !== 'true') {
+          btn.click();
+          // Remember we turned it on so endTour can revert if user didn't
+          _tourActivatedDisturbances = true;
+        }
+      }, 250);
+      return 400;
+    },
   },
   {
     selector: '#sidepanel',
@@ -15318,12 +15339,13 @@ const TOUR_STEPS = [
     },
   },
   {
-    // v21 — new step: AI · Trade Flow Atlas inside the country panel
+    // v22 — AI · Trade Flow Atlas. Actually click the Wheat chip so the user
+    // sees arcs render on the globe — not just a static control panel.
     selector: '#trade-atlas-cta',
     title: 'AI · Trade Flow Atlas',
-    body: 'Click any commodity here to overlay the actual trade flows on the globe — green arcs for exports, red for imports, weighted by volume. The AI layer auto-suggests the most-relevant flows for the country you\'re viewing.',
+    body: 'We just clicked the <em>Wheat</em> chip below. Watch the red arcs appear on the globe — each one is a real Comtrade-recorded wheat import flow into Egypt, weighted by USD value. Pick any commodity for any country to see its real trade pattern.',
     before: () => {
-      // Make sure Egypt panel is still open + scroll Trade Flow Atlas into view
+      // Ensure Egypt panel is still open
       try {
         const sp = document.getElementById('sidepanel');
         if (!sp || sp.classList.contains('hidden')) selectCountry('EGY');
@@ -15331,14 +15353,31 @@ const TOUR_STEPS = [
       setTimeout(() => {
         const tfa = document.getElementById('trade-atlas-cta');
         if (tfa) tfa.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // v22 — actually click a chip so arcs render. Wheat is the canonical
+        // Egypt example (~62% of caloric imports). Find the chip by label.
+        setTimeout(() => {
+          const chips = document.querySelectorAll('.tfa-chip');
+          let wheatChip = null;
+          chips.forEach(c => {
+            if (!wheatChip && /wheat/i.test(c.textContent || '')) wheatChip = c;
+          });
+          // Fallback: first non-active chip
+          if (!wheatChip && chips.length) wheatChip = chips[0];
+          if (wheatChip && !wheatChip.classList.contains('active')) {
+            wheatChip.click();
+            _tourActivatedTFA = true;
+          }
+        }, 350);
       }, 200);
-      return 700;
+      return 1000;
     },
   },
   {
-    selector: '.subnav-btn[data-tab="trade"]',
-    title: 'Cross-country trade flows',
-    body: 'The Trade Flows tab does the same overlay at a global scale — pick any commodity (wheat, rice, soy, fertiliser…) and see who exports to whom, in real volume terms.',
+    // v22 — Disturbances tab (newly added to subnav). User can also use the
+    // map toggle (shown earlier), but the tab gives the full list view.
+    selector: '.subnav-btn[data-tab="disturbances"]',
+    title: 'Disturbances feed (full list)',
+    body: 'The Disturbances tab gives you the full feed: every food-relevant shock with its source, date, severity, and which commodities are at risk. Use the map toggle for a quick spatial view, this tab for the full list.',
     before: () => {
       closePanelIfOpen();
       try { showTab('global'); } catch(e){}
@@ -15388,6 +15427,9 @@ function closePanelIfOpen() {
 let _tourIdx = 0;
 let _tourResizeHandler = null;
 let _tourEscHandler = null;
+// v22 — track side-effects the tour caused so we can revert on end
+let _tourActivatedDisturbances = false;
+let _tourActivatedTFA = false;
 
 function startTour() {
   _tourIdx = 0;
@@ -15522,8 +15564,16 @@ function _tourGo(delta) {
 }
 
 function endTour() {
+  // v22 — fully REMOVE the overlay element from DOM, not just toggle a class.
+  // Previously the .tour-clickcatch child element kept pointer-events: auto
+  // even after removing the .tour-on class — that froze map clicks. Removing
+  // the whole node guarantees no leaked event capture.
   const o = document.getElementById('tour-overlay');
-  if (o) o.classList.remove('tour-on');
+  if (o) {
+    o.classList.remove('tour-on');
+    // Give the opacity transition a brief moment, then nuke from DOM
+    setTimeout(() => { try { o.remove(); } catch(e) {} }, 280);
+  }
   if (_tourResizeHandler) {
     window.removeEventListener('resize', _tourResizeHandler);
     window.removeEventListener('scroll', _tourResizeHandler, true);
@@ -15533,10 +15583,21 @@ function endTour() {
     document.removeEventListener('keydown', _tourEscHandler);
     _tourEscHandler = null;
   }
-  // v22 — Leave the user on the Global map with the Egypt panel closed.
-  // Defer via setTimeout so any in-flight tab-switch animations from the
-  // previous step complete before we override — earlier the tour was
-  // sometimes ending on Disturbances because a late tab-change won the race.
+
+  // v22 — revert side-effects the tour caused
+  if (_tourActivatedDisturbances) {
+    const btn = document.getElementById('map-dist-toggle');
+    if (btn && btn.getAttribute('aria-pressed') === 'true') btn.click();
+    _tourActivatedDisturbances = false;
+  }
+  if (_tourActivatedTFA) {
+    // Try to hide TFA flows if the user didn't explicitly engage with them
+    try { if (typeof hideTFAFlows === 'function') hideTFAFlows(); } catch(e) {}
+    _tourActivatedTFA = false;
+  }
+
+  // Leave the user on the Global map with the Egypt panel closed.
+  // Defer so any in-flight tab-switch animations finish before we override.
   closePanelIfOpen();
   setTimeout(() => {
     try { showTab('global'); } catch(e) {}
