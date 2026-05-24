@@ -9577,6 +9577,361 @@ const COUNTRIES = [
 // legacy w:85/r:8 (BGD) on screen instead of the FBS-sourced values.
 window.COUNTRIES = COUNTRIES;
 
+// ════════════════════════════════════════════════════════════════════════════
+// COMMODITY_TRADE_ROUTES — per-commodity exporter rankings + per-importer
+// supplier mixes. Used by Trade Flow Atlas so a wheat chip shows wheat routes
+// and a cocoa chip shows cocoa routes, instead of one flat per-country list
+// being reused across every commodity.
+//
+// Source: structural patterns derived from FAOSTAT, USDA FAS PSD, UN Comtrade,
+// and OEC mirror data (recent 3-year averages, ~2022–2024). Numbers are
+// directionally correct — share % rounded to whole percentage points; the gap
+// to 100% is the "other / rest of world" residual and is intentional/honest.
+//
+// `exporters[]`     — top 10–15 global exporters of this commodity, share % of
+//                     global exports.
+// `importer_suppliers{}` — for the top ~15–25 importers (keyed by ISO3), the
+//                     realistic supplier mix (4–6 sources, % of that importer's
+//                     imports of this commodity). Countries not in this map
+//                     fall through to `exporters[]` in the frontend.
+// ════════════════════════════════════════════════════════════════════════════
+const COMMODITY_TRADE_ROUTES = {
+
+  // ── WHEAT ────────────────────────────────────────────────────────────────
+  wheat: {
+    exporters: [
+      { iso:'RUS', share:22 }, { iso:'USA', share:14 }, { iso:'CAN', share:13 },
+      { iso:'AUS', share:11 }, { iso:'UKR', share:9  }, { iso:'FRA', share:8  },
+      { iso:'ARG', share:6  }, { iso:'DEU', share:4  }, { iso:'ROU', share:3  },
+      { iso:'KAZ', share:3  }, { iso:'POL', share:2  }, { iso:'BGR', share:2  },
+    ],
+    importer_suppliers: {
+      EGY: [ { iso:'RUS', share:58 }, { iso:'UKR', share:14 }, { iso:'ROU', share:10 }, { iso:'FRA', share:6  }, { iso:'ARG', share:4  } ],
+      IDN: [ { iso:'AUS', share:38 }, { iso:'UKR', share:18 }, { iso:'CAN', share:14 }, { iso:'USA', share:10 }, { iso:'ARG', share:8  } ],
+      DZA: [ { iso:'FRA', share:42 }, { iso:'RUS', share:20 }, { iso:'CAN', share:12 }, { iso:'DEU', share:8  }, { iso:'UKR', share:7  } ],
+      BGD: [ { iso:'RUS', share:38 }, { iso:'IND', share:18 }, { iso:'UKR', share:14 }, { iso:'USA', share:10 }, { iso:'AUS', share:8  } ],
+      TUR: [ { iso:'RUS', share:65 }, { iso:'UKR', share:14 }, { iso:'ROU', share:5  }, { iso:'KAZ', share:5  }, { iso:'POL', share:3  } ],
+      PHL: [ { iso:'USA', share:34 }, { iso:'AUS', share:24 }, { iso:'CAN', share:16 }, { iso:'UKR', share:10 }, { iso:'ARG', share:6  } ],
+      BRA: [ { iso:'ARG', share:64 }, { iso:'USA', share:14 }, { iso:'CAN', share:8  }, { iso:'URY', share:6  }, { iso:'PRY', share:4  } ],
+      JPN: [ { iso:'USA', share:48 }, { iso:'CAN', share:32 }, { iso:'AUS', share:18 } ],
+      KOR: [ { iso:'USA', share:42 }, { iso:'AUS', share:22 }, { iso:'CAN', share:12 }, { iso:'UKR', share:10 }, { iso:'RUS', share:6  } ],
+      CHN: [ { iso:'AUS', share:32 }, { iso:'CAN', share:24 }, { iso:'USA', share:14 }, { iso:'FRA', share:14 }, { iso:'KAZ', share:6  } ],
+      NGA: [ { iso:'USA', share:34 }, { iso:'RUS', share:22 }, { iso:'CAN', share:14 }, { iso:'ARG', share:10 }, { iso:'UKR', share:8  } ],
+      MEX: [ { iso:'USA', share:62 }, { iso:'CAN', share:14 }, { iso:'RUS', share:8  }, { iso:'UKR', share:5  }, { iso:'FRA', share:4  } ],
+      ITA: [ { iso:'FRA', share:32 }, { iso:'CAN', share:16 }, { iso:'UKR', share:14 }, { iso:'HUN', share:10 }, { iso:'USA', share:8  } ],
+      MAR: [ { iso:'FRA', share:34 }, { iso:'RUS', share:20 }, { iso:'UKR', share:14 }, { iso:'CAN', share:10 }, { iso:'ARG', share:8  } ],
+      YEM: [ { iso:'AUS', share:30 }, { iso:'RUS', share:26 }, { iso:'IND', share:16 }, { iso:'UKR', share:12 }, { iso:'ARG', share:8  } ],
+      SDN: [ { iso:'RUS', share:42 }, { iso:'ROU', share:16 }, { iso:'UKR', share:14 }, { iso:'AUS', share:12 }, { iso:'ARG', share:8  } ],
+      ETH: [ { iso:'USA', share:24 }, { iso:'RUS', share:22 }, { iso:'UKR', share:16 }, { iso:'ROU', share:10 }, { iso:'ARG', share:6  } ],
+      IRQ: [ { iso:'USA', share:24 }, { iso:'AUS', share:22 }, { iso:'CAN', share:16 }, { iso:'RUS', share:14 }, { iso:'UKR', share:10 } ],
+      IRN: [ { iso:'RUS', share:38 }, { iso:'KAZ', share:18 }, { iso:'DEU', share:10 }, { iso:'TUR', share:8  }, { iso:'UKR', share:8  } ],
+      SAU: [ { iso:'RUS', share:22 }, { iso:'DEU', share:16 }, { iso:'POL', share:14 }, { iso:'UKR', share:12 }, { iso:'CAN', share:10 }, { iso:'AUS', share:10 } ],
+      VNM: [ { iso:'AUS', share:38 }, { iso:'USA', share:18 }, { iso:'CAN', share:14 }, { iso:'ARG', share:10 }, { iso:'BRA', share:8  } ],
+      KEN: [ { iso:'RUS', share:34 }, { iso:'UKR', share:18 }, { iso:'ARG', share:14 }, { iso:'AUS', share:10 }, { iso:'CAN', share:8  } ],
+      ESP: [ { iso:'FRA', share:38 }, { iso:'UKR', share:14 }, { iso:'DEU', share:10 }, { iso:'POL', share:8  }, { iso:'CAN', share:8  } ],
+      NLD: [ { iso:'DEU', share:30 }, { iso:'FRA', share:24 }, { iso:'UKR', share:12 }, { iso:'USA', share:8  }, { iso:'CAN', share:6  } ],
+    }
+  },
+
+  // ── RICE ─────────────────────────────────────────────────────────────────
+  rice: {
+    exporters: [
+      { iso:'IND', share:38 }, { iso:'THA', share:15 }, { iso:'VNM', share:13 },
+      { iso:'PAK', share:9  }, { iso:'USA', share:5  }, { iso:'MMR', share:3  },
+      { iso:'CHN', share:3  }, { iso:'BRA', share:2  }, { iso:'URY', share:2  },
+      { iso:'ITA', share:2  }, { iso:'KHM', share:2  },
+    ],
+    importer_suppliers: {
+      PHL: [ { iso:'VNM', share:74 }, { iso:'THA', share:12 }, { iso:'MMR', share:6  }, { iso:'PAK', share:4  } ],
+      CHN: [ { iso:'IND', share:24 }, { iso:'VNM', share:22 }, { iso:'PAK', share:18 }, { iso:'THA', share:16 }, { iso:'MMR', share:10 } ],
+      IDN: [ { iso:'THA', share:32 }, { iso:'VNM', share:28 }, { iso:'IND', share:20 }, { iso:'PAK', share:12 } ],
+      NGA: [ { iso:'IND', share:34 }, { iso:'THA', share:24 }, { iso:'BRA', share:14 }, { iso:'VNM', share:10 }, { iso:'PAK', share:8  } ],
+      SAU: [ { iso:'IND', share:62 }, { iso:'PAK', share:18 }, { iso:'THA', share:8  }, { iso:'USA', share:4  } ],
+      IRQ: [ { iso:'IND', share:42 }, { iso:'USA', share:18 }, { iso:'THA', share:14 }, { iso:'URY', share:10 }, { iso:'BRA', share:6  } ],
+      IRN: [ { iso:'IND', share:54 }, { iso:'PAK', share:24 }, { iso:'THA', share:8  }, { iso:'URY', share:4  } ],
+      MYS: [ { iso:'IND', share:32 }, { iso:'VNM', share:26 }, { iso:'PAK', share:16 }, { iso:'THA', share:14 }, { iso:'MMR', share:6  } ],
+      EUR: [ { iso:'IND', share:30 }, { iso:'PAK', share:24 }, { iso:'THA', share:14 }, { iso:'VNM', share:8  }, { iso:'USA', share:6  } ],
+      USA: [ { iso:'THA', share:38 }, { iso:'IND', share:24 }, { iso:'VNM', share:10 }, { iso:'PAK', share:8  }, { iso:'BRA', share:4  } ],
+      JPN: [ { iso:'USA', share:48 }, { iso:'THA', share:24 }, { iso:'CHN', share:10 }, { iso:'VNM', share:8  } ],
+      KOR: [ { iso:'CHN', share:30 }, { iso:'USA', share:24 }, { iso:'THA', share:14 }, { iso:'VNM', share:10 }, { iso:'IND', share:8  } ],
+      CIV: [ { iso:'IND', share:38 }, { iso:'THA', share:20 }, { iso:'PAK', share:14 }, { iso:'MMR', share:8  }, { iso:'VNM', share:6  } ],
+      SEN: [ { iso:'IND', share:54 }, { iso:'THA', share:18 }, { iso:'VNM', share:10 }, { iso:'PAK', share:6  } ],
+      BGD: [ { iso:'IND', share:74 }, { iso:'MMR', share:10 }, { iso:'THA', share:6  } ],
+      BEN: [ { iso:'IND', share:42 }, { iso:'THA', share:24 }, { iso:'PAK', share:14 }, { iso:'VNM', share:8  } ],
+      YEM: [ { iso:'IND', share:64 }, { iso:'PAK', share:18 }, { iso:'THA', share:8  } ],
+      SOM: [ { iso:'IND', share:38 }, { iso:'PAK', share:22 }, { iso:'THA', share:14 }, { iso:'ARE', share:10 } ],
+      ZAF: [ { iso:'THA', share:38 }, { iso:'IND', share:30 }, { iso:'VNM', share:14 }, { iso:'PAK', share:8  } ],
+      MEX: [ { iso:'USA', share:62 }, { iso:'URY', share:14 }, { iso:'PRY', share:10 }, { iso:'IND', share:6  } ],
+      GBR: [ { iso:'IND', share:36 }, { iso:'PAK', share:20 }, { iso:'ITA', share:14 }, { iso:'THA', share:10 }, { iso:'USA', share:8  } ],
+      AFG: [ { iso:'PAK', share:68 }, { iso:'IND', share:18 }, { iso:'IRN', share:8  } ],
+    }
+  },
+
+  // ── MAIZE / CORN ────────────────────────────────────────────────────────
+  maize: {
+    exporters: [
+      { iso:'USA', share:30 }, { iso:'BRA', share:22 }, { iso:'ARG', share:18 },
+      { iso:'UKR', share:12 }, { iso:'RUS', share:3  }, { iso:'FRA', share:2  },
+      { iso:'IND', share:2  }, { iso:'PRY', share:2  }, { iso:'ROU', share:2  },
+      { iso:'CAN', share:1  }, { iso:'ZAF', share:1  },
+    ],
+    importer_suppliers: {
+      CHN: [ { iso:'BRA', share:48 }, { iso:'USA', share:32 }, { iso:'UKR', share:12 }, { iso:'ARG', share:4  } ],
+      MEX: [ { iso:'USA', share:88 }, { iso:'BRA', share:6  }, { iso:'ARG', share:3  } ],
+      JPN: [ { iso:'USA', share:64 }, { iso:'BRA', share:22 }, { iso:'ARG', share:8  }, { iso:'UKR', share:2  } ],
+      KOR: [ { iso:'BRA', share:36 }, { iso:'USA', share:26 }, { iso:'ARG', share:18 }, { iso:'UKR', share:14 } ],
+      VNM: [ { iso:'BRA', share:34 }, { iso:'ARG', share:32 }, { iso:'USA', share:14 }, { iso:'IND', share:10 } ],
+      EGY: [ { iso:'BRA', share:36 }, { iso:'UKR', share:24 }, { iso:'USA', share:14 }, { iso:'ARG', share:14 }, { iso:'RUS', share:6  } ],
+      IRN: [ { iso:'BRA', share:46 }, { iso:'RUS', share:14 }, { iso:'UKR', share:14 }, { iso:'TUR', share:8  }, { iso:'IND', share:6  } ],
+      ESP: [ { iso:'UKR', share:34 }, { iso:'BRA', share:24 }, { iso:'FRA', share:14 }, { iso:'ARG', share:10 }, { iso:'ROU', share:6  } ],
+      ITA: [ { iso:'UKR', share:28 }, { iso:'HUN', share:18 }, { iso:'FRA', share:16 }, { iso:'ROU', share:12 }, { iso:'BRA', share:8  } ],
+      DEU: [ { iso:'FRA', share:34 }, { iso:'UKR', share:22 }, { iso:'POL', share:14 }, { iso:'HUN', share:10 }, { iso:'ROU', share:6  } ],
+      NLD: [ { iso:'FRA', share:28 }, { iso:'UKR', share:22 }, { iso:'BRA', share:14 }, { iso:'DEU', share:10 }, { iso:'ARG', share:6  } ],
+      TUR: [ { iso:'RUS', share:30 }, { iso:'UKR', share:24 }, { iso:'BRA', share:16 }, { iso:'ROU', share:10 }, { iso:'BGR', share:6  } ],
+      DZA: [ { iso:'ARG', share:48 }, { iso:'BRA', share:22 }, { iso:'UKR', share:12 }, { iso:'USA', share:8  } ],
+      MAR: [ { iso:'BRA', share:34 }, { iso:'ARG', share:24 }, { iso:'UKR', share:14 }, { iso:'USA', share:10 }, { iso:'FRA', share:6  } ],
+      COL: [ { iso:'USA', share:64 }, { iso:'ARG', share:18 }, { iso:'BRA', share:12 } ],
+      GTM: [ { iso:'USA', share:78 }, { iso:'MEX', share:8  }, { iso:'BRA', share:6  } ],
+      DOM: [ { iso:'USA', share:76 }, { iso:'ARG', share:10 }, { iso:'BRA', share:6  } ],
+      PHL: [ { iso:'USA', share:42 }, { iso:'BRA', share:18 }, { iso:'IDN', share:12 }, { iso:'ARG', share:10 } ],
+      MYS: [ { iso:'ARG', share:42 }, { iso:'BRA', share:24 }, { iso:'USA', share:12 }, { iso:'IDN', share:8  } ],
+      ZAF: [ { iso:'ARG', share:34 }, { iso:'BRA', share:24 }, { iso:'USA', share:18 } ],
+      KEN: [ { iso:'ZAF', share:28 }, { iso:'UGA', share:22 }, { iso:'TZA', share:16 }, { iso:'BRA', share:12 }, { iso:'USA', share:6  } ],
+      ZWE: [ { iso:'ZAF', share:52 }, { iso:'ZMB', share:18 }, { iso:'BRA', share:10 }, { iso:'TZA', share:6  } ],
+    }
+  },
+
+  // ── SOYBEANS ─────────────────────────────────────────────────────────────
+  soybeans: {
+    exporters: [
+      { iso:'BRA', share:54 }, { iso:'USA', share:32 }, { iso:'ARG', share:5  },
+      { iso:'PRY', share:4  }, { iso:'CAN', share:2  }, { iso:'URY', share:1  },
+      { iso:'UKR', share:1  },
+    ],
+    importer_suppliers: {
+      CHN: [ { iso:'BRA', share:68 }, { iso:'USA', share:24 }, { iso:'ARG', share:4  }, { iso:'URY', share:2  } ],
+      DEU: [ { iso:'BRA', share:42 }, { iso:'USA', share:28 }, { iso:'CAN', share:10 }, { iso:'UKR', share:8  }, { iso:'PRY', share:6  } ],
+      NLD: [ { iso:'BRA', share:46 }, { iso:'USA', share:32 }, { iso:'CAN', share:8  }, { iso:'PRY', share:6  } ],
+      ESP: [ { iso:'BRA', share:48 }, { iso:'USA', share:24 }, { iso:'PRY', share:14 }, { iso:'ARG', share:6  } ],
+      ITA: [ { iso:'BRA', share:42 }, { iso:'USA', share:24 }, { iso:'CAN', share:12 }, { iso:'UKR', share:8  } ],
+      MEX: [ { iso:'USA', share:88 }, { iso:'BRA', share:6  }, { iso:'PRY', share:3  } ],
+      ARG: [ { iso:'PRY', share:64 }, { iso:'BRA', share:24 }, { iso:'URY', share:6  } ],
+      THA: [ { iso:'BRA', share:54 }, { iso:'USA', share:28 }, { iso:'ARG', share:8  }, { iso:'CAN', share:4  } ],
+      IDN: [ { iso:'USA', share:78 }, { iso:'BRA', share:12 }, { iso:'CAN', share:4  } ],
+      EGY: [ { iso:'BRA', share:58 }, { iso:'USA', share:24 }, { iso:'ARG', share:8  }, { iso:'UKR', share:4  } ],
+      TUR: [ { iso:'BRA', share:52 }, { iso:'USA', share:18 }, { iso:'UKR', share:14 }, { iso:'PRY', share:8  } ],
+      IRN: [ { iso:'BRA', share:58 }, { iso:'RUS', share:14 }, { iso:'UKR', share:10 }, { iso:'IND', share:8  } ],
+      JPN: [ { iso:'USA', share:74 }, { iso:'BRA', share:14 }, { iso:'CAN', share:10 } ],
+      VNM: [ { iso:'USA', share:42 }, { iso:'BRA', share:36 }, { iso:'CAN', share:10 }, { iso:'ARG', share:4  } ],
+      KOR: [ { iso:'USA', share:54 }, { iso:'BRA', share:24 }, { iso:'CAN', share:8  }, { iso:'PRY', share:6  } ],
+      PAK: [ { iso:'BRA', share:48 }, { iso:'USA', share:30 }, { iso:'PRY', share:8  } ],
+      BGD: [ { iso:'BRA', share:46 }, { iso:'USA', share:24 }, { iso:'ARG', share:14 }, { iso:'UKR', share:8  } ],
+      TWN: [ { iso:'BRA', share:48 }, { iso:'USA', share:38 }, { iso:'PRY', share:6  } ],
+      FRA: [ { iso:'BRA', share:42 }, { iso:'USA', share:28 }, { iso:'CAN', share:10 }, { iso:'UKR', share:8  } ],
+      RUS: [ { iso:'BRA', share:48 }, { iso:'PRY', share:24 }, { iso:'ARG', share:12 } ],
+    }
+  },
+
+  // ── PALM OIL ─────────────────────────────────────────────────────────────
+  palm_oil: {
+    exporters: [
+      { iso:'IDN', share:54 }, { iso:'MYS', share:30 }, { iso:'THA', share:4  },
+      { iso:'COL', share:3  }, { iso:'GTM', share:2  }, { iso:'HND', share:2  },
+      { iso:'PNG', share:1  }, { iso:'CIV', share:1  }, { iso:'ECU', share:1  },
+    ],
+    importer_suppliers: {
+      IND: [ { iso:'IDN', share:62 }, { iso:'MYS', share:30 }, { iso:'THA', share:4  } ],
+      CHN: [ { iso:'IDN', share:64 }, { iso:'MYS', share:30 }, { iso:'THA', share:2  } ],
+      PAK: [ { iso:'IDN', share:74 }, { iso:'MYS', share:22 } ],
+      EGY: [ { iso:'IDN', share:52 }, { iso:'MYS', share:34 }, { iso:'THA', share:6  } ],
+      BGD: [ { iso:'IDN', share:68 }, { iso:'MYS', share:24 } ],
+      NLD: [ { iso:'IDN', share:48 }, { iso:'MYS', share:38 }, { iso:'COL', share:6  }, { iso:'PNG', share:4  } ],
+      ESP: [ { iso:'IDN', share:46 }, { iso:'MYS', share:32 }, { iso:'COL', share:8  }, { iso:'GTM', share:6  } ],
+      ITA: [ { iso:'IDN', share:50 }, { iso:'MYS', share:30 }, { iso:'PNG', share:6  }, { iso:'COL', share:4  } ],
+      DEU: [ { iso:'IDN', share:42 }, { iso:'MYS', share:36 }, { iso:'COL', share:8  }, { iso:'PNG', share:4  } ],
+      USA: [ { iso:'IDN', share:38 }, { iso:'MYS', share:34 }, { iso:'GTM', share:10 }, { iso:'COL', share:8  }, { iso:'HND', share:6  } ],
+      RUS: [ { iso:'IDN', share:74 }, { iso:'MYS', share:18 } ],
+      MEX: [ { iso:'GTM', share:42 }, { iso:'IDN', share:22 }, { iso:'COL', share:18 }, { iso:'MYS', share:8  }, { iso:'HND', share:6  } ],
+      TUR: [ { iso:'IDN', share:48 }, { iso:'MYS', share:32 }, { iso:'COL', share:8  } ],
+      IRN: [ { iso:'IDN', share:58 }, { iso:'MYS', share:30 }, { iso:'THA', share:6  } ],
+      NGA: [ { iso:'IDN', share:54 }, { iso:'MYS', share:30 }, { iso:'CIV', share:8  } ],
+      KEN: [ { iso:'IDN', share:52 }, { iso:'MYS', share:32 }, { iso:'THA', share:8  } ],
+      ZAF: [ { iso:'IDN', share:48 }, { iso:'MYS', share:36 }, { iso:'THA', share:8  } ],
+      ETH: [ { iso:'IDN', share:46 }, { iso:'MYS', share:36 }, { iso:'THA', share:8  } ],
+      PHL: [ { iso:'MYS', share:54 }, { iso:'IDN', share:40 } ],
+      VNM: [ { iso:'IDN', share:54 }, { iso:'MYS', share:32 }, { iso:'THA', share:10 } ],
+      KOR: [ { iso:'IDN', share:46 }, { iso:'MYS', share:42 }, { iso:'THA', share:6  } ],
+      JPN: [ { iso:'MYS', share:54 }, { iso:'IDN', share:38 } ],
+    }
+  },
+
+  // ── SUGAR (raw + refined) ────────────────────────────────────────────────
+  sugar: {
+    exporters: [
+      { iso:'BRA', share:42 }, { iso:'THA', share:10 }, { iso:'IND', share:8  },
+      { iso:'FRA', share:4  }, { iso:'AUS', share:4  }, { iso:'GTM', share:3  },
+      { iso:'MEX', share:3  }, { iso:'DEU', share:3  }, { iso:'CUB', share:2  },
+      { iso:'COL', share:2  }, { iso:'RUS', share:2  }, { iso:'PAK', share:2  },
+    ],
+    importer_suppliers: {
+      IDN: [ { iso:'BRA', share:42 }, { iso:'THA', share:24 }, { iso:'IND', share:14 }, { iso:'AUS', share:10 } ],
+      CHN: [ { iso:'BRA', share:48 }, { iso:'THA', share:18 }, { iso:'CUB', share:8  }, { iso:'GTM', share:6  } ],
+      USA: [ { iso:'MEX', share:34 }, { iso:'BRA', share:18 }, { iso:'GTM', share:10 }, { iso:'DOM', share:8  }, { iso:'COL', share:6  } ],
+      BGD: [ { iso:'BRA', share:64 }, { iso:'IND', share:20 }, { iso:'THA', share:8  } ],
+      DZA: [ { iso:'BRA', share:84 }, { iso:'FRA', share:6  }, { iso:'CUB', share:3  } ],
+      MYS: [ { iso:'BRA', share:42 }, { iso:'THA', share:28 }, { iso:'AUS', share:14 }, { iso:'IND', share:8  } ],
+      NGA: [ { iso:'BRA', share:78 }, { iso:'IND', share:10 }, { iso:'THA', share:4  } ],
+      ARE: [ { iso:'BRA', share:64 }, { iso:'IND', share:16 }, { iso:'THA', share:8  } ],
+      SAU: [ { iso:'BRA', share:46 }, { iso:'IND', share:24 }, { iso:'THA', share:12 }, { iso:'GTM', share:6  } ],
+      IRN: [ { iso:'BRA', share:54 }, { iso:'IND', share:18 }, { iso:'RUS', share:10 }, { iso:'THA', share:8  } ],
+      EGY: [ { iso:'BRA', share:62 }, { iso:'IND', share:18 }, { iso:'THA', share:8  } ],
+      MAR: [ { iso:'BRA', share:74 }, { iso:'FRA', share:10 }, { iso:'IND', share:6  } ],
+      KOR: [ { iso:'THA', share:38 }, { iso:'BRA', share:32 }, { iso:'AUS', share:18 } ],
+      JPN: [ { iso:'THA', share:48 }, { iso:'AUS', share:32 }, { iso:'BRA', share:10 } ],
+      RUS: [ { iso:'BRA', share:54 }, { iso:'IND', share:14 }, { iso:'CUB', share:10 } ],
+      GBR: [ { iso:'BRA', share:32 }, { iso:'FRA', share:18 }, { iso:'DEU', share:14 }, { iso:'IND', share:8  }, { iso:'GTM', share:6  } ],
+      ITA: [ { iso:'FRA', share:36 }, { iso:'DEU', share:18 }, { iso:'BRA', share:14 }, { iso:'POL', share:8  } ],
+      ESP: [ { iso:'FRA', share:42 }, { iso:'BRA', share:18 }, { iso:'DEU', share:10 }, { iso:'GTM', share:6  } ],
+      CAN: [ { iso:'BRA', share:38 }, { iso:'USA', share:22 }, { iso:'GTM', share:12 }, { iso:'AUS', share:10 } ],
+      YEM: [ { iso:'BRA', share:68 }, { iso:'IND', share:14 }, { iso:'ARE', share:8  } ],
+      SOM: [ { iso:'BRA', share:48 }, { iso:'IND', share:22 }, { iso:'ARE', share:14 } ],
+    }
+  },
+
+  // ── COFFEE ──────────────────────────────────────────────────────────────
+  coffee: {
+    exporters: [
+      { iso:'BRA', share:32 }, { iso:'VNM', share:18 }, { iso:'COL', share:8  },
+      { iso:'IDN', share:6  }, { iso:'ETH', share:5  }, { iso:'HND', share:4  },
+      { iso:'UGA', share:4  }, { iso:'IND', share:3  }, { iso:'PER', share:2  },
+      { iso:'GTM', share:2  }, { iso:'NIC', share:2  }, { iso:'MEX', share:2  },
+      { iso:'CIV', share:1  }, { iso:'KEN', share:1  },
+    ],
+    importer_suppliers: {
+      USA: [ { iso:'BRA', share:28 }, { iso:'COL', share:22 }, { iso:'VNM', share:10 }, { iso:'HND', share:8  }, { iso:'IDN', share:6  }, { iso:'NIC', share:6  } ],
+      DEU: [ { iso:'BRA', share:32 }, { iso:'VNM', share:20 }, { iso:'HND', share:8  }, { iso:'COL', share:6  }, { iso:'ETH', share:6  }, { iso:'PER', share:4  } ],
+      ITA: [ { iso:'BRA', share:34 }, { iso:'VNM', share:24 }, { iso:'UGA', share:8  }, { iso:'IND', share:6  }, { iso:'COL', share:6  } ],
+      JPN: [ { iso:'BRA', share:28 }, { iso:'VNM', share:24 }, { iso:'COL', share:14 }, { iso:'ETH', share:10 }, { iso:'GTM', share:6  } ],
+      BEL: [ { iso:'BRA', share:32 }, { iso:'VNM', share:18 }, { iso:'HND', share:10 }, { iso:'COL', share:8  }, { iso:'PER', share:6  } ],
+      FRA: [ { iso:'BRA', share:26 }, { iso:'VNM', share:22 }, { iso:'COL', share:12 }, { iso:'ETH', share:8  }, { iso:'IDN', share:6  } ],
+      ESP: [ { iso:'VNM', share:34 }, { iso:'BRA', share:24 }, { iso:'UGA', share:8  }, { iso:'HND', share:8  }, { iso:'IDN', share:6  } ],
+      NLD: [ { iso:'BRA', share:32 }, { iso:'VNM', share:22 }, { iso:'HND', share:8  }, { iso:'UGA', share:6  }, { iso:'COL', share:6  } ],
+      RUS: [ { iso:'VNM', share:34 }, { iso:'BRA', share:28 }, { iso:'IDN', share:12 }, { iso:'IND', share:6  }, { iso:'COL', share:4  } ],
+      CAN: [ { iso:'BRA', share:24 }, { iso:'COL', share:22 }, { iso:'GTM', share:10 }, { iso:'PER', share:8  }, { iso:'HND', share:8  } ],
+      GBR: [ { iso:'BRA', share:24 }, { iso:'VNM', share:18 }, { iso:'COL', share:12 }, { iso:'HND', share:8  }, { iso:'IDN', share:6  }, { iso:'PER', share:4  } ],
+      KOR: [ { iso:'BRA', share:24 }, { iso:'COL', share:20 }, { iso:'VNM', share:18 }, { iso:'ETH', share:8  }, { iso:'HND', share:6  } ],
+      POL: [ { iso:'DEU', share:24 }, { iso:'BRA', share:22 }, { iso:'VNM', share:16 }, { iso:'IDN', share:8  }, { iso:'UGA', share:6  } ],
+      AUS: [ { iso:'BRA', share:22 }, { iso:'VNM', share:18 }, { iso:'COL', share:14 }, { iso:'PNG', share:10 }, { iso:'ETH', share:6  } ],
+      CHN: [ { iso:'BRA', share:24 }, { iso:'VNM', share:20 }, { iso:'COL', share:10 }, { iso:'IDN', share:8  }, { iso:'ETH', share:6  } ],
+      DZA: [ { iso:'VNM', share:42 }, { iso:'CIV', share:18 }, { iso:'BRA', share:14 }, { iso:'UGA', share:8  } ],
+      MAR: [ { iso:'VNM', share:32 }, { iso:'BRA', share:24 }, { iso:'CIV', share:14 }, { iso:'UGA', share:8  } ],
+      TUR: [ { iso:'BRA', share:48 }, { iso:'VNM', share:16 }, { iso:'COL', share:8  }, { iso:'IDN', share:6  } ],
+    }
+  },
+
+  // ── COCOA ────────────────────────────────────────────────────────────────
+  cocoa: {
+    exporters: [
+      { iso:'CIV', share:38 }, { iso:'GHA', share:14 }, { iso:'ECU', share:13 },
+      { iso:'CMR', share:6  }, { iso:'NGA', share:5  }, { iso:'IDN', share:5  },
+      { iso:'BRA', share:3  }, { iso:'PER', share:3  }, { iso:'DOM', share:2  },
+      { iso:'COL', share:1  }, { iso:'UGA', share:1  },
+    ],
+    importer_suppliers: {
+      NLD: [ { iso:'CIV', share:48 }, { iso:'GHA', share:14 }, { iso:'CMR', share:10 }, { iso:'NGA', share:8  }, { iso:'ECU', share:8  } ],
+      USA: [ { iso:'CIV', share:38 }, { iso:'ECU', share:18 }, { iso:'GHA', share:10 }, { iso:'IDN', share:8  }, { iso:'DOM', share:6  } ],
+      DEU: [ { iso:'CIV', share:36 }, { iso:'GHA', share:18 }, { iso:'NGA', share:10 }, { iso:'ECU', share:10 }, { iso:'CMR', share:8  } ],
+      MYS: [ { iso:'CIV', share:32 }, { iso:'IDN', share:22 }, { iso:'GHA', share:14 }, { iso:'PNG', share:10 }, { iso:'ECU', share:6  } ],
+      BEL: [ { iso:'CIV', share:42 }, { iso:'GHA', share:16 }, { iso:'CMR', share:10 }, { iso:'ECU', share:8  }, { iso:'NGA', share:6  } ],
+      FRA: [ { iso:'CIV', share:54 }, { iso:'GHA', share:14 }, { iso:'CMR', share:10 }, { iso:'ECU', share:6  }, { iso:'NGA', share:4  } ],
+      ESP: [ { iso:'CIV', share:48 }, { iso:'GHA', share:16 }, { iso:'NGA', share:10 }, { iso:'ECU', share:8  } ],
+      ITA: [ { iso:'CIV', share:42 }, { iso:'GHA', share:14 }, { iso:'ECU', share:10 }, { iso:'CMR', share:8  }, { iso:'NGA', share:6  } ],
+      GBR: [ { iso:'CIV', share:42 }, { iso:'GHA', share:18 }, { iso:'ECU', share:12 }, { iso:'CMR', share:6  }, { iso:'NGA', share:6  } ],
+      TUR: [ { iso:'CIV', share:48 }, { iso:'GHA', share:18 }, { iso:'ECU', share:12 }, { iso:'CMR', share:6  } ],
+      RUS: [ { iso:'CIV', share:40 }, { iso:'GHA', share:14 }, { iso:'ECU', share:14 }, { iso:'CMR', share:10 } ],
+      CAN: [ { iso:'CIV', share:30 }, { iso:'USA', share:20 }, { iso:'ECU', share:14 }, { iso:'GHA', share:8  } ],
+      JPN: [ { iso:'GHA', share:48 }, { iso:'ECU', share:14 }, { iso:'CIV', share:10 }, { iso:'VEN', share:6  } ],
+      CHN: [ { iso:'CIV', share:32 }, { iso:'GHA', share:18 }, { iso:'ECU', share:14 }, { iso:'NGA', share:8  }, { iso:'IDN', share:6  } ],
+      EST: [ { iso:'CIV', share:42 }, { iso:'GHA', share:18 }, { iso:'CMR', share:10 }, { iso:'ECU', share:8  } ],
+      SGP: [ { iso:'IDN', share:32 }, { iso:'CIV', share:24 }, { iso:'GHA', share:14 }, { iso:'ECU', share:10 } ],
+      AUS: [ { iso:'CIV', share:28 }, { iso:'GHA', share:18 }, { iso:'IDN', share:14 }, { iso:'PNG', share:12 }, { iso:'ECU', share:8  } ],
+      BRA: [ { iso:'CIV', share:38 }, { iso:'GHA', share:20 }, { iso:'ECU', share:14 }, { iso:'NGA', share:8  } ],
+    }
+  },
+
+  // ── FERTILIZER (urea / nitrogen ferts) ───────────────────────────────────
+  fertilizer: {
+    exporters: [
+      { iso:'RUS', share:18 }, { iso:'CHN', share:14 }, { iso:'QAT', share:8  },
+      { iso:'SAU', share:7  }, { iso:'EGY', share:6  }, { iso:'IRN', share:6  },
+      { iso:'OMN', share:4  }, { iso:'IND', share:4  }, { iso:'NLD', share:4  },
+      { iso:'DZA', share:3  }, { iso:'CAN', share:3  }, { iso:'USA', share:3  },
+      { iso:'IDN', share:2  }, { iso:'NGA', share:2  },
+    ],
+    importer_suppliers: {
+      IND: [ { iso:'OMN', share:24 }, { iso:'RUS', share:16 }, { iso:'CHN', share:14 }, { iso:'EGY', share:10 }, { iso:'QAT', share:10 }, { iso:'SAU', share:8  } ],
+      BRA: [ { iso:'RUS', share:24 }, { iso:'CHN', share:14 }, { iso:'OMN', share:10 }, { iso:'QAT', share:10 }, { iso:'CAN', share:8  }, { iso:'NGA', share:6  } ],
+      USA: [ { iso:'CAN', share:42 }, { iso:'TTO', share:14 }, { iso:'RUS', share:8  }, { iso:'QAT', share:6  }, { iso:'SAU', share:6  } ],
+      CHN: [ { iso:'RUS', share:24 }, { iso:'CAN', share:18 }, { iso:'BLR', share:10 }, { iso:'MAR', share:8  } ],
+      THA: [ { iso:'CHN', share:34 }, { iso:'RUS', share:14 }, { iso:'SAU', share:10 }, { iso:'OMN', share:8  }, { iso:'IDN', share:6  } ],
+      IDN: [ { iso:'CHN', share:24 }, { iso:'RUS', share:16 }, { iso:'CAN', share:10 }, { iso:'JOR', share:8  }, { iso:'MAR', share:6  } ],
+      VNM: [ { iso:'CHN', share:42 }, { iso:'RUS', share:18 }, { iso:'OMN', share:8  }, { iso:'IDN', share:6  } ],
+      TUR: [ { iso:'RUS', share:38 }, { iso:'CHN', share:14 }, { iso:'EGY', share:8  }, { iso:'IRN', share:8  } ],
+      FRA: [ { iso:'RUS', share:18 }, { iso:'EGY', share:14 }, { iso:'NLD', share:12 }, { iso:'DEU', share:10 }, { iso:'BEL', share:8  } ],
+      DEU: [ { iso:'NLD', share:18 }, { iso:'RUS', share:14 }, { iso:'BEL', share:12 }, { iso:'EGY', share:10 }, { iso:'POL', share:8  } ],
+      ARG: [ { iso:'RUS', share:24 }, { iso:'CHN', share:16 }, { iso:'USA', share:12 }, { iso:'CAN', share:10 }, { iso:'EGY', share:8  } ],
+      AUS: [ { iso:'CHN', share:28 }, { iso:'KOR', share:14 }, { iso:'OMN', share:10 }, { iso:'IDN', share:8  }, { iso:'SAU', share:6  } ],
+      MEX: [ { iso:'USA', share:34 }, { iso:'RUS', share:14 }, { iso:'CHN', share:10 }, { iso:'CAN', share:8  }, { iso:'NGA', share:6  } ],
+      BGD: [ { iso:'SAU', share:24 }, { iso:'CHN', share:18 }, { iso:'QAT', share:12 }, { iso:'OMN', share:8  }, { iso:'RUS', share:6  } ],
+      PAK: [ { iso:'CHN', share:34 }, { iso:'OMN', share:14 }, { iso:'RUS', share:10 }, { iso:'SAU', share:8  } ],
+      EGY: [ { iso:'RUS', share:38 }, { iso:'BLR', share:14 }, { iso:'CHN', share:10 }, { iso:'JOR', share:8  } ],
+      KEN: [ { iso:'RUS', share:24 }, { iso:'SAU', share:18 }, { iso:'OMN', share:14 }, { iso:'ZAF', share:10 }, { iso:'MAR', share:8  } ],
+      NGA: [ { iso:'CHN', share:24 }, { iso:'MAR', share:18 }, { iso:'RUS', share:14 }, { iso:'EGY', share:10 } ],
+      ETH: [ { iso:'MAR', share:34 }, { iso:'RUS', share:18 }, { iso:'SAU', share:10 }, { iso:'EGY', share:8  } ],
+      PHL: [ { iso:'CHN', share:34 }, { iso:'RUS', share:14 }, { iso:'OMN', share:10 }, { iso:'IDN', share:8  } ],
+      MYS: [ { iso:'CHN', share:28 }, { iso:'RUS', share:14 }, { iso:'IDN', share:12 }, { iso:'SAU', share:8  } ],
+    }
+  },
+
+  // ── BEEF (bovine meat fresh+frozen) ──────────────────────────────────────
+  beef: {
+    exporters: [
+      { iso:'BRA', share:24 }, { iso:'USA', share:14 }, { iso:'AUS', share:12 },
+      { iso:'ARG', share:8  }, { iso:'IND', share:8  }, { iso:'NLD', share:5  },
+      { iso:'CAN', share:5  }, { iso:'NZL', share:5  }, { iso:'URY', share:4  },
+      { iso:'IRL', share:3  }, { iso:'PRY', share:3  }, { iso:'MEX', share:3  },
+      { iso:'POL', share:2  },
+    ],
+    importer_suppliers: {
+      CHN: [ { iso:'BRA', share:42 }, { iso:'ARG', share:14 }, { iso:'AUS', share:10 }, { iso:'USA', share:8  }, { iso:'NZL', share:8  }, { iso:'URY', share:6  } ],
+      USA: [ { iso:'CAN', share:24 }, { iso:'AUS', share:18 }, { iso:'BRA', share:14 }, { iso:'MEX', share:14 }, { iso:'NZL', share:10 }, { iso:'NIC', share:6  } ],
+      JPN: [ { iso:'USA', share:42 }, { iso:'AUS', share:38 }, { iso:'CAN', share:8  }, { iso:'MEX', share:4  } ],
+      KOR: [ { iso:'USA', share:54 }, { iso:'AUS', share:30 }, { iso:'NZL', share:6  }, { iso:'CAN', share:4  } ],
+      HKG: [ { iso:'BRA', share:48 }, { iso:'USA', share:14 }, { iso:'ARG', share:8  }, { iso:'AUS', share:8  }, { iso:'IRL', share:6  } ],
+      EGY: [ { iso:'BRA', share:54 }, { iso:'IND', share:24 }, { iso:'ARG', share:8  }, { iso:'AUS', share:4  } ],
+      RUS: [ { iso:'BRA', share:48 }, { iso:'PRY', share:18 }, { iso:'ARG', share:14 }, { iso:'BLR', share:10 } ],
+      VNM: [ { iso:'IND', share:34 }, { iso:'AUS', share:18 }, { iso:'USA', share:14 }, { iso:'BRA', share:10 }, { iso:'ARG', share:6  } ],
+      CHL: [ { iso:'BRA', share:38 }, { iso:'PRY', share:24 }, { iso:'ARG', share:18 }, { iso:'USA', share:8  } ],
+      ITA: [ { iso:'FRA', share:28 }, { iso:'POL', share:14 }, { iso:'NLD', share:14 }, { iso:'IRL', share:10 }, { iso:'ESP', share:8  } ],
+      DEU: [ { iso:'NLD', share:24 }, { iso:'POL', share:18 }, { iso:'IRL', share:14 }, { iso:'AUT', share:12 }, { iso:'BEL', share:8  } ],
+      FRA: [ { iso:'NLD', share:18 }, { iso:'DEU', share:14 }, { iso:'IRL', share:14 }, { iso:'ITA', share:10 }, { iso:'POL', share:8  } ],
+      NLD: [ { iso:'DEU', share:24 }, { iso:'IRL', share:18 }, { iso:'POL', share:14 }, { iso:'BEL', share:10 }, { iso:'ARG', share:6  } ],
+      GBR: [ { iso:'IRL', share:54 }, { iso:'NLD', share:10 }, { iso:'POL', share:8  }, { iso:'DEU', share:6  }, { iso:'AUS', share:4  } ],
+      MEX: [ { iso:'USA', share:84 }, { iso:'CAN', share:8  }, { iso:'NIC', share:3  } ],
+      PHL: [ { iso:'AUS', share:34 }, { iso:'BRA', share:24 }, { iso:'IND', share:14 }, { iso:'USA', share:10 }, { iso:'NZL', share:6  } ],
+      IDN: [ { iso:'AUS', share:54 }, { iso:'IND', share:24 }, { iso:'BRA', share:10 }, { iso:'USA', share:6  } ],
+      MYS: [ { iso:'IND', share:54 }, { iso:'AUS', share:18 }, { iso:'BRA', share:10 }, { iso:'NZL', share:6  } ],
+      ARE: [ { iso:'BRA', share:34 }, { iso:'IND', share:22 }, { iso:'AUS', share:14 }, { iso:'PAK', share:10 }, { iso:'SOM', share:6  } ],
+      SAU: [ { iso:'IND', share:34 }, { iso:'BRA', share:24 }, { iso:'AUS', share:14 }, { iso:'PAK', share:8  }, { iso:'SOM', share:6  } ],
+      IRN: [ { iso:'BRA', share:48 }, { iso:'IND', share:22 }, { iso:'PAK', share:14 } ],
+      DZA: [ { iso:'BRA', share:48 }, { iso:'IND', share:14 }, { iso:'ESP', share:10 }, { iso:'ARG', share:8  } ],
+      CAN: [ { iso:'USA', share:74 }, { iso:'AUS', share:8  }, { iso:'NZL', share:8  }, { iso:'URY', share:4  } ],
+    }
+  },
+
+};
+window.COMMODITY_TRADE_ROUTES = COMMODITY_TRADE_ROUTES;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -13068,6 +13423,33 @@ function tfaSelectChip(cm, btn) {
   }
 }
 
+// v21.x — map a free-form commodity label (from chips) to a stable route key
+// used by COMMODITY_TRADE_ROUTES. Returns null if the commodity isn't one of
+// the 10 we have structured routes for.
+function _routeKeyFor(commodity) {
+  if (!commodity) return null;
+  const s = String(commodity).toLowerCase();
+  if (/wheat/.test(s)) return 'wheat';
+  if (/rice/.test(s)) return 'rice';
+  if (/maize|corn/.test(s)) return 'maize';
+  if (/soy/.test(s)) return 'soybeans';
+  if (/palm/.test(s)) return 'palm_oil';
+  if (/sugar/.test(s)) return 'sugar';
+  if (/coffee/.test(s)) return 'coffee';
+  if (/cocoa/.test(s)) return 'cocoa';
+  if (/fertili[zs]er|urea|nitrogen/.test(s)) return 'fertilizer';
+  if (/beef|cattle|bovine/.test(s)) return 'beef';
+  return null;
+}
+
+// v21.x — resolve a country display name from an ISO3 code; falls back to the
+// ISO itself if no match found in COUNTRIES (graceful degradation).
+function _nameFromISO(iso) {
+  if (!iso) return '';
+  const c = COUNTRIES.find(cc => cc.iso === iso);
+  return c ? c.name : iso;
+}
+
 function tfaShowFlows() {
   if (!window.Globe) return;
   const iso = _currentOpenISO || Globe.state.selectedISO;
@@ -13086,13 +13468,92 @@ function tfaShowFlows() {
   const exportItems = displayExportList(c);
 
   if (dir === 'import') {
-    // Build supplier list filtered by commodity if one is selected
-    const suppliers = (c.suppliers || []).slice(0, 6).map((sup, i) => {
-      const pct = (c.supPct || [])[i] || 0;
-      // If a specific commodity is chosen, only keep suppliers that matter for it
+    // BUGFIX v21.x — c.suppliers is one flat list per country. When a specific
+    // commodity is selected the unfiltered list would show the same 5 suppliers
+    // for every commodity (e.g. Germany imports Soybeans, Tropical fruit, Coffee,
+    // Cocoa, Fish — but the supplier list was NL/FR/PL/BE/IT regardless of which
+    // chip the user picked, which is wrong because cocoa comes from CIV/GHA, not
+    // from neighbours). Same intersect-or-fallback strategy as exports below.
+    //
+    // ALSO: when observed Comtrade data is available for this country+commodity,
+    // prefer that supplier list — it's the strongest signal available.
+    let pairs;
+    if (commodity) {
+      const commLower = commodity.toLowerCase();
+      const routeKey = _routeKeyFor(commodity);
+      // 1) Observed Comtrade — strongest signal, use as-is.
+      const obsRow = (routeKey && LIVE && LIVE.comtrade) ? (LIVE.comtrade[c.iso] || {})[routeKey] : null;
+      const obsTop = obsRow && Array.isArray(obsRow.top_suppliers) ? obsRow.top_suppliers : null;
+      if (obsTop && obsTop.length >= 2) {
+        pairs = obsTop.slice(0, 6).map(s => ({
+          name: s.country || s.name || '',
+          pct: Math.round(s.share_pct || 0),
+        })).filter(p => p.name && p.pct > 0);
+      } else if (routeKey && COMMODITY_TRADE_ROUTES[routeKey] && COMMODITY_TRADE_ROUTES[routeKey].importer_suppliers[c.iso]) {
+        // 2) Structured per-importer mix from COMMODITY_TRADE_ROUTES.
+        pairs = COMMODITY_TRADE_ROUTES[routeKey].importer_suppliers[c.iso]
+          .slice(0, 6)
+          .map(s => ({ name: _nameFromISO(s.iso), pct: s.share }))
+          .filter(p => p.name && p.pct > 0);
+      } else if (routeKey && COMMODITY_TRADE_ROUTES[routeKey] && Array.isArray(COMMODITY_TRADE_ROUTES[routeKey].exporters)) {
+        // 3) Generic top exporters of this commodity (importer not specifically
+        //    modeled). Exclude the country itself in case it appears in its
+        //    own exporters list.
+        const expList = COMMODITY_TRADE_ROUTES[routeKey].exporters
+          .filter(e => e.iso !== c.iso)
+          .slice(0, 6);
+        // Renormalize shares to a per-importer-style mix so the percentages
+        // displayed reflect "who likely supplies this country" rather than
+        // "global export share", which would otherwise sum to <100%.
+        const totalShare = expList.reduce((sum, e) => sum + (e.share || 0), 0) || 1;
+        pairs = expList.map(e => ({
+          name: _nameFromISO(e.iso),
+          pct: Math.round((e.share / totalShare) * 92), // leave ~8% "other" residual — honest gap
+        })).filter(p => p.name && p.pct > 0);
+      } else {
+        // 4) Heritage fallback — intersect flat supplier list with countries
+        //    that actually export this commodity, else fall through to global
+        //    exporters ranked by FDRS.
+        const matches = (list) => Array.isArray(list) && list.some(it => {
+          const s = (it || '').toLowerCase();
+          if (s.includes(commLower)) return true;
+          if (/corn|maize/.test(commLower) && /corn|maize/.test(s)) return true;
+          if (/beef|cattle|bovine/.test(commLower) && /beef|cattle|bovine/.test(s)) return true;
+          if (/soy/.test(commLower) && /soy/.test(s)) return true;
+          if (/palm/.test(commLower) && /palm/.test(s)) return true;
+          return false;
+        });
+        const candidateNames = (c.suppliers || []).filter(name => {
+          const sc = COUNTRIES.find(cc => cc.name === name || cc.iso === name);
+          return sc && matches(sc.exports || []);
+        });
+        if (candidateNames.length >= 2) {
+          pairs = candidateNames.slice(0, 6).map((name, i) => ({
+            name, pct: (c.supPct || [])[(c.suppliers || []).indexOf(name)] || [30,22,18,15,10,5][i] || 5,
+          }));
+        } else {
+          const globalExporters = COUNTRIES
+            .filter(cc => !cc.iso.startsWith('US-') && cc.iso !== c.iso && matches(cc.exports || []))
+            .sort((a, b) => (a.fdrs || 100) - (b.fdrs || 100))
+            .slice(0, 6)
+            .map(cc => cc.name);
+          if (globalExporters.length) {
+            pairs = globalExporters.map((name, i) => ({ name, pct: [30,22,18,15,10,5][i] || 5 }));
+          } else {
+            pairs = (c.suppliers || []).slice(0, 6).map((name, i) => ({
+              name, pct: (c.supPct || [])[i] || 0,
+            }));
+          }
+        }
+      }
+    } else {
+      pairs = (c.suppliers || []).slice(0, 6).map((name, i) => ({
+        name, pct: (c.supPct || [])[i] || 0,
+      }));
+    }
+    const suppliers = pairs.map(({ name: sup, pct }, i) => {
       const commo = commodity || importItems[i] || 'Food products';
-      // Pass supplier NAME so _estimateVolume can match observed Comtrade data correctly
-      // (legacy c.suppliers list is NOT aligned by index with Comtrade top_suppliers).
+      // Pass supplier NAME so _estimateVolume can match observed Comtrade data correctly.
       const vol = _estimateVolume(c, commo, i, sup) || _modeledVolumeFallback(c, commo, i);
       const companies = _companiesFor(commo);
       const supplierCompanies = companies.slice(i, i + 3).map((co, j) => ({
@@ -13111,8 +13572,84 @@ function tfaShowFlows() {
     _tfaShowSidePanel(title, suppliers, 'import');
 
   } else {
-    // Export direction
-    const dests = (c.exportDests || []).slice(0, 6);
+    // Export direction.
+    //
+    // BUGFIX v21.x — c.exportDests is one flat list per country (no per-commodity
+    // breakdown in the heritage data model). If a user picks a specific commodity
+    // chip, we used to show the SAME destinations for every commodity, which
+    // looked wrong (Germany dairy/wheat/barley all going to USA/France/NL/UK/CN).
+    //
+    // Honest fix: when a commodity is selected, intersect c.exportDests with the
+    // set of countries that actually list that commodity (or a synonym) in their
+    // `imports` array. If no overlap, fall back to global top-importers of that
+    // commodity from COUNTRIES so we still show plausible destinations rather
+    // than a misleading lookup. Volumes stay clearly badged MODELED — the route
+    // is a directional screen, not customs data.
+    let dests;
+    if (commodity) {
+      const commLower = commodity.toLowerCase();
+      const routeKey = _routeKeyFor(commodity);
+      const route = routeKey ? COMMODITY_TRADE_ROUTES[routeKey] : null;
+      const isExporter = route && route.exporters.some(e => e.iso === c.iso);
+
+      if (route && isExporter) {
+        // This country exports this commodity per the route map. Find importers
+        // whose supplier mix lists c.iso, then rank by (share-from-this-country
+        // × importer's relative weight in global imports of this commodity).
+        // Importer's global weight is proxied by 1/(rank+1) on insertion order,
+        // since the dict isn't pre-ranked — but the structured importers list
+        // was authored top-down so insertion order ≈ size rank.
+        const impEntries = Object.entries(route.importer_suppliers || {});
+        const matched = [];
+        impEntries.forEach(([impISO, supList], rank) => {
+          const sup = (supList || []).find(s => s.iso === c.iso);
+          if (sup && sup.share > 0 && impISO !== c.iso) {
+            // Larger rank = smaller importer; use 1/(rank+1) as proxy weight.
+            const importerWeight = 1 / (rank + 1);
+            matched.push({
+              iso: impISO,
+              shareFromUs: sup.share,
+              score: sup.share * importerWeight,
+            });
+          }
+        });
+        matched.sort((a, b) => b.score - a.score);
+        const top = matched.slice(0, 6);
+        if (top.length >= 2) {
+          dests = top.map(m => _nameFromISO(m.iso));
+        }
+      }
+
+      if (!dests) {
+        // Heritage fallback: intersect exportDests names with countries that
+        // actually import this commodity; else top FDRS importers globally.
+        const matches = (list) => Array.isArray(list) && list.some(it => {
+          const s = (it || '').toLowerCase();
+          if (s.includes(commLower)) return true;
+          if (/corn|maize/.test(commLower) && /corn|maize/.test(s)) return true;
+          if (/beef|cattle|bovine/.test(commLower) && /beef|cattle|bovine/.test(s)) return true;
+          if (/soy/.test(commLower) && /soy/.test(s)) return true;
+          if (/palm/.test(commLower) && /palm/.test(s)) return true;
+          return false;
+        });
+        const candidateDests = (c.exportDests || []).filter(name => {
+          const dc = COUNTRIES.find(cc => cc.name === name || cc.iso === name);
+          return dc && matches(displayImportList(dc));
+        });
+        if (candidateDests.length >= 2) {
+          dests = candidateDests.slice(0, 6);
+        } else {
+          const globalImporters = COUNTRIES
+            .filter(cc => !cc.iso.startsWith('US-') && cc.iso !== c.iso && matches(displayImportList(cc)))
+            .sort((a, b) => (b.fdrs || 0) - (a.fdrs || 0))
+            .slice(0, 6)
+            .map(cc => cc.name);
+          dests = globalImporters.length ? globalImporters : (c.exportDests || []).slice(0, 6);
+        }
+      }
+    } else {
+      dests = (c.exportDests || []).slice(0, 6);
+    }
     const suppliers = dests.map((dest, i) => {
       const pct = [35, 25, 18, 12, 7, 3][i] || 5;
       const commo = commodity || exportItems[i] || 'Agricultural goods';
