@@ -71,8 +71,9 @@ ISO3_SET = set()
 try:
     from refresh_faostat_fbs import FAO_AREA_TO_ISO3
     ISO3_SET.update(FAO_AREA_TO_ISO3.values())
-except Exception:
-    pass
+except Exception as e:
+    print(f"[WARN] Failed to import FAO_AREA_TO_ISO3 ({type(e).__name__}: {e}); "
+          f"falling back to the augmented small-states list only.")
 # Augment with small states + non-FBS countries
 ISO3_SET.update({
     "USA","GBR","FRA","DEU","ITA","ESP","NLD","BEL","CHE","AUT","SWE","NOR",

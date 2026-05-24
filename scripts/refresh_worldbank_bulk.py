@@ -128,8 +128,9 @@ KNOWN_ISO3 = set()
 try:
     from refresh_faostat_fbs import FAO_AREA_TO_ISO3
     KNOWN_ISO3.update(FAO_AREA_TO_ISO3.values())
-except Exception:
-    pass
+except Exception as e:
+    print(f"[WARN] Failed to import FAO_AREA_TO_ISO3 ({type(e).__name__}: {e}); "
+          f"falling back to the augmented WDI-only ISO3 list.")
 # Augment with countries WDI tracks that FAOSTAT FBS skips. Pulled from the
 # WDICountry.csv reference list (~217 economies). Hand-curated to ISO3 only.
 KNOWN_ISO3.update({

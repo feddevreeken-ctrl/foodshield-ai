@@ -142,7 +142,7 @@ Update procedure when MMG publishes:
 
 The source manifest will label this feed `manual` even when it is current.
 
-## Provenance scaffold (v20.5, in progress)
+## Provenance scaffold (live since v21)
 
 Country structural fields (`fdrs`, `c[]`, `w`, `r`, `m`, `fi`, `net`, `imports`, `exports`,
 `suppliers`, etc.) are now generated into `data/countries.json` with per-metric provenance:
