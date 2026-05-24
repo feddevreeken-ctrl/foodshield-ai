@@ -1206,8 +1206,11 @@ abbr.ac:hover, .ac:hover {
   position: absolute;
   z-index: 1;  /* above the click-catcher; below the card */
   border-radius: 12px;
+  /* v22 — lighter mask so the map and tab content underneath stays readable.
+     Was rgba(0.68) which made the choropleth nearly invisible; rgba(0.45)
+     keeps the dim effect but lets country colors show through. */
   box-shadow: 0 0 0 3px rgba(138,166,196,0.75),
-              0 0 0 9999px rgba(8, 12, 16, 0.68);
+              0 0 0 9999px rgba(8, 12, 16, 0.45);
   transition: all .35s cubic-bezier(.4,0,.2,1);
   pointer-events: none;
 }
@@ -4783,10 +4786,7 @@ input[type="email"]:focus {
   <button class="subnav-btn" data-tab="forecast" data-sub-group="analyze" onclick="showTab('forecast',this)">Forecast 2030</button>
   <button class="subnav-btn" data-tab="scenario" data-sub-group="analyze" onclick="showTab('scenario',this)">Scenario Simulator<span class="subnav-shock-pill">Live shock</span></button>
   <!-- Live -->
-  <!-- v22 — Disturbances subnav removed. The Live disturbances toggle on the
-       map is the single canonical UI for the disturbance overlay. The
-       full-page list view at #tab-disturbances is kept in code for the impact-
-       panel "Open full feed" deeplink but isn't exposed in the nav. -->
+  <button class="subnav-btn" data-tab="disturbances" data-sub-group="live" onclick="showTab('disturbances',this)" title="Full list of live food-security disturbances with sources, dates, severity.">Disturbances</button>
   <button class="subnav-btn" data-tab="livedata" data-sub-group="live" onclick="showTab('livedata',this)">Live Data</button>
   <!-- About -->
   <button class="subnav-btn" data-tab="methodology" data-sub-group="about" onclick="showTab('methodology',this)">Methodology</button>
@@ -15293,25 +15293,19 @@ const TOUR_STEPS = [
   {
     // v22 — Live disturbances toggle. Properly activate it so the user sees
     // the overlay dots appear on the map (not just a static highlight).
-    // toggleMapDisturbances() has a guard requiring window.Globe + may need
-    // to await loadDisturbanceData() — call it directly with await semantics
-    // instead of just clicking the button.
     selector: '#map-dist-toggle',
     title: 'Live disturbances · toggle on the map',
     body: 'This button overlays live shocks on the map — droughts, conflicts, floods, currency crises. We just turned it ON: red dots appear over the affected countries. Click it again to return to the clean choropleth.',
     before: () => {
       try { showTab('global'); } catch(e){}
       closePanelIfOpen();
-      // Robust activation: wait for Globe + disturbanceEvents to be available,
-      // then call the toggle. Retry up to 6 times (3 seconds) before giving up.
       const tryActivate = (attempt = 0) => {
         const btn = document.getElementById('map-dist-toggle');
         const globeReady = window.Globe && typeof window.Globe.showDisturbances === 'function';
         const eventsLoaded = typeof window.disturbanceEvents !== 'undefined' && window.disturbanceEvents.length > 0;
         if (!btn) return;
-        if (btn.getAttribute('aria-pressed') === 'true') return; // already on
+        if (btn.getAttribute('aria-pressed') === 'true') return;
         if (globeReady && eventsLoaded) {
-          // Both ready — fire the toggle
           if (typeof toggleMapDisturbances === 'function') {
             toggleMapDisturbances();
             _tourActivatedDisturbances = true;
@@ -15320,7 +15314,6 @@ const TOUR_STEPS = [
             _tourActivatedDisturbances = true;
           }
         } else if (attempt < 6) {
-          // Wait and retry — disturbance data still loading or Globe not ready
           if (typeof window.loadDisturbanceData === 'function' && !eventsLoaded) {
             try { window.loadDisturbanceData(); } catch(e) {}
           }
@@ -15328,7 +15321,18 @@ const TOUR_STEPS = [
         }
       };
       tryActivate();
-      return 800; // give the dots time to render before spotlight positions
+      return 800;
+    },
+    // v22 — clean up the disturbance overlay when user advances past this step
+    after: () => {
+      try {
+        const btn = document.getElementById('map-dist-toggle');
+        if (btn && btn.getAttribute('aria-pressed') === 'true') {
+          if (typeof toggleMapDisturbances === 'function') toggleMapDisturbances();
+          else btn.click();
+        }
+      } catch(e) {}
+      _tourActivatedDisturbances = false;
     },
   },
   {
@@ -15346,20 +15350,6 @@ const TOUR_STEPS = [
     title: 'The headline score',
     body: 'Egypt sits in the upper range. Why? It imports ~62% of its wheat — mostly from the Black Sea — while servicing a 110m-person population. That structural exposure plus live FX stress drives the number.',
     before: () => 250,
-  },
-  {
-    selector: '#sp-imports',
-    title: 'Where the food actually comes from',
-    body: 'Top suppliers per commodity, drawn from UN Comtrade. This is the actionable piece — if Russia\'s wheat exports drop, you can see immediately which countries take the biggest hit.',
-    before: () => {
-      // Scroll panel content to bring imports section into view
-      const sp = document.getElementById('sidepanel');
-      const imp = document.getElementById('sp-imports');
-      if (sp && imp) {
-        imp.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-      return 500;
-    },
   },
   {
     // v22 — AI · Trade Flow Atlas. Select Wheat chip AND call tfaShowFlows()
@@ -15402,40 +15392,43 @@ const TOUR_STEPS = [
     },
   },
   {
-    selector: '.subnav-btn[data-tab="commodities"]',
+    // v22 — tab steps highlight the WHOLE tab page (the spotlight will clip to
+    // viewport for large targets, see _positionTourStep) so the user sees the
+    // full tab content + sub-nav button in one frame, not a tiny button alone.
+    selector: '#tab-commodities',
     title: 'Follow a commodity end-to-end',
     body: 'The Commodities tab lets you start from a commodity (instead of a country): wheat, rice, maize, soy, palm oil, sugar, coffee, fertiliser… each card shows producers, importers, and chokepoints.',
     before: () => {
       closePanelIfOpen();
       try { showTab('commodities'); } catch(e){}
-      return 400;
+      return 500;
     },
   },
   {
-    selector: '.subnav-btn[data-tab="scenario"]',
+    selector: '#tab-scenario',
     title: 'Stress-test the system',
     body: 'Scenario Simulator — pull a real lever (wheat embargo, drought in India, Suez closure) and see which countries break first. The "what would actually happen if…" tool.',
     before: () => {
       try { showTab('scenario'); } catch(e){}
-      return 400;
+      return 500;
     },
   },
   {
-    selector: '.subnav-btn[data-tab="forecast"]',
+    selector: '#tab-forecast',
     title: 'Forecast to 2030',
     body: 'Project each country\'s risk trajectory out to 2030 — blending climate (CCKP), adaptive capacity (ND-GAIN) and structural fundamentals. For planning, not just today\'s headlines.',
     before: () => {
       try { showTab('forecast'); } catch(e){}
-      return 400;
+      return 500;
     },
   },
   {
-    selector: '.subnav-btn[data-tab="methodology"]',
+    selector: '#tab-methodology',
     title: 'Everything is sourced',
     body: 'Methodology lists exactly which data feeds power each score, what\'s live vs modelled, and where the gaps are. Transparency by default — no black box.',
     before: () => {
       try { showTab('methodology'); } catch(e){}
-      return 400;
+      return 500;
     },
   },
   {
@@ -15587,6 +15580,11 @@ function _positionTourStep() {
 }
 
 function _tourGo(delta) {
+  // v22 — let the step we're leaving clean up its side-effects
+  const prevStep = TOUR_STEPS[_tourIdx];
+  if (prevStep && typeof prevStep.after === 'function') {
+    try { prevStep.after(); } catch(e) {}
+  }
   _tourIdx += delta;
   if (_tourIdx >= TOUR_STEPS.length) { endTour(); return; }
   if (_tourIdx < 0) _tourIdx = 0;
