@@ -15288,24 +15288,44 @@ const TOUR_STEPS = [
     before: () => { try { showTab('global'); } catch(e){} closePanelIfOpen(); return 200; },
   },
   {
-    // v22 — Live disturbances toggle. Briefly activate it so the user sees
-    // the overlay dots appear on the map (instead of just staring at a button).
+    // v22 — Live disturbances toggle. Properly activate it so the user sees
+    // the overlay dots appear on the map (not just a static highlight).
+    // toggleMapDisturbances() has a guard requiring window.Globe + may need
+    // to await loadDisturbanceData() — call it directly with await semantics
+    // instead of just clicking the button.
     selector: '#map-dist-toggle',
     title: 'Live disturbances · toggle on the map',
-    body: 'This button overlays live shocks on the map — droughts, conflicts, floods, currency crises. We just clicked it ON: red dots appear over the affected countries. Click it OFF to return to the clean choropleth.',
+    body: 'This button overlays live shocks on the map — droughts, conflicts, floods, currency crises. We just turned it ON: red dots appear over the affected countries. Click it again to return to the clean choropleth.',
     before: () => {
       try { showTab('global'); } catch(e){}
       closePanelIfOpen();
-      // Auto-activate the toggle so the user SEES the disturbance dots
-      setTimeout(() => {
+      // Robust activation: wait for Globe + disturbanceEvents to be available,
+      // then call the toggle. Retry up to 6 times (3 seconds) before giving up.
+      const tryActivate = (attempt = 0) => {
         const btn = document.getElementById('map-dist-toggle');
-        if (btn && btn.getAttribute('aria-pressed') !== 'true') {
-          btn.click();
-          // Remember we turned it on so endTour can revert if user didn't
-          _tourActivatedDisturbances = true;
+        const globeReady = window.Globe && typeof window.Globe.showDisturbances === 'function';
+        const eventsLoaded = typeof window.disturbanceEvents !== 'undefined' && window.disturbanceEvents.length > 0;
+        if (!btn) return;
+        if (btn.getAttribute('aria-pressed') === 'true') return; // already on
+        if (globeReady && eventsLoaded) {
+          // Both ready — fire the toggle
+          if (typeof toggleMapDisturbances === 'function') {
+            toggleMapDisturbances();
+            _tourActivatedDisturbances = true;
+          } else {
+            btn.click();
+            _tourActivatedDisturbances = true;
+          }
+        } else if (attempt < 6) {
+          // Wait and retry — disturbance data still loading or Globe not ready
+          if (typeof window.loadDisturbanceData === 'function' && !eventsLoaded) {
+            try { window.loadDisturbanceData(); } catch(e) {}
+          }
+          setTimeout(() => tryActivate(attempt + 1), 500);
         }
-      }, 250);
-      return 400;
+      };
+      tryActivate();
+      return 800; // give the dots time to render before spotlight positions
     },
   },
   {
@@ -15339,11 +15359,12 @@ const TOUR_STEPS = [
     },
   },
   {
-    // v22 — AI · Trade Flow Atlas. Actually click the Wheat chip so the user
-    // sees arcs render on the globe — not just a static control panel.
+    // v22 — AI · Trade Flow Atlas. Select Wheat chip AND call tfaShowFlows()
+    // so arcs actually render — selecting the chip alone only sets state, it
+    // doesn't trigger the globe to render arcs (that's a separate function).
     selector: '#trade-atlas-cta',
     title: 'AI · Trade Flow Atlas',
-    body: 'We just clicked the <em>Wheat</em> chip below. Watch the red arcs appear on the globe — each one is a real Comtrade-recorded wheat import flow into Egypt, weighted by USD value. Pick any commodity for any country to see its real trade pattern.',
+    body: 'We just selected <em>Wheat</em> and pushed the flows to the globe. Watch the red arcs appear — each one is a real Comtrade-recorded wheat import flow into Egypt, weighted by USD value. Pick any commodity for any country to see its real trade pattern.',
     before: () => {
       // Ensure Egypt panel is still open
       try {
@@ -15353,23 +15374,28 @@ const TOUR_STEPS = [
       setTimeout(() => {
         const tfa = document.getElementById('trade-atlas-cta');
         if (tfa) tfa.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        // v22 — actually click a chip so arcs render. Wheat is the canonical
-        // Egypt example (~62% of caloric imports). Find the chip by label.
+        // Click the Wheat chip to SELECT it (sets _tfaCommodity = 'Wheat')
         setTimeout(() => {
           const chips = document.querySelectorAll('.tfa-chip');
           let wheatChip = null;
           chips.forEach(c => {
             if (!wheatChip && /wheat/i.test(c.textContent || '')) wheatChip = c;
           });
-          // Fallback: first non-active chip
           if (!wheatChip && chips.length) wheatChip = chips[0];
           if (wheatChip && !wheatChip.classList.contains('active')) {
             wheatChip.click();
             _tourActivatedTFA = true;
           }
+          // CRITICAL: now actually push the flows to the globe.
+          // tfaSelectChip only sets state; tfaShowFlows() does the rendering.
+          setTimeout(() => {
+            try {
+              if (typeof tfaShowFlows === 'function') tfaShowFlows();
+            } catch(e) {}
+          }, 200);
         }, 350);
       }, 200);
-      return 1000;
+      return 1400; // longer dwell so user can see arcs draw
     },
   },
   {
