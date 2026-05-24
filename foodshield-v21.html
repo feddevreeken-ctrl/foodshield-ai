@@ -4783,7 +4783,10 @@ input[type="email"]:focus {
   <button class="subnav-btn" data-tab="forecast" data-sub-group="analyze" onclick="showTab('forecast',this)">Forecast 2030</button>
   <button class="subnav-btn" data-tab="scenario" data-sub-group="analyze" onclick="showTab('scenario',this)">Scenario Simulator<span class="subnav-shock-pill">Live shock</span></button>
   <!-- Live -->
-  <button class="subnav-btn" data-tab="disturbances" data-sub-group="live" onclick="showTab('disturbances',this)" title="Live food-security disturbances (conflicts, droughts, floods, currency shocks) from ReliefWeb, GDACS, WFP HungerMap, NASA FIRMS, Open-Meteo and USGS.">Disturbances</button>
+  <!-- v22 — Disturbances subnav removed. The Live disturbances toggle on the
+       map is the single canonical UI for the disturbance overlay. The
+       full-page list view at #tab-disturbances is kept in code for the impact-
+       panel "Open full feed" deeplink but isn't exposed in the nav. -->
   <button class="subnav-btn" data-tab="livedata" data-sub-group="live" onclick="showTab('livedata',this)">Live Data</button>
   <!-- About -->
   <button class="subnav-btn" data-tab="methodology" data-sub-group="about" onclick="showTab('methodology',this)">Methodology</button>
@@ -15399,40 +15402,41 @@ const TOUR_STEPS = [
     },
   },
   {
-    // v22 — Disturbances tab (newly added to subnav). User can also use the
-    // map toggle (shown earlier), but the tab gives the full list view.
-    selector: '.subnav-btn[data-tab="disturbances"]',
-    title: 'Disturbances feed (full list)',
-    body: 'The Disturbances tab gives you the full feed: every food-relevant shock with its source, date, severity, and which commodities are at risk. Use the map toggle for a quick spatial view, this tab for the full list.',
-    before: () => {
-      closePanelIfOpen();
-      try { showTab('global'); } catch(e){}
-      return 250;
-    },
-  },
-  {
     selector: '.subnav-btn[data-tab="commodities"]',
     title: 'Follow a commodity end-to-end',
     body: 'The Commodities tab lets you start from a commodity (instead of a country): wheat, rice, maize, soy, palm oil, sugar, coffee, fertiliser… each card shows producers, importers, and chokepoints.',
-    before: () => 200,
+    before: () => {
+      closePanelIfOpen();
+      try { showTab('commodities'); } catch(e){}
+      return 400;
+    },
   },
   {
     selector: '.subnav-btn[data-tab="scenario"]',
     title: 'Stress-test the system',
     body: 'Scenario Simulator — pull a real lever (wheat embargo, drought in India, Suez closure) and see which countries break first. The "what would actually happen if…" tool.',
-    before: () => 200,
+    before: () => {
+      try { showTab('scenario'); } catch(e){}
+      return 400;
+    },
   },
   {
     selector: '.subnav-btn[data-tab="forecast"]',
     title: 'Forecast to 2030',
     body: 'Project each country\'s risk trajectory out to 2030 — blending climate (CCKP), adaptive capacity (ND-GAIN) and structural fundamentals. For planning, not just today\'s headlines.',
-    before: () => 200,
+    before: () => {
+      try { showTab('forecast'); } catch(e){}
+      return 400;
+    },
   },
   {
     selector: '.subnav-btn[data-tab="methodology"]',
     title: 'Everything is sourced',
     body: 'Methodology lists exactly which data feeds power each score, what\'s live vs modelled, and where the gaps are. Transparency by default — no black box.',
-    before: () => 200,
+    before: () => {
+      try { showTab('methodology'); } catch(e){}
+      return 400;
+    },
   },
   {
     selector: '#bb-status-dot',
@@ -15610,17 +15614,27 @@ function endTour() {
     _tourEscHandler = null;
   }
 
-  // v22 — revert side-effects the tour caused
-  if (_tourActivatedDisturbances) {
+  // v22 — aggressive cleanup. Always revert tour side-effects regardless of
+  // whether our internal flag thinks they were activated — earlier reports of
+  // "tour doesn't take away the button contents after pressed" came from
+  // the flag not being set (e.g. user clicked Back during the tour, the
+  // disturbances were still ON, but _tourActivatedDisturbances tracked Back's
+  // path). Just always reset.
+  try {
     const btn = document.getElementById('map-dist-toggle');
-    if (btn && btn.getAttribute('aria-pressed') === 'true') btn.click();
-    _tourActivatedDisturbances = false;
-  }
-  if (_tourActivatedTFA) {
-    // Try to hide TFA flows if the user didn't explicitly engage with them
-    try { if (typeof hideTFAFlows === 'function') hideTFAFlows(); } catch(e) {}
-    _tourActivatedTFA = false;
-  }
+    if (btn && btn.getAttribute('aria-pressed') === 'true') {
+      if (typeof toggleMapDisturbances === 'function') toggleMapDisturbances();
+      else btn.click();
+    }
+  } catch(e) {}
+  try { if (typeof hideTFAFlows === 'function') hideTFAFlows(); } catch(e) {}
+  // Also clear any selected TFA commodity chip so the next country open is clean
+  try {
+    document.querySelectorAll('.tfa-chip.active').forEach(c => c.classList.remove('active'));
+    if (typeof _tfaCommodity !== 'undefined') _tfaCommodity = null;
+  } catch(e) {}
+  _tourActivatedDisturbances = false;
+  _tourActivatedTFA = false;
 
   // Leave the user on the Global map with the Egypt panel closed.
   // Defer so any in-flight tab-switch animations finish before we override.
