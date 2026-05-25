@@ -792,6 +792,32 @@ body {
 }
 .sp-score-meta { flex: 1; padding-bottom: 4px; min-width: 0; }
 
+/* v22.2 — Full-width detail strip below the score row.
+   Holds the structural/nowcast breakdown, forecast line, and delta line.
+   Pulled out of .sp-score-row so they can render at full panel width
+   instead of wrapping inside a narrow flex column next to the 56px score. */
+.sp-score-detail {
+  padding: 10px 20px 14px;
+  border-bottom: 1px solid var(--b1);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.sp-score-detail-row {
+  font-size: 11px;
+  color: var(--t2);
+  line-height: 1.55;
+}
+.sp-score-detail-row:empty { display: none; }
+.sp-score-detail #sp-forecast {
+  display: flex; align-items: center; gap: 8px;
+  color: var(--t2);
+}
+#sp-score-meta {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10.5px;
+  color: var(--t3);
+  line-height: 1.5;
+}
+
 /* v22.1 — Peer block (percentile + nearest peers) gets its own full-width
    strip below the score row so it doesn't get squashed into the flex residual. */
 .sp-peer-block {
@@ -1824,163 +1850,227 @@ abbr.ac:hover, .ac:hover {
 }
 .commodity-intro-body b { color: var(--t1); font-weight: 500; }
 
-/* v22.1 — Editorial header for Commodity / Scenario / Method / About pages.
-   The header is intentionally large and fills the page canvas — the previous
-   46px headline left ~70% of the screen empty in the top-left. */
+/* v22.2 — Editorial header for Commodity / Scenario / Method / About pages.
+   Tuned to V1 reference scale: 38-44px serif headline, mono eyebrow with
+   bullet separator, restrained padding. */
 .editorial-header {
-  margin: 4px 0 36px;
-  padding: 32px 0 30px;
+  margin: 0 0 28px;
+  padding: 14px 0 22px;
   border-bottom: 1px solid var(--b1);
   position: relative;
 }
-.editorial-header::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0;
-  width: 60px; height: 1px;
-  background: var(--accent);
-}
 .editorial-dateline {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center; gap: 10px;
   font-family: 'Geist Mono', monospace;
-  font-size: 11px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.18em;
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.16em;
   color: var(--t3);
-  margin-bottom: 28px;
+  margin-bottom: 18px;
 }
 .editorial-dateline .dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--accent); box-shadow: 0 0 8px var(--accent);
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 6px var(--accent);
 }
 .editorial-headline {
   font-family: 'Instrument Serif', serif;
   font-weight: 400;
-  font-size: clamp(48px, 7vw, 92px);
-  line-height: 0.98;
-  letter-spacing: -0.028em;
+  font-size: clamp(32px, 3.6vw, 44px);
+  line-height: 1.04;
+  letter-spacing: -0.018em;
   color: var(--t1);
-  /* No max-width — fill the canvas. */
-  margin-bottom: 28px;
+  margin-bottom: 18px;
+  max-width: 34ch;
 }
 .editorial-headline em { font-style: italic; color: var(--accent); }
 .editorial-standfirst {
-  font-size: 16px;
+  font-size: 14px;
   color: var(--t2);
   line-height: 1.65;
-  max-width: 70ch;
-  font-weight: 300;
+  max-width: 68ch;
+  font-weight: 400;
 }
 .editorial-standfirst b { color: var(--t1); font-weight: 500; }
 .editorial-colophon {
-  margin-top: 28px;
-  padding: 16px 20px;
-  background: var(--bg1);
-  border: 1px solid var(--b1);
-  border-radius: 8px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--b1);
   font-family: 'Geist Mono', monospace;
-  font-size: 10.5px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: var(--t3);
-  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
 }
 .editorial-colophon .src { color: var(--t2); }
 .editorial-colophon .sep { color: var(--b3); }
 
-/* v22 — Concentration-first commodity cards */
+/* v22.2 — V1-reference commodity cards.
+   Sharp 0px corners, dark layered surface, serif commodity name + mono
+   category tag, large price + momentum delta, then a concentration
+   eyebrow + plain-English explainer + big risk score. */
 .cmd-card {
   position: relative;
   display: flex; flex-direction: column;
-  background: var(--bg2);
+  background: var(--bg1);
   border: 1px solid var(--b1);
-  border-radius: 10px;
-  padding: 18px 18px 16px;
+  border-radius: 0;
+  padding: 18px 20px 16px;
   cursor: pointer;
-  transition: border-color .15s, transform .15s;
-  min-height: 220px;
+  transition: background-color .15s, border-color .15s;
+  min-height: 240px;
 }
-.cmd-card:hover { border-color: var(--accent); transform: translateY(-1px); }
-.cmd-card-head {
-  display: flex; align-items: center; gap: 10px;
-  margin-bottom: 14px;
+.cmd-card:hover { background: var(--bg2); border-color: var(--b2); }
+.cmd-card-topbar {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  min-height: 16px;
 }
-.cmd-card-icon { font-size: 22px; line-height: 1; }
-.cmd-card-name {
-  font-family: 'Instrument Serif', serif;
-  font-size: 22px; font-weight: 400;
-  letter-spacing: -0.01em;
-  color: var(--t1);
-  line-height: 1;
-}
-.cmd-card-conc-row {
-  display: flex; align-items: baseline;
-  gap: 10px; margin-bottom: 8px;
-}
-.cmd-card-conc-score {
-  font-family: 'Geist Mono', monospace;
-  font-size: 26px; font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1;
-}
-.cmd-card-conc-lbl {
-  font-family: 'Geist Mono', monospace;
-  font-size: 9.5px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.14em;
-  color: var(--t3);
-}
-.cmd-card-conc-story {
-  font-size: 12px; color: var(--t1);
-  line-height: 1.55;
-  margin-bottom: 12px;
-  min-height: 36px;
-}
-.cmd-card-conc-story b { font-weight: 500; color: var(--accent); }
 .cmd-card-alert {
   display: inline-flex; align-items: center; gap: 5px;
-  padding: 2px 8px;
-  background: rgba(196, 75, 60, 0.12);
-  border: 1px solid rgba(196, 75, 60, 0.4);
-  border-radius: 10px;
+  padding: 2px 7px;
+  background: rgba(196, 75, 60, 0.14);
   font-family: 'Geist Mono', monospace;
-  font-size: 9px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.12em;
+  font-size: 9px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.16em;
   color: #c44b3c;
-  margin-left: auto;
+  border-radius: 0;
 }
 .cmd-card-alert .dot {
   width: 5px; height: 5px; border-radius: 50%;
   background: #c44b3c;
 }
-.cmd-card-price-row {
-  margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid var(--b1);
-  display: flex; align-items: baseline; justify-content: space-between;
+.cmd-card-name {
+  font-family: 'Instrument Serif', serif;
+  font-size: 26px; font-weight: 400;
+  letter-spacing: -0.012em;
+  color: var(--t1);
+  line-height: 1.05;
+  margin-bottom: 4px;
+}
+.cmd-card-cat {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.18em;
+  color: var(--t3);
+  margin-bottom: 16px;
+}
+.cmd-card-price-block {
+  display: flex; align-items: baseline; gap: 12px;
+  margin-bottom: 4px;
 }
 .cmd-card-price {
   font-family: 'Geist Mono', monospace;
-  font-size: 13px; font-weight: 500;
-  color: var(--t2);
+  font-size: 22px; font-weight: 500;
+  color: var(--t1);
+  letter-spacing: -0.02em;
+  line-height: 1;
 }
 .cmd-card-chg {
   font-family: 'Geist Mono', monospace;
-  font-size: 11px; font-weight: 600;
+  font-size: 12px; font-weight: 600;
+  letter-spacing: 0.02em;
 }
-.cmd-card-note {
-  font-size: 9.5px; color: var(--t3);
-  margin-top: 4px;
+.cmd-card-unit {
   font-family: 'Geist Mono', monospace;
-  text-transform: uppercase; letter-spacing: 0.1em;
+  font-size: 9.5px;
+  text-transform: uppercase; letter-spacing: 0.14em;
+  color: var(--t3);
+  margin-bottom: 18px;
+}
+.cmd-card-conc-eyebrow {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.16em;
+  color: var(--t3);
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--b1);
+  margin-bottom: 8px;
+}
+.cmd-card-conc-story {
+  font-size: 12px;
+  color: var(--t2);
+  line-height: 1.55;
+  margin-bottom: 10px;
+  min-height: 36px;
+}
+.cmd-card-conc-story b { font-weight: 500; color: var(--t1); }
+.cmd-card-conc-score-row {
+  display: flex; align-items: baseline; gap: 8px;
+}
+.cmd-card-conc-score {
+  font-family: 'Geist Mono', monospace;
+  font-size: 24px; font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
+.cmd-card-conc-score-lbl {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.16em;
+  color: var(--t3);
 }
 
-/* v22 — Scenario publishable brief */
-.scn-brief {
-  margin-bottom: 18px;
-  padding: 24px 26px;
-  background: var(--bg2);
+/* v22.2 — "Today's signal" lede card above the commodity grid */
+.cmd-lede {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 24px;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 22px 26px;
+  background: var(--bg1);
   border: 1px solid var(--b1);
-  border-left: 3px solid var(--accent);
-  border-radius: 0 10px 10px 0;
+  border-left: 3px solid #c44b3c;
+  border-radius: 0;
+  cursor: pointer;
+  transition: background-color .15s;
+}
+.cmd-lede:hover { background: var(--bg2); }
+.cmd-lede-info { border-left-color: var(--accent); }
+.cmd-lede-watch { border-left-color: #d27a3e; }
+.cmd-lede-eyebrow {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.18em;
+  color: #c44b3c;
+  white-space: nowrap;
+}
+.cmd-lede-info .cmd-lede-eyebrow { color: var(--accent); }
+.cmd-lede-watch .cmd-lede-eyebrow { color: #d27a3e; }
+.cmd-lede-body {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--t2);
+}
+.cmd-lede-headline {
+  color: var(--t1);
+  font-weight: 500;
+}
+.cmd-lede-secondary { color: var(--t1); font-weight: 400; }
+.cmd-lede-consequence { color: var(--t3); }
+.cmd-lede-body > span { display: inline; margin-right: 4px; }
+.cmd-lede-cta {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.14em;
+  color: var(--accent);
+  white-space: nowrap;
+}
+@media (max-width: 700px) {
+  .cmd-lede { grid-template-columns: 1fr; gap: 12px; }
+}
+
+/* v22.2 — Scenario publishable brief, V1-reference style.
+   Sentence-as-title (serif, accent on variable phrases) + numbered answer
+   panels (01/02/03/04) with serif sub-heads + from→to mini-tables. */
+.scn-brief {
+  margin-bottom: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 .scn-brief-dateline {
   display: flex; align-items: center; gap: 10px;
@@ -1988,45 +2078,90 @@ abbr.ac:hover, .ac:hover {
   font-size: 10px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.16em;
   color: var(--t3);
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 .scn-brief-dateline .dot {
   width: 5px; height: 5px; border-radius: 50%;
   background: var(--accent); box-shadow: 0 0 6px var(--accent);
 }
-.scn-brief-headline {
+.scn-brief-sentence {
   font-family: 'Instrument Serif', serif;
   font-weight: 400;
-  font-size: 28px; line-height: 1.15;
-  letter-spacing: -0.015em;
+  font-size: clamp(26px, 2.6vw, 34px);
+  line-height: 1.18;
+  letter-spacing: -0.012em;
   color: var(--t1);
-  margin-bottom: 16px;
-  max-width: 36ch;
+  margin-bottom: 28px;
+  max-width: 58ch;
 }
-.scn-brief-headline em { font-style: italic; color: var(--accent); }
+.scn-brief-sentence em { font-style: italic; color: var(--accent); }
+.scn-brief-sentence .var { color: var(--accent); font-style: italic; }
+
 .scn-brief-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-  margin-bottom: 16px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0;
+  border: 1px solid var(--b1);
+  background: var(--bg1);
+  margin-bottom: 18px;
 }
-.scn-brief-col { display: flex; flex-direction: column; gap: 6px; }
-.scn-brief-col-lbl {
+.scn-brief-panel {
+  position: relative;
+  padding: 22px 24px;
+  border-right: 1px solid var(--b1);
+  border-bottom: 1px solid var(--b1);
+  display: flex; flex-direction: column; gap: 12px;
+  min-height: 200px;
+}
+.scn-brief-panel:nth-child(2n) { border-right: none; }
+.scn-brief-panel:nth-last-child(-n+2) { border-bottom: none; }
+.scn-brief-panel-num {
   font-family: 'Geist Mono', monospace;
-  font-size: 9.5px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.14em;
-  color: var(--accent);
+  font-size: 11px; font-weight: 700;
+  color: var(--t3);
+  letter-spacing: 0.16em;
 }
-.scn-brief-col-body {
-  font-size: 12px;
+.scn-brief-panel-title {
+  font-family: 'Instrument Serif', serif;
+  font-weight: 400;
+  font-size: 22px;
+  line-height: 1.15;
+  letter-spacing: -0.012em;
   color: var(--t1);
-  line-height: 1.55;
 }
-.scn-brief-col-body b { font-weight: 500; }
-.scn-brief-col-body .muted { color: var(--t3); font-size: 11px; }
+.scn-brief-panel-title em { font-style: italic; color: var(--accent); }
+.scn-brief-panel-lede {
+  font-size: 13px;
+  color: var(--t2);
+  line-height: 1.6;
+}
+.scn-brief-panel-lede b { color: var(--t1); font-weight: 500; }
+.scn-brief-panel-lede .up { color: #c44b3c; font-family: 'Geist Mono', monospace; font-weight: 600; }
+.scn-brief-panel-lede .down { color: #6ba36b; font-family: 'Geist Mono', monospace; font-weight: 600; }
+.scn-brief-table {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px dashed var(--b1);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.scn-brief-table-row {
+  display: grid;
+  grid-template-columns: 1fr auto 14px auto;
+  gap: 8px; align-items: baseline;
+  font-size: 12px;
+}
+.scn-brief-table-row .name { color: var(--t1); }
+.scn-brief-table-row .from { font-family: 'Geist Mono', monospace; color: var(--t3); }
+.scn-brief-table-row .arr { color: var(--t3); }
+.scn-brief-table-row .to { font-family: 'Geist Mono', monospace; font-weight: 600; }
+.scn-brief-table-row .to.up { color: #c44b3c; }
+.scn-brief-table-row .to.down { color: #6ba36b; }
+.scn-brief-table-row .to.neutral { color: var(--t2); }
+.scn-brief-table-row.empty { color: var(--t3); display: block; font-style: italic; }
+
 .scn-brief-footer {
   display: flex; align-items: center; justify-content: space-between;
-  padding-top: 14px;
+  padding: 14px 0 0;
   border-top: 1px solid var(--b1);
   flex-wrap: wrap; gap: 12px;
 }
@@ -2037,22 +2172,24 @@ abbr.ac:hover, .ac:hover {
   color: var(--t3);
 }
 .scn-brief-copy-btn {
-  padding: 6px 14px;
-  background: transparent;
-  border: 1px solid var(--b3);
-  border-radius: 5px;
-  color: var(--t1);
+  padding: 7px 16px;
+  background: var(--t1);
+  border: none;
+  border-radius: 0;
+  color: var(--bg0);
   font-family: 'Geist Mono', monospace;
-  font-size: 10px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.12em;
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.16em;
   cursor: pointer;
-  transition: border-color .15s, color .15s;
+  transition: opacity .15s;
 }
-.scn-brief-copy-btn:hover { border-color: var(--accent); color: var(--accent); }
-@media (max-width: 900px) {
-  /* clamp() in .editorial-headline handles the scale-down naturally */
-  .scn-brief-grid { grid-template-columns: 1fr 1fr; }
+.scn-brief-copy-btn:hover { opacity: 0.85; }
+@media (max-width: 800px) {
+  .scn-brief-grid { grid-template-columns: 1fr; }
+  .scn-brief-panel { border-right: none; border-bottom: 1px solid var(--b1); }
+  .scn-brief-panel:last-child { border-bottom: none; }
 }
+/* v22.2 — responsive overrides moved into per-component @media blocks */
 
 /* Methodology — visual weight bar */
 .meth-weight-bar {
@@ -5352,14 +5489,22 @@ input[type="email"]:focus {
         </button>
       </div>
 
+      <!-- v22.2 — score row now only contains the big number + a tight 2-line
+           meta column (label + badge). The forecast / nowcast meta / delta
+           lines are pulled out to full-width rows below to prevent the
+           crammed-2-words-per-line layout in the narrow side panel. -->
       <div class="sp-score-row">
         <div class="sp-score-num" id="sp-score">—</div>
         <div class="sp-score-meta">
           <div class="sp-score-label"><abbr class="ac" title="Food Disruption Risk Score — 0–100 composite measuring how exposed a country is to food shocks (imports, climate, conflict, logistics, prices).">Food Disruption Risk</abbr></div>
           <div id="sp-badge" class="risk-badge">—</div>
-          <div class="sp-forecast" id="sp-forecast"></div>
-          <div id="sp-delta" style="margin-top:3px;"></div>
         </div>
+      </div>
+      <!-- Full-width strip below the score row: structural/nowcast breakdown, -->
+      <!-- forecast trajectory, and any delta vs prior. -->
+      <div class="sp-score-detail">
+        <div class="sp-score-detail-row" id="sp-forecast"></div>
+        <div class="sp-score-detail-row" id="sp-delta"></div>
       </div>
 
       <div class="sp-score-bar-wrap">
@@ -15974,11 +16119,15 @@ function openPanel(c, skipDrilldown) {
     const adj = c._fdrsAdj;
     const scoreEl = document.getElementById('sp-score');
     let metaEl = document.getElementById('sp-score-meta');
-    if (!metaEl && scoreEl && scoreEl.parentElement) {
+    // v22.2 — insert the structural/nowcast meta in the full-width strip below
+    // the score row instead of inside the narrow flex column next to the score.
+    const detailStrip = document.querySelector('.sp-score-detail');
+    if (!metaEl && detailStrip) {
       metaEl = document.createElement('div');
       metaEl.id = 'sp-score-meta';
-      metaEl.style.cssText = 'font-size:10px;color:var(--t3);font-family:Geist Mono,monospace;margin-top:2px;line-height:1.4;';
-      scoreEl.parentElement.appendChild(metaEl);
+      metaEl.className = 'sp-score-detail-row';
+      // Insert as the FIRST detail row (above forecast/delta)
+      detailStrip.insertBefore(metaEl, detailStrip.firstChild);
     }
     if (metaEl) {
       if (struct != null && adj != null && adj !== 0) {
@@ -16045,21 +16194,17 @@ function openPanel(c, skipDrilldown) {
       }
     }
 
-    // v22.1 — percentile + 3 nearest peers. Placed as a full-width block AFTER
-    // the score row (not inside its flex layout) so the peer chips have full
-    // panel width and don't wrap into a narrow column. The peer block markup
-    // is built by fdrsPeerBlockHTML() which now returns its own .sp-peer-block.
+    // v22.2 — percentile + 3 nearest peers as a full-width block placed
+    // immediately after the .sp-score-detail strip.
     let peerEl = document.getElementById('sp-score-peers');
-    // Find the .sp-score-row (parent of metaEl); insert peer block AFTER it.
-    const scoreRow = metaEl && metaEl.closest ? metaEl.closest('.sp-score-row') : null;
-    if (!peerEl && scoreRow && scoreRow.parentNode) {
+    const detailStripForPeer = document.querySelector('.sp-score-detail');
+    if (!peerEl && detailStripForPeer && detailStripForPeer.parentNode) {
       peerEl = document.createElement('div');
       peerEl.id = 'sp-score-peers';
-      // Insert immediately after the score row
-      if (scoreRow.nextSibling) {
-        scoreRow.parentNode.insertBefore(peerEl, scoreRow.nextSibling);
+      if (detailStripForPeer.nextSibling) {
+        detailStripForPeer.parentNode.insertBefore(peerEl, detailStripForPeer.nextSibling);
       } else {
-        scoreRow.parentNode.appendChild(peerEl);
+        detailStripForPeer.parentNode.appendChild(peerEl);
       }
     }
     if (peerEl) {
@@ -17973,87 +18118,128 @@ function _renderStressResults() {
   }
 }
 
-// v22 — Publishable wire-service brief.
-// Renders a 4-column summary (who breaks · who buffers · who profits · when it lands)
-// above the existing engine output, plus a "Copy brief" button.
+// v22.2 — Publishable wire-service brief in V1-reference style.
+// Renders a sentence-as-title + 4 numbered answer panels with from→to tables.
 function _renderScenarioBrief(results, selected, stats) {
   const el = document.getElementById('scn-brief');
   if (!el || !results || !results.length) return;
 
   const sorted = results.slice().sort((a,b)=> b.delta - a.delta);
-
-  // Who breaks — top 3 biggest jumps
-  const breaks = sorted.slice(0, 3);
-  // Who buffers — countries with smallest |delta| from a high-FDRS pool
-  //   (i.e. structurally exposed yet barely shifted under this stack)
+  const breaks = sorted.slice(0, 4);
   const exposedPool = sorted.filter(c => c.fdrs >= 51);
-  const buffers = exposedPool
-    .slice()
+  const buffers = exposedPool.slice()
     .sort((a,b)=> Math.abs(a.delta) - Math.abs(b.delta))
-    .slice(0, 3);
-  // Who profits — negative deltas (rare) or otherwise countries that
-  //   appear as named exporters of the shocked commodities
-  const negatives = sorted.filter(c => c.delta < 0)
-    .sort((a,b)=> a.delta - b.delta)
-    .slice(0, 3);
-  let profitText;
-  if (negatives.length >= 2) {
-    profitText = negatives.map(c => `${c.name} <span class="muted">${c.delta.toFixed(1)}</span>`).join(' · ');
-  } else {
-    // Fall back to top exporters of the shocked commodity baskets
-    const exportISOs = new Set();
-    selected.forEach(s => {
-      const route = COMMODITY_TRADE_ROUTES[
-        s.id.includes('wheat') ? 'wheat' :
-        s.id.includes('rice')  ? 'rice'  :
-        s.id.includes('maize') ? 'maize' :
-        s.id.includes('fert')  ? 'fertilizer' : null
-      ];
-      if (route && route.exporters) route.exporters.slice(0,3).forEach(e => exportISOs.add(e.iso));
-    });
-    const profiters = Array.from(exportISOs)
-      .map(iso => _nameFromISO(iso))
-      .filter(Boolean)
-      .slice(0, 3);
-    profitText = profiters.length
-      ? profiters.join(' · ') + ' <span class="muted">(major suppliers)</span>'
-      : `<span class="muted">No clear winners — shock hits both producers and consumers.</span>`;
-  }
+    .slice(0, 4);
+
+  // Who profits — find net exporters of the shocked commodities
+  const exportISOs = new Set();
+  selected.forEach(s => {
+    const route = COMMODITY_TRADE_ROUTES[
+      s.id.includes('wheat') ? 'wheat' :
+      s.id.includes('rice')  ? 'rice'  :
+      s.id.includes('maize') ? 'maize' :
+      s.id.includes('fert')  ? 'fertilizer' : null
+    ];
+    if (route && route.exporters) route.exporters.slice(0,4).forEach(e => exportISOs.add(e.iso));
+  });
+  const profiters = Array.from(exportISOs)
+    .map(iso => results.find(r => r.iso === iso))
+    .filter(Boolean)
+    .slice(0, 4);
+  const negatives = sorted.filter(c => c.delta < 0).sort((a,b)=> a.delta - b.delta).slice(0, 4);
+  const profitList = negatives.length >= 2 ? negatives : profiters;
 
   // When it lands — heuristic from shock categories
   const cats = selected.map(s => (s.cat || '').toLowerCase());
-  let whenText = '';
+  let whenLede = '';
+  let whenTimeline = [];
   if (cats.some(c => c.includes('logistic') || c.includes('geopolit'))) {
-    whenText = '<b>Days to weeks.</b> Logistics and supplier-ban shocks transmit fastest — port and corridor disruption shows in spot prices within 5–10 days.';
+    whenLede = `<b>Days to weeks.</b> Logistics and supplier-ban shocks transmit fastest — port and corridor disruption shows in spot prices within <span class="up">5–10 days</span>.`;
+    whenTimeline = [
+      {phase:'Spot price', when:'D 0–7'},
+      {phase:'Import contract', when:'D 14–30'},
+      {phase:'Retail shelves', when:'D 30–60'},
+    ];
   } else if (cats.some(c => c.includes('commodity'))) {
-    whenText = '<b>4–8 weeks.</b> Price shocks transmit through import contracts, then retail. Most import-dependent countries see CPI impact within two months.';
+    whenLede = `<b>4–8 weeks.</b> Price shocks transmit through import contracts, then retail. Most import-dependent countries see CPI impact within <span class="up">two months</span>.`;
+    whenTimeline = [
+      {phase:'Futures', when:'D 0–3'},
+      {phase:'Import unloading', when:'D 20–45'},
+      {phase:'Consumer CPI', when:'D 45–90'},
+    ];
   } else if (cats.some(c => c.includes('climate'))) {
-    whenText = '<b>One marketing year.</b> Climate shocks land at the next harvest — visible in stock-to-use ratios within 6–9 months.';
+    whenLede = `<b>One marketing year.</b> Climate shocks land at the next harvest — visible in stock-to-use ratios within <span class="up">6–9 months</span>.`;
+    whenTimeline = [
+      {phase:'Production forecast', when:'M 1–3'},
+      {phase:'Stocks-to-use', when:'M 6–9'},
+      {phase:'Import surge', when:'M 9–12'},
+    ];
   } else if (cats.some(c => c.includes('input'))) {
-    whenText = '<b>One growing season.</b> Fertilizer shocks compound through yield reductions at the next planting cycle (~6–12 months).';
+    whenLede = `<b>One growing season.</b> Fertilizer shocks compound through yield reductions at the next planting cycle (<span class="up">~6–12 months</span>).`;
+    whenTimeline = [
+      {phase:'Input cost rise', when:'D 0–14'},
+      {phase:'Planted area cut', when:'M 1–3'},
+      {phase:'Yield shortfall', when:'M 6–12'},
+    ];
   } else if (cats.some(c => c.includes('macro'))) {
-    whenText = '<b>Weeks.</b> FX-driven food inflation shows up at import unloading and in retail within 2–6 weeks.';
+    whenLede = `<b>Weeks.</b> FX-driven food inflation shows up at import unloading and in retail within <span class="up">2–6 weeks</span>.`;
+    whenTimeline = [
+      {phase:'FX move', when:'D 0'},
+      {phase:'Import cost', when:'D 7–21'},
+      {phase:'Retail CPI', when:'D 21–45'},
+    ];
   } else {
-    whenText = '<b>Weeks to months.</b> Mixed channels — fastest transmission via spot markets, slowest via production cycles.';
+    whenLede = `<b>Weeks to months.</b> Mixed channels — fastest transmission via spot markets, slowest via production cycles.`;
+    whenTimeline = [
+      {phase:'Spot/futures', when:'D 0–14'},
+      {phase:'Trade flows', when:'M 1–2'},
+      {phase:'Production impact', when:'M 3–12'},
+    ];
   }
 
-  const shockLabels = selected.map(s => s.label).join(' + ');
-  const headline = (() => {
-    if (breaks.length === 0) return 'Stress test complete';
-    const top = breaks[0];
-    if (top.delta >= 8) return `<em>${top.name}</em> cracks under ${shockLabels.toLowerCase()}.`;
-    if (top.delta >= 4) return `<em>${top.name}</em> takes the worst hit from ${shockLabels.toLowerCase()}.`;
-    return `Modest spread — ${top.name} leads under ${shockLabels.toLowerCase()}.`;
-  })();
+  // Sentence-as-title: weave selected shocks into a serif sentence
+  const shockSentenceParts = selected.map(s => {
+    const sev = scenarioSeverity[s.id];
+    const sevDisp = formatSev(sev, s.sevUnit);
+    return `<span class="var">${s.label.toLowerCase()} (${sevDisp})</span>`;
+  });
+  const sentence = shockSentenceParts.length === 1
+    ? `If <em>${shockSentenceParts[0]}</em> hits, here's what the model says.`
+    : `If ${shockSentenceParts.slice(0, -1).join(', ')} and ${shockSentenceParts.slice(-1)[0]} stack — here's what the model says.`;
 
   const today = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }).toUpperCase();
 
-  const breaksHtml = breaks.length
-    ? breaks.map(c => `<b>${c.name}</b> <span class="muted">+${c.delta.toFixed(1)} → ${c.newScore}</span>`).join(' · ')
-    : '<span class="muted">No country shifts meaningfully.</span>';
-  const buffersHtml = buffers.length
-    ? buffers.map(c => `<b>${c.name}</b> <span class="muted">+${c.delta.toFixed(1)}</span>`).join(' · ')
-    : '<span class="muted">No structurally exposed country buffered well.</span>';
+  // Build table rows: from → to with the "to" colored by direction
+  const fromToRows = (list) => list.length
+    ? list.map(c => {
+        const dir = c.delta > 0 ? 'up' : (c.delta < 0 ? 'down' : 'neutral');
+        return `<div class="scn-brief-table-row">
+          <span class="name">${c.name}</span>
+          <span class="from">${c.fdrs}</span>
+          <span class="arr">→</span>
+          <span class="to ${dir}">${c.newScore}</span>
+        </div>`;
+      }).join('')
+    : `<div class="scn-brief-table-row empty">No countries match.</div>`;
+
+  // "Who breaks" lede sentence
+  const topBreak = breaks[0];
+  const breakLede = topBreak
+    ? `<b>${topBreak.name}</b> shifts <span class="up">+${topBreak.delta.toFixed(1)} pts</span>, the biggest jump in the model. ${breaks.slice(1, 4).length ? `Also exposed: ${breaks.slice(1,4).map(c=>`<b>${c.name}</b>`).join(', ')}.` : ''}`
+    : `No country shifts meaningfully under this stack.`;
+
+  // "Who buffers" lede sentence
+  const topBuffer = buffers[0];
+  const bufferLede = topBuffer
+    ? `Despite a structural FDRS of ${topBuffer.fdrs}, <b>${topBuffer.name}</b> only moves <span class="up">+${topBuffer.delta.toFixed(1)}</span> — diversified supply or low exposure to this shock's channel.`
+    : `No structurally exposed country buffered well.`;
+
+  // "Who profits" lede
+  const profitLede = profitList.length
+    ? (negatives.length >= 2
+        ? `<b>${profitList[0].name}</b> sees its score <span class="down">improve ${profitList[0].delta.toFixed(1)}</span> under this stack.`
+        : `Major exporters of the shocked commodities — <b>${profitList.slice(0,3).map(c=>c.name).join(', ')}</b> — are positioned to gain share as prices rise.`)
+    : `No clear winners — the shock hits both producers and consumers.`;
 
   el.style.display = 'block';
   el.innerHTML = `
@@ -18061,27 +18247,43 @@ function _renderScenarioBrief(results, selected, stats) {
       <span class="dot"></span>
       <span>${today} · Stress test brief</span>
     </div>
-    <div class="scn-brief-headline">${headline}</div>
+    <div class="scn-brief-sentence">${sentence}</div>
     <div class="scn-brief-grid">
-      <div class="scn-brief-col">
-        <span class="scn-brief-col-lbl">Who breaks</span>
-        <span class="scn-brief-col-body">${breaksHtml}</span>
+      <div class="scn-brief-panel">
+        <span class="scn-brief-panel-num">01</span>
+        <span class="scn-brief-panel-title">Who breaks <em>first</em></span>
+        <div class="scn-brief-panel-lede">${breakLede}</div>
+        <div class="scn-brief-table">${fromToRows(breaks)}</div>
       </div>
-      <div class="scn-brief-col">
-        <span class="scn-brief-col-lbl">Who buffers</span>
-        <span class="scn-brief-col-body">${buffersHtml}</span>
+      <div class="scn-brief-panel">
+        <span class="scn-brief-panel-num">02</span>
+        <span class="scn-brief-panel-title">Who <em>buffers</em></span>
+        <div class="scn-brief-panel-lede">${bufferLede}</div>
+        <div class="scn-brief-table">${fromToRows(buffers)}</div>
       </div>
-      <div class="scn-brief-col">
-        <span class="scn-brief-col-lbl">Who profits</span>
-        <span class="scn-brief-col-body">${profitText}</span>
+      <div class="scn-brief-panel">
+        <span class="scn-brief-panel-num">03</span>
+        <span class="scn-brief-panel-title">Who <em>profits</em></span>
+        <div class="scn-brief-panel-lede">${profitLede}</div>
+        <div class="scn-brief-table">${fromToRows(profitList)}</div>
       </div>
-      <div class="scn-brief-col">
-        <span class="scn-brief-col-lbl">When it lands</span>
-        <span class="scn-brief-col-body">${whenText}</span>
+      <div class="scn-brief-panel">
+        <span class="scn-brief-panel-num">04</span>
+        <span class="scn-brief-panel-title">When it <em>lands</em></span>
+        <div class="scn-brief-panel-lede">${whenLede}</div>
+        <div class="scn-brief-table">
+          ${whenTimeline.map(t => `
+            <div class="scn-brief-table-row">
+              <span class="name">${t.phase}</span>
+              <span class="from"></span>
+              <span class="arr"></span>
+              <span class="to neutral" style="font-family:'Geist Mono',monospace;">${t.when}</span>
+            </div>`).join('')}
+        </div>
       </div>
     </div>
     <div class="scn-brief-footer">
-      <span class="scn-brief-method">Stack · ${shockLabels} &nbsp;·&nbsp; ${stats.crossing} cross a risk band &nbsp;·&nbsp; peak +${stats.maxDelta}pts</span>
+      <span class="scn-brief-method">${selected.length} shock${selected.length>1?'s':''} stacked · ${stats.crossing} cross a risk band · peak +${stats.maxDelta} pts</span>
       <button class="scn-brief-copy-btn" onclick="copyScenarioBrief()">Copy brief →</button>
     </div>`;
 }
@@ -23086,25 +23288,25 @@ function renderCompareTab() {
 // v15 FEATURE: COMMODITY DRILL-DOWN TAB
 // ════════════════════════════════════════════════════════════════════════════
 const COMMODITY_META = [
-  { key:'Wheat',      icon:'🌾', price:'$198/MT', chg:'-4.2%', chgDir:-1, note:'CBOT front month',
+  { key:'Wheat',      icon:'🌾', cat:'GRAIN',     price:'$198/MT', chg:'-4.2%', chgDir:-1, note:'CBOT front month',
     desc:'Staple grain for bread and pasta. Critical for food security in MENA and Sub-Saharan Africa.' },
-  { key:'Rice',       icon:'🍚', price:'$442/MT', chg:'+0.6%', chgDir:1,  note:'Thailand 5% broken',
+  { key:'Rice',       icon:'🍚', cat:'GRAIN',     price:'$442/MT', chg:'+0.6%', chgDir:1,  note:'Thailand 5% broken',
     desc:'Primary caloric source for over 3 billion people across Asia and Africa.' },
-  { key:'Corn',       icon:'🌽', price:'$164/MT', chg:'+1.8%', chgDir:1,  note:'CBOT front month',
+  { key:'Corn',       icon:'🌽', cat:'GRAIN',     price:'$164/MT', chg:'+1.8%', chgDir:1,  note:'CBOT front month',
     desc:'Used for food, animal feed and biofuels. Supply disruptions cascade through livestock prices.' },
-  { key:'Soybeans',   icon:'🫘', price:'$365/MT', chg:'-2.1%', chgDir:-1, note:'US Gulf FOB',
+  { key:'Soybeans',   icon:'🫘', cat:'OILSEED',   price:'$365/MT', chg:'-2.1%', chgDir:-1, note:'US Gulf FOB',
     desc:'Key protein source for animal feed globally. Brazil and US dominate supply.' },
-  { key:'Palm Oil',   icon:'🌴', price:'$870/MT', chg:'+3.1%', chgDir:1,  note:'Malaysia BMD',
+  { key:'Palm Oil',   icon:'🌴', cat:'OILSEED',   price:'$870/MT', chg:'+3.1%', chgDir:1,  note:'Malaysia BMD',
     desc:'World’s most consumed vegetable oil. Indonesia and Malaysia produce ~85% of global supply.' },
-  { key:'Sugar',      icon:'🍬', price:'$0.19/lb',chg:'-1.4%', chgDir:-1, note:'ICE #11 raw',
+  { key:'Sugar',      icon:'🍬', cat:'SWEETENER', price:'$0.19/lb',chg:'-1.4%', chgDir:-1, note:'ICE #11 raw',
     desc:'Produced from sugarcane and sugar beet. Brazil is the dominant exporter.' },
-  { key:'Coffee',     icon:'☕', price:'$2.20/lb',chg:'+12%',  chgDir:1,  note:'ICE Arabica C',
+  { key:'Coffee',     icon:'☕', cat:'SOFT',      price:'$2.20/lb',chg:'+12%',  chgDir:1,  note:'ICE Arabica C',
     desc:'High-value export crop for dozens of developing nations. Vulnerable to climate volatility.' },
-  { key:'Cocoa',      icon:'🍫', price:'$7800/MT',chg:'+38%',  chgDir:1,  note:'ICE front month',
+  { key:'Cocoa',      icon:'🍫', cat:'SOFT',      price:'$7800/MT',chg:'+38%',  chgDir:1,  note:'ICE front month',
     desc:'Historic price surge in 2024-25 due to West African crop failures.' },
-  { key:'Fertilizer', icon:'⚗️', price:'$310/MT', chg:'-8.4%', chgDir:-1, note:'Black Sea Urea FOB',
+  { key:'Fertilizer', icon:'⚗️', cat:'INPUT',     price:'$310/MT', chg:'-8.4%', chgDir:-1, note:'Black Sea Urea FOB',
     desc:'Urea and phosphate prices directly drive food production costs globally.' },
-  { key:'Cattle',     icon:'🐄', price:'$1.94/lb',chg:'+2.8%', chgDir:1,  note:'CME live cattle',
+  { key:'Cattle',     icon:'🐄', cat:'PROTEIN',   price:'$1.94/lb',chg:'+2.8%', chgDir:1,  note:'CME live cattle',
     desc:'Key protein source and livelihood for hundreds of millions of smallholder farmers.' },
 ];
 
@@ -23171,15 +23373,62 @@ function concBandColor(score) {
   return '#6ba36b';                    // green
 }
 
+// v22.2 — pick the "today's signal" — the commodity with the biggest absolute
+// month-on-month price move from live Pink Sheet data, OR (when no live signal)
+// the highest-concentration alert. Returns { cm, kind, headline, body } or null.
+function _commodityTodaysSignal() {
+  // Try live momentum first
+  const moves = COMMODITY_META.map(cm => {
+    const live = commodityLivePrice(cm.key);
+    if (!live || !live.chg || live.chg === 'n/a') return null;
+    const num = parseFloat(String(live.chg).replace('%','').replace('+',''));
+    if (isNaN(num)) return null;
+    return { cm, abs: Math.abs(num), num, live };
+  }).filter(Boolean);
+  if (moves.length) {
+    moves.sort((a,b) => b.abs - a.abs);
+    const top = moves[0];
+    if (top.abs >= 3) {
+      const dir = top.num > 0 ? 'up' : 'down';
+      const arrow = top.num > 0 ? '↑' : '↓';
+      const sign = top.num > 0 ? '+' : '';
+      return {
+        cm: top.cm,
+        kind: top.num > 0 ? 'alert' : 'info',
+        headline: `${top.cm.key} ${dir} ${arrow}${Math.abs(top.num).toFixed(1)}% month-on-month.`,
+        body: `${top.cm.key} prices are moving fastest of any tracked commodity this cycle (WB Pink Sheet · ${top.live.note.split(' · ').slice(-1)[0] || ''}).`,
+        consequence: `Largest exposure: countries with high import dependency on ${top.cm.key.toLowerCase()}.`
+      };
+    }
+  }
+  // Fall back to highest-concentration commodity
+  const concs = COMMODITY_META.map(cm => {
+    const c = commodityConcentration(cm.key);
+    return c ? { cm, score: c.score, story: c.story } : null;
+  }).filter(Boolean);
+  concs.sort((a,b) => b.score - a.score);
+  if (concs[0] && concs[0].score >= 70) {
+    const top = concs[0];
+    return {
+      cm: top.cm,
+      kind: 'watch',
+      headline: `${top.cm.key} sits at the top of the concentration risk list.`,
+      body: top.story.replace(/<[^>]+>/g, '') + '.',
+      consequence: 'A single-supplier disruption would transmit fastest here.'
+    };
+  }
+  return null;
+}
+
 function renderCommodityGrid() {
   const grid = document.getElementById('commodities-grid');
   if (!grid) return;
-  // v22 — Replace the static intro card with an editorial header inserted once.
-  // Older sessions injected `.commodity-intro`; remove it so we don't render
-  // both the old intro and the new editorial header.
   const wrap = grid.parentElement;
+  // v22.2 — drop the older injected intro card if present (legacy)
   const oldIntro = document.getElementById('commodity-intro');
   if (oldIntro) oldIntro.remove();
+  // Editorial header — only inject once, do NOT re-render on every refresh
+  // so the dateline doesn't reflow.
   if (wrap && !document.getElementById('commodity-editorial-header')) {
     const today = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }).toUpperCase();
     const header = document.createElement('div');
@@ -23188,57 +23437,81 @@ function renderCommodityGrid() {
     header.innerHTML = `
       <div class="editorial-dateline">
         <span class="dot"></span>
-        <span>${today} · Commodity Intelligence</span>
+        <span>Commodity Intelligence · ${today}</span>
       </div>
-      <div class="editorial-headline">Ten foods <em>carry the world</em> — and most of them flow through a handful of suppliers.</div>
+      <div class="editorial-headline">Track the food that <em>moves the world</em>.</div>
       <div class="editorial-standfirst">
-        Wheat, rice, maize, soybeans, palm oil, sugar, coffee, cocoa, fertilizer, beef — together they carry roughly <b>85% of globally traded food calories</b>. For each one, FoodShield surfaces the <b>chokepoint first</b>: who controls supply, how concentrated that supply is, and where the market is today. Click any card for full exposure detail.
+        Ten commodities carry roughly <b>85% of globally traded food calories</b>. For each, FoodShield surfaces the chokepoint first — who controls supply, how concentrated that supply is, where the market is today. Click any card for full exposure detail.
       </div>
       <div class="editorial-colophon">
-        <span class="src">Sources</span>
+        <span class="src">Prices</span><span>· FAO FFPI + World Bank Pink Sheet</span>
         <span class="sep">·</span>
-        <span>FAO Pink Sheet</span><span class="sep">·</span>
-        <span>World Bank Commodities</span><span class="sep">·</span>
-        <span>UN Comtrade</span><span class="sep">·</span>
-        <span>USDA PSD</span>
+        <span class="src">Concentration</span><span>· UN Comtrade + USDA PSD</span>
       </div>`;
     wrap.insertBefore(header, grid);
   }
-  // Slightly wider cards so the concentration story has room to breathe.
+  // v22.2 — "Today's signal" lede card. Re-render every time so it can refresh
+  // when new live data lands. Replace if it already exists.
+  if (wrap) {
+    let lede = document.getElementById('commodity-todays-signal');
+    if (lede) lede.remove();
+    const signal = _commoditiesInited ? _commodityTodaysSignal() : null;
+    if (signal) {
+      lede = document.createElement('div');
+      lede.id = 'commodity-todays-signal';
+      lede.className = `cmd-lede cmd-lede-${signal.kind}`;
+      lede.onclick = () => showCommodityDetail(signal.cm.key);
+      lede.innerHTML = `
+        <div class="cmd-lede-eyebrow">Today's signal</div>
+        <div class="cmd-lede-body">
+          <span class="cmd-lede-headline">${signal.headline}</span>
+          <span class="cmd-lede-secondary">${signal.body}</span>
+          <span class="cmd-lede-consequence">${signal.consequence}</span>
+        </div>
+        <div class="cmd-lede-cta">Open ${signal.cm.key} profile →</div>`;
+      wrap.insertBefore(lede, grid);
+    }
+  }
+  // Card grid — sharp corners, V1-reference layout
   grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(260px, 1fr))';
+  grid.style.gap = '0';
+  grid.style.border = 'none';
 
   grid.innerHTML = COMMODITY_META.map(cm => {
     const live = commodityLivePrice(cm.key);
-    const price = live ? live.price : cm.price;
+    // Split price into number + unit for the V1-style layout
+    const priceStr = live ? live.price : cm.price;
+    const priceMatch = String(priceStr).match(/^(\$[\d,.]+)\s*(.*)$/);
+    const priceNum = priceMatch ? priceMatch[1] : priceStr;
+    const priceUnit = priceMatch ? (priceMatch[2] || '') : '';
     const chg   = live ? live.chg   : cm.chg;
     const chgDir = live ? live.chgDir : cm.chgDir;
+    const chgNum = parseFloat(String(chg).replace('%','').replace('+',''));
+    const chgDisp = isNaN(chgNum) ? chg : `${chgDir>0?'↑':(chgDir<0?'↓':'·')} ${Math.abs(chgNum).toFixed(1)}%`;
     const note  = live ? live.note  : (cm.note + ' · baseline');
+    const noteUnit = priceUnit || (note.split(' · ').slice(-1)[0] || '');
     const conc = commodityConcentration(cm.key);
     const score = conc ? conc.score : null;
     const story = conc ? conc.story : `<span style="color:var(--t3);">Concentration data unavailable</span>`;
     const bandColor = score != null ? concBandColor(score) : 'var(--t3)';
     const alertPill = (score != null && score >= 70)
-      ? `<span class="cmd-card-alert"><span class="dot"></span>High concentration</span>`
+      ? `<span class="cmd-card-alert"><span class="dot"></span>Alert</span>`
       : '';
-    const baselineBadge = live ? '' : ` <span style="font-size:8.5px;color:var(--accent);background:rgba(138,166,196,0.12);padding:1px 5px;border-radius:3px;letter-spacing:.05em;text-transform:uppercase;">baseline</span>`;
     return `
     <div class="cmd-card" onclick="showCommodityDetail('${cm.key}')">
-      <div class="cmd-card-head">
-        <div class="cmd-card-icon">${cm.icon}</div>
-        <div class="cmd-card-name">${cm.key}</div>
-        ${alertPill}
+      <div class="cmd-card-topbar">${alertPill}</div>
+      <div class="cmd-card-name">${cm.key}</div>
+      <div class="cmd-card-cat">${cm.cat || ''}</div>
+      <div class="cmd-card-price-block">
+        <span class="cmd-card-price">${priceNum}</span>
+        <span class="cmd-card-chg" style="color:${chgDir>0?'#c44b3c':(chgDir<0?'#6ba36b':'var(--t3)')}">${chgDisp}</span>
       </div>
-      <div class="cmd-card-conc-row">
-        <span class="cmd-card-conc-score" style="color:${bandColor}">${score != null ? score : '—'}</span>
-        <span class="cmd-card-conc-lbl">Concentration</span>
-      </div>
+      <div class="cmd-card-unit">${noteUnit || '—'}</div>
+      <div class="cmd-card-conc-eyebrow">Concentration risk</div>
       <div class="cmd-card-conc-story">${story}</div>
-      <div class="cmd-card-price-row">
-        <div>
-          <div class="cmd-card-price">${price}${baselineBadge}</div>
-          <div class="cmd-card-note">${note}</div>
-        </div>
-        <div class="cmd-card-chg" style="color:${chgDir>0?'#c44b3c':(chgDir<0?'#6ba36b':'var(--t3)')}">${chg}</div>
+      <div class="cmd-card-conc-score-row">
+        <span class="cmd-card-conc-score" style="color:${bandColor}">${score != null ? score : '—'}</span>
+        <span class="cmd-card-conc-score-lbl">/ 100</span>
       </div>
     </div>`;
   }).join('');
