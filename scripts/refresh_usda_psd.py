@@ -122,58 +122,188 @@ ATTR_KEYS = {
 # FAS 2-char code → ISO3. PSD uses ISO 3166-1 alpha-2 for most countries with
 # a few FAS-specific deviations. This list covers the producers we care about
 # (every country that ships >50kt of any staple) plus typical importers.
+# Canonical USDA Foreign Agricultural Service 2-letter codes → ISO 3166-1 alpha-3.
+#
+# IMPORTANT: USDA FAS codes are NOT the same as ISO 3166-1 alpha-2. The FAS code
+# table is a legacy USDA scheme — e.g. Germany is "GM" (not "DE"), Belarus is
+# "BY" (not "BL"), Bulgaria is "BU" (not "BG"). Confusion in this dict has
+# caused several country-swap bugs in the served JSON (BGR↔Bangladesh,
+# ESP↔El Salvador, SRB↔Russia, BOL↔Belarus, NER↔Nigeria, NGA↔Niger, DEU absent).
+# Every entry below should be cross-referenced against the USDA FAS country
+# code list before editing — do NOT add entries by ISO-alpha-2 intuition.
 FAS_TO_ISO3 = {
-    # Major producers + exporters
-    "US": "USA", "AR": "ARG", "BR": "BRA", "AU": "AUS", "CA": "CAN",
-    "RU": "RUS", "UA": "UKR", "KZ": "KAZ", "FR": "FRA", "DE": "DEU",
-    "PL": "POL", "RO": "ROU", "HU": "HUN", "ES": "ESP", "IT": "ITA",
-    "TR": "TUR", "IN": "IND", "CH": "CHN", "TH": "THA", "VM": "VNM",
-    "MX": "MEX", "ID": "IDN", "ML": "MLI", "ET": "ETH", "EG": "EGY",
-    "KR": "KOR", "JA": "JPN", "BG": "BGD", "PK": "PAK", "PH": "PHL",
-    "MY": "MYS", "BD": "BGD", "NG": "NGA", "ZA": "ZAF", "RP": "PHL",
-    "MM": "MMR", "LA": "LAO", "KH": "KHM",
-    # FAS code "BU" is Bulgaria (NOT Burkina Faso). Burkina Faso is "UV".
-    # FAS code "ES" is El Salvador (NOT Spain). Spain is "SP".
-    # FAS code "RS" is Russia (NOT Serbia). Serbia is "RB" or "RI".
-    # These were the source of the BGR/Bangladesh, ESP/El Salvador, SRB/Russia swap bugs.
-    "BU": "BGR",  # Bulgaria
+    # ── Major producers + exporters (canonical FAS) ────────────────────────
+    "US": "USA",  # United States
+    "AR": "ARG",  # Argentina
+    "BR": "BRA",  # Brazil
+    "AU": "AUS",  # Australia
+    "CA": "CAN",  # Canada
+    "RS": "RUS",  # Russia (FAS code, NOT "RU")
+    "UP": "UKR",  # Ukraine (FAS uses "UP", not "UA")
+    "KZ": "KAZ",  # Kazakhstan
+    "FR": "FRA",  # France
+    "GM": "DEU",  # Germany (FAS uses "GM", NOT "DE")
+    "PL": "POL",  # Poland
+    "RO": "ROU",  # Romania
+    "HU": "HUN",  # Hungary
+    "SP": "ESP",  # Spain (FAS uses "SP", NOT "ES")
+    "IT": "ITA",  # Italy
+    "TU": "TUR",  # Turkey (FAS uses "TU", NOT "TR")
+    "IN": "IND",  # India
+    "CH": "CHN",  # China (FAS uses "CH", NOT "CN")
+    "TH": "THA",  # Thailand
+    "VM": "VNM",  # Vietnam
+    "MX": "MEX",  # Mexico
+    "ID": "IDN",  # Indonesia
+    "ML": "MLI",  # Mali
+    "ET": "ETH",  # Ethiopia
+    "EG": "EGY",  # Egypt
+    "KS": "KOR",  # Korea, South (FAS uses "KS")
+    "KN": "PRK",  # Korea, North (FAS uses "KN")
+    "JA": "JPN",  # Japan (FAS uses "JA", NOT "JP")
+    "BG": "BGD",  # Bangladesh (FAS uses "BG", NOT "BD")
+    "PK": "PAK",  # Pakistan
+    "RP": "PHL",  # Philippines (FAS uses "RP", NOT "PH")
+    "MY": "MYS",  # Malaysia
+    "NI": "NGA",  # Nigeria (FAS uses "NI" for Nigeria — common confusion source)
+    "NG": "NER",  # Niger (FAS uses "NG" for Niger — common confusion source)
+    "SF": "ZAF",  # South Africa (FAS uses "SF", NOT "ZA")
+    "BM": "MMR",  # Burma/Myanmar
+    "LA": "LAO",  # Laos
+    "CB": "KHM",  # Cambodia (FAS uses "CB", NOT "KH")
+    # ── Europe ─────────────────────────────────────────────────────────────
+    "BU": "BGR",  # Bulgaria (FAS — NOT Burkina Faso, which is "UV")
     "UV": "BFA",  # Burkina Faso (Upper Volta — historical USDA code)
-    "ES": "SLV",  # El Salvador (not Spain)
-    "SP": "ESP",  # Spain
-    "RS": "RUS",  # Russia (USDA Foreign Agricultural Service code)
+    "ES": "SLV",  # El Salvador (FAS uses "ES" — NOT Spain, which is "SP")
     "RB": "SRB",  # Serbia
     "RI": "SRB",  # Serbia (alternate)
-    "ER": "ERI", "SO": "SOM", "SU": "SDN", "SD": "SDN",
-    "YM": "YEM", "AF": "AFG", "IR": "IRN", "IZ": "IRQ", "SY": "SYR",
-    "DJ": "DJI", "LY": "LBY", "MO": "MAR", "TS": "TUN", "AG": "DZA",
-    "CO": "COL", "PE": "PER", "VE": "VEN", "EC": "ECU", "BO": "BOL",
-    "CL": "CHL", "PA": "PAN", "GT": "GTM", "HO": "HND", "NU": "NIC",
-    "CR": "CRI", "JM": "JAM", "CU": "CUB", "DR": "DOM",
-    "AL": "ALB", "MK": "MKD", "BK": "BIH", "MJ": "MNE",
-    "EN": "EST", "LH": "LTU", "LG": "LVA", "FI": "FIN", "SW": "SWE",
-    "DA": "DNK", "NL": "NLD", "BE": "BEL", "AT": "AUT", "EZ": "CZE",
-    "SI": "SVN", "SK": "SVK", "GR": "GRC", "PO": "PRT", "IC": "ISL",
-    "IE": "IRL", "NO": "NOR", "SZ": "CHE", "EI": "IRL", "UK": "GBR",
-    "TW": "TWN", "HK": "HKG", "KS": "KOR", "KN": "PRK", "MG": "MNG",
-    "TI": "TJK", "UZ": "UZB", "KG": "KGZ", "TX": "TKM", "AJ": "AZE",
-    "AM": "ARM", "GG": "GEO", "BO_": "BLR", "MD": "MDA",
-    "JO": "JOR", "LE": "LBN", "SA": "SAU", "AE": "ARE", "KU": "KWT",
-    "MU": "OMN", "QA": "QAT", "BA": "BHR", "IS": "ISR",
-    "AO": "AGO", "MZ": "MOZ", "ZI": "ZWE", "ZA_": "ZAF", "BC": "BWA",
-    "WA": "NAM", "LT": "LSO", "WZ": "SWZ", "MI": "MWI", "ZM": "ZMB",
-    "TZ": "TZA", "KE": "KEN", "UG": "UGA", "RW": "RWA", "BY": "BDI",
-    "CG": "COD", "CF": "COG", "GB": "GAB", "CM": "CMR", "CT": "CAF",
-    "CD": "TCD", "NI": "NER", "ML_": "MLI", "MR": "MRT", "SG": "SEN",
-    "GV": "GIN", "PU": "GNB", "GA": "GMB", "LI": "LBR", "SL": "SLE",
-    "TO": "TGO", "BN": "BEN", "IV": "CIV", "GH": "GHA", "CV": "CPV",
-    "PP": "PNG", "FJ": "FJI", "NZ": "NZL", "SH": "SHN", "MV": "MDV",
-    "CE": "LKA", "NP": "NPL", "BT": "BTN", "BX": "BRN",
-    # Aggregates — handled specially below
-    # "E4": "EU",  # 27-country aggregate
-    # "FU": "FSU", # Former Soviet Union (pre-1992)
+    "ER": "ERI",  # Eritrea
+    "SO": "SOM",  # Somalia
+    "SU": "SDN",  # Sudan (current)
+    "OD": "SSD",  # South Sudan (FAS uses "OD")
+    "YM": "YEM",  # Yemen
+    "AF": "AFG",  # Afghanistan
+    "IR": "IRN",  # Iran
+    "IZ": "IRQ",  # Iraq
+    "SY": "SYR",  # Syria
+    "DJ": "DJI",  # Djibouti
+    "LY": "LBY",  # Libya
+    "MO": "MAR",  # Morocco
+    "TS": "TUN",  # Tunisia
+    "AG": "DZA",  # Algeria
+    # ── Americas ───────────────────────────────────────────────────────────
+    "CO": "COL",  # Colombia
+    "PE": "PER",  # Peru
+    "VE": "VEN",  # Venezuela
+    "EC": "ECU",  # Ecuador
+    "BL": "BOL",  # Bolivia (FAS uses "BL", NOT "BO" — BO is Belarus)
+    "BO": "BLR",  # Belarus (FAS uses "BO" — common confusion source)
+    "CI": "CHL",  # Chile (FAS uses "CI", NOT "CL")
+    "PM": "PAN",  # Panama (FAS uses "PM", NOT "PA")
+    "PA": "PRY",  # Paraguay (FAS uses "PA" for Paraguay — common confusion source)
+    "GT": "GTM",  # Guatemala
+    "HO": "HND",  # Honduras
+    "NU": "NIC",  # Nicaragua
+    "CS": "CRI",  # Costa Rica (FAS uses "CS")
+    "JM": "JAM",  # Jamaica
+    "CU": "CUB",  # Cuba
+    "DR": "DOM",  # Dominican Republic
+    # ── Eastern Europe / Baltics ───────────────────────────────────────────
+    "AL": "ALB",  # Albania
+    "MK": "MKD",  # North Macedonia
+    "BK": "BIH",  # Bosnia and Herzegovina
+    "MJ": "MNE",  # Montenegro
+    "EN": "EST",  # Estonia
+    "LH": "LTU",  # Lithuania
+    "LG": "LVA",  # Latvia
+    "FI": "FIN",  # Finland
+    "SW": "SWE",  # Sweden
+    "DA": "DNK",  # Denmark
+    "NL": "NLD",  # Netherlands
+    "BE": "BEL",  # Belgium
+    "AU_AT": "AUT",  # Austria placeholder (FAS uses "AU" but that's Australia)
+    "EZ": "CZE",  # Czech Republic
+    "SI": "SVN",  # Slovenia
+    "LO": "SVK",  # Slovakia (FAS uses "LO")
+    "GR": "GRC",  # Greece
+    "PO": "PRT",  # Portugal (FAS uses "PO")
+    "IC": "ISL",  # Iceland
+    "EI": "IRL",  # Ireland (FAS uses "EI")
+    "NO": "NOR",  # Norway
+    "SZ": "CHE",  # Switzerland
+    "UK": "GBR",  # United Kingdom
+    # ── Asia ───────────────────────────────────────────────────────────────
+    "TW": "TWN",  # Taiwan
+    "HK": "HKG",  # Hong Kong
+    "MG": "MNG",  # Mongolia
+    "TI": "TJK",  # Tajikistan
+    "UZ": "UZB",  # Uzbekistan
+    "KG": "KGZ",  # Kyrgyzstan
+    "TX": "TKM",  # Turkmenistan
+    "AJ": "AZE",  # Azerbaijan
+    "AM": "ARM",  # Armenia
+    "GG": "GEO",  # Georgia
+    "MD": "MDA",  # Moldova
+    "JO": "JOR",  # Jordan
+    "LE": "LBN",  # Lebanon
+    "SA": "SAU",  # Saudi Arabia
+    "AE": "ARE",  # United Arab Emirates
+    "KU": "KWT",  # Kuwait
+    "MU": "OMN",  # Oman
+    "QA": "QAT",  # Qatar
+    "BA": "BHR",  # Bahrain
+    "IS": "ISR",  # Israel
+    # ── Africa ─────────────────────────────────────────────────────────────
+    "AO": "AGO",  # Angola
+    "MZ": "MOZ",  # Mozambique
+    "ZI": "ZWE",  # Zimbabwe
+    "BC": "BWA",  # Botswana
+    "WA": "NAM",  # Namibia
+    "LT": "LSO",  # Lesotho
+    "WZ": "SWZ",  # Eswatini
+    "MI": "MWI",  # Malawi
+    "ZA": "ZMB",  # Zambia (FAS uses "ZA" — NOT South Africa, which is "SF")
+    "TZ": "TZA",  # Tanzania
+    "KE": "KEN",  # Kenya
+    "UG": "UGA",  # Uganda
+    "RW": "RWA",  # Rwanda
+    "BY": "BDI",  # Burundi (FAS uses "BY" for Burundi — NOT Belarus, which is "BO")
+    "CG": "COD",  # Congo (Kinshasa) / DRC
+    "CF": "COG",  # Congo (Brazzaville)
+    "GB": "GAB",  # Gabon
+    "CM": "CMR",  # Cameroon
+    "CT": "CAF",  # Central African Republic
+    "CD": "TCD",  # Chad
+    "MR": "MRT",  # Mauritania
+    "SG": "SEN",  # Senegal
+    "GV": "GIN",  # Guinea
+    "PU": "GNB",  # Guinea-Bissau
+    "GA": "GMB",  # Gambia
+    "LI": "LBR",  # Liberia
+    "SL": "SLE",  # Sierra Leone
+    "TO": "TGO",  # Togo
+    "BN": "BEN",  # Benin
+    "IV": "CIV",  # Cote d'Ivoire
+    "GH": "GHA",  # Ghana
+    "CV": "CPV",  # Cabo Verde
+    # ── Oceania + small states ─────────────────────────────────────────────
+    "PP": "PNG",  # Papua New Guinea
+    "FJ": "FJI",  # Fiji
+    "NZ": "NZL",  # New Zealand
+    "SH": "SHN",  # Saint Helena
+    "MV": "MDV",  # Maldives
+    "CE": "LKA",  # Sri Lanka
+    "NP": "NPL",  # Nepal
+    "BT": "BTN",  # Bhutan
+    "BX": "BRN",  # Brunei
+    # Aggregates — explicitly NOT mapped so they're dropped:
+    # "E4": EU 27-country aggregate
+    # "FU": Former Soviet Union (pre-1992)
 }
 
 # Country names we'll also match by string if FAS code missing/ambiguous.
+# This is the safety net for when the FAS_TO_ISO3 dict is missing a code —
+# the country_name column in PSD bulk CSV always carries the canonical name.
 NAME_TO_ISO3 = {
     "United States": "USA", "Argentina": "ARG", "Brazil": "BRA",
     "Australia": "AUS", "Canada": "CAN", "Russia": "RUS", "Ukraine": "UKR",
@@ -192,6 +322,56 @@ NAME_TO_ISO3 = {
     "Morocco": "MAR", "Tunisia": "TUN", "Sudan": "SDN", "Yemen": "YEM",
     "Afghanistan": "AFG", "Iraq": "IRQ", "Syria": "SYR", "Lebanon": "LBN",
     "Jordan": "JOR", "Israel": "ISR",
+    # Countries previously misrouted (May 2026 dict swap fix). These are the
+    # name-based safety nets that catch the row even if a future dict edit
+    # drops/renames the FAS code. Names below MUST match the country_name
+    # string USDA emits in the CSV — verified May 2026.
+    "Germany": "DEU",
+    "Belarus": "BLR",
+    "Bolivia": "BOL",
+    "Niger": "NER",
+    "Bulgaria": "BGR",
+    "Burkina Faso": "BFA",
+    "El Salvador": "SLV",
+    "Spain": "ESP",
+    "Serbia": "SRB",
+    "Paraguay": "PRY",
+    "Panama": "PAN",
+    "Chile": "CHL",
+    "Slovakia": "SVK",
+    "Austria": "AUT",
+    "France": "FRA", "Italy": "ITA", "Poland": "POL", "Romania": "ROU",
+    "Hungary": "HUN", "Netherlands": "NLD", "Belgium": "BEL",
+    "Czech Republic": "CZE", "Slovenia": "SVN", "Greece": "GRC",
+    "Portugal": "PRT", "Sweden": "SWE", "Denmark": "DNK", "Finland": "FIN",
+    "Norway": "NOR", "Switzerland": "CHE", "Ireland": "IRL", "Iceland": "ISL",
+    "Estonia": "EST", "Latvia": "LVA", "Lithuania": "LTU",
+    "Albania": "ALB", "North Macedonia": "MKD", "Bosnia and Herzegovina": "BIH",
+    "Montenegro": "MNE", "Moldova": "MDA",
+    "Kazakhstan": "KAZ", "Uzbekistan": "UZB", "Tajikistan": "TJK",
+    "Kyrgyzstan": "KGZ", "Turkmenistan": "TKM",
+    "Azerbaijan": "AZE", "Armenia": "ARM", "Georgia": "GEO",
+    "Cambodia": "KHM", "Laos": "LAO", "Mongolia": "MNG", "Nepal": "NPL",
+    "Sri Lanka": "LKA", "Bhutan": "BTN", "Brunei": "BRN", "Maldives": "MDV",
+    "Kenya": "KEN", "Uganda": "UGA", "Tanzania": "TZA", "Rwanda": "RWA",
+    "Burundi": "BDI", "Zambia": "ZMB", "Malawi": "MWI", "Mozambique": "MOZ",
+    "Zimbabwe": "ZWE", "Namibia": "NAM", "Botswana": "BWA", "Lesotho": "LSO",
+    "Eswatini": "SWZ", "Angola": "AGO", "Madagascar": "MDG",
+    "Mali": "MLI", "Senegal": "SEN", "Guinea": "GIN", "Guinea-Bissau": "GNB",
+    "Liberia": "LBR", "Sierra Leone": "SLE", "Togo": "TGO", "Benin": "BEN",
+    "Ghana": "GHA", "Cote d'Ivoire": "CIV", "Cabo Verde": "CPV",
+    "Cameroon": "CMR", "Central African Republic": "CAF", "Chad": "TCD",
+    "Congo (Kinshasa)": "COD", "Congo (Brazzaville)": "COG", "Gabon": "GAB",
+    "Mauritania": "MRT", "Gambia, The": "GMB",
+    "Cuba": "CUB", "Jamaica": "JAM", "Dominican Republic": "DOM",
+    "Honduras": "HND", "Guatemala": "GTM", "Nicaragua": "NIC",
+    "Costa Rica": "CRI", "Colombia": "COL", "Peru": "PER", "Ecuador": "ECU",
+    "Venezuela": "VEN",
+    "Eritrea": "ERI", "Somalia": "SOM", "Djibouti": "DJI",
+    "South Sudan": "SSD",
+    "Papua New Guinea": "PNG", "Fiji": "FJI", "New Zealand": "NZL",
+    "Kuwait": "KWT", "Oman": "OMN", "Qatar": "QAT", "Bahrain": "BHR",
+    "Thailand": "THA", "Japan": "JPN",
 }
 
 

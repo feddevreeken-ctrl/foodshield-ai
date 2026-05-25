@@ -184,6 +184,17 @@ def main():
         for filename, msg in critical_failures:
             print(f"  - {filename}: {msg}")
 
+    # Cross-file content checks (May 2026): a corrupt envelope can still be
+    # valid JSON, so we run targeted semantic checks for known-bug-prone files.
+    psd_failures = validate_usda_psd()
+    if psd_failures:
+        print("\nUSDA PSD content failures:")
+        for msg in psd_failures:
+            print(f"  - {msg}")
+        # Treat any PSD content failure as critical — these are silent-data-
+        # corruption bugs that have re-emerged 3+ times during 2026.
+        critical_failures.extend(("usda_psd.json", m) for m in psd_failures)
+
     if len(critical_failures) >= CRITICAL_FAILURE_THRESHOLD:
         print(f"\n{len(critical_failures)} critical failures (>= {CRITICAL_FAILURE_THRESHOLD} threshold). "
               f"Exiting non-zero so the workflow status reflects reality.")
@@ -194,6 +205,159 @@ def main():
               f"threshold so the workflow keeps going, but watch the next refresh.")
 
     sys.exit(0)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# USDA PSD content-integrity checks
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Background: refresh_usda_psd.py uses a FAS_TO_ISO3 dict that has been
+# repeatedly mis-edited, producing country-swap bugs in the served JSON:
+#   - BOL key contained Belarus data (BO is FAS for Belarus, not Bolivia)
+#   - NER key contained Nigeria data (NI is FAS for Nigeria, not Niger)
+#   - NGA key contained Niger data (NG is FAS for Niger, not Nigeria)
+#   - PAN key contained Paraguay data (PA is FAS for Paraguay)
+#   - DEU absent (GM is FAS for Germany, dict had only "DE")
+# These checks fail loudly if any of those swaps reappear, plus a coarse
+# coverage check so we notice if the parser stops capturing imports/exports.
+
+# Canonical country_name → ISO3 for high-stakes cross-checks. Names taken
+# directly from USDA PSD bulk CSV.
+PSD_NAME_TO_ISO = {
+    "Bolivia": "BOL",
+    "Belarus": "BLR",
+    "Niger": "NER",
+    "Nigeria": "NGA",
+    "Germany": "DEU",
+    "Bulgaria": "BGR",
+    "Bangladesh": "BGD",
+    "El Salvador": "SLV",
+    "Spain": "ESP",
+    "Serbia": "SRB",
+    "Russia": "RUS",
+    "Paraguay": "PRY",
+    "Panama": "PAN",
+    "Burkina Faso": "BFA",
+    "Philippines": "PHL",
+    "Burundi": "BDI",
+    "Burma": "MMR",
+    "Korea, South": "KOR",
+    "Korea, North": "PRK",
+}
+
+
+def _get_country_name(body):
+    if not isinstance(body, dict):
+        return None
+    for cmd, cval in body.items():
+        if isinstance(cval, dict) and 'country' in cval:
+            return cval['country']
+    return None
+
+
+def validate_usda_psd():
+    """Returns list of failure messages (empty list = all good)."""
+    p = DATA_DIR / 'usda_psd.json'
+    failures = []
+    if not p.exists():
+        return ["usda_psd.json missing"]
+
+    try:
+        env = json.loads(p.read_text())
+    except json.JSONDecodeError as e:
+        return [f"usda_psd.json parse error: {e}"]
+
+    data = env.get('data') or {}
+    if not isinstance(data, dict) or not data:
+        return ["usda_psd.json data dict empty/non-dict"]
+
+    # Check 1 — no known ISO/name swaps. Critical-bug list from May 2026.
+    KNOWN_BAD = {
+        ('BOL', 'Belarus'),
+        ('BLR', 'Bolivia'),
+        ('NER', 'Nigeria'),
+        ('NGA', 'Niger'),
+        ('PAN', 'Paraguay'),
+        ('PRY', 'Panama'),
+        ('BGR', 'Bangladesh'),
+        ('BGD', 'Bulgaria'),
+        ('SLV', 'Spain'),
+        ('ESP', 'El Salvador'),
+        ('SRB', 'Russia'),
+        ('RUS', 'Serbia'),
+        ('BDI', 'Belarus'),
+        ('DEU', 'Germany'),  # this would actually be OK; never flagged as a bug
+    }
+    KNOWN_BAD.discard(('DEU', 'Germany'))  # explicit allow
+
+    swap_failures = []
+    for iso, body in data.items():
+        name = _get_country_name(body)
+        if not name:
+            continue
+        if (iso, name) in KNOWN_BAD:
+            swap_failures.append(f"key {iso} contains country '{name}' (known-bad swap)")
+
+    if swap_failures:
+        failures.extend(swap_failures)
+
+    # Check 2 — for every ISO that points at a canonical-mapped name, ISO
+    # must equal the canonical ISO for that name.
+    name_mismatches = []
+    for iso, body in data.items():
+        name = _get_country_name(body)
+        if not name:
+            continue
+        expected_iso = PSD_NAME_TO_ISO.get(name)
+        if expected_iso and expected_iso != iso:
+            name_mismatches.append(
+                f"key {iso} stores country '{name}' but canonical ISO is {expected_iso}"
+            )
+    if name_mismatches:
+        failures.extend(name_mismatches)
+
+    # Check 3 — imports_kt and exports_kt non-null for at least 50 rows total.
+    # If the parser regresses (May 2026 attribute-label drift), these go to
+    # zero across the board and the frontend falls back to heuristics.
+    imports_rows = 0
+    exports_rows = 0
+    imports_zero_iso = []
+    for iso, body in data.items():
+        if not isinstance(body, dict):
+            continue
+        for cmd, cval in body.items():
+            if not isinstance(cval, dict):
+                continue
+            if cval.get('imports_kt') is not None:
+                imports_rows += 1
+            if cval.get('exports_kt') is not None:
+                exports_rows += 1
+
+    if imports_rows < 50:
+        failures.append(
+            f"only {imports_rows} country×commodity rows have non-null imports_kt "
+            f"(threshold: 50). Parser may have regressed on Attribute_Description label."
+        )
+    if exports_rows < 50:
+        failures.append(
+            f"only {exports_rows} country×commodity rows have non-null exports_kt "
+            f"(threshold: 50). Parser may have regressed on Attribute_Description label."
+        )
+
+    # Print summary (always, success or failure)
+    print()
+    print("=== USDA PSD content checks ===")
+    print(f"  countries:        {len(data)}")
+    print(f"  imports rows:     {imports_rows} (threshold >=50)")
+    print(f"  exports rows:     {exports_rows} (threshold >=50)")
+    print(f"  swap checks:      {'PASS' if not swap_failures else 'FAIL'}")
+    print(f"  name-match check: {'PASS' if not name_mismatches else 'FAIL'}")
+    for k in ('BOL', 'BLR', 'NER', 'NGA', 'DEU', 'PAN', 'PRY'):
+        name = _get_country_name(data.get(k)) if k in data else None
+        marker = name if name else "(absent)"
+        print(f"  {k}: {marker}")
+
+    return failures
 
 
 if __name__ == "__main__":

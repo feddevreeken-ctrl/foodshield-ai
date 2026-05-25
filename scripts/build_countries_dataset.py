@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -161,6 +162,12 @@ def main():
         "previous_schema_version": existing_meta.get("schema_version"),
     }
 
+    # Validate before writing. If the parser regresses (e.g. swallows the
+    # COUNTRIES literal again because of a future HTML edit), fail loudly
+    # instead of overwriting countries.json with a 1-row stub.
+    names = getattr(_extract_legacy_rows, "names", {})
+    _validate_dataset(ordered, names)
+
     payload = {"countries": ordered}
     OUT_PATH.write_text(
         json.dumps({"_meta": meta, "data": payload}, indent=2, ensure_ascii=False)
@@ -172,11 +179,14 @@ def _extract_legacy_rows():
     text = HTML_PATH.read_text()
     blocks = _country_blocks(text)
     rows = {}
+    names = {}
     for block in blocks:
         head = re.split(r"\n\s*ai:", block, maxsplit=1)[0]
         iso = _match_string(head, "iso")
         if not iso:
             continue
+        name = _match_string(head, "name")
+        names[iso] = name
         rows[iso] = {
             "fdrs": _match_number(head, "fdrs"),
             "c": _match_array(head, "c"),
@@ -192,10 +202,81 @@ def _extract_legacy_rows():
             "suppliers": _match_array(head, "suppliers"),
             "supPct": _match_array(head, "supPct"),
         }
+    # Stash names on the function so main() can validate without changing the
+    # downstream rows schema. countries.json itself does not store country
+    # names — those live with the embedded COUNTRIES array — but we still want
+    # to reject blocks where the legacy literal is missing a usable name.
+    _extract_legacy_rows.names = names
     return rows
 
 
+REQUIRED_ISOS = {"USA", "CHN", "IND", "NLD", "DEU", "BRA", "NGA", "NER", "BOL", "BLR", "SDN"}
+MIN_COUNTRY_COUNT = 150
+
+
+def _validate_dataset(ordered, names):
+    """Hard-fail if the structural overlay regresses below baseline coverage.
+
+    History: the parser silently extracted only SDN after JS line-comment
+    apostrophes confused the string-detection logic, producing a 1-country
+    countries.json. Validation guards against that class of silent regression.
+    """
+    errors = []
+
+    # 1. Minimum country count.
+    n = len(ordered)
+    if n < MIN_COUNTRY_COUNT:
+        errors.append(
+            f"coverage.countries = {n}, expected >= {MIN_COUNTRY_COUNT}. "
+            "The COUNTRIES parser likely misread index.html."
+        )
+
+    # 2. Required ISO set must be present.
+    missing = sorted(REQUIRED_ISOS - set(ordered.keys()))
+    if missing:
+        errors.append(
+            f"Required ISO3 codes missing from output: {missing}. "
+            f"Found {n} countries; expected all of {sorted(REQUIRED_ISOS)}."
+        )
+
+    # 3. Per-row sanity: iso must be a non-empty string, name must be present
+    #    and a non-empty string in the source literal.
+    bad_rows = []
+    for iso in ordered:
+        if not isinstance(iso, str) or not iso.strip():
+            bad_rows.append({"iso": repr(iso), "reason": "iso not a non-empty string"})
+            continue
+        name = names.get(iso)
+        if not isinstance(name, str) or not name.strip():
+            bad_rows.append({"iso": iso, "name": repr(name), "reason": "missing/empty name"})
+    if bad_rows:
+        errors.append(f"{len(bad_rows)} rows failed iso/name validation: {bad_rows[:10]}")
+
+    if errors:
+        print("[ERROR] countries.json validation failed:", file=sys.stderr)
+        for msg in errors:
+            print(f"  - {msg}", file=sys.stderr)
+        sys.exit(1)
+
+
 def _country_blocks(text: str):
+    """Extract each top-level country object literal from the embedded
+    `const COUNTRIES = [...]` array in index.html.
+
+    The previous implementation walked the array as raw characters and treated
+    both `"` and `'` as string delimiters. The COUNTRIES literal contains JS
+    line comments like `// Sudan's top wheat suppliers...` whose apostrophes
+    were misread as the opening quote of a long string, swallowing every
+    subsequent `{` / `}` until another apostrophe appeared far downstream. As
+    a result only the first country (SDN) was extracted.
+
+    This implementation:
+      * Skips `//` line comments and `/* ... */` block comments.
+      * Treats only `"` as a string delimiter (the COUNTRIES literal never
+        uses single-quoted strings; all string values are double-quoted).
+      * Counts `{` / `}` with proper string-awareness to find each top-level
+        country object.
+    """
     start = text.find("const COUNTRIES = [")
     if start == -1:
         raise RuntimeError("Could not find COUNTRIES array in index.html")
@@ -206,33 +287,51 @@ def _country_blocks(text: str):
     blocks = []
     level = 0
     current_start = None
-    in_string = None
+    in_string = False
     escape = False
     pos = arr_start + 1
+    n = len(text)
 
-    while pos < len(text):
+    while pos < n:
         ch = text[pos]
+
         if in_string:
             if escape:
                 escape = False
             elif ch == "\\":
                 escape = True
-            elif ch == in_string:
-                in_string = None
-        else:
-            if ch in {'"', "'"}:
-                in_string = ch
-            elif ch == "{":
-                if level == 0:
-                    current_start = pos
-                level += 1
-            elif ch == "}":
-                level -= 1
-                if level == 0 and current_start is not None:
-                    blocks.append(text[current_start:pos + 1])
-                    current_start = None
-            elif ch == "]" and level == 0:
-                break
+            elif ch == '"':
+                in_string = False
+            pos += 1
+            continue
+
+        # Outside strings: skip JS comments before doing structural counting.
+        if ch == "/" and pos + 1 < n:
+            nxt = text[pos + 1]
+            if nxt == "/":
+                # Line comment — skip to end of line.
+                nl = text.find("\n", pos + 2)
+                pos = n if nl == -1 else nl + 1
+                continue
+            if nxt == "*":
+                # Block comment — skip to closing */.
+                end = text.find("*/", pos + 2)
+                pos = n if end == -1 else end + 2
+                continue
+
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            if level == 0:
+                current_start = pos
+            level += 1
+        elif ch == "}":
+            level -= 1
+            if level == 0 and current_start is not None:
+                blocks.append(text[current_start:pos + 1])
+                current_start = None
+        elif ch == "]" and level == 0:
+            break
         pos += 1
 
     if not blocks:

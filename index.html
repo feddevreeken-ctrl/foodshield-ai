@@ -11776,6 +11776,82 @@ function renderDataStatusTab() {
       </div>
     </div>
 
+    <!-- v22 — Per-pipeline coverage card: real counts from LIVE / data files -->
+    <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:12px;padding:18px 22px;margin-bottom:18px;">
+      <div style="font-size:10.5px;color:var(--t3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:12px;">Live pipeline coverage</div>
+      ${(()=>{
+        // Build coverage rows from actual LIVE structures + manifest.
+        const lines = [];
+        const dot = c => `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${c};margin-right:6px;"></span>`;
+        const fmtRow = (label, cntHtml, color, note) => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--b1);gap:14px;flex-wrap:wrap;">
+            <div style="font-size:12px;color:var(--t1);font-weight:600;display:flex;align-items:center;">${dot(color)}${label}</div>
+            <div style="font-family:'Geist Mono',monospace;font-size:11.5px;color:var(--t2);text-align:right;">${cntHtml}${note ? `<span style=\"font-family:'Geist',sans-serif;font-size:10.5px;color:var(--t3);margin-left:8px;\">${note}</span>` : ''}</div>
+          </div>`;
+
+        // data/countries.json provenance overlay
+        try {
+          const n = (LIVE.countries_overlay_count != null) ? LIVE.countries_overlay_count
+                  : (LIVE.countries_overlay ? Object.keys(LIVE.countries_overlay).length : null);
+          const color = (n == null || n === 0) ? '#c44b3c' : (n < 20 ? '#c9a957' : '#6ba36b');
+          const note  = (n != null && n < 20)
+            ? 'overlay under-populated; embedded heritage values rendered as fallback'
+            : '';
+          lines.push(fmtRow('data/countries.json overlay', n == null ? '—' : `${n} countries`, color, note));
+        } catch(e) {}
+
+        // CCKP
+        try {
+          const n = LIVE.cckp ? Object.keys(LIVE.cckp).length : 0;
+          const color = n === 0 ? '#c44b3c' : (n < 50 ? '#c9a957' : '#6ba36b');
+          lines.push(fmtRow('WB CCKP climate projections', `${n} countries`, color, n === 0 ? 'no coverage — 2030 climate kick falls back to heritage' : ''));
+        } catch(e) {}
+
+        // ND-GAIN
+        try {
+          const n = LIVE.ndgain ? Object.keys(LIVE.ndgain).length : 0;
+          const failed = !!(LIVE.manifest?.sources?.ndgain?.status === 'failed' || LIVE.manifest?.sources?.ndgain?.status === 'degraded');
+          const color = (n === 0 || failed) ? '#c44b3c' : (n < 100 ? '#c9a957' : '#6ba36b');
+          const note = n === 0 ? 'last download failed — climate component falls back to heritage' : (failed ? 'last refresh degraded' : '');
+          lines.push(fmtRow('ND-GAIN Country Index', `${n} countries`, color, note));
+        } catch(e) {}
+
+        // USDA PSD
+        try {
+          const countries = LIVE.psd ? Object.keys(LIVE.psd) : [];
+          let commodities = 0;
+          for (const k of countries) {
+            const inner = LIVE.psd[k];
+            if (inner && typeof inner === 'object') commodities = Math.max(commodities, Object.keys(inner).length);
+          }
+          const n = countries.length;
+          const color = n === 0 ? '#c44b3c' : '#6ba36b';
+          lines.push(fmtRow('USDA PSD (wheat/rice/corn/soy)', `${n} countries × ${commodities} commodities`, color, n === 0 ? 'no PSD data loaded' : ''));
+        } catch(e) {}
+
+        // ReliefWeb
+        try {
+          let evCount = 0;
+          const rw = LIVE.reliefweb || {};
+          if (rw.events && Array.isArray(rw.events)) evCount = rw.events.length;
+          else {
+            for (const k of Object.keys(rw)) {
+              const v = rw[k];
+              if (Array.isArray(v)) evCount += v.length;
+              else if (v && typeof v === 'object') evCount += 1;
+            }
+          }
+          const color = evCount === 0 ? '#c44b3c' : (evCount < 10 ? '#c9a957' : '#6ba36b');
+          lines.push(fmtRow('ReliefWeb situation reports', `${evCount} events`, color, evCount === 0 ? 'no events loaded' : ''));
+        } catch(e) {}
+
+        return lines.join('');
+      })()}
+      <div style="font-size:10.5px;color:var(--t3);margin-top:10px;line-height:1.5;">
+        Counts read live from the JSON manifests loaded into the browser. Any pipeline showing 0 or degraded is honestly reflected in the methodology and 2030 outlook — those sections fall back to heritage structural values and label the result <b style="color:#c44b3c">illustrative</b>.
+      </div>
+    </div>
+
     <!-- Audit table -->
     <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:12px;overflow:hidden;margin-bottom:18px;">
       <div style="padding:14px 18px;border-bottom:1px solid var(--b1);background:var(--bg0);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
@@ -11982,6 +12058,9 @@ async function loadLiveData() {
   try {
     const provData = await _fetchData('countries');
     const overrides = provData?.data?.countries || provData?.countries || {};
+    // v22 honesty pass — expose overlay coverage count for the Data Status panel.
+    LIVE.countries_overlay = overrides;
+    LIVE.countries_overlay_count = Object.keys(overrides || {}).length;
     if (Array.isArray(window.COUNTRIES) && Object.keys(overrides).length) {
       let touched = 0, fieldsApplied = 0;
       for (const c of COUNTRIES) {
@@ -16876,7 +16955,7 @@ function renderForecastWhy(c, delta, trendUp, futureCol, todayCol){
         </div>
         <div class="fc-method-list">
           <div><span class="fc-method-step">01</span><span><b style="color:var(--t1)">Baseline</b> · curated heritage structural vintage (FAO/USDA/WB)</span></div>
-          <div><span class="fc-method-step">02</span><span><b style="color:var(--t1)">Climate component</b> · when ${ac('CCKP')} and ${ac('ND-GAIN')} are populated (currently degraded — see Data Status), the climate kick is derived from them; today it falls back to the heritage structural value</span></div>
+          <div><span class="fc-method-step">02</span><span><b style="color:var(--t1)">Climate component</b> · when ${ac('CCKP')}/${ac('ND-GAIN')} coverage is populated, the climate component derives from them; today, with both sources degraded, the component falls back to the heritage structural value (see Data Status)</span></div>
           <div><span class="fc-method-step">03</span><span><b style="color:var(--t1)">Demographic scale</b> · UN WPP medium-scenario population</span></div>
           <div><span class="fc-method-step">04</span><span><b style="color:var(--t1)">Geopolitical overlay</b> · ${ac('ACLED')} conflict + active sanctions (qualitative)</span></div>
           <div><span class="fc-method-step">05</span><span><b style="color:var(--t1)">Live overlay</b> · persistent shocks nudge the 2030 number by up to +8 pts</span></div>
@@ -17057,11 +17136,13 @@ function renderScenarioTab() {
           Featured · Crisis scenario · May 2026
         </div>
         <div class="scn-crisis-title">
-          If <em>Russia halts wheat exports</em> for six months — who flips?
+          <em>Major wheat supplier export shock</em> — who flips?
+        </div>
+        <div class="scn-crisis-subtitle" style="font-size:11.5px;color:var(--t3);margin:6px 0 10px;line-height:1.45;">
+          Uses supplier concentration exposure; not a Russia-specific bilateral simulation unless Russia-specific dependency data is available.
         </div>
         <div class="scn-crisis-body">
-          Russia and Ukraine produce 30% of global wheat. In the model, a six-month
-          export shutdown stacked with a top-supplier export ban pushes
+          The top supplier of wheat tends to concentrate 25–45% of imports for many countries. In the model, a wheat-price spike stacked with a top-supplier export ban pushes
           <b>${_featuredPreview ? _featuredPreview.crossingVuln : '—'} countries</b>
           across the Vulnerable threshold — most of them Sub-Saharan Africa and
           MENA, already under climate stress.
@@ -17280,8 +17361,10 @@ function clearScenarios(){
   document.getElementById('scn-results').style.display = 'none';
 }
 
-// Featured "Crisis Room" scenario — Russian wheat export halt.
-// Layers wheat-price spike + Black Sea logistics shock at high severity.
+// Featured "Crisis Room" scenario — Major wheat supplier export shock.
+// Uses supplier concentration exposure (top-supplier export ban + wheat-price spike).
+// Not a Russia-specific bilateral simulation — applied symmetrically across all
+// countries via the c.c[1] supplier-concentration component.
 function runFeaturedScenario(){
   // Clear existing
   activeScenarios.forEach(id => {
@@ -18075,7 +18158,7 @@ const TOUR_STEPS = [
   {
     selector: '#tab-forecast',
     title: '2030 Modeled Outlook',
-    body: `A modeled scenario, not a back-tested forecast. Each country's 2030 number is a curated structural baseline plus a small modeled live overlay. When ${ac('CCKP')} and ${ac('ND-GAIN')} are populated (currently degraded — see Data Status), they shape the climate component; today it falls back to the heritage structural value.`,
+    body: `An illustrative scenario estimate, not a back-tested forecast. Each country's 2030 number combines the current baseline with legacy embedded assumptions and available risk proxies. When ${ac('CCKP')}/${ac('ND-GAIN')} coverage is populated, the climate component derives from them; today, with both sources degraded, the component falls back to the heritage structural value (see Data Status).`,
     before: () => {
       try { showTab('forecast'); } catch(e){}
       return 500;
@@ -19737,7 +19820,7 @@ function renderMethodologyTab() {
         <br><b style="color:var(--t1)">v20.1.</b> Food-inflation signal now reads from the freshest available source per country: WFP HungerMap (crisis countries) &gt; Eurostat HICP (EU monthly) &gt; FAOSTAT food CPI (global annual) &gt; World Bank headline CPI fallback.
         <br><b style="color:var(--t1)">v20.2.</b> Added <b>Supply-Chain Exposure</b> as a 7th structural sub-component (weight 8%). Captures TRADE import dependency, distinct from caloric reliance. Resolves the "Netherlands shows 0% rice dependency despite importing $481M of rice annually" class of issue. Commodity rows in country panels now display <b>both caloric share AND trade dependency</b>. Existing weights re-balanced (28/18/14/14/9/9/8 = 100). Country FDRS values may shift by up to ±7 points; relative rankings preserved.
         <br><b style="color:var(--t1)">v20.5–v20.25.</b> Per-metric provenance system added (see card below). Pipelines added: FAOSTAT FBS (caloric shares for 174 countries), FAOSTAT TCL (observed net food trade ~190 countries), WB WDI bulk (20 structural indicators), WB WGI (6 governance indicators), WB WFSO (food-security outlook), USDA PSD (observed staples production/imports/exports for wheat/rice/corn/soybeans), ND-GAIN climate, WRI Aqueduct water risk, EU JRC INFORM risk. Static-link helpers for FAO GIEWS, FEWS NET, WFP ACR, USDA GAIN. Cron cadence moved from daily 06:00 UTC to every 6h. Source-health pill now shows last-refresh age in human terms.
-        <br><b style="color:var(--t1)">v20.26–v20.27.</b> Pipelines added: WB LPI (logistics performance), UNDP HDI (human development), WB CCKP (climate projections). Calculations wiring: <b>structural FDRS climate component</b> (c[4]) now derived 60% from ND-GAIN food_vulnerability + Aqueduct drought/water_stress + CCKP projected temp Δ, 40% from heritage. <b>Conflict/logistics component</b> (c[5]) now derived 60% from INFORM risk + WGI rule_of_law + LPI overall + INFORM lack_coping_capacity, 40% from heritage. <b>Nowcast Δ</b> extended with INFORM amplifier (+0-3), governance drag (+0-2), USDA PSD shortfall (+0-3). <b>2030 modeled outlook</b> climate kick (when CCKP + ND-GAIN are populated — currently degraded) replaced with sourced CCKP temp Δ + ND-GAIN food vulnerability (capped +5); today the climate component falls back to heritage when those feeds aren't covering the country. All overlays preserve the heritage values on c._cOriginal / c._fdrsRaw / c._f2030Structural for reference.
+        <br><b style="color:var(--t1)">v20.26–v20.27.</b> Pipelines added: WB LPI (logistics performance), UNDP HDI (human development), WB CCKP (climate projections). Calculations wiring (when source coverage is populated): <b>structural FDRS climate component</b> (c[4]) blends ND-GAIN food_vulnerability + Aqueduct drought/water_stress + CCKP projected temp Δ at 60%, 40% heritage; <b>conflict/logistics component</b> (c[5]) blends INFORM risk + WGI rule_of_law + LPI overall + INFORM lack_coping_capacity at 60%, 40% heritage; <b>nowcast Δ</b> extended with INFORM amplifier (+0-3), governance drag (+0-2), USDA PSD shortfall (+0-3); <b>2030 modeled outlook</b> climate kick uses sourced CCKP temp Δ + ND-GAIN food vulnerability (capped +5). <b>Today CCKP and ND-GAIN are degraded</b> — CCKP covers 0 countries in the served data and ND-GAIN's last download failed; the climate component falls back to the heritage structural value, and the 2030 figure is illustrative rather than CCKP/ND-GAIN-derived. All overlays preserve the heritage values on c._cOriginal / c._fdrsRaw / c._f2030Structural for reference.
       </div>
     </div>
 
@@ -19953,7 +20036,7 @@ function renderMethodologyTab() {
       <summary>
         <span class="meth-acc-marker"></span>
         <span class="meth-acc-title">2030 Modeled Outlook</span>
-        <span class="meth-acc-teaser">Curated structural baseline · CCKP + ND-GAIN climate kick (when populated; currently degraded) · UN WPP demographics · modeled live overlay</span>
+        <span class="meth-acc-teaser">Illustrative scenario estimate · legacy embedded assumptions · CCKP/ND-GAIN climate kick when populated (currently degraded) · UN WPP demographics · modeled live overlay</span>
         <span class="meth-acc-chev">▾</span>
       </summary>
       <div class="meth-acc-body">
@@ -19963,10 +20046,10 @@ function renderMethodologyTab() {
       </div>
       <div style="display:flex;flex-direction:column;gap:12px;">
         ${[
-          {step:'01',title:'Baseline from FAO-OECD Outlook',
-           body:'Production and consumption projections 2023–2032 from the FAO-OECD Agricultural Outlook provide the starting trajectory. Each country’s supply balance in 2030 sets the baseline import dependency component.'},
-          {step:'02',title:'Climate Component (CCKP + ND-GAIN — currently degraded)',
-           body:'When CCKP and ND-GAIN are populated (currently degraded — CCKP covers 0 countries in the served data and ND-GAIN failed its last download; see Data Status), the climate kick is derived from them: <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">climate_kick = piecewise(temp_Δ) + max(0, (food_vuln − 0.5) × 8)</code>, capped at +5 points. Today the climate component falls back to the heritage structural value.'},
+          {step:'01',title:'2030 baseline — illustrative scenario estimate',
+           body:'<b style="color:var(--t1)">2030 values are illustrative scenario estimates.</b> They combine the current country baseline with legacy embedded assumptions and available risk proxies. Read them as directional stress-test indicators, not as official FAO-OECD, CCKP, or ND-GAIN forecasts. Where live source coverage is unavailable (CCKP currently 0 countries; ND-GAIN last download failed), the model falls back to embedded assumptions and marks the result as illustrative.'},
+          {step:'02',title:'Climate component (degraded today)',
+           body:'When CCKP/ND-GAIN coverage is populated, the climate component derives from them; today, with both sources degraded, the component falls back to the heritage structural value. Formula (when populated): <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">climate_kick = piecewise(temp_Δ) + max(0, (food_vuln − 0.5) × 8)</code>, capped at +5 points. See Data Status for current coverage.'},
           {step:'03',title:'Demographic Scaling',
            body:'UN WPP medium-scenario population growth is applied to consumption. Countries with >2% annual population growth face increasing import dependency unless production growth matches pace.'},
           {step:'04',title:'Policy & Geopolitical Overlay',
