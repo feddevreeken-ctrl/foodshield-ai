@@ -649,18 +649,12 @@ body {
   font-weight: 500;
 }
 
-/* v21 design audit — editorial standfirst above the map. Sits on bg0
-   directly (no card, no border) so the reader gets a single live-computed
-   sentence before the globe. Numbers are emphasised with --t1 weight 500. */
+/* v21 design audit — editorial standfirst REMOVED 2026-05-25 (was creating
+   a tall black column to the left of the map). Same numbers still shown in
+   the in-map pill strip overlay. CSS kept here only as inert placeholder so
+   any cached references degrade harmlessly. */
 #map-standfirst {
-  font-family: 'Geist', system-ui, sans-serif;
-  font-size: 17px;
-  font-weight: 400;
-  line-height: 1.5;
-  color: var(--t2);
-  padding: 8px 22px 14px;
-  background: var(--bg0);
-  letter-spacing: -0.005em;
+  display: none !important;
 }
 #map-standfirst .ms-num {
   color: var(--t1);
@@ -5001,18 +4995,10 @@ input[type="email"]:focus {
 
   <!-- TAB 1: GLOBAL MAP -->
   <div id="tab-global" class="tab-page active">
-    <!-- v21 design audit — editorial standfirst. Live-computed from COUNTRIES,
-         disturbanceEvents, and the manifest refresh time. Sits above the map
-         on bg0; no card, no eyebrow, no border. -->
-    <div id="map-standfirst" aria-live="polite">
-      <span class="ms-num" id="ms-total">—</span> countries scored
-      <span class="ms-sep">·</span>
-      <span class="ms-num" id="ms-vuln">—</span> vulnerable today
-      <span class="ms-sep">·</span>
-      <span class="ms-num" id="ms-dist">—</span> active disturbances
-      <span class="ms-sep">·</span>
-      refreshed <span class="ms-num" id="ms-age">—</span>
-    </div>
+    <!-- v21 design audit — editorial standfirst REMOVED 2026-05-25: it was
+         rendering as a flex sibling to #map-wrap and creating a tall black
+         column on the left of the map. The same numbers are already shown
+         in the in-map pill strip overlay (#map-overlay-stats). -->
     <div id="map-wrap">
       <div id="map"></div>
 
@@ -9636,6 +9622,29 @@ const COUNTRIES = [
  ai:"Greenland's food system depends almost entirely on Danish imports. Strong fishing exports but no agriculture beyond subsistence.",risk:"Arctic logistics; climate-driven sea-ice change",resp:"Diversify supply lines beyond Denmark",
  trend:{years:[2018,2019,2020,2021,2022,2023,2024,2030],production:[8,8,8,8,8,8,8,8],consumption:[60,60,60,60,60,60,60,62],imports:[55,55,55,55,55,55,55,57],exports:[40,42,44,42,40,40,40,42],pop:[0.06,0.06,0.06,0.06,0.06,0.06,0.06,0.06]}},
 
+// v21.x TFA audit — entrepôts + small states referenced by COMMODITY_TRADE_ROUTES
+// (HKG, ISL, MAC) but missing from the COUNTRIES table. Without these stubs,
+// byISO() / byName() return null, _nameFromISO() collapses to the ISO literal,
+// and ranked endpoint markers can't resolve a clickable iso. Stub values land
+// from overlay (data/countries.json) when available.
+{iso:"HKG",name:"Hong Kong",region:"Asia",fdrs:34,c:[60,50,28,22,40,8],f2030:36,
+ w:0,r:0,m:0,net:-450,fi:2,imports:["Rice","Meat","Vegetables","Fruit","Dairy"],exports:["Re-exports","Electronics","Jewellery","Apparel","Watches"],
+ exportDests:["China","USA","Japan","Taiwan","Vietnam"],suppliers:["China","USA","Brazil","Australia","Thailand"],supPct:[40,15,12,10,8],
+ ai:"Hong Kong is a major re-export hub with near-total food import dependency. Mainland China is the dominant supplier with US, Brazil, Australia covering meat/grain.",risk:"Mainland supply-chain concentration; logistics chokepoints",resp:"Maintain diversified shipping routes",
+ trend:{years:[2018,2019,2020,2021,2022,2023,2024,2030],production:[5,5,5,5,5,5,5,5],consumption:[110,110,110,110,110,110,110,115],imports:[105,105,105,105,105,105,105,110],exports:[90,90,90,90,90,90,90,92],pop:[7.4,7.4,7.4,7.4,7.4,7.4,7.4,7.5]}},
+
+{iso:"ISL",name:"Iceland",region:"Europe",fdrs:22,c:[40,30,20,18,30,5],f2030:24,
+ w:0,r:0,m:0,net:50,fi:3,imports:["Wheat","Vegetables","Fruit","Cereals","Dairy"],exports:["Fish","Aluminum","Salmon","Lamb","Geothermal services"],
+ exportDests:["Netherlands","UK","Spain","France","Norway"],suppliers:["Norway","Denmark","Germany","Netherlands","UK"],supPct:[28,20,16,14,10],
+ ai:"Iceland imports most grain + produce but has a robust fisheries sector and geothermal-powered greenhouses. Nordic supply lines keep it resilient.",risk:"Atlantic logistics; volcanic exposure",resp:"Maintain Nordic + UK supply chain",
+ trend:{years:[2018,2019,2020,2021,2022,2023,2024,2030],production:[55,57,58,58,57,57,57,58],consumption:[70,71,72,72,71,71,71,73],imports:[35,36,37,36,35,35,35,37],exports:[60,62,64,62,60,60,60,62],pop:[0.36,0.36,0.37,0.37,0.38,0.38,0.39,0.40]}},
+
+{iso:"MAC",name:"Macao",region:"Asia",fdrs:32,c:[60,55,28,20,38,5],f2030:34,
+ w:0,r:0,m:0,net:-280,fi:2,imports:["Rice","Meat","Vegetables","Fruit","Dairy"],exports:["Gaming services","Tourism","Garments","Re-exports","Cosmetics"],
+ exportDests:["Hong Kong","China","USA","UK","Australia"],suppliers:["China","Hong Kong","USA","Brazil","Thailand"],supPct:[55,15,10,8,7],
+ ai:"Macao is a small SAR with near-total food import dependency. Mainland China dominates supply; Hong Kong handles re-exports.",risk:"Mainland supply-chain concentration",resp:"Maintain regional integration",
+ trend:{years:[2018,2019,2020,2021,2022,2023,2024,2030],production:[2,2,2,2,2,2,2,2],consumption:[110,110,110,110,110,110,110,112],imports:[108,108,108,108,108,108,108,110],exports:[40,40,40,40,40,40,40,42],pop:[0.67,0.67,0.68,0.68,0.68,0.68,0.68,0.69]}},
+
 {iso:"IMN",name:"Isle of Man",region:"Europe",fdrs:20,c:[40,35,18,15,28,5],f2030:22,
  w:0,r:0,m:0,net:-30,fi:2,imports:["Wheat","Dairy","Vegetables","Meat","Fish"],exports:["Lamb","Fish","Beef","Financial services","Manx kippers"],
  exportDests:["UK","Ireland","France","Belgium","Germany"],suppliers:["UK","Ireland","Netherlands","France","Spain"],supPct:[75,12,5,4,4],
@@ -9862,7 +9871,6 @@ const COMMODITY_TRADE_ROUTES = {
       IRQ: [ { iso:'IND', share:42 }, { iso:'USA', share:18 }, { iso:'THA', share:14 }, { iso:'URY', share:10 }, { iso:'BRA', share:6  } ],
       IRN: [ { iso:'IND', share:54 }, { iso:'PAK', share:24 }, { iso:'THA', share:8  }, { iso:'URY', share:4  } ],
       MYS: [ { iso:'IND', share:32 }, { iso:'VNM', share:26 }, { iso:'PAK', share:16 }, { iso:'THA', share:14 }, { iso:'MMR', share:6  } ],
-      EUR: [ { iso:'IND', share:30 }, { iso:'PAK', share:24 }, { iso:'THA', share:14 }, { iso:'VNM', share:8  }, { iso:'USA', share:6  } ],
       USA: [ { iso:'THA', share:38 }, { iso:'IND', share:24 }, { iso:'VNM', share:10 }, { iso:'PAK', share:8  }, { iso:'BRA', share:4  } ],
       JPN: [ { iso:'USA', share:48 }, { iso:'THA', share:24 }, { iso:'CHN', share:10 }, { iso:'VNM', share:8  } ],
       KOR: [ { iso:'CHN', share:30 }, { iso:'USA', share:24 }, { iso:'THA', share:14 }, { iso:'VNM', share:10 }, { iso:'IND', share:8  } ],
@@ -10298,12 +10306,12 @@ const COMMODITY_TRADE_ROUTES = {
       USA: [ { iso:'CAN', share:14 }, { iso:'CHL', share:12 }, { iso:'IND', share:10 }, { iso:'IDN', share:8  }, { iso:'ECU', share:8  }, { iso:'CHN', share:8  } ],
       JPN: [ { iso:'CHN', share:18 }, { iso:'CHL', share:12 }, { iso:'NOR', share:10 }, { iso:'RUS', share:10 }, { iso:'USA', share:8  }, { iso:'VNM', share:6  } ],
       CHN: [ { iso:'RUS', share:18 }, { iso:'ECU', share:14 }, { iso:'USA', share:8  }, { iso:'NOR', share:8  }, { iso:'CAN', share:6  } ],
-      ESP: [ { iso:'MAR', share:14 }, { iso:'CHN', share:10 }, { iso:'ECU', share:10 }, { iso:'FRA', share:8  }, { iso:'POR', share:6  } ],
+      ESP: [ { iso:'MAR', share:14 }, { iso:'CHN', share:10 }, { iso:'ECU', share:10 }, { iso:'FRA', share:8  }, { iso:'PRT', share:6  } ],
       FRA: [ { iso:'NOR', share:18 }, { iso:'ESP', share:10 }, { iso:'NLD', share:10 }, { iso:'GBR', share:8  }, { iso:'CHN', share:6  } ],
       ITA: [ { iso:'ESP', share:14 }, { iso:'NLD', share:10 }, { iso:'DNK', share:8  }, { iso:'GRC', share:6  }, { iso:'NOR', share:6  } ],
       DEU: [ { iso:'POL', share:24 }, { iso:'NOR', share:14 }, { iso:'NLD', share:10 }, { iso:'CHN', share:6  }, { iso:'DNK', share:6  } ],
       KOR: [ { iso:'CHN', share:24 }, { iso:'RUS', share:18 }, { iso:'VNM', share:14 }, { iso:'NOR', share:8  } ],
-      GBR: [ { iso:'NOR', share:14 }, { iso:'ISL', share:10 }, { iso:'CHN', share:8  }, { iso:'DNK', share:8  }, { iso:'GER', share:6  } ],
+      GBR: [ { iso:'NOR', share:14 }, { iso:'ISL', share:10 }, { iso:'CHN', share:8  }, { iso:'DNK', share:8  }, { iso:'DEU', share:6  } ],
       NLD: [ { iso:'NOR', share:14 }, { iso:'DEU', share:10 }, { iso:'BEL', share:8  }, { iso:'POL', share:8  }, { iso:'GBR', share:6  } ],
       RUS: [ { iso:'CHL', share:18 }, { iso:'TUR', share:14 }, { iso:'BLR', share:10 }, { iso:'CHN', share:8  }, { iso:'ARG', share:6  } ],
       THA: [ { iso:'IDN', share:18 }, { iso:'VNM', share:14 }, { iso:'CHN', share:10 }, { iso:'IND', share:8  }, { iso:'TWN', share:6  } ],
@@ -10330,7 +10338,7 @@ const COMMODITY_TRADE_ROUTES = {
       CHN: [ { iso:'PHL', share:42 }, { iso:'VNM', share:14 }, { iso:'ECU', share:10 }, { iso:'THA', share:8  }, { iso:'MEX', share:6  } ],
       JPN: [ { iso:'PHL', share:74 }, { iso:'MEX', share:8  }, { iso:'ECU', share:6  }, { iso:'TWN', share:4  } ],
       NLD: [ { iso:'ECU', share:18 }, { iso:'COL', share:14 }, { iso:'CRI', share:10 }, { iso:'PER', share:10 }, { iso:'CIV', share:8  } ],
-      GBR: [ { iso:'DOM', share:18 }, { iso:'COL', share:14 }, { iso:'CRI', share:10 }, { iso:'CMR', share:10 }, { iso:'WIN', share:8  } ],
+      GBR: [ { iso:'DOM', share:18 }, { iso:'COL', share:14 }, { iso:'CRI', share:10 }, { iso:'CMR', share:10 }, { iso:'JAM', share:8  } ],
       BEL: [ { iso:'CRI', share:24 }, { iso:'COL', share:18 }, { iso:'ECU', share:14 }, { iso:'CIV', share:10 } ],
       ITA: [ { iso:'ECU', share:24 }, { iso:'COL', share:18 }, { iso:'CRI', share:10 }, { iso:'CMR', share:6  } ],
       FRA: [ { iso:'CIV', share:18 }, { iso:'CMR', share:14 }, { iso:'COL', share:10 }, { iso:'DOM', share:10 }, { iso:'ECU', share:8  } ],
@@ -10432,7 +10440,7 @@ const COMMODITY_TRADE_ROUTES = {
       CHN: [ { iso:'FRA', share:38 }, { iso:'AUS', share:18 }, { iso:'CAN', share:14 }, { iso:'UKR', share:10 }, { iso:'KAZ', share:8  } ],
       SAU: [ { iso:'RUS', share:24 }, { iso:'AUS', share:18 }, { iso:'UKR', share:14 }, { iso:'ARG', share:10 }, { iso:'ROU', share:8  } ],
       JPN: [ { iso:'AUS', share:54 }, { iso:'CAN', share:24 }, { iso:'ARG', share:8  }, { iso:'FRA', share:4  } ],
-      IRN: [ { iso:'RUS', share:34 }, { iso:'KAZ', share:18 }, { iso:'UKR', share:14 }, { iso:'GER', share:6  } ],
+      IRN: [ { iso:'RUS', share:34 }, { iso:'KAZ', share:18 }, { iso:'UKR', share:14 }, { iso:'DEU', share:6  } ],
       TUR: [ { iso:'RUS', share:48 }, { iso:'UKR', share:18 }, { iso:'ROU', share:8  }, { iso:'KAZ', share:6  } ],
       BEL: [ { iso:'FRA', share:54 }, { iso:'DEU', share:14 }, { iso:'NLD', share:8  } ],
       NLD: [ { iso:'FRA', share:38 }, { iso:'DEU', share:18 }, { iso:'DNK', share:10 }, { iso:'BEL', share:8  } ],
@@ -10468,7 +10476,7 @@ const COMMODITY_TRADE_ROUTES = {
   cassava: {
     exporters: [
       { iso:'THA', share:48 }, { iso:'VNM', share:24 }, { iso:'CRI', share:8  },
-      { iso:'IDN', share:5  }, { iso:'CAM', share:4  }, { iso:'LAO', share:3  },
+      { iso:'IDN', share:5  }, { iso:'KHM', share:4  }, { iso:'LAO', share:3  },
       { iso:'NGA', share:2  },
     ],
     importer_suppliers: {
@@ -10501,7 +10509,7 @@ const COMMODITY_TRADE_ROUTES = {
       JPN: [ { iso:'CHN', share:54 }, { iso:'LKA', share:14 }, { iso:'IND', share:8  } ],
       MAR: [ { iso:'CHN', share:84 }, { iso:'VNM', share:4  } ],
       DEU: [ { iso:'CHN', share:24 }, { iso:'IND', share:18 }, { iso:'POL', share:8  }, { iso:'LKA', share:8  } ],
-      NLD: [ { iso:'CHN', share:18 }, { iso:'IND', share:14 }, { iso:'KEN', share:10 }, { iso:'INA', share:8  } ],
+      NLD: [ { iso:'CHN', share:18 }, { iso:'IND', share:14 }, { iso:'KEN', share:10 }, { iso:'IDN', share:8  } ],
       KAZ: [ { iso:'IND', share:34 }, { iso:'KEN', share:24 }, { iso:'LKA', share:10 } ],
       AFG: [ { iso:'KEN', share:54 }, { iso:'IND', share:24 }, { iso:'CHN', share:8  } ],
       SAU: [ { iso:'KEN', share:34 }, { iso:'IND', share:18 }, { iso:'LKA', share:14 }, { iso:'EGY', share:6  } ],
@@ -12497,6 +12505,19 @@ const COUNTRY_LL = {
   TKM:[37.95,58.38],UGA:[0.32,32.58],UKR:[50.45,30.52],ARE:[24.45,54.38],GBR:[51.51,-0.13],
   USA:[38.91,-77.04],URY:[-34.90,-56.19],UZB:[41.30,69.24],VEN:[10.50,-66.92],VNM:[21.03,105.85],
   YEM:[15.37,44.19],ZMB:[-15.42,28.28],ZWE:[-17.83,31.05],
+  // v21.x — entrepôts / small islands referenced by COMMODITY_TRADE_ROUTES
+  // or heritage supplier lists but missing from the COUNTRIES table. Without
+  // these, getCoord() returns null and TFA arcs silently skip.
+  HKG:[22.30,114.17], MAC:[22.20,113.55], ISL:[64.15,-21.94], BLZ:[17.50,-88.20],
+  BRN:[4.94,114.95],  MUS:[-20.16,57.50], BMU:[32.30,-64.78], GRL:[64.18,-51.74],
+  LCA:[14.01,-60.99], VCT:[13.16,-61.22], GRD:[12.05,-61.75], DMA:[15.30,-61.38],
+  ATG:[17.12,-61.85], KNA:[17.30,-62.72], BHS:[25.05,-77.34], BRB:[13.10,-59.62],
+  MLT:[35.90,14.51],  CYP:[35.17,33.37],  AND:[42.51,1.52],   LUX:[49.61,6.13],
+  LIE:[47.14,9.52],   MCO:[43.74,7.42],   SMR:[43.94,12.45],  VAT:[41.90,12.45],
+  // v21.x TFA audit — XKX (Kosovo) is in COUNTRIES but was missing from
+  // COUNTRY_LL; without this entry, getCoord('XKX') returns null whenever the
+  // map GeoJSON hasn't matched it (small-state polygons sometimes 404).
+  XKX:[42.67,21.17],
 };
 
 // ── v20: live-adjusted component bars ──────────────────────────────────────
@@ -12638,7 +12659,64 @@ function riskBadgeStyle(s) {
   return `background:${c}1a;color:${c};border:1px solid ${c}40;`;
 }
 function byISO(iso) { if (!iso) return null; return COUNTRIES.find(c => c.iso === iso); }
-function byName(n) { return COUNTRIES.find(c => c.name.toLowerCase() === n.toLowerCase()); }
+// v21.x — byName is alias-aware. Heritage data uses short / informal names
+// ("USA", "UK", "Russia (pre-war)", "Czech Rep.", "Cote dIvoire", "Dominican
+// Rep.", "Trinidad", "Bosnia", etc.) that don't match COUNTRIES.name exactly.
+// Without aliasing, byName returns null and downstream lookups (TFA arcs,
+// commodityDestinations exporter matching, side panel links) silently fail.
+const NAME_ALIASES_BY_ISO = {
+  USA: ['usa','united states','united states of america','america','u.s.','u.s.a.','usa mainland'],
+  GBR: ['uk','britain','great britain','united kingdom','england'],
+  ARE: ['uae'],
+  RUS: ['russia','russia (pre-war)','russian federation'],
+  KOR: ['south korea','korea','republic of korea'],
+  PRK: ['north korea',"democratic people's republic of korea"],
+  CZE: ['czech rep','czech rep.','czechia','czech republic'],
+  CIV: ['ivory coast','cote divoire',"cote d'ivoire","côte d'ivoire"],
+  COD: ['dr congo','democratic republic of congo','democratic republic of the congo','drc'],
+  DOM: ['dominican rep','dominican rep.','dominican republic'],
+  TTO: ['trinidad','trinidad and tobago','trinidad & tobago'],
+  KNA: ['st kitts','saint kitts','saint kitts and nevis'],
+  ATG: ['antigua','antigua and barbuda'],
+  BIH: ['bosnia','bosnia and herzegovina','bosnia & herzegovina'],
+  CPV: ['cabo verde','cape verde'],
+  TLS: ['east timor','timor leste','timor-leste'],
+  MMR: ['burma','myanmar'],
+  SWZ: ['swaziland','eswatini'],
+  SYR: ['syria','syrian arab republic'],
+  LAO: ['laos',"lao people's democratic republic","lao pdr"],
+  IRN: ['iran','islamic republic of iran'],
+  TZA: ['tanzania','united republic of tanzania'],
+  VNM: ['vietnam','viet nam'],
+  MDA: ['moldova','republic of moldova'],
+  VEN: ['venezuela','venezuela, bolivarian republic of'],
+  BOL: ['bolivia','plurinational state of bolivia'],
+  BRN: ['brunei','brunei darussalam'],
+  FSM: ['micronesia','federated states of micronesia'],
+  PSE: ['palestine','state of palestine','occupied palestinian territory'],
+  TWN: ['taiwan','chinese taipei','taiwan, province of china'],
+};
+const _NAME_ALIAS_LOOKUP = (() => {
+  const m = new Map();
+  Object.entries(NAME_ALIASES_BY_ISO).forEach(([iso, names]) => {
+    names.forEach(n => m.set(n.toLowerCase(), iso));
+  });
+  return m;
+})();
+function byName(n) {
+  if (!n) return null;
+  const s = String(n).toLowerCase();
+  // Direct canonical match
+  let hit = COUNTRIES.find(c => c.name.toLowerCase() === s);
+  if (hit) return hit;
+  // Alias → ISO → byISO
+  const iso = _NAME_ALIAS_LOOKUP.get(s);
+  if (iso) {
+    hit = COUNTRIES.find(c => c.iso === iso);
+    if (hit) return hit;
+  }
+  return null;
+}
 
 // v21 design audit — FDRS percentile + 3 nearest peers for a country.
 // Universe = sovereign / non-US-state countries with a numeric FDRS.
@@ -13003,21 +13081,71 @@ function _simulateScenario(c, selected, severityById) {
 (function () {
   'use strict';
 
-  // Supplier name → geojson name aliases
+  // Supplier name → geojson name aliases.
+  // v21.x — expanded to cover every non-canonical name found in COUNTRIES'
+  // heritage `.suppliers` / `.exportDests` arrays. Without these, an arc gets
+  // silently skipped because findSupplierCoord() can't match the name to a
+  // geojson feature and getCoord() falls through to null.
   const SUPPLIER_ALIASES = {
     'usa': ['united states of america','united states'],
+    'usa mainland': ['united states of america','united states'],
     'uk':  ['united kingdom','england'],
     'uae': ['united arab emirates'],
     'south korea': ['south korea','korea','republic of korea'],
+    'north korea': ["democratic people's republic of korea",'north korea'],
     'czech rep.': ['czechia','czech republic'],
+    'czech rep':  ['czechia','czech republic'],
     'czechia': ['czech republic'],
     'russia': ['russia','russian federation'],
+    'russia (pre-war)': ['russia','russian federation'],
     'ivory coast': ["côte d'ivoire", "cote d'ivoire", 'ivory coast'],
+    "cote divoire": ["côte d'ivoire", "cote d'ivoire", 'ivory coast'],
+    'cabo verde': ['cape verde'],
+    'cape verde': ['cabo verde'],
+    'dr congo': ['democratic republic of the congo','democratic republic of congo','dr congo'],
+    'dominican rep.': ['dominican republic'],
+    'dominican rep':  ['dominican republic'],
+    'trinidad': ['trinidad and tobago','trinidad & tobago'],
+    'trinidad and tobago': ['trinidad and tobago','trinidad & tobago'],
+    'trinidad & tobago': ['trinidad and tobago','trinidad & tobago'],
+    'st kitts': ['saint kitts and nevis','saint kitts & nevis'],
+    'antigua':  ['antigua and barbuda','antigua & barbuda'],
+    'bosnia':   ['bosnia and herzegovina','bosnia & herzegovina'],
+    'hong kong': ['hong kong','hong kong s.a.r.','hong kong sar'],
+    'macao':     ['macao','macau','macao s.a.r.'],
+    'iceland':   ['iceland','republic of iceland'],
+    'malta':     ['malta','republic of malta'],
+    'cyprus':    ['cyprus','republic of cyprus'],
+    'curacao':   ['curaçao','curacao'],
+    'tokelau':   ['tokelau'],
+    'cook islands': ['cook islands'],
+    'guadeloupe': ['guadeloupe'],
+    'caribbean':  ['jamaica'],
+    'anguilla':   ['anguilla'],
+    'palestine':  ['palestine','state of palestine','occupied palestinian territory'],
+    'east timor': ['timor-leste','east timor','timor leste'],
+    'taiwan':     ['taiwan','chinese taipei','taiwan, province of china'],
+    'syria':      ['syria','syrian arab republic'],
+    'laos':       ['laos',"lao people's democratic republic","lao pdr"],
+    'iran':       ['iran','islamic republic of iran'],
+    'tanzania':   ['tanzania','united republic of tanzania'],
+    'vietnam':    ['vietnam','viet nam'],
+    'moldova':    ['moldova','republic of moldova'],
+    'venezuela':  ['venezuela','venezuela, bolivarian republic of'],
+    'bolivia':    ['bolivia','plurinational state of bolivia'],
+    'brunei':     ['brunei','brunei darussalam'],
+    'micronesia': ['micronesia','federated states of micronesia'],
+    'eswatini':   ['eswatini','swaziland'],
+    'swaziland':  ['eswatini','swaziland'],
+    'myanmar':    ['myanmar','burma'],
+    'burma':      ['myanmar','burma'],
   };
-  // Lat/Lng for non-country suppliers (organizations)
+  // Lat/Lng for non-country suppliers (organizations / multi-country blocs)
   const FALLBACK_COORDS = {
     'wfp': [41.9, 12.5],     // Rome HQ
     'eu':  [50.85, 4.35],    // Brussels
+    'food aid': [41.9, 12.5],
+    'caribbean': [18.0, -76.0], // pin near Jamaica
   };
   // Plausible export destinations (when net exporter)
   const GENERIC_EXPORT_MARKETS = [
@@ -13442,7 +13570,16 @@ function _simulateScenario(c, selected, severityById) {
     // PRIMARY: try byName → G.centroids (overrides applied).
     if (typeof byName === 'function') {
       const co = byName(supplierName);
-      if (co && G.centroids.has(co.iso)) return G.centroids.get(co.iso);
+      if (co) {
+        if (G.centroids.has(co.iso)) return G.centroids.get(co.iso);
+        // v21.x TFA audit — byName resolved, but GeoJSON hadn't been matched
+        // for this ISO. Use the capital-city table BEFORE risking a partial
+        // name match (which can mis-map to a different country whose name
+        // includes a substring).
+        if (typeof COUNTRY_LL !== 'undefined' && COUNTRY_LL[co.iso]) {
+          return COUNTRY_LL[co.iso];
+        }
+      }
     }
     // SECONDARY: nameMap → d3.geoCentroid (no overrides — only used if byName
     // didn't resolve, e.g. for aliases or partial matches).
@@ -13456,6 +13593,17 @@ function _simulateScenario(c, selected, severityById) {
           const f = G.nameMap.get(alt);
           try { const c = d3.geoCentroid(f); return [c[1], c[0]]; } catch (e) {}
         }
+      }
+    }
+    // v21.x — alias → byName → COUNTRY_LL. Catches names that didn't load
+    // into G.nameMap (e.g. GeoJSON 404'd, or the country simply isn't in
+    // the polygon set but IS in our capital-city table). Try this BEFORE
+    // partial-match so a sub-string collision doesn't win.
+    if (typeof COUNTRY_LL !== 'undefined' && typeof byName === 'function') {
+      const tryNames = (SUPPLIER_ALIASES[s] || []).concat([supplierName]);
+      for (const n of tryNames) {
+        const co = byName(n);
+        if (co && COUNTRY_LL[co.iso]) return COUNTRY_LL[co.iso];
       }
     }
     // Partial match — last resort.
@@ -13499,12 +13647,28 @@ function _simulateScenario(c, selected, severityById) {
     if (G.centroids.has(nameOrISO)) return G.centroids.get(nameOrISO);
     // v21.x — ISO that wasn't matched against the loaded GeoJSON yet (e.g.
     // small states, or pre-init lookup). Fall back to the global capital-city
-    // COUNTRY_COORDS table so arcs still draw instead of silently skipping.
+    // COUNTRY_LL table (declared ~line 12466) so arcs still draw instead of
+    // silently skipping.  BUGFIX: the lookup previously referenced
+    // `COUNTRY_COORDS`, which never existed in this file — the entire fallback
+    // branch was dead code. Keep `COUNTRY_COORDS` as a soft alias check so
+    // future renames don't break us.
+    if (typeof COUNTRY_LL !== 'undefined' && COUNTRY_LL[nameOrISO]) {
+      return COUNTRY_LL[nameOrISO];
+    }
     if (typeof COUNTRY_COORDS !== 'undefined' && COUNTRY_COORDS[nameOrISO]) {
       return COUNTRY_COORDS[nameOrISO];
     }
-    // Country centroid by name
-    return findSupplierCoord(nameOrISO);
+    // Country centroid by name (heritage flat-list, name-only suppliers)
+    const named = findSupplierCoord(nameOrISO);
+    if (named) return named;
+    // Silent-skip diagnostic. Off by default; flip window.__TFA_DEBUG=true in
+    // the console to surface unresolved keys without spamming production logs.
+    try {
+      if (typeof window !== 'undefined' && window.__TFA_DEBUG) {
+        console.warn('[TFA] getCoord could not resolve:', nameOrISO);
+      }
+    } catch (e) {}
+    return null;
   }
 
   function drawFlows() {
@@ -13513,10 +13677,15 @@ function _simulateScenario(c, selected, severityById) {
     if (!country) return;
 
     const isState = G.selectedISO.startsWith('US-');
+    // v21.x TFA audit — use getCoord() fallback chain (G.centroids → COUNTRY_LL
+    // → name) so the all-commodity globe view still draws for small states.
     const center = isState
       ? US_STATE_CENTROIDS[G.selectedISO]
-      : G.centroids.get(G.selectedISO);
-    if (!center) return;
+      : getCoord(G.selectedISO);
+    if (!center) {
+      console.warn('[TFA] drawFlows: hub coord missing for', G.selectedISO);
+      return;
+    }
 
     G.flowsActive = true;
     G.flows = [];
@@ -13654,7 +13823,12 @@ function _simulateScenario(c, selected, severityById) {
 
     // v21.x — anchored hub marker on the selected country with FDRS color +
     // ISO3 label. Replaces the subtle livePulse from earlier.
-    const center = G.centroids.get(G.selectedISO);
+    //
+    // BUGFIX: read through getCoord() so the same fallback chain applied to
+    // arc endpoints (US states → G.centroids → COUNTRY_LL → name-match) also
+    // applies to the hub. Without this, small states whose ISO wasn't matched
+    // against the loaded GeoJSON ended up with arcs but no central hub dot.
+    const center = getCoord(G.selectedISO);
     if (center) {
       let hubColor = '#c44b3c';
       try {
@@ -13890,15 +14064,31 @@ function _simulateScenario(c, selected, severityById) {
     // any country whose ISO wasn't matched against the loaded GeoJSON
     // silently fails to draw arcs.
     const center = getCoord(toIso);
-    if (!center) return;
+    if (!center) {
+      console.warn('[TFA] drawCommodityFlows: hub coord missing for', toIso, commodity);
+      return;
+    }
 
     suppliers.forEach((sup, i) => {
-      const fromCoord = getCoord(sup.iso || sup.country);
-      if (!fromCoord) return;
-      // v21.x — resolve iso for the ranked endpoint label
+      // v21.x — try BOTH iso and country-name lookup before skipping; either
+      // can resolve via the getCoord fallback chain. Without this, a supplier
+      // with a valid iso that wasn't in G.centroids (and only in COUNTRY_LL)
+      // would silently skip when the user picked it from the heritage path.
+      let fromCoord = getCoord(sup.iso) || getCoord(sup.country);
+      if (!fromCoord) {
+        try {
+          console.warn('[TFA] drawCommodityFlows: supplier coord unresolved',
+            { iso: sup.iso, country: sup.country, commodity });
+        } catch (e) {}
+        return;
+      }
+      // v21.x — resolve iso for the ranked endpoint label.
+      // v21.x TFA audit — also match against COUNTRIES.iso so when `sup.country`
+      // is the literal ISO string (e.g. _nameFromISO fallback for HKG/ISL),
+      // we still recover a clickable iso for the rank marker.
       let endIso = sup.iso || null;
       if (!endIso && typeof COUNTRIES !== 'undefined') {
-        const found = COUNTRIES.find(cc => cc.name === sup.country);
+        const found = COUNTRIES.find(cc => cc.name === sup.country || cc.iso === sup.country);
         if (found) endIso = found.iso;
       }
       G.flows.push({
@@ -13930,14 +14120,27 @@ function _simulateScenario(c, selected, severityById) {
     // v21.x — fall through to getCoord chain so arcs still draw when the
     // exporter isn't in G.centroids yet (small states, pre-init).
     const center = getCoord(fromIso);
-    if (!center) return;
+    if (!center) {
+      console.warn('[TFA] drawExportFlows: hub coord missing for', fromIso, commodity);
+      return;
+    }
 
     dests.forEach((dest, i) => {
-      const toCoord = getCoord(dest.iso || dest.country);
-      if (!toCoord) return;
+      // Try BOTH iso and country-name lookup before skipping.
+      let toCoord = getCoord(dest.iso) || getCoord(dest.country);
+      if (!toCoord) {
+        try {
+          console.warn('[TFA] drawExportFlows: destination coord unresolved',
+            { iso: dest.iso, country: dest.country, commodity });
+        } catch (e) {}
+        return;
+      }
+      // v21.x TFA audit — also check cc.iso so when dest.country is the raw
+      // ISO literal (e.g. _nameFromISO fallback for HKG/ISL), the rank-marker
+      // click still resolves a country panel.
       let endIso = dest.iso || null;
       if (!endIso && typeof COUNTRIES !== 'undefined') {
-        const found = COUNTRIES.find(cc => cc.name === dest.country);
+        const found = COUNTRIES.find(cc => cc.name === dest.country || cc.iso === dest.country);
         if (found) endIso = found.iso;
       }
       G.flows.push({
@@ -13965,8 +14168,13 @@ function _simulateScenario(c, selected, severityById) {
   function drawImpactArcs(fromIso, targets){
     clearImpactArcs();
     if (!fromIso || !targets || !targets.length) return;
-    const from = G.centroids.get(fromIso);
-    if (!from) return;
+    // v21.x TFA audit — same fallback chain as TFA arcs so small states /
+    // pre-init lookups still draw impact ripples instead of silently bailing.
+    const from = getCoord(fromIso);
+    if (!from) {
+      console.warn('[TFA] drawImpactArcs: source coord missing for', fromIso);
+      return;
+    }
     // Highlight source with concentric warning ring
     const sourcePulse = L.marker(from, {
       pane: 'flowmarkers',
@@ -13982,8 +14190,12 @@ function _simulateScenario(c, selected, severityById) {
     G.impactMarkers.push(sourcePulse);
 
     targets.forEach((t, i) => {
-      const to = G.centroids.get(t.iso);
-      if (!to) return;
+      // v21.x TFA audit — fallback chain.
+      const to = getCoord(t.iso) || getCoord(t.name);
+      if (!to) {
+        console.warn('[TFA] drawImpactArcs: target coord missing for', t.iso, t.name);
+        return;
+      }
       const segs = greatCirclePath(from, to, 32);
       // Base dim arc
       const base = L.polyline(segs, {
@@ -14711,11 +14923,14 @@ function commoditySuppliers(c, commodity) {
   }
 
   // 2) Per-importer mix from route table
+  // v21.x TFA audit — carry iso through (same reason as tfaShowFlows): allows
+  // downstream getCoord/byName to resolve entries whose _nameFromISO falls
+  // back to the literal ISO (HKG, ISL, MAC).
   if (routeKey && COMMODITY_TRADE_ROUTES[routeKey]
       && COMMODITY_TRADE_ROUTES[routeKey].importer_suppliers[c.iso]) {
     const pairs = COMMODITY_TRADE_ROUTES[routeKey].importer_suppliers[c.iso]
       .slice(0, 6)
-      .map(s => ({ name: _nameFromISO(s.iso), pct: s.share }))
+      .map(s => ({ name: _nameFromISO(s.iso), iso: s.iso, pct: s.share }))
       .filter(p => p.name && p.pct > 0);
     if (pairs.length) return pairs;
   }
@@ -14729,6 +14944,7 @@ function commoditySuppliers(c, commodity) {
     const totalShare = expList.reduce((sum, e) => sum + (e.share || 0), 0) || 1;
     const pairs = expList.map(e => ({
       name: _nameFromISO(e.iso),
+      iso: e.iso,
       pct: Math.round((e.share / totalShare) * 92), // ~8% honest residual
     })).filter(p => p.name && p.pct > 0);
     if (pairs.length) return pairs;
@@ -14763,7 +14979,9 @@ function commodityDestinations(c, commodity) {
       }
     });
     matched.sort((a, b) => b.score - a.score);
-    const top = matched.slice(0, 6).map(m => ({ name: _nameFromISO(m.iso), pct: m.pct }));
+    // v21.x TFA audit — carry iso through so downstream getCoord/byName can
+    // resolve entries whose _nameFromISO falls back to the literal ISO.
+    const top = matched.slice(0, 6).map(m => ({ name: _nameFromISO(m.iso), iso: m.iso, pct: m.pct }));
     if (top.length >= 2) {
       // v21.x — honest caveat for commodities whose top-5 doesn't tell the whole
       // story (wine, dairy, vegetable oil, fish, fruit, spices, nuts, processed
@@ -14836,9 +15054,12 @@ function tfaShowFlows(opts) {
         }).filter(p => p.name && p.pct > 0);
       } else if (routeKey && COMMODITY_TRADE_ROUTES[routeKey] && COMMODITY_TRADE_ROUTES[routeKey].importer_suppliers[c.iso]) {
         // 2) Structured per-importer mix from COMMODITY_TRADE_ROUTES.
+        // v21.x TFA audit — carry iso through so downstream getCoord/byName
+        // can resolve entries whose _nameFromISO falls back to the literal
+        // ISO (HKG, ISL, MAC when COUNTRIES lacks the entry on first load).
         pairs = COMMODITY_TRADE_ROUTES[routeKey].importer_suppliers[c.iso]
           .slice(0, 6)
-          .map(s => ({ name: _nameFromISO(s.iso), pct: s.share }))
+          .map(s => ({ name: _nameFromISO(s.iso), iso: s.iso, pct: s.share }))
           .filter(p => p.name && p.pct > 0);
       } else if (routeKey && COMMODITY_TRADE_ROUTES[routeKey] && Array.isArray(COMMODITY_TRADE_ROUTES[routeKey].exporters)) {
         // 3) Generic top exporters of this commodity (importer not specifically
@@ -14851,8 +15072,10 @@ function tfaShowFlows(opts) {
         // displayed reflect "who likely supplies this country" rather than
         // "global export share", which would otherwise sum to <100%.
         const totalShare = expList.reduce((sum, e) => sum + (e.share || 0), 0) || 1;
+        // v21.x TFA audit — carry iso through (same reason as above).
         pairs = expList.map(e => ({
           name: _nameFromISO(e.iso),
+          iso: e.iso,
           pct: Math.round((e.share / totalShare) * 92), // leave ~8% "other" residual — honest gap
         })).filter(p => p.name && p.pct > 0);
       } else {
@@ -14900,9 +15123,12 @@ function tfaShowFlows(opts) {
       const commo = commodity || importItems[i] || 'Food products';
       // Resolve supplier ISO from name when the upstream branch didn't supply
       // it (route table branches set iso explicitly; heritage branch doesn't).
+      // v21.x — go through byName/byISO so alias names like "USA", "UK",
+      // "Russia (pre-war)", "Czech Rep." resolve to canonical ISO.
       let resolvedIso = supIso;
       if (!resolvedIso) {
-        const sc = COUNTRIES.find(cc => cc.name === sup || cc.iso === sup);
+        const sc = byName(sup) || byISO(sup) ||
+                   COUNTRIES.find(cc => cc.name === sup || cc.iso === sup);
         if (sc) resolvedIso = sc.iso;
       }
       // Pass both NAME and ISO so _estimateVolume can match observed Comtrade
@@ -15017,7 +15243,10 @@ function tfaShowFlows(opts) {
       // direction='export' lookup (destination's import-row → our share as
       // observed exporter). If no observed evidence exists, falls through
       // to modeled — and we never reuse import-side totals.
-      const dc = COUNTRIES.find(cc => cc.name === dest || cc.iso === dest);
+      // v21.x — alias-aware via byName/byISO so heritage names like "UK",
+      // "Russia (pre-war)" resolve correctly.
+      const dc = byName(dest) || byISO(dest) ||
+                 COUNTRIES.find(cc => cc.name === dest || cc.iso === dest);
       const destIso = dc ? dc.iso : null;
       const vol = _estimateVolume(c, commo, i, dest, destIso, 'export')
         || _modeledVolumeFallback(c, commo, i);
@@ -15025,7 +15254,10 @@ function tfaShowFlows(opts) {
       const supplierCompanies = companies.slice(0, 3).map((co, j) => ({
         name: co, share: Math.max(8, Math.round((35 - j*8) * (1 - i*0.1))),
       }));
-      return { country: dest, pct, vol, commo, companies: supplierCompanies };
+      // v21.x TFA audit — pass iso through to drawExportFlows so the arc
+      // resolves via getCoord(sup.iso) even when `dest` is the raw ISO literal
+      // (small states / SARs that _nameFromISO couldn't translate).
+      return { country: dest, iso: destIso, pct, vol, commo, companies: supplierCompanies };
     });
 
     // Draw export arcs using the globe's existing drawFlows but for exports
