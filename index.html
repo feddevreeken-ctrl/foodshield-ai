@@ -14128,10 +14128,13 @@ function tfaShowFlows() {
       const obsRow = (routeKey && LIVE && LIVE.comtrade) ? (LIVE.comtrade[c.iso] || {})[routeKey] : null;
       const obsTop = obsRow && Array.isArray(obsRow.top_suppliers) ? obsRow.top_suppliers : null;
       if (obsTop && obsTop.length >= 2) {
-        pairs = obsTop.slice(0, 6).map(s => ({
-          name: s.country || s.name || '',
-          pct: Math.round(s.share_pct || 0),
-        })).filter(p => p.name && p.pct > 0);
+        // Comtrade rows store suppliers with `iso3` only. Resolve to display
+        // names via _nameFromISO and keep iso on the pair for downstream lookups.
+        pairs = obsTop.slice(0, 6).map(s => {
+          const iso = s.iso3 || s.iso || '';
+          const name = s.country || s.name || (iso ? _nameFromISO(iso) : '');
+          return { name, iso, pct: Math.round(s.share_pct || 0) };
+        }).filter(p => p.name && p.pct > 0);
       } else if (routeKey && COMMODITY_TRADE_ROUTES[routeKey] && COMMODITY_TRADE_ROUTES[routeKey].importer_suppliers[c.iso]) {
         // 2) Structured per-importer mix from COMMODITY_TRADE_ROUTES.
         pairs = COMMODITY_TRADE_ROUTES[routeKey].importer_suppliers[c.iso]
