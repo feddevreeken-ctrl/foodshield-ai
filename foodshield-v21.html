@@ -649,6 +649,28 @@ body {
   font-weight: 500;
 }
 
+/* v21 design audit — editorial standfirst above the map. Sits on bg0
+   directly (no card, no border) so the reader gets a single live-computed
+   sentence before the globe. Numbers are emphasised with --t1 weight 500. */
+#map-standfirst {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--t2);
+  padding: 8px 22px 14px;
+  background: var(--bg0);
+  letter-spacing: -0.005em;
+}
+#map-standfirst .ms-num {
+  color: var(--t1);
+  font-weight: 500;
+}
+#map-standfirst .ms-sep {
+  color: var(--t3);
+  margin: 0 6px;
+}
+
 /* Legend */
 #map-legend {
   position: absolute;
@@ -4979,6 +5001,18 @@ input[type="email"]:focus {
 
   <!-- TAB 1: GLOBAL MAP -->
   <div id="tab-global" class="tab-page active">
+    <!-- v21 design audit — editorial standfirst. Live-computed from COUNTRIES,
+         disturbanceEvents, and the manifest refresh time. Sits above the map
+         on bg0; no card, no eyebrow, no border. -->
+    <div id="map-standfirst" aria-live="polite">
+      <span class="ms-num" id="ms-total">—</span> countries scored
+      <span class="ms-sep">·</span>
+      <span class="ms-num" id="ms-vuln">—</span> vulnerable today
+      <span class="ms-sep">·</span>
+      <span class="ms-num" id="ms-dist">—</span> active disturbances
+      <span class="ms-sep">·</span>
+      refreshed <span class="ms-num" id="ms-age">—</span>
+    </div>
     <div id="map-wrap">
       <div id="map"></div>
 
@@ -10636,6 +10670,21 @@ function provenanceTooltip(c, field) {
   if (p.note) lines.push(p.note);
   return lines.join(' · ') || 'Provenance: ' + (p.quality_flag || 'unknown');
 }
+
+// v21 design audit — small uniform "Updated · Source" footer for major chart/data
+// cards. Caller passes a source label; refreshedTime is optional and (when present)
+// renders the human-readable age via formatAge(). Kept deliberately tiny so it
+// reads as metadata, not chrome.
+function chartSourceFooter(sourceLabel, refreshedTime) {
+  if (!sourceLabel) return '';
+  const ago = (typeof formatAge === 'function' && refreshedTime) ? formatAge(refreshedTime) : '';
+  return `<div style="font-family:'Geist Mono',monospace;font-size:9.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-top:8px;padding-top:6px;border-top:1px dashed var(--b1);">${ago ? 'Updated ' + ago + ' · ' : ''}${sourceLabel}</div>`;
+}
+// Convenience — look up a manifest entry's last-success/loaded time for the footer.
+function chartSourceTime(manifestKey) {
+  const entry = (typeof sourceManifestEntry === 'function') ? sourceManifestEntry(manifestKey) : null;
+  return entry && (entry.last_success || entry.generated_at || entry.loaded_at) || null;
+}
 const COUNTRY_STRUCTURAL_FIELDS = ['fdrs','c','f2030','w','r','m','fi','net','imports','exports','exportDests','suppliers','supPct'];
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -10724,6 +10773,7 @@ function wfsoCardHTML(iso3) {
       <div style="font-size:9.5px;color:var(--t3);margin-top:8px;">
         Source: <a href="https://microdatalibqa.worldbank.org/index.php/catalog/15616" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">World Bank WFSO ↗</a>
       </div>
+      ${chartSourceFooter('World Bank WFSO · IPC/CH Phase 3+ projections', chartSourceTime('wb_wfso'))}
     </div>`;
 }
 
@@ -12589,6 +12639,40 @@ function riskBadgeStyle(s) {
 }
 function byISO(iso) { if (!iso) return null; return COUNTRIES.find(c => c.iso === iso); }
 function byName(n) { return COUNTRIES.find(c => c.name.toLowerCase() === n.toLowerCase()); }
+
+// v21 design audit — FDRS percentile + 3 nearest peers for a country.
+// Universe = sovereign / non-US-state countries with a numeric FDRS.
+// Returns { pct, total, peers: [{iso,name,fdrs}, …] } or null when the country
+// has no valid FDRS or no peer pool to compare against.
+function fdrsPeerContext(c) {
+  if (!c || typeof c.fdrs !== 'number') return null;
+  const pool = COUNTRIES.filter(cc =>
+    cc.iso !== c.iso &&
+    cc.iso !== 'XKX' &&
+    !cc.iso.startsWith('US-') &&
+    typeof cc.fdrs === 'number'
+  );
+  const total = pool.length;
+  if (!total) return null;
+  const lower = pool.filter(cc => cc.fdrs < c.fdrs).length;
+  const pct = Math.round(100 * lower / total);
+  const sorted = pool.slice().sort((a, b) =>
+    Math.abs(a.fdrs - c.fdrs) - Math.abs(b.fdrs - c.fdrs)
+  );
+  return { pct, total, peers: sorted.slice(0, 3) };
+}
+// Render the percentile + peers block. Used in the side panel and country-tab hero.
+function fdrsPeerBlockHTML(c) {
+  const ctx = fdrsPeerContext(c);
+  if (!ctx) return '';
+  const peerLine = ctx.peers.map(p =>
+    `<a href="#" onclick="event.preventDefault();openPanel(byISO('${p.iso}'));return false;" style="color:var(--accent);text-decoration:none;">${p.name}</a> <span style="font-family:'Geist Mono',monospace;color:var(--t2);">${p.fdrs}</span>`
+  ).join(' <span style="color:var(--t3);">·</span> ');
+  return `
+    <div style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--t3);margin-top:6px;line-height:1.5;">Higher than <span style="color:var(--t2);">${ctx.pct}%</span> of countries</div>
+    <div style="font-family:'Geist',sans-serif;font-size:11px;color:var(--t3);margin-top:3px;line-height:1.55;">Closest peers: ${peerLine}</div>
+  `;
+}
 
 // Map GeoJSON names (D3 world.geojson uses UN full names) to our country names
 const GEO_NAME_ALIASES = {
@@ -15102,9 +15186,25 @@ function updateOverlayStats() {
   const n    = sovereign.length;
   const vuln = sovereign.filter(c => c.fdrs > 75).length;
   const avg  = Math.round(sovereign.reduce((s,c)=>s+c.fdrs,0)/n);
-  document.getElementById('msp-countries').textContent = n;
-  document.getElementById('msp-vulnerable').textContent = vuln;
-  document.getElementById('msp-avg').textContent = avg;
+  const mc = document.getElementById('msp-countries'); if (mc) mc.textContent = n;
+  const mv = document.getElementById('msp-vulnerable'); if (mv) mv.textContent = vuln;
+  const ma = document.getElementById('msp-avg'); if (ma) ma.textContent = avg;
+
+  // v21 design audit — editorial standfirst above the map. Live-computed from
+  // the same data the overlay pills use. Disturbance count is read from the
+  // global disturbanceEvents array (populated by loadDisturbanceData) and the
+  // refresh-age comes from the source manifest summary.
+  const distN = (typeof disturbanceEvents !== 'undefined' && Array.isArray(disturbanceEvents))
+    ? disturbanceEvents.length
+    : 0;
+  const summary = (typeof sourceManifestSummary === 'function') ? sourceManifestSummary() : null;
+  const age = (summary && typeof formatAge === 'function')
+    ? (formatAge(summary.loaded_at) || 'just now')
+    : 'just now';
+  const t = document.getElementById('ms-total'); if (t) t.textContent = n;
+  const v = document.getElementById('ms-vuln'); if (v) v.textContent = vuln;
+  const d = document.getElementById('ms-dist'); if (d) d.textContent = distN || '—';
+  const a = document.getElementById('ms-age'); if (a) a.textContent = age;
 }
 
 // ════════════════════════════════════════════════════
@@ -15327,6 +15427,19 @@ function openPanel(c, skipDrilldown) {
       } else {
         metaEl.innerHTML = '';
       }
+    }
+
+    // v21 design audit — percentile + 3 nearest peers. Anchors the headline
+    // FDRS score in the global distribution so the reader has an instant frame
+    // ("Yemen is in the worst-15% globally · closest peers are Sudan, Lebanon…").
+    let peerEl = document.getElementById('sp-score-peers');
+    if (!peerEl && metaEl && metaEl.parentElement) {
+      peerEl = document.createElement('div');
+      peerEl.id = 'sp-score-peers';
+      metaEl.parentElement.appendChild(peerEl);
+    }
+    if (peerEl) {
+      peerEl.innerHTML = (typeof fdrsPeerBlockHTML === 'function') ? fdrsPeerBlockHTML(c) : '';
     }
 
     // Calibration anchors — absolute numbers next to relative score
@@ -15836,6 +15949,7 @@ function renderCountryTab() {
             <span class="ct-hero-forecast-delta" style="color:${trendCol}">${trendUp?'+':''}${c.f2030 - c.fdrs}</span>
           </div>
           <div style="font-family:'Geist Mono',monospace;font-size:9px;color:var(--t3);background:var(--bg1);border:1px solid var(--b1);padding:2px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;margin-top:4px;display:inline-block;" title="The 2030 number is a curated heritage baseline plus a small modeled live overlay. It is not a back-tested forecast.">CURATED baseline + MODELED live overlay</div>
+          ${(typeof fdrsPeerBlockHTML === 'function') ? fdrsPeerBlockHTML(c) : ''}
         </div>
       </div>
     </div>
@@ -15883,7 +15997,8 @@ function renderCountryTab() {
           <div class="ct-stat-label">Net trade ${provenanceBadge(fieldProvenance(c, 'net')?.quality_flag || 'legacy_curated')}</div>
           <div class="ct-stat-val" style="color:${c.net>=0?'#6ba36b':'#c44b3c'}">${c.net>=0?'+':''}${(c.net/1000).toFixed(1)}<span class="ct-stat-unit">B USD</span></div>
         </div>
-      </div>`;
+      </div>
+      ${chartSourceFooter('FAOSTAT TCL net food trade · USDA PSD trade dependency · HungerMap food CPI', chartSourceTime('faostat_trade'))}`;
     })()}
 
     <!-- Composition: radar + bars -->
@@ -15893,6 +16008,7 @@ function renderCountryTab() {
         <div style="display:flex;justify-content:center;align-items:center;height:260px;">
           <canvas id="radar-ct" style="max-height:260px;max-width:340px;"></canvas>
         </div>
+        ${chartSourceFooter('Composite · FAO + USDA + WB + ND-GAIN + INFORM + WGI + LPI', (sourceManifestSummary()||{}).loaded_at)}
       </div>
       <div class="card">
         <div class="card-title"><span class="card-marker"></span> FDRS Composition</div>
@@ -15915,6 +16031,7 @@ function renderCountryTab() {
             <div class="comp-val" style="color:${riskColor(sceV)}">${sceV}</div>
           </div>`;
         })()}
+        ${chartSourceFooter('Composite · 7 weighted components · see methodology', (sourceManifestSummary()||{}).loaded_at)}
       </div>
     </div>
 
@@ -16013,6 +16130,7 @@ function renderCountryTab() {
     <div class="card">
       <div class="card-title"><span class="card-marker"></span> Top Trading Companies Active in ${c.name}</div>
       <div id="ct-companies-${c.iso}">${renderTopCompaniesForCountry(c)}</div>
+      ${chartSourceFooter('Curated · per-trader sourcing footprints + commodity overlap', chartSourceTime('companies'))}
     </div>`;
 
   setTimeout(()=>{
@@ -20350,6 +20468,10 @@ async function loadDisturbanceData() {
 
   disturbanceEvents = events;
   DISTURBANCE_CACHE.ts = Date.now();
+
+  // v21 design audit — refresh the editorial standfirst & dist toggle pill now
+  // that disturbance count is populated.
+  if (typeof updateOverlayStats === 'function') updateOverlayStats();
 }
 
 const SOURCE_STATUSES = {
@@ -20676,7 +20798,8 @@ function renderDisturbanceSidebar() {
             <span style="font-size:11px;font-weight:600;color:${c.chg==null?'var(--t3)':c.chg>0?'#c44b3c':c.chg<0?'#6ba36b':'var(--t3)'};">${trend}${trend?' ':''}${sign}${c.chg==null?'':c.chg+'%'}</span>
           </div>`;
         }).join('')}
-        <div style="font-size:10px;color:var(--t3);margin-top:8px;">Source: <a href="https://www.fao.org/worldfoodsituation/foodpricesindex/en/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">FAO FFPI</a> · refreshed every 6h.</div>`;
+        <div style="font-size:10px;color:var(--t3);margin-top:8px;">Source: <a href="https://www.fao.org/worldfoodsituation/foodpricesindex/en/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">FAO FFPI</a> · refreshed every 6h.</div>
+        ${chartSourceFooter('FAO Food Price Index · 2014–2016 = 100', chartSourceTime('fao_ffpi'))}`;
     } else {
       priceEl.innerHTML = `
         <div style="font-size:10px;color:var(--t3);text-align:center;padding:14px 8px;">
@@ -21248,6 +21371,7 @@ async function refreshLiveData() {
           <div class="live-indicator-chg" style="color:${cm.chg.startsWith('+')?'#c44b3c':cm.chg==='n/a'?'var(--t3)':'#6ba36b'}">${cm.chg}</div>
         </div>`).join('')}
       <div style="font-size:10px;color:var(--t3);margin-top:10px;">Source: World Bank Commodity Markets Pink Sheet · monthly release · ${pinkSheetMonth ? 'as-of ' + pinkSheetMonth : 'snapshot missing'}${pinkSheetUpdated ? ' · dataset updated ' + pinkSheetUpdated : ''}. Benchmark reference prices — not customs-cleared transactions.</div>
+      ${chartSourceFooter('World Bank Pink Sheet · monthly commodity benchmarks', chartSourceTime('pink_sheet'))}
     </div>
 
     <!-- Top 10 most vulnerable -->
