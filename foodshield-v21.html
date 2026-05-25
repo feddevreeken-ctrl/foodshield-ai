@@ -5104,10 +5104,10 @@ input[type="email"]:focus {
         <!-- Row 2 — Segmented direction toggle -->
         <div class="tfa-segmented" role="tablist" aria-label="Trade direction">
           <button class="tfa-seg active" id="tfa-dir-import" role="tab" aria-selected="true" onclick="tfaSetDir('import',this)">
-            Inbound suppliers
+            Imports
           </button>
           <button class="tfa-seg" id="tfa-dir-export" role="tab" aria-selected="false" onclick="tfaSetDir('export',this)">
-            Outbound destinations
+            Exports
           </button>
         </div>
 
@@ -12424,7 +12424,7 @@ const COUNTRY_LL = {
   CUB:[23.13,-82.38],CYP:[35.17,33.37],CZE:[50.08,14.44],DNK:[55.68,12.57],DJI:[11.59,43.15],
   DOM:[18.49,-69.90],ECU:[-0.18,-78.47],EGY:[30.04,31.23],SLV:[13.69,-89.22],ERI:[15.32,38.93],
   EST:[59.44,24.75],SWZ:[-26.31,31.13],ETH:[9.03,38.74],FJI:[-18.12,178.42],FIN:[60.17,24.94],
-  FRA:[48.85,2.35],GAB:[0.41,9.45],GMB:[13.45,-16.58],GEO:[41.72,44.78],DEU:[52.52,13.41],
+  FRA:[46.60,2.50],GAB:[0.41,9.45],GMB:[13.45,-16.58],GEO:[41.72,44.78],DEU:[52.52,13.41],
   GHA:[5.60,-0.19],GRC:[37.98,23.73],GTM:[14.63,-90.51],GIN:[9.51,-13.71],GNB:[11.86,-15.59],
   GUY:[6.81,-58.16],HTI:[18.55,-72.34],HND:[14.07,-87.19],HUN:[47.50,19.04],ISL:[64.15,-21.94],
   IND:[28.61,77.21],IDN:[-6.21,106.85],IRN:[35.69,51.39],IRQ:[33.31,44.37],IRL:[53.35,-6.26],
@@ -13342,10 +13342,26 @@ function _simulateScenario(c, selected, severityById) {
   }
 
   // ── Supplier resolution ──
+  // v21.x BUGFIX: findSupplierCoord() must honor the same CENTROID_OVERRIDES
+  // as the main centroids Map. Without this, France resolved by NAME (e.g.
+  // from a flow row that arrived as "France" instead of "FRA") gets d3.geoCentroid
+  // applied to the raw GeoJSON feature — which lands in Spain because of
+  // French Guiana / Réunion / Mayotte overseas territories.
+  //
+  // The proper way is to first check if the name resolves to a known ISO3
+  // with a centroid in G.centroids (which already honors the override map),
+  // and only fall back to d3.geoCentroid when no ISO match exists.
   function findSupplierCoord(supplierName) {
     if (!supplierName) return null;
     const s = supplierName.toLowerCase().trim();
     if (FALLBACK_COORDS[s]) return FALLBACK_COORDS[s];
+    // PRIMARY: try byName → G.centroids (overrides applied).
+    if (typeof byName === 'function') {
+      const co = byName(supplierName);
+      if (co && G.centroids.has(co.iso)) return G.centroids.get(co.iso);
+    }
+    // SECONDARY: nameMap → d3.geoCentroid (no overrides — only used if byName
+    // didn't resolve, e.g. for aliases or partial matches).
     if (G.nameMap.has(s)) {
       const f = G.nameMap.get(s);
       try { const c = d3.geoCentroid(f); return [c[1], c[0]]; } catch (e) {}
@@ -13358,16 +13374,12 @@ function _simulateScenario(c, selected, severityById) {
         }
       }
     }
-    // Partial match
+    // Partial match — last resort.
     for (const k of G.nameMap.keys()) {
       if (k.includes(s) || s.includes(k)) {
         const f = G.nameMap.get(k);
         try { const c = d3.geoCentroid(f); return [c[1], c[0]]; } catch (e) {}
       }
-    }
-    if (typeof byName === 'function') {
-      const co = byName(supplierName);
-      if (co) return G.centroids.get(co.iso);
     }
     return null;
   }
@@ -13398,8 +13410,15 @@ function _simulateScenario(c, selected, severityById) {
     if (!nameOrISO) return null;
     // US state ISO
     if (US_STATE_CENTROIDS[nameOrISO]) return US_STATE_CENTROIDS[nameOrISO];
-    // Country centroid by ISO
+    // Country centroid by ISO — preferred (CENTROID_OVERRIDES already applied
+    // to G.centroids on map init, so mainland coordinates are honored here).
     if (G.centroids.has(nameOrISO)) return G.centroids.get(nameOrISO);
+    // v21.x — ISO that wasn't matched against the loaded GeoJSON yet (e.g.
+    // small states, or pre-init lookup). Fall back to the global capital-city
+    // COUNTRY_COORDS table so arcs still draw instead of silently skipping.
+    if (typeof COUNTRY_COORDS !== 'undefined' && COUNTRY_COORDS[nameOrISO]) {
+      return COUNTRY_COORDS[nameOrISO];
+    }
     // Country centroid by name
     return findSupplierCoord(nameOrISO);
   }
@@ -13782,7 +13801,11 @@ function _simulateScenario(c, selected, severityById) {
     G.flows = [];
     G.selectedISO = toIso;
 
-    const center = G.centroids.get(toIso);
+    // v21.x — use getCoord() for the hub too so the fallback chain
+    // (G.centroids → COUNTRY_COORDS → name lookup) applies. Without this,
+    // any country whose ISO wasn't matched against the loaded GeoJSON
+    // silently fails to draw arcs.
+    const center = getCoord(toIso);
     if (!center) return;
 
     suppliers.forEach((sup, i) => {
@@ -13820,7 +13843,9 @@ function _simulateScenario(c, selected, severityById) {
     G.flows = [];
     G.selectedISO = fromIso;
 
-    const center = G.centroids.get(fromIso);
+    // v21.x — fall through to getCoord chain so arcs still draw when the
+    // exporter isn't in G.centroids yet (small states, pre-init).
+    const center = getCoord(fromIso);
     if (!center) return;
 
     dests.forEach((dest, i) => {
