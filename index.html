@@ -790,7 +790,39 @@ body {
   letter-spacing: -0.04em;
   line-height: 0.9;
 }
-.sp-score-meta { flex: 1; padding-bottom: 4px; }
+.sp-score-meta { flex: 1; padding-bottom: 4px; min-width: 0; }
+
+/* v22.1 — Peer block (percentile + nearest peers) gets its own full-width
+   strip below the score row so it doesn't get squashed into the flex residual. */
+.sp-peer-block {
+  padding: 12px 20px 14px;
+  border-bottom: 1px solid var(--b1);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.sp-peer-row {
+  display: flex; align-items: baseline; gap: 8px;
+  flex-wrap: wrap;
+}
+.sp-peer-pct-num {
+  font-family: 'Geist Mono', monospace;
+  font-size: 18px; font-weight: 500;
+  color: var(--t1);
+  letter-spacing: -0.02em;
+}
+.sp-peer-pct-lbl {
+  font-size: 11px; color: var(--t3);
+  letter-spacing: 0.02em;
+}
+.sp-peer-chips-row { gap: 10px; align-items: center; }
+.sp-peer-chips-lbl {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.14em;
+  color: var(--t3);
+}
+.sp-peer-chips {
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
 .sp-score-label {
   font-size: 9.5px;
   color: var(--t3);
@@ -1792,49 +1824,61 @@ abbr.ac:hover, .ac:hover {
 }
 .commodity-intro-body b { color: var(--t1); font-weight: 500; }
 
-/* v22 — Editorial header for Commodity & Scenario pages */
+/* v22.1 — Editorial header for Commodity / Scenario / Method / About pages.
+   The header is intentionally large and fills the page canvas — the previous
+   46px headline left ~70% of the screen empty in the top-left. */
 .editorial-header {
-  margin-bottom: 22px;
-  padding-bottom: 18px;
+  margin: 4px 0 36px;
+  padding: 32px 0 30px;
   border-bottom: 1px solid var(--b1);
+  position: relative;
+}
+.editorial-header::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 60px; height: 1px;
+  background: var(--accent);
 }
 .editorial-dateline {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 12px;
   font-family: 'Geist Mono', monospace;
-  font-size: 10px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.16em;
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.18em;
   color: var(--t3);
-  margin-bottom: 14px;
+  margin-bottom: 28px;
 }
 .editorial-dateline .dot {
-  width: 5px; height: 5px; border-radius: 50%;
-  background: var(--accent); box-shadow: 0 0 6px var(--accent);
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 8px var(--accent);
 }
 .editorial-headline {
   font-family: 'Instrument Serif', serif;
   font-weight: 400;
-  font-size: 46px; line-height: 1.05;
-  letter-spacing: -0.02em;
+  font-size: clamp(48px, 7vw, 92px);
+  line-height: 0.98;
+  letter-spacing: -0.028em;
   color: var(--t1);
-  max-width: 22ch;
-  margin-bottom: 14px;
+  /* No max-width — fill the canvas. */
+  margin-bottom: 28px;
 }
 .editorial-headline em { font-style: italic; color: var(--accent); }
 .editorial-standfirst {
-  font-size: 14px;
+  font-size: 16px;
   color: var(--t2);
   line-height: 1.65;
-  max-width: 64ch;
+  max-width: 70ch;
+  font-weight: 300;
 }
 .editorial-standfirst b { color: var(--t1); font-weight: 500; }
 .editorial-colophon {
-  margin-top: 24px;
-  padding: 14px 18px;
+  margin-top: 28px;
+  padding: 16px 20px;
   background: var(--bg1);
   border: 1px solid var(--b1);
   border-radius: 8px;
   font-family: 'Geist Mono', monospace;
-  font-size: 10px;
+  font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: var(--t3);
@@ -2006,7 +2050,7 @@ abbr.ac:hover, .ac:hover {
 }
 .scn-brief-copy-btn:hover { border-color: var(--accent); color: var(--accent); }
 @media (max-width: 900px) {
-  .editorial-headline { font-size: 32px; }
+  /* clamp() in .editorial-headline handles the scale-down naturally */
   .scn-brief-grid { grid-template-columns: 1fr 1fr; }
 }
 
@@ -5591,10 +5635,29 @@ input[type="email"]:focus {
 
   <div id="tab-methodology" class="tab-page">
     <div class="content-page">
-      <div class="page-header">
-        <div class="page-eyebrow">Transparency · open methodology</div>
-        <div class="page-title">How <em>FDRS</em> is calculated</div>
-        <div class="page-sub">Every country gets one Food Disruption Risk Score from 0–100 — a weighted blend of seven components, all derived from public data. Every weight is documented. Every source is cited.</div>
+      <!-- v22.1 — editorial header -->
+      <div class="editorial-header">
+        <div class="editorial-dateline">
+          <span class="dot"></span>
+          <span>Open Methodology · Updated May 2026</span>
+        </div>
+        <div class="editorial-headline">Every number on this site is <em>auditable</em>.</div>
+        <div class="editorial-standfirst">
+          The <b>Food Disruption Risk Score</b> is one 0–100 composite per country, built from <b>seven independently-sourced components</b> using public data only. Every weight is documented, every input is traceable, and the formula is reproducible from a single page. Below: the math, the data, the limitations.
+        </div>
+        <div class="editorial-colophon">
+          <span class="src">Built from</span>
+          <span class="sep">·</span>
+          <span>FAO</span><span class="sep">·</span>
+          <span>USDA PSD</span><span class="sep">·</span>
+          <span>World Bank</span><span class="sep">·</span>
+          <span>WFP</span><span class="sep">·</span>
+          <span>ACLED</span><span class="sep">·</span>
+          <span>ND-GAIN</span><span class="sep">·</span>
+          <span>INFORM</span><span class="sep">·</span>
+          <span>IPC</span><span class="sep">·</span>
+          <span>UN Comtrade</span>
+        </div>
       </div>
       <div id="methodology-body" class="fade-in"></div>
     </div>
@@ -5617,14 +5680,15 @@ input[type="email"]:focus {
   <!-- ABOUT TAB -->
   <div id="tab-about" class="tab-page">
     <div class="content-page">
-      <div class="page-header">
-        <div class="page-eyebrow">About FoodShield AI</div>
-        <div class="page-title">What this <em>is</em>, and what it isn't.</div>
-        <div class="page-sub">
-          <b style="color:var(--t1)">FoodShield AI is an open-data dashboard that scores every country on its exposure to food-supply disruption.</b>
-          Every metric carries a small provenance badge so readers can audit the input class at a glance. The five categories: <b style="color:#6ba36b">sourced</b> (fetched live from FAO, USDA, World Bank, WFP, ACLED, NASA, ND-GAIN, INFORM, IPC, etc.), <b style="color:#7c9fcf">manual</b> (curated from a primary publication, refreshed by hand), <b style="color:var(--accent)">modeled</b> (computed from observed inputs — e.g. trade-dependency overlays), <b style="color:#c47a3c">curated</b> (legacy heritage value awaiting re-derivation), and <b style="color:#c44b3c">illustrative</b> (plausible example with no upstream data — e.g. company sourcing shares).
-          It is built for <b style="color:var(--t1)">procurement, supply-chain, and risk professionals</b> who need a fast read on country-level food-system fragility before a deeper dive.
-          Two things <b>not to trust blindly</b>: the modeled trade-dependency view (it is a directional screen, not an audited customs record) and the company sourcing shares (illustrative — major traders don't publish per-country tonnage).
+      <!-- v22.1 — editorial header replaces the dense intro paragraph -->
+      <div class="editorial-header">
+        <div class="editorial-dateline">
+          <span class="dot"></span>
+          <span>About FoodShield AI · Built in Rotterdam</span>
+        </div>
+        <div class="editorial-headline">A free dashboard for <em>the question no single source answers</em>.</div>
+        <div class="editorial-standfirst">
+          If something goes wrong in one country tomorrow — a war, a drought, a port closure — <b>who actually gets hurt, and how badly?</b> Built solo by a student at Erasmus University Rotterdam, FoodShield wires together 33 public data feeds into one comparable score per country, refreshed every six hours, with every input traceable.
         </div>
       </div>
       <div id="about-body" class="fade-in"></div>
@@ -13039,15 +13103,36 @@ function fdrsPeerContext(c) {
   return { pct, total, peers: sorted.slice(0, 3) };
 }
 // Render the percentile + peers block. Used in the side panel and country-tab hero.
+// v22.1 — rebuilt as a full-width 2-row block so the peer line has room to breathe.
+// Previous version was being shoved into the flex residual of .sp-score-row,
+// causing the "Closest peers: India 20 · Italy 20 · Romania 20" line to wrap
+// awkwardly into a narrow column.
 function fdrsPeerBlockHTML(c) {
   const ctx = fdrsPeerContext(c);
   if (!ctx) return '';
-  const peerLine = ctx.peers.map(p =>
-    `<a href="#" onclick="event.preventDefault();openPanel(byISO('${p.iso}'));return false;" style="color:var(--accent);text-decoration:none;">${p.name}</a> <span style="font-family:'Geist Mono',monospace;color:var(--t2);">${p.fdrs}</span>`
-  ).join(' <span style="color:var(--t3);">·</span> ');
+  const peerChips = ctx.peers.map(p =>
+    `<a href="#" onclick="event.preventDefault();openPanel(byISO('${p.iso}'));return false;"
+       style="display:inline-flex;align-items:baseline;gap:5px;padding:3px 9px;
+              background:var(--bg2);border:1px solid var(--b1);border-radius:14px;
+              color:var(--t1);text-decoration:none;font-size:11px;line-height:1.2;
+              transition:border-color .15s;"
+       onmouseover="this.style.borderColor='var(--accent)'"
+       onmouseout="this.style.borderColor='var(--b1)'">
+       <span>${p.name}</span>
+       <span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--t3);font-weight:500;">${p.fdrs}</span>
+     </a>`
+  ).join(' ');
   return `
-    <div style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--t3);margin-top:6px;line-height:1.5;">Higher than <span style="color:var(--t2);">${ctx.pct}%</span> of countries</div>
-    <div style="font-family:'Geist',sans-serif;font-size:11px;color:var(--t3);margin-top:3px;line-height:1.55;">Closest peers: ${peerLine}</div>
+    <div class="sp-peer-block">
+      <div class="sp-peer-row">
+        <span class="sp-peer-pct-num">${ctx.pct}%</span>
+        <span class="sp-peer-pct-lbl">of countries score lower</span>
+      </div>
+      <div class="sp-peer-row sp-peer-chips-row">
+        <span class="sp-peer-chips-lbl">Closest peers</span>
+        <div class="sp-peer-chips">${peerChips}</div>
+      </div>
+    </div>
   `;
 }
 
@@ -15960,14 +16045,22 @@ function openPanel(c, skipDrilldown) {
       }
     }
 
-    // v21 design audit — percentile + 3 nearest peers. Anchors the headline
-    // FDRS score in the global distribution so the reader has an instant frame
-    // ("Yemen is in the worst-15% globally · closest peers are Sudan, Lebanon…").
+    // v22.1 — percentile + 3 nearest peers. Placed as a full-width block AFTER
+    // the score row (not inside its flex layout) so the peer chips have full
+    // panel width and don't wrap into a narrow column. The peer block markup
+    // is built by fdrsPeerBlockHTML() which now returns its own .sp-peer-block.
     let peerEl = document.getElementById('sp-score-peers');
-    if (!peerEl && metaEl && metaEl.parentElement) {
+    // Find the .sp-score-row (parent of metaEl); insert peer block AFTER it.
+    const scoreRow = metaEl && metaEl.closest ? metaEl.closest('.sp-score-row') : null;
+    if (!peerEl && scoreRow && scoreRow.parentNode) {
       peerEl = document.createElement('div');
       peerEl.id = 'sp-score-peers';
-      metaEl.parentElement.appendChild(peerEl);
+      // Insert immediately after the score row
+      if (scoreRow.nextSibling) {
+        scoreRow.parentNode.insertBefore(peerEl, scoreRow.nextSibling);
+      } else {
+        scoreRow.parentNode.appendChild(peerEl);
+      }
     }
     if (peerEl) {
       peerEl.innerHTML = (typeof fdrsPeerBlockHTML === 'function') ? fdrsPeerBlockHTML(c) : '';
@@ -18023,105 +18116,119 @@ function renderAboutTab() {
   if (!el || el.dataset.rendered) return;
   el.dataset.rendered = '1';
   el.innerHTML = `
-    <!-- v21 — Founder note. Personal, specific, businessperson-readable.
-         Replaces the older generic "I built this as a research project" bio. -->
-    <div class="card" style="margin-bottom:16px;">
-      <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;margin-bottom:18px;">
-        <div style="width:64px;height:64px;border-radius:50%;background:var(--accent)22;border:2px solid var(--accent)44;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;">👤</div>
-        <div style="flex:1;min-width:200px;">
-          <div style="font-size:18px;font-weight:700;color:var(--t1);margin-bottom:3px;">Fedde Vreeken</div>
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
-            <span style="font-size:12px;color:var(--accent);font-weight:500;">Student · Erasmus University Rotterdam</span>
-            <a href="https://www.linkedin.com/in/feddevreeken" target="_blank" rel="noopener"
-              style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;background:#0A66C2;border-radius:5px;color:#fff;font-size:10.5px;font-weight:600;text-decoration:none;letter-spacing:.02em;">
-              <svg viewBox="0 0 24 24" fill="currentColor" style="width:11px;height:11px;"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
-              LinkedIn
-            </a>
-          </div>
+    <!-- v22.1 — At-a-glance fact strip (replaces dense "what this is" paragraph) -->
+    <div class="about-stats">
+      <div class="about-stat">
+        <div class="about-stat-num">33</div>
+        <div class="about-stat-lab">Public data feeds</div>
+      </div>
+      <div class="about-stat">
+        <div class="about-stat-num">193</div>
+        <div class="about-stat-lab">Countries + 50 US states</div>
+      </div>
+      <div class="about-stat">
+        <div class="about-stat-num">6h</div>
+        <div class="about-stat-lab">Refresh cadence</div>
+      </div>
+      <div class="about-stat">
+        <div class="about-stat-num">0</div>
+        <div class="about-stat-lab">Paywalls or auth required</div>
+      </div>
+    </div>
+
+    <!-- v22.1 — Mission statement: who it's for + what's modeled vs sourced. -->
+    <div class="about-mission-grid">
+      <div class="about-mission-card">
+        <div class="about-mission-eyebrow">Built for</div>
+        <div class="about-mission-body">
+          <b style="color:var(--t1)">Procurement, supply-chain, and country-risk professionals</b> who need a fast read on food-system fragility before a deeper dive. Also useful for researchers, journalists, and humanitarian planners cross-referencing the same underlying sources.
         </div>
       </div>
+      <div class="about-mission-card">
+        <div class="about-mission-eyebrow">Provenance, in five classes</div>
+        <div class="about-mission-body">
+          <span style="color:#6ba36b">Sourced</span> (live from a public pipeline) ·
+          <span style="color:#7c9fcf">Manual</span> (hand-maintained snapshot) ·
+          <span style="color:var(--accent)">Modeled</span> (computed from sourced inputs) ·
+          <span style="color:#c47a3c">Curated</span> (legacy, awaiting re-derivation) ·
+          <span style="color:#c44b3c">Illustrative</span> (no upstream data — e.g. company sourcing shares).
+          Every metric on every panel carries one of these tags.
+        </div>
+      </div>
+    </div>
 
-      <div style="font-family:'Instrument Serif',serif;font-size:21px;font-weight:400;color:var(--t1);letter-spacing:-0.005em;line-height:1.3;margin-bottom:14px;">
-        Why I built this
+    <!-- v22.1 — Founder note, restructured. Two-column header strip with name +
+         LinkedIn, then serif callout, then a single tightened essay block. -->
+    <div class="card" style="margin-bottom:16px;padding:26px 28px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--b1);">
+        <div>
+          <div style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:0.16em;margin-bottom:6px;">Founder note</div>
+          <div style="font-size:18px;font-weight:600;color:var(--t1);letter-spacing:-0.01em;">Fedde Vreeken</div>
+          <div style="font-size:12px;color:var(--t2);margin-top:2px;">International Economics & Business Economics · Erasmus University Rotterdam</div>
+        </div>
+        <a href="https://www.linkedin.com/in/feddevreeken" target="_blank" rel="noopener"
+          style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:#0A66C2;border-radius:6px;color:#fff;font-size:11.5px;font-weight:600;text-decoration:none;letter-spacing:.02em;">
+          <svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px;"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+          Connect on LinkedIn
+        </a>
       </div>
 
-      <div style="font-size:13px;color:var(--t2);line-height:1.85;">
+      <div style="font-family:'Instrument Serif',serif;font-size:28px;font-weight:400;color:var(--t1);letter-spacing:-0.012em;line-height:1.2;margin-bottom:18px;max-width:42ch;">
+        I built this because the question I had — <em style="color:var(--accent)">"if something goes wrong in country X tomorrow, who gets hurt?"</em> — had no single answer.
+      </div>
+
+      <div style="font-size:14px;color:var(--t2);line-height:1.8;max-width:68ch;">
         <p style="margin:0 0 14px;">
-          I'm not a food-security expert. I'm a student at Erasmus University in Rotterdam,
-          and I built this for one reason: <b style="color:var(--t1)">I wanted to learn how the
-          world's food system actually works</b>, and the public dashboards I could find didn't
-          give me a coherent picture.
-        </p>
-        <p style="margin:0 0 14px;">
-          ${ac('FAO')} has a price index. ${ac('WFP')} has a hunger map. World Bank has trade data. ${ac('NASA')} has fire
-          and weather data. ${ac('ACLED')} has conflict events. Each of these is excellent on its own.
-          None of them, by themselves, answers the simplest question I had:
-          <em style="color:var(--t1);font-style:italic;">if something goes wrong in country X
-          tomorrow, who gets hurt — and how badly?</em>
+          ${ac('FAO')} has prices. ${ac('WFP')} has hunger. World Bank has trade. ${ac('NASA')} has weather. ${ac('ACLED')} has conflict. Each is excellent. <b style="color:var(--t1)">None of them, alone, answers that question.</b>
         </p>
         <p style="margin:0 0 14px;">
-          So I started wiring them together. One pipeline became three. Three became ten.
-          Eventually it became the dashboard you're looking at — a single 0–100 risk score
-          with every input traceable to a source.
+          So I started wiring them together. One pipeline became three. Three became ten. It ended up at <b style="color:var(--t1)">33 public feeds, refreshing every six hours, covering 193 countries and 50 US states</b> — distilled into one 0–100 Food Disruption Risk Score per country with every input traceable.
         </p>
         <p style="margin:0 0 14px;">
-          <b style="color:var(--t1)">Three things surprised me while building it.</b> First,
-          how concentrated the world's food trade really is — a handful of suppliers feed most
-          of the countries on the IPC crisis list. Second, how often the &ldquo;structurally
-          stable&rdquo; countries (Egypt, Lebanon, Tunisia) sit one shock away from a serious
-          problem. Third, how much of the genuinely useful data is technically free but
-          practically locked behind APIs, PDFs, and spreadsheets nobody reads.
+          Three things surprised me while building it. <b style="color:var(--t1)">First</b>, how concentrated the world's food trade is — a handful of suppliers feed most of the countries on the IPC crisis list. <b style="color:var(--t1)">Second</b>, how often the "structurally stable" countries — Egypt, Lebanon, Tunisia — sit one shock away from a serious problem. <b style="color:var(--t1)">Third</b>, how much of the useful data is technically free but practically locked behind APIs, PDFs, and spreadsheets nobody reads. <em style="font-style:italic;color:var(--t1);">The synthesis is the product.</em>
         </p>
-        <p style="margin:0 0 14px;">
-          FoodShield AI is the dashboard I wished existed when I started the project.
-          It's free, open, and honest about what it knows and doesn't know. Every metric
-          carries a provenance label so you can see which numbers are live and which are
-          modelled. I'm still learning, and I'm sure I've gotten things wrong — if you spot
-          one, please tell me.
-        </p>
-        <p style="margin:0 0 4px;color:var(--t1);font-weight:500;">
-          What I'd most like back from you:
-        </p>
-        <p style="margin:4px 0 8px;color:var(--t2);font-size:12.5px;line-height:1.7;">
-          <span style="color:var(--accent)">What signals are missing? What false positives have you spotted? What's your sourcing-risk feedback?</span>
-          If you work in procurement, supply chain, or commodity / country risk, the feedback I'm hungriest for is the
-          ground-truth check — where does the score under- or over-state what you're actually seeing on the desk?
-        </p>
-        <p style="margin:6px 0 0;font-size:12px;color:var(--t3);">
-          <a href="https://www.linkedin.com/in/feddevreeken" target="_blank" rel="noopener"
-             style="color:var(--accent);text-decoration:none;">Reach out on LinkedIn →</a>
+        <p style="margin:0 0 0;">
+          I'm not a food-security expert. I'm a student, this is open and honest about what it knows and doesn't know. If you spot something wrong — or something missing — <b style="color:var(--accent)">please tell me</b>. The feedback I'm hungriest for: where does the score under- or over-state what you're actually seeing on the desk?
         </p>
       </div>
     </div>
 
-    <!-- Email signup card -->
-    <div class="card" style="margin-bottom:16px;">
-      <div class="card-title"><span class="card-marker"></span> Stay in the loop</div>
-      <div style="font-size:12px;color:var(--t2);line-height:1.7;margin-bottom:12px;">
-        Leave your email to be notified about future AI projects, data updates, and new features.
+    <!-- v22.1 — Two-up: Stay in loop + What not to trust blindly. -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+      <div class="card" style="padding:20px 22px;">
+        <div class="card-title" style="margin-bottom:10px;"><span class="card-marker"></span> Stay in the loop</div>
+        <div style="font-size:12.5px;color:var(--t2);line-height:1.7;margin-bottom:14px;">
+          Get a note when new data sources land or major model updates ship. No spam — maybe one email a month.
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <input type="email" id="about-email" placeholder="your@email.com"
+            style="flex:1;min-width:160px;padding:9px 12px;background:var(--bg3);border:1px solid var(--b2);border-radius:6px;color:var(--t1);font-size:12px;outline:none;box-sizing:border-box;">
+          <button onclick="submitSignupFrom('about-email','about-signup-msg')"
+            style="padding:9px 16px;background:var(--accent)22;border:1px solid var(--accent)55;color:var(--accent);border-radius:6px;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;">
+            Notify me
+          </button>
+        </div>
+        <div id="about-signup-msg" style="display:none;margin-top:8px;font-size:11.5px;"></div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <input type="email" id="about-email" placeholder="your@email.com"
-          style="flex:1;min-width:200px;padding:8px 12px;background:var(--bg3);border:1px solid var(--b2);border-radius:8px;color:var(--t1);font-size:12px;outline:none;box-sizing:border-box;">
-        <button onclick="submitSignupFrom('about-email','about-signup-msg')"
-          style="padding:8px 18px;background:var(--accent)22;border:1px solid var(--accent)55;color:var(--accent);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">
-          Notify me
-        </button>
+
+      <div class="card" style="padding:20px 22px;">
+        <div class="card-title" style="margin-bottom:10px;color:#d27a3e;"><span class="card-marker" style="background:#d27a3e;"></span> What NOT to trust blindly</div>
+        <div style="font-size:12.5px;color:var(--t2);line-height:1.7;">
+          The <b style="color:var(--t1)">modeled trade-dependency overlays</b> are a directional screen, not customs records. The <b style="color:var(--t1)">company sourcing shares</b> are illustrative — major traders don't publish per-country tonnage. The <b style="color:var(--t1)">2030 outlook</b> is a plausibility cone built on current trends, not a forecast. Everywhere these appear, the badge says so.
+        </div>
       </div>
-      <div id="about-signup-msg" style="display:none;margin-top:8px;font-size:11.5px;"></div>
     </div>
 
-    <!-- Contact / disclaimer -->
-    <div style="background:var(--bg2);border:1px solid var(--b1);border-radius:10px;padding:14px 16px;font-size:11px;color:var(--t3);line-height:1.75;">
-      <b style="color:var(--t2);">Academic disclaimer:</b> This platform is a student research project.
-      FDRS scores and modeled outlooks are model-derived estimates intended for analytical exploration,
-      not official policy guidance. Data is updated to the best ability of the author using publicly
-      available sources. For questions or collaboration: <b style="color:var(--t1)">fedde.vreeken@gmail.com</b>
-      &nbsp;·&nbsp;
-      <a href="https://www.linkedin.com/in/feddevreeken" target="_blank" rel="noopener"
-        style="color:#0A66C2;font-weight:600;text-decoration:none;">
-        LinkedIn ↗
-      </a>
+    <!-- v22.1 — Compact disclaimer footer -->
+    <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:10px;padding:14px 18px;font-size:11px;color:var(--t3);line-height:1.75;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+      <div>
+        <b style="color:var(--t2);">Academic project disclaimer.</b> Model-derived estimates for analytical exploration — not official policy guidance.
+      </div>
+      <div>
+        <b style="color:var(--t2);">fedde.vreeken@gmail.com</b>
+        <span style="color:var(--b3);margin:0 8px;">·</span>
+        <a href="https://www.linkedin.com/in/feddevreeken" target="_blank" rel="noopener" style="color:#0A66C2;font-weight:600;text-decoration:none;">LinkedIn ↗</a>
+      </div>
     </div>
   `;
 }
