@@ -13995,15 +13995,25 @@ function commoditySuppliers(c, commodity) {
 
   const routeKey = _routeKeyFor(commodity);
 
-  // 1) Observed Comtrade
+  // 1) Observed Comtrade. CRITICAL: refresh_comtrade.py stores suppliers
+  // with `iso3` only (no `country`/`name` field). Resolve via _nameFromISO
+  // and also keep the iso3 around so downstream volume lookups can match.
   const obsRow = (routeKey && typeof LIVE !== 'undefined' && LIVE && LIVE.comtrade)
     ? (LIVE.comtrade[c.iso] || {})[routeKey] : null;
   const obsTop = obsRow && Array.isArray(obsRow.top_suppliers) ? obsRow.top_suppliers : null;
   if (obsTop && obsTop.length >= 2) {
-    const pairs = obsTop.slice(0, 6).map(s => ({
-      name: s.country || s.name || '',
-      pct: Math.round(s.share_pct || 0),
-    })).filter(p => p.name && p.pct > 0);
+    const pairs = obsTop.slice(0, 6).map(s => {
+      const iso = s.iso3 || s.iso || '';
+      const name = s.country || s.name || (iso ? _nameFromISO(iso) : '');
+      return {
+        name,
+        iso,
+        pct: Math.round(s.share_pct || 0),
+        // Keep raw USD on the supplier so _estimateVolume can use the OBSERVED
+        // per-supplier value directly instead of computing total × share again.
+        usd_m: typeof s.usd_m === 'number' ? s.usd_m : null,
+      };
+    }).filter(p => p.name && p.pct > 0);
     if (pairs.length >= 2) return pairs;
   }
 
@@ -14184,10 +14194,19 @@ function tfaShowFlows() {
         name, pct: (c.supPct || [])[i] || 0,
       }));
     }
-    const suppliers = pairs.map(({ name: sup, pct }, i) => {
+    const suppliers = pairs.map(({ name: sup, pct, iso: supIso }, i) => {
       const commo = commodity || importItems[i] || 'Food products';
-      // Pass supplier NAME so _estimateVolume can match observed Comtrade data correctly.
-      const vol = _estimateVolume(c, commo, i, sup) || _modeledVolumeFallback(c, commo, i);
+      // Resolve supplier ISO from name when the upstream branch didn't supply
+      // it (route table branches set iso explicitly; heritage branch doesn't).
+      let resolvedIso = supIso;
+      if (!resolvedIso) {
+        const sc = COUNTRIES.find(cc => cc.name === sup || cc.iso === sup);
+        if (sc) resolvedIso = sc.iso;
+      }
+      // Pass both NAME and ISO so _estimateVolume can match observed Comtrade
+      // suppliers (which are stored as iso3 only).
+      const vol = _estimateVolume(c, commo, i, sup, resolvedIso, 'import')
+        || _modeledVolumeFallback(c, commo, i);
       const companies = _companiesFor(commo);
       const supplierCompanies = companies.slice(i, i + 3).map((co, j) => ({
         name: co, share: Math.max(8, Math.round((35 - j*8) * (1 - i*0.1))),
@@ -14292,7 +14311,14 @@ function tfaShowFlows() {
     const suppliers = dests.map((dest, i) => {
       const pct = [35, 25, 18, 12, 7, 3][i] || 5;
       const commo = commodity || exportItems[i] || 'Agricultural goods';
-      const vol = _estimateVolume(c, commo, i, dest) || _modeledVolumeFallback(c, commo, i);
+      // Resolve destination ISO so _estimateVolume can attempt the
+      // direction='export' lookup (destination's import-row → our share as
+      // observed exporter). If no observed evidence exists, falls through
+      // to modeled — and we never reuse import-side totals.
+      const dc = COUNTRIES.find(cc => cc.name === dest || cc.iso === dest);
+      const destIso = dc ? dc.iso : null;
+      const vol = _estimateVolume(c, commo, i, dest, destIso, 'export')
+        || _modeledVolumeFallback(c, commo, i);
       const companies = _companiesFor(commo);
       const supplierCompanies = companies.slice(0, 3).map((co, j) => ({
         name: co, share: Math.max(8, Math.round((35 - j*8) * (1 - i*0.1))),
@@ -17969,56 +17995,129 @@ function _companiesFor(name){
   return COMMODITY_COMPANIES.food.slice();
 }
 
-// v20.7: Volume estimator — clearly modeled, not observed.
-// First try real Comtrade observation; only fall back to model when we have nothing.
-// The return shape now carries a `provenance` field so the UI can label it honestly.
-function _estimateVolume(country, commodity, supplierIdx, supplierName){
-  // Try observed Comtrade staples data first (covers ~25 priority countries × 4 staples).
-  // CRITICAL: match by supplier NAME, not array index. The legacy c.suppliers list and
-  // the observed Comtrade top_suppliers list are NOT aligned by position. Using index
-  // would attach Comtrade share X to the wrong country name and badge it OBS · COMTRADE.
+// v21.x — Direction-aware volume estimator.
+//
+// CRITICAL BUG FIXES (May 25 2026):
+//   1. refresh_comtrade.py stores suppliers as `{iso3, usd_m, share_pct}` —
+//      no `country`/`name` field. The previous name-match branch only worked
+//      when callers had pre-resolved the supplier name, AND its partial
+//      `supName.includes(n)` fallback matched empty strings to every row,
+//      assigning the top supplier's share to every displayed line. Now we
+//      match by iso3 primarily, with name fallback only when iso3 is missing.
+//   2. The 'observed' Comtrade data is IMPORT-side. Calling _estimateVolume
+//      for an export flow returned the importer's import total as if it
+//      were the exporter's export evidence — totally wrong. Now we require
+//      a `direction` argument and refuse to badge export flows as observed
+//      from import-side Comtrade.
+//   3. When `total_kt` is null in the served data (public Comtrade endpoint
+//      doesn't return netWgt), we keep kt null instead of coercing to 0.
+//
+// Args:
+//   country       — country object whose panel is open (the IMPORTER for
+//                   dir='import', the EXPORTER for dir='export')
+//   commodity     — commodity label string (free-form, e.g. "Wheat", "Rice")
+//   supplierIdx   — position in the legacy list (used only for modeled fallback)
+//   supplierName  — display name of the supplier/destination (may be undefined)
+//   supplierIso   — ISO3 of the supplier/destination if known (preferred lookup)
+//   direction     — 'import' or 'export'. Defaults to 'import' for backward compat.
+function _estimateVolume(country, commodity, supplierIdx, supplierName, supplierIso, direction){
+  const dir = direction === 'export' ? 'export' : 'import';
   const commLower = (commodity || '').toLowerCase();
   const obsKey = /wheat/.test(commLower) ? 'wheat'
               : /rice/.test(commLower) ? 'rice'
               : /maize|corn/.test(commLower) ? 'maize'
               : /soy/.test(commLower) ? 'soybeans'
+              : /palm/.test(commLower) ? 'palm_oil'
+              : /sugar/.test(commLower) ? 'sugar'
+              : /coffee/.test(commLower) ? 'coffee'
+              : /cocoa/.test(commLower) ? 'cocoa'
+              : /fertili[zs]er|urea/.test(commLower) ? 'fertilizer'
+              : /beef|cattle|bovine/.test(commLower) ? 'beef'
               : null;
   if (obsKey && LIVE && LIVE.comtrade) {
-    const row = (LIVE.comtrade[country.iso] || {})[obsKey];
-    if (row && row.total_usd_m != null) {
-      // Find the supplier in Comtrade's observed list by NAME match.
-      const supName = (supplierName || '').toLowerCase().trim();
-      let supShare = null;
-      if (supName) {
-        const ts = (row.top_suppliers || []);
-        // Try exact match first, then partial (e.g. "USA" matches "United States of America")
-        const exact = ts.find(s => (s.country || s.name || '').toLowerCase().trim() === supName);
-        const partial = !exact && ts.find(s => {
-          const n = (s.country || s.name || '').toLowerCase();
-          return n.includes(supName) || supName.includes(n);
-        });
-        const match = exact || partial;
-        if (match) supShare = match.share_pct;
-      }
-      if (supShare != null) {
+    if (dir === 'import') {
+      // Import side: the importer's row holds observed bilateral inflows.
+      const row = (LIVE.comtrade[country.iso] || {})[obsKey];
+      if (row && row.total_usd_m != null) {
+        const ts = Array.isArray(row.top_suppliers) ? row.top_suppliers : [];
+        // Prefer per-supplier observed USD if present (most precise).
+        const wantIso = (supplierIso || '').toUpperCase();
+        const wantName = (supplierName || '').toLowerCase().trim();
+        let match = null;
+        if (wantIso) match = ts.find(s => (s.iso3 || s.iso || '').toUpperCase() === wantIso);
+        if (!match && wantName) {
+          match = ts.find(s => {
+            const n = (s.country || s.name || _nameFromISO(s.iso3 || s.iso) || '').toLowerCase().trim();
+            // Require non-empty AND exact-or-substring match. Empty supplier-row
+            // name must never silently match every row (the previous .includes('')
+            // bug); guard explicitly.
+            if (!n) return false;
+            return n === wantName || n.includes(wantName) || wantName.includes(n);
+          });
+        }
+        if (match) {
+          // NOTE: refresh_comtrade stores both `total_usd_m` and per-supplier
+          // `usd_m` in raw USD (the field name is historical/misleading). The
+          // downstream UI uses _fmtMoneyUSD() which already handles raw-USD
+          // values, so we pass them through unchanged. Don't divide by 1e6.
+          const supUsd = (typeof match.usd_m === 'number')
+            ? match.usd_m
+            : (match.share_pct != null ? row.total_usd_m * match.share_pct / 100 : null);
+          if (supUsd != null) {
+            return {
+              // The `usdM` key is historical — downstream consumers know it
+              // carries raw USD; _fmtMoneyUSD() will format as $B/$M/$K.
+              usdM: Math.round(supUsd),
+              kt: row.total_kt != null && match.share_pct != null
+                ? Math.round(row.total_kt * match.share_pct / 100) : null,
+              provenance: 'observed',
+            };
+          }
+        }
+        // Supplier didn't match any observed Comtrade entry — return the
+        // aggregate total without claiming a bilateral share. Caller renders
+        // this as 'observed_aggregate' so the user sees the country-level
+        // total but knows we couldn't allocate to a specific supplier.
         return {
-          usdM: Math.round(row.total_usd_m * supShare / 100),
-          // v20.8: public Comtrade endpoint does not return netWgt; kt unavailable.
-          kt:   row.total_kt != null ? Math.round(row.total_kt * supShare / 100) : null,
-          provenance: 'observed',
+          usdM: Math.round(row.total_usd_m),
+          kt: row.total_kt != null ? Math.round(row.total_kt) : null,
+          provenance: 'observed_aggregate',
         };
       }
-      // Supplier name doesn't match any observed Comtrade supplier — fall through to
-      // aggregate-only (don't claim observed bilateral share we can't verify).
-      return {
-        usdM: Math.round(row.total_usd_m),
-        kt: row.total_kt != null ? Math.round(row.total_kt) : null,
-        provenance: 'observed_aggregate'
-      };
+    } else {
+      // Export side: comtrade_staples.json is keyed on the importer, not the
+      // exporter. So if Egypt's row says "Russia 73%", that's evidence FOR
+      // Egypt's import-side. We can derive an observed export volume from
+      // the *destination's* observed import row, NOT from the current
+      // country's own row. supplierName/supplierIso here represent the
+      // export DESTINATION.
+      const destIso = (supplierIso || '').toUpperCase();
+      const destRow = destIso ? (LIVE.comtrade[destIso] || {})[obsKey] : null;
+      if (destRow && Array.isArray(destRow.top_suppliers)) {
+        // Find country.iso as a supplier inside the destination's row.
+        const usAsSupplier = destRow.top_suppliers.find(s =>
+          (s.iso3 || s.iso || '').toUpperCase() === country.iso
+        );
+        if (usAsSupplier) {
+          // Same raw-USD convention as the import branch above.
+          const supUsd = (typeof usAsSupplier.usd_m === 'number')
+            ? usAsSupplier.usd_m
+            : (usAsSupplier.share_pct != null ? destRow.total_usd_m * usAsSupplier.share_pct / 100 : null);
+          if (supUsd != null) {
+            return {
+              usdM: Math.round(supUsd),
+              kt: null,
+              provenance: 'observed',
+            };
+          }
+        }
+      }
+      // No observed export-side evidence — return null so the UI either
+      // falls back to the explicit modeled estimator or hides the volume.
+      return null;
     }
   }
-  // No observed data — return null so the UI knows to show "Observed bilateral trade unavailable"
-  // rather than fabricating a number that looks precise but isn't grounded.
+  // Commodity not in Comtrade coverage, or no row for this country.
   return null;
 }
 
@@ -18055,8 +18154,15 @@ function openCommodityDrilldown(commodity, importerIso){
   // supplier mix (observed Comtrade → COMMODITY_TRADE_ROUTES → heritage), not
   // the same 5 suppliers for every chip.
   const _drillSupMix = commoditySuppliers(c, commodity).slice(0, 5);
-  const suppliers = _drillSupMix.map(({ name: sup, pct }, i) => {
-    let vol = _estimateVolume(c, commodity, i, sup);
+  const suppliers = _drillSupMix.map(({ name: sup, pct, iso: supIso }, i) => {
+    // Resolve supplier ISO when not already carried on the pair (heritage branch).
+    let resolvedIso = supIso;
+    if (!resolvedIso) {
+      const sc = COUNTRIES.find(cc => cc.name === sup || cc.iso === sup);
+      if (sc) resolvedIso = sc.iso;
+    }
+    // commodityDrilldown opens from the importer's panel, so direction='import'.
+    let vol = _estimateVolume(c, commodity, i, sup, resolvedIso, 'import');
     // _estimateVolume returns null if neither PSD nor Comtrade has data.
     // Fall back to the modeled estimate so the total math never NaN's.
     if (!vol) {
@@ -18064,10 +18170,12 @@ function openCommodityDrilldown(commodity, importerIso){
         ? _modeledVolumeFallback(c, commodity, i)
         : { usdM: 0, kt: 0, provenance: 'modeled' };
     }
-    // Defensive: ensure usdM/kt are finite numbers
+    // Defensive: keep null kt as null (not 0) so the UI doesn't show "0 kt /yr"
+    // alongside a real USD figure. Public Comtrade endpoint doesn't return
+    // netWgt, so kt is legitimately unavailable for observed rows.
     vol = {
       usdM: Number.isFinite(vol.usdM) ? vol.usdM : 0,
-      kt:   Number.isFinite(vol.kt) ? vol.kt : 0,
+      kt:   (vol.kt == null) ? null : (Number.isFinite(vol.kt) ? vol.kt : null),
       provenance: vol.provenance || 'modeled',
     };
 
@@ -18085,9 +18193,15 @@ function openCommodityDrilldown(commodity, importerIso){
     return { country: sup, pct, vol, companies: supplierCompanies };
   }).filter(s => s.pct > 0);
 
-  // Total estimate (now always finite because of vol defensive wrap above)
+  // Total estimate (now always finite because of vol defensive wrap above).
+  // kt is intentionally nullable when the underlying data didn't carry it
+  // (public Comtrade endpoint doesn't return netWgt). Only sum suppliers
+  // that have a real kt value so totalKT stays null when nobody has it.
   const totalUSD = suppliers.reduce((s,x) => s + (x.vol.usdM || 0), 0);
-  const totalKT  = suppliers.reduce((s,x) => s + (x.vol.kt || 0), 0);
+  const ktContributors = suppliers.filter(x => Number.isFinite(x.vol.kt));
+  const totalKT  = ktContributors.length
+    ? ktContributors.reduce((s,x) => s + x.vol.kt, 0)
+    : null;
   // v20.28 — collective provenance: 'observed' if any supplier returned PSD/Comtrade
   // data, otherwise 'modeled'. Used by the modal header badge.
   const anyObserved = suppliers.some(s => s.vol.provenance && s.vol.provenance.startsWith('observed'));
@@ -18138,11 +18252,22 @@ function openCommodityDrilldown(commodity, importerIso){
       <div class="commodity-quantgrid">
         <div class="commodity-quant">
           <div class="commodity-quant-label">Annual volume</div>
-          <div class="commodity-quant-val">${totalKT.toLocaleString()}<span class="commodity-quant-unit">kt / yr</span></div>
+          <div class="commodity-quant-val">${
+            totalKT == null
+              ? '<span style="color:var(--t3);font-size:14px;font-weight:400;" title="UN Comtrade public preview endpoint does not return netWgt for these flows, so tonnage is unavailable for observed bilateral trade. USD values are observed; tonnage is not.">n/a<span class="commodity-quant-unit">kt unavailable</span></span>'
+              : `${totalKT.toLocaleString()}<span class="commodity-quant-unit">kt / yr</span>`
+          }</div>
         </div>
         <div class="commodity-quant">
           <div class="commodity-quant-label">Import value</div>
-          <div class="commodity-quant-val">$${(totalUSD/1000).toFixed(1)}<span class="commodity-quant-unit">B / yr</span></div>
+          <div class="commodity-quant-val">${
+            // _fmtMoneyUSD already handles raw-USD → $B/$M/$K formatting.
+            // The old `(totalUSD/1000).toFixed(1) + 'B'` assumed USD millions
+            // but _estimateVolume now returns raw USD consistently.
+            typeof _fmtMoneyUSD === 'function'
+              ? _fmtMoneyUSD(totalUSD)
+              : ('$' + (totalUSD/1e9).toFixed(2) + 'B')
+          }<span class="commodity-quant-unit">/ yr</span></div>
         </div>
         <div class="commodity-quant">
           <div class="commodity-quant-label">Top source</div>
