@@ -12871,6 +12871,39 @@ const SCENARIOS = [
             'Zambia': ['zambia','republic of zambia'],
             'Madagascar': ['madagascar','republic of madagascar'],
           };
+          // v21.x — Centroid overrides for countries whose GeoJSON geometry
+          // includes overseas territories that drag the calculated centroid
+          // far from the actual mainland. d3.geoCentroid(France) lands in the
+          // Atlantic between Spain and Portugal because the feature includes
+          // French Guiana, Réunion, Mayotte, French Polynesia, etc. Same
+          // problem for several other countries with scattered island/overseas
+          // territory. Override with mainland-capital coordinates so the arc
+          // origin / Leaflet pin / pulse marker lands where users expect.
+          const CENTROID_OVERRIDES = {
+            FRA: [46.60, 2.50],    // mainland France
+            NLD: [52.13, 5.29],    // mainland Netherlands (excl. Caribbean)
+            GBR: [54.00, -2.00],   // mainland UK (excl. overseas territories)
+            DNK: [56.00, 10.00],   // mainland Denmark (excl. Greenland)
+            ESP: [40.00, -3.70],   // mainland Spain (excl. Canary Islands)
+            PRT: [39.50, -8.00],   // mainland Portugal (excl. Azores, Madeira)
+            NOR: [62.00, 10.00],   // mainland Norway (excl. Svalbard)
+            USA: [39.50, -98.35],  // contiguous USA (excl. Alaska, Hawaii)
+            CHL: [-35.68, -71.54], // mainland Chile (excl. Easter Island)
+            ECU: [-1.83, -78.18],  // mainland Ecuador (excl. Galapagos)
+            RUS: [55.75, 37.62],   // European Russia / Moscow (huge country, weight by population)
+            CAN: [56.13, -106.35], // central Canada (huge country)
+            AUS: [-25.27, 133.78], // central Australia
+            BRA: [-14.24, -51.93], // central Brazil
+            CHN: [35.86, 104.20],  // central China
+            IND: [20.59, 78.96],   // central India
+            IDN: [-2.50, 117.00],  // central Indonesia
+            KAZ: [48.02, 66.92],   // central Kazakhstan
+            DZA: [28.03, 1.66],    // central Algeria
+            COD: [-4.04, 21.76],   // central DRC
+            MEX: [23.63, -102.55], // central Mexico
+            ARG: [-38.42, -63.62], // central Argentina
+            ZAF: [-30.56, 22.94],  // central South Africa
+          };
           COUNTRIES.forEach(co => {
             const aliases = (NAME_ALIASES[co.name] || []).concat([co.name.toLowerCase()]);
             for (const n of aliases) {
@@ -12878,8 +12911,12 @@ const SCENARIOS = [
                 const f = G.nameMap.get(n);
                 G.isoMap.set(co.iso, f);
                 try {
-                  const c = d3.geoCentroid(f); // [lng, lat]
-                  G.centroids.set(co.iso, [c[1], c[0]]); // Leaflet wants [lat, lng]
+                  if (CENTROID_OVERRIDES[co.iso]) {
+                    G.centroids.set(co.iso, CENTROID_OVERRIDES[co.iso]);
+                  } else {
+                    const c = d3.geoCentroid(f); // [lng, lat]
+                    G.centroids.set(co.iso, [c[1], c[0]]); // Leaflet wants [lat, lng]
+                  }
                 } catch (e) {}
                 break;
               }
