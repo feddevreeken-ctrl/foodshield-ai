@@ -4962,7 +4962,7 @@ input[type="email"]:focus {
   <button class="subnav-btn" data-tab="score" data-sub-group="analyze" onclick="showTab('score',this)">Score &amp; Ranking</button>
   <button class="subnav-btn" data-tab="compare" data-sub-group="analyze" onclick="showTab('compare',this)">Compare</button>
   <button class="subnav-btn" data-tab="forecast" data-sub-group="analyze" onclick="showTab('forecast',this)" title="Modeled 2030 outlook — scenarios under a moderate baseline, not predictions.">2030 Modeled Outlook</button>
-  <button class="subnav-btn" data-tab="scenario" data-sub-group="analyze" onclick="showTab('scenario',this)">Scenario Simulator<span class="subnav-shock-pill">Live shock</span></button>
+  <button class="subnav-btn" data-tab="scenario" data-sub-group="analyze" onclick="showTab('scenario',this)">Scenario Stress Test<span class="subnav-shock-pill">Live shock</span></button>
   <!-- Live -->
   <button class="subnav-btn" data-tab="disturbances" data-sub-group="live" onclick="showTab('disturbances',this)" title="Full list of live food-security disturbances with sources, dates, severity.">Disturbances</button>
   <button class="subnav-btn" data-tab="livedata" data-sub-group="live" onclick="showTab('livedata',this)">Live Data</button>
@@ -5296,7 +5296,7 @@ input[type="email"]:focus {
         Each 2030 number is a <b>curated structural baseline plus a small modeled live overlay</b>. It shows what the FDRS model produces if today's trends continue under a <b>moderate baseline</b>
         (no major new shock, current climate trajectory SSP2-4.5, current trade policy, UN WPP medium-variant population).
         It is <em>not</em> an econometric forecast of where each country will actually be in 2030 — and no formal back-test pipeline exists yet (it's on the roadmap). Layer shocks on top in the
-        <b style="color:var(--accent)">Scenario Simulator</b>; see the
+        <b style="color:var(--accent)">Scenario Stress Test</b>; see the
         <b style="color:var(--accent)">Methodology</b> page for inputs.
       </div>
       <div id="forecast-body" class="fade-in"></div>
@@ -5308,31 +5308,36 @@ input[type="email"]:focus {
     <div class="content-page">
       <div class="page-header">
         <div class="page-eyebrow">Illustrative stress test</div>
-        <div class="page-title">Scenario <em>simulator</em></div>
-        <div class="page-sub">Layer food-shock scenarios and see which countries shift most. Uses deterministic formulas tied to each country's exposure — direction and rough magnitude, not an econometric forecast.</div>
+        <div class="page-title">Scenario <em>stress test</em></div>
+        <div class="page-sub">Layer food-shock scenarios and see which countries shift most. Uses deterministic heuristic formulas tied to each country's exposure — direction and rough magnitude, not an econometric forecast.</div>
       </div>
       <div style="background:var(--bg0);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:12px 16px;margin:0 0 18px;font-size:11.5px;color:var(--t2);line-height:1.7;">
-        <b style="color:var(--t1)">Illustrative stress-test — not a forecast.</b>
-        Each shock applies a deterministic formula to every country's structural exposure
-        (e.g. <i>wheat-shock impact</i> ≈ wheat dependency × shock size × supplier-concentration multiplier).
-        Shocks stack additively. The output shows the <em>direction and rough magnitude</em> of who would move and by how much under that hypothetical — it is not a probabilistic forecast, and the absolute point shifts should not be treated as precise predictions. Calibrated against historical analogues (2010 Russia ban, 2022 Black Sea blockade, 2008 rice export bans). Expand <b style="color:var(--accent)">How this works</b> below for the per-shock formulas.
+        <b style="color:var(--t1)">Illustrative stress test — not a forecast.</b>
+        Each shock applies a heuristic kick to one or more FDRS components.
+        Where served data carries the right input (e.g. supplier concentration from
+        COMMODITY_TRADE_ROUTES, food inflation from WFP / Eurostat), shocks use it.
+        Where data is heritage / curated, shocks use the curated component value with
+        a dampening factor (×0.6). The result is directional —
+        treat it as a stress test, not a forecast. Loosely informed by historical
+        analogues (2010 Russia ban, 2022 Black Sea blockade, 2008 rice export bans),
+        but not formally calibrated. Expand <b style="color:var(--accent)">How this works</b> below for the per-shock formulas.
       </div>
       <details style="background:var(--bg2);border:1px solid var(--b1);border-radius:8px;margin:0 0 18px;font-size:11.5px;color:var(--t2);">
         <summary style="padding:10px 14px;cursor:pointer;color:var(--t1);font-weight:500;list-style:none;display:flex;align-items:center;gap:8px;">
           <span style="color:var(--accent);">▸</span> How this works — per-shock formulas
         </summary>
         <div style="padding:0 14px 14px;line-height:1.75;border-top:1px solid var(--b1);padding-top:12px;">
-          Each shock applies a closed-form impact to each country's FDRS, then sums. All inputs come from observed exposure (FAO FBS caloric shares, USDA PSD trade flows, Comtrade supplier concentration, WB food-CPI, WFP HungerMap, IMF FX).
+          Each shock applies a heuristic kick to one or more FDRS components, then we combine: shocks on <em>different</em> components add up; shocks on the <em>same</em> component are combined with a square-root rule (<span style="font-family:'Geist Mono',monospace;color:var(--t3)">combined = √(Σ kick²)</span>) so overlapping channels don't double-count.
           <div style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--t2);background:var(--bg0);border:1px solid var(--b1);border-radius:6px;padding:10px 12px;margin-top:10px;line-height:1.85;">
-            <div><b style="color:var(--t1)">Wheat-export halt</b> &nbsp;Δ = wheat_dep × shock_size × supplier_conc_mult</div>
-            <div><b style="color:var(--t1)">Supplier ban</b> &nbsp;Δ = top_supplier_share × ban_severity × import_dep</div>
-            <div><b style="color:var(--t1)">FX collapse</b> &nbsp;Δ = depreciation_pct × food_import_share × food_CPI_passthrough</div>
-            <div><b style="color:var(--t1)">Fertilizer surge</b> &nbsp;Δ = N+P+K_import_dep × price_shock × ag_intensity</div>
-            <div><b style="color:var(--t1)">Drought / heatwave</b> &nbsp;Δ = ND-GAIN_climate_vuln × yield_loss_pct × calorie_share_of_affected_crop</div>
-            <div><b style="color:var(--t1)">Logistics chokepoint</b> &nbsp;Δ = LPI_dep × route_share × closure_duration</div>
+            <div><b style="color:var(--t1)">Wheat price spike</b> &nbsp;Δ = wheat_dep × 0.30 × shock × provenance_factor → c[0]</div>
+            <div><b style="color:var(--t1)">Supplier ban</b> &nbsp;Δ = supplier_concentration × 0.18 × shock → c[1]</div>
+            <div><b style="color:var(--t1)">FX collapse</b> &nbsp;Δ = food_inflation × 0.12 × (shock/0.30) → c[3]</div>
+            <div><b style="color:var(--t1)">Fertilizer surge</b> &nbsp;Δ = fert_import_conc × 0.08 × (shock/0.30) → c[2]</div>
+            <div><b style="color:var(--t1)">Drought / heatwave</b> &nbsp;Δ = (100 − production_trend) × 0.12 × (shock/0.15) → c[4]</div>
+            <div><b style="color:var(--t1)">Logistics chokepoint</b> &nbsp;Δ = conflict_logistics × 0.06–0.15 × shock → c[5]</div>
           </div>
           <div style="margin-top:10px;color:var(--t3);font-size:11px;">
-            Severity sliders linearly scale each shock's contribution. Population, supplier mix and elasticities are held constant — this is a short-horizon shock test, not a long-run projection. For 2030 trajectory, use the Modeled Outlook tab.
+            Severity sliders linearly scale each shock's contribution. Population, supplier mix and elasticities are held constant — this is a short-horizon shock test, not a long-run projection. Countries with <span style="color:#6ba36b">sourced</span> wheat / rice / maize trade data respond at full strength; countries on legacy / curated baselines are dampened (×0.6) to avoid over-stressing on opaque inputs. For 2030 trajectory, use the Modeled Outlook tab.
           </div>
         </div>
       </details>
@@ -12770,48 +12775,138 @@ function lookupFeature(f) {
 
 // Scenarios — food-only stressors, with descriptions + categories.
 // `impact(c, sev)` returns FDRS-point shift; `sev` is 0–1 (0.5 = baseline labeled severity).
+//
+// Each scenario carries a `channel` tag mapping to the FDRS component it stresses:
+//   0 = import dep · 1 = supplier conc · 2 = production trend · 3 = food inflation
+//   4 = climate · 5 = conflict/logistics · 6 = supply-chain exposure
+// `kick(c, sev)` returns the *raw, unrounded* contribution on that channel. When 2+
+// shocks hit the same channel we apply a square-root combining rule in _simulateScenario():
+//   combined = sqrt(sum of squared kicks)   (instead of plain sum)
+// so two +6 shocks on the same channel come out at ~+8.5, not +12. `impact()` is
+// kept as a back-compat wrapper that rounds `kick()`.
 const SCENARIOS = [
-  {id:'wheat20', label:'Wheat price spike',        cat:'Commodity', baseSev:0.20, sevUnit:'%',
+  {id:'wheat20', label:'Wheat price spike',        cat:'Commodity', baseSev:0.20, sevUnit:'%', channel:0,
     desc:'Global wheat futures shock — Black Sea disruption or Northern Hemisphere harvest failure.',
-    formula:'Δ = wheat-import-share × 30% weight × shock',
-    impact: (c, s=0.20) => Math.round(c.w * 0.30 * s)},
-  {id:'rice20',  label:'Rice price spike',         cat:'Commodity', baseSev:0.20, sevUnit:'%',
+    formula:'Δ = wheat-import-share × 30% × shock × provenance_factor',
+    kick: (c, s=0.20) => {
+      const prov = (c?._provenance?.w?.quality_flag) || (c?._provenance?.w) || 'legacy_curated';
+      const damp = (prov === 'sourced') ? 1.0 : 0.6;   // legacy/curated baselines are dampened
+      return (c.w||0) * 0.30 * s * damp;
+    },
+    impact: function(c, s=0.20){ return Math.round(this.kick(c, s)); }},
+  {id:'rice20',  label:'Rice price spike',         cat:'Commodity', baseSev:0.20, sevUnit:'%', channel:0,
     desc:'Major rice exporter (India, Vietnam, Thailand) imposes restrictions.',
-    formula:'Δ = rice-import-share × 25% weight × shock',
-    impact: (c, s=0.20) => Math.round(c.r * 0.25 * s)},
-  {id:'maize20', label:'Maize price spike',        cat:'Commodity', baseSev:0.20, sevUnit:'%',
+    formula:'Δ = rice-import-share × 25% × shock × provenance_factor',
+    kick: (c, s=0.20) => {
+      const prov = (c?._provenance?.r?.quality_flag) || (c?._provenance?.r) || 'legacy_curated';
+      const damp = (prov === 'sourced') ? 1.0 : 0.6;
+      return (c.r||0) * 0.25 * s * damp;
+    },
+    impact: function(c, s=0.20){ return Math.round(this.kick(c, s)); }},
+  {id:'maize20', label:'Maize price spike',        cat:'Commodity', baseSev:0.20, sevUnit:'%', channel:0,
     desc:'Feed-grain shock from US/Brazilian drought — hits livestock-dependent food systems.',
-    formula:'Δ = maize-import-share × 20% weight × shock',
-    impact: (c, s=0.20) => Math.round(c.m * 0.20 * s)},
-  {id:'fert30',  label:'Fertilizer price surge',   cat:'Input',     baseSev:0.30, sevUnit:'%',
+    formula:'Δ = maize-import-share × 20% × shock × provenance_factor',
+    kick: (c, s=0.20) => {
+      const prov = (c?._provenance?.m?.quality_flag) || (c?._provenance?.m) || 'legacy_curated';
+      const damp = (prov === 'sourced') ? 1.0 : 0.6;
+      return (c.m||0) * 0.20 * s * damp;
+    },
+    impact: function(c, s=0.20){ return Math.round(this.kick(c, s)); }},
+  {id:'fert30',  label:'Fertilizer price surge',   cat:'Input',     baseSev:0.30, sevUnit:'%', channel:2,
     desc:'Phosphate / potash / urea supply shock — hits yield 1–2 seasons later.',
-    formula:'Δ = 4 + (100 − production-trend) × 4% × (shock / 0.30)',
-    impact: (c, s=0.30) => Math.round(4 + (100-c.c[2]) * 0.04 * (s/0.30))},
-  {id:'drought', label:'Domestic drought',         cat:'Climate',   baseSev:0.15, sevUnit:'% yield',
+    formula:'Δ = fertilizer-import-conc × 8% × (shock / 0.30)   |   exporters: 1–2 pts',
+    // v21 honesty pass: fertilizer shock now wires real COMMODITY_TRADE_ROUTES.fertilizer
+    // data — net exporters (USA / Brazil / Russia / Canada / etc.) barely move,
+    // importers with concentrated supplier mixes (India / Egypt / Bangladesh / Pakistan)
+    // see realistic +10–15 kicks.
+    kick: (c, s=0.30) => {
+      const FERT = (typeof COMMODITY_TRADE_ROUTES !== 'undefined') ? COMMODITY_TRADE_ROUTES.fertilizer : null;
+      if (!FERT) return (4 + (100-(c.c?.[2]||50)) * 0.04) * (s/0.30);
+      // COUNTRIES entries already carry ISO3 codes (`c.iso`) — match directly.
+      const candidate = c.iso;
+      const exporterIsos = (FERT.exporters||[]).map(e=>e.iso);
+      const isExporter = exporterIsos.includes(candidate);
+      if (isExporter) {
+        // Net exporters: tiny kick (1-2 pts) — they may even benefit from price
+        const expShare = (FERT.exporters.find(e=>e.iso===candidate)||{}).share || 0;
+        return Math.max(1, 2 - expShare*0.05) * (s/0.30);
+      }
+      const suppliers = FERT.importer_suppliers[candidate];
+      if (suppliers && suppliers.length) {
+        const top = suppliers[0].share || 0;
+        // 8 base + supplier_concentration_pct × 0.08
+        return (8 + top * 0.08) * (s/0.30);
+      }
+      // Mid-dependency / unknown: small modeled kick (2–3 pts)
+      return 2.5 * (s/0.30);
+    },
+    impact: function(c, s=0.30){ return Math.round(this.kick(c, s)); }},
+  {id:'drought', label:'Domestic drought',         cat:'Climate',   baseSev:0.15, sevUnit:'% yield', channel:4,
     desc:'15% shortfall in domestic food production for current season.',
     formula:'Δ = (100 − production-trend) × 12% × (shock / 0.15)',
-    impact: (c, s=0.15) => Math.round((100-c.c[2]) * 0.12 * (s/0.15))},
-  {id:'oil25',   label:'Fuel + logistics cost',    cat:'Logistics', baseSev:0.25, sevUnit:'%',
+    kick: (c, s=0.15) => (100-(c.c?.[2]||50)) * 0.12 * (s/0.15),
+    impact: function(c, s=0.15){ return Math.round(this.kick(c, s)); }},
+  {id:'oil25',   label:'Fuel + logistics cost',    cat:'Logistics', baseSev:0.25, sevUnit:'%', channel:5,
     desc:'Higher fuel costs cascade through fertilizer, transport, cold-chain — food inflation follow-on.',
     formula:'Δ = conflict/logistics × 8% + 2',
-    impact: (c, s=0.25) => Math.round(c.c[5] * 0.08 * (s/0.25) + 2)},
-  {id:'ban',     label:'Major supplier export ban',cat:'Geopolitics',baseSev:1.00, sevUnit:'×',
+    kick: (c, s=0.25) => (c.c?.[5]||0) * 0.08 * (s/0.25) + 2,
+    impact: function(c, s=0.25){ return Math.round(this.kick(c, s)); }},
+  {id:'ban',     label:'Major supplier export ban',cat:'Geopolitics',baseSev:1.00, sevUnit:'×', channel:1,
     desc:'Top-1 supplier withdraws from the market (e.g. Russia, Ukraine, India for rice).',
     formula:'Δ = supplier-concentration × 18%',
-    impact: (c, s=1.00) => Math.round(c.c[1] * 0.18 * s)},
-  {id:'fx',      label:'Currency depreciation',    cat:'Macro',     baseSev:0.30, sevUnit:'%',
+    kick: (c, s=1.00) => (c.c?.[1]||0) * 0.18 * s,
+    impact: function(c, s=1.00){ return Math.round(this.kick(c, s)); }},
+  {id:'fx',      label:'Currency depreciation',    cat:'Macro',     baseSev:0.30, sevUnit:'%', channel:3,
     desc:'30% FX devaluation — import bills rise even if global prices stay flat.',
     formula:'Δ = food-inflation × 12% × (shock / 0.30)',
-    impact: (c, s=0.30) => Math.round(c.c[3] * 0.12 * (s/0.30))},
-  {id:'ship',    label:'Shipping disruption',      cat:'Logistics', baseSev:0.50, sevUnit:'%',
+    kick: (c, s=0.30) => (c.c?.[3]||0) * 0.12 * (s/0.30),
+    impact: function(c, s=0.30){ return Math.round(this.kick(c, s)); }},
+  {id:'ship',    label:'Shipping disruption',      cat:'Logistics', baseSev:0.50, sevUnit:'%', channel:5,
     desc:'Suez / Panama / Red Sea bottleneck — global food freight 50% more expensive.',
     formula:'Δ = conflict/logistics × 6% + 1',
-    impact: (c, s=0.50) => Math.round(c.c[5] * 0.06 * (s/0.50) + 1)},
-  {id:'conflict',label:'Trade-route conflict',     cat:'Geopolitics',baseSev:1.00, sevUnit:'×',
+    kick: (c, s=0.50) => (c.c?.[5]||0) * 0.06 * (s/0.50) + 1,
+    impact: function(c, s=0.50){ return Math.round(this.kick(c, s)); }},
+  {id:'conflict',label:'Trade-route conflict',     cat:'Geopolitics',baseSev:1.00, sevUnit:'×', channel:5,
     desc:'Regional conflict severs primary food trade corridor for the country.',
     formula:'Δ = conflict/logistics × 15%',
-    impact: (c, s=1.00) => Math.round(c.c[5] * 0.15 * s)},
+    kick: (c, s=1.00) => (c.c?.[5]||0) * 0.15 * s,
+    impact: function(c, s=1.00){ return Math.round(this.kick(c, s)); }},
 ];
+
+// v21 honesty pass — central per-country simulator.
+// Returns { delta, breakdown: [{id,label,channel,raw}], channelTotals: {ch -> total}}
+// Applies a *square-root combining rule* when 2+ shocks hit the same FDRS component,
+// so we don't double-count overlapping channels (e.g. oil25 + ship + conflict all hit c[5]).
+function _simulateScenario(c, selected, severityById) {
+  const byChannel = {};        // channel -> array of raw kicks
+  const breakdown = [];        // ordered list for audit display
+  selected.forEach(sc => {
+    const sev = (severityById && severityById[sc.id] != null) ? severityById[sc.id] : sc.baseSev;
+    const raw = (typeof sc.kick === 'function') ? sc.kick(c, sev) : (sc.impact(c, sev));
+    const ch  = (sc.channel != null) ? sc.channel : -1;
+    (byChannel[ch] ||= []).push(raw);
+    breakdown.push({ id: sc.id, label: sc.label, channel: ch, raw: raw, sev: sev });
+  });
+  // Square-root combining per channel — overlap damper.
+  let totalDelta = 0;
+  const channelTotals = {};
+  Object.keys(byChannel).forEach(k => {
+    const arr = byChannel[k];
+    if (arr.length === 1) {
+      channelTotals[k] = arr[0];
+    } else {
+      // sqrt(sum of squares) — caps stacked same-channel shocks at realistic levels
+      const sumSq = arr.reduce((s,v)=> s + v*v, 0);
+      channelTotals[k] = Math.sqrt(sumSq);
+    }
+    totalDelta += channelTotals[k];
+  });
+  return {
+    delta: Math.round(totalDelta),
+    breakdown: breakdown,
+    channelTotals: channelTotals,
+  };
+}
 
 </script>
 <script>
@@ -16400,7 +16495,7 @@ function renderForecastWhy(c, delta, trendUp, futureCol, todayCol){
               : `${c.name} is projected to hold near today's FDRS in the model. Resilience comes from manageable import exposure and a domestic production trajectory of ${prodChange>=0?'+':''}${prodChange.toFixed(1)}%. Population growth (${popGrowth}%) is matched by supply growth, keeping per-capita food availability stable.`}
             <br><br>
             <span style="color:var(--t3);font-size:11px;">
-              This is a modeled outlook, not a back-tested forecast. It assumes a baseline climate scenario (SSP2-4.5), no new conflicts, and current trade policy. Active shocks should be tested in the <b style="color:var(--accent)">Scenario Simulator</b>.
+              This is a modeled outlook, not a back-tested forecast. It assumes a baseline climate scenario (SSP2-4.5), no new conflicts, and current trade policy. Active shocks should be tested in the <b style="color:var(--accent)">Scenario Stress Test</b>.
             </span>
           </div>
         </div>
@@ -16554,6 +16649,30 @@ function renderScenarioTab() {
   const groups = {};
   SCENARIOS.forEach(s => { (groups[s.cat] ||= []).push(s); });
 
+  // v21 honesty pass — compute the featured-crisis stats LIVE off the engine
+  // so the card numbers always match what "Run this scenario" actually produces.
+  // (Previously the card hard-coded Egypt 78→91 etc. while runFeaturedScenario
+  // stacked wheat20 + ban at high severity, which produced very different numbers.)
+  const _featuredPreview = (function() {
+    try {
+      const featuredIds = ['wheat20','ban'];
+      const selected = SCENARIOS.filter(s => featuredIds.includes(s.id));
+      if (!selected.length) return null;
+      const sev = {};
+      selected.forEach(s => { sev[s.id] = (s.sevUnit === '×') ? 1.8 : 0.8; });
+      const pool = COUNTRIES.filter(c => !c.iso.startsWith('US-'));
+      const out = pool.map(c => {
+        const sim = _simulateScenario(c, selected, sev);
+        return { name: c.name, fdrs: c.fdrs, newScore: Math.min(100, c.fdrs + sim.delta), delta: sim.delta };
+      }).sort((a,b)=> b.delta - a.delta);
+      const crossingVuln = out.filter(r => r.fdrs < 76 && r.newScore >= 76).length;
+      return {
+        crossingVuln,
+        top: out.filter(r=>r.delta>0).slice(0,8),
+      };
+    } catch(e) { return null; }
+  })();
+
   document.getElementById('scenario-body').innerHTML = `
     <!-- ════════════ CRISIS ROOM HERO ════════════ -->
     <div class="scn-crisis-card" id="scn-crisis-card">
@@ -16566,47 +16685,49 @@ function renderScenarioTab() {
           If <em>Russia halts wheat exports</em> for six months — who flips?
         </div>
         <div class="scn-crisis-body">
-          Russia and Ukraine produce 30% of global wheat. A six-month export shutdown
-          would push <b>18 countries</b> into the vulnerable risk band — most of them
-          Sub-Saharan Africa and MENA, already under climate stress.
+          Russia and Ukraine produce 30% of global wheat. In the model, a six-month
+          export shutdown stacked with a top-supplier export ban pushes
+          <b>${_featuredPreview ? _featuredPreview.crossingVuln : '—'} countries</b>
+          across the Vulnerable threshold — most of them Sub-Saharan Africa and
+          MENA, already under climate stress.
         </div>
         <div class="scn-crisis-actions">
           <button class="scn-crisis-run" onclick="runFeaturedScenario()">Run this scenario →</button>
           <button class="scn-crisis-modify" onclick="document.getElementById('scn-shocks-anchor').scrollIntoView({behavior:'smooth',block:'start'})">Modify parameters ↓</button>
         </div>
         <div class="scn-crisis-precedent">
-          <div class="scn-crisis-precedent-label">Historical precedent</div>
-          Calibrated against the 2010 Russian export ban (heatwave), 2022 Black Sea blockade, and 1973 US soybean embargo.
+          <div class="scn-crisis-precedent-label">Historical analogues</div>
+          Loosely informed by the 2010 Russian export ban (heatwave), 2022 Black Sea blockade, and 1973 US soybean embargo — no formal calibration.
         </div>
       </div>
       <div class="scn-crisis-right">
         <div class="scn-crisis-stats">
           <div class="scn-crisis-stat scn-crisis-stat--severe">
-            <div class="scn-crisis-stat-n">+18</div>
-            <div class="scn-crisis-stat-l">countries shift to vulnerable</div>
+            <div class="scn-crisis-stat-n">+${_featuredPreview ? _featuredPreview.crossingVuln : '—'}</div>
+            <div class="scn-crisis-stat-l">countries cross to vulnerable</div>
           </div>
           <div class="scn-crisis-stat scn-crisis-stat--dep">
             <div class="scn-crisis-stat-n">+42%</div>
-            <div class="scn-crisis-stat-l">wheat price (90d)</div>
+            <div class="scn-crisis-stat-l">wheat price (90d, analogue)</div>
           </div>
           <div class="scn-crisis-stat scn-crisis-stat--severe">
             <div class="scn-crisis-stat-n">380M</div>
-            <div class="scn-crisis-stat-l">people exposed</div>
+            <div class="scn-crisis-stat-l">people in top-exposed states</div>
           </div>
         </div>
         <div class="scn-crisis-list">
-          <div class="scn-crisis-list-head">Most affected · projected</div>
-          ${[
-            ['Egypt',78,91],['Sudan',84,96],['Yemen',81,93],['Tunisia',62,78],
-            ['Lebanon',71,84],['Morocco',58,72],['Mauritania',69,82],['Jordan',55,69]
-          ].map((c,i)=>`
+          <div class="scn-crisis-list-head">Most affected · live engine output</div>
+          ${(_featuredPreview && _featuredPreview.top.length
+              ? _featuredPreview.top
+              : [{name:'—',fdrs:0,newScore:0,delta:0}]
+            ).map((r,i)=>`
             <div class="scn-crisis-list-row">
               <div class="scn-crisis-list-i">${String(i+1).padStart(2,'0')}</div>
-              <div class="scn-crisis-list-n">${c[0]}</div>
-              <div class="scn-crisis-list-f">${c[1]}</div>
+              <div class="scn-crisis-list-n">${r.name}</div>
+              <div class="scn-crisis-list-f">${r.fdrs}</div>
               <div class="scn-crisis-list-arr">→</div>
-              <div class="scn-crisis-list-t">${c[2]}</div>
-              <div class="scn-crisis-list-d">+${c[2]-c[1]}</div>
+              <div class="scn-crisis-list-t">${r.newScore}</div>
+              <div class="scn-crisis-list-d">+${r.delta}</div>
             </div>
           `).join('')}
         </div>
@@ -16617,7 +16738,7 @@ function renderScenarioTab() {
     <div class="scn-builder-header">
       <div class="scn-builder-eyebrow">Build your own · or modify parameters</div>
       <div class="scn-builder-title">Layer real-world shocks to model a <em>compound crisis</em></div>
-      <div class="scn-builder-sub">Pick one or more shocks below — each one carries the real historical calibration. Tune severity per shock. Layer 3+ to estimate a multi-shock world (Ukraine + drought + fertilizer-surge style stack).</div>
+      <div class="scn-builder-sub">Pick one or more shocks below — each maps to a specific FDRS sub-component with a heuristic kick (loosely informed by historical analogues, not formally calibrated). Tune severity per shock. Layer 3+ to estimate a multi-shock world (Ukraine + drought + fertilizer-surge style stack). Overlapping shocks on the same component combine with a square-root rule so the model doesn't over-stress.</div>
     </div>
 
     <div class="scn-section-header" style="margin-top:0;">
@@ -16653,8 +16774,9 @@ function renderScenarioTab() {
           <button onclick="setScenarioScope(this,'no-us')">Exclude US states</button>
         </div>
         <div class="scn-context-info">
-          Shocks compound additively — running 3 scenarios at once estimates a multi-shock world
-          (Ukraine + drought + fertilizer surge style stack).
+          Shocks compound across FDRS components; overlapping shocks on the same
+          component combine with a square-root rule (no double-counting). Stack 3+ to
+          model a multi-shock world (Ukraine + drought + fertilizer surge style stack).
         </div>
       </div>
     </div>
@@ -16663,7 +16785,7 @@ function renderScenarioTab() {
     <div class="scn-section-header">
       <div>
         <div class="scn-section-eyebrow">Step 2 · pick one or more</div>
-        <div class="scn-section-title">Available shocks · ${SCENARIOS.length} calibrated scenarios</div>
+        <div class="scn-section-title">Available shocks · ${SCENARIOS.length} illustrative shock scenarios <span style="font-size:10.5px;color:var(--t3);font-weight:400;">— heuristic stress tests, not calibrated forecasts</span></div>
       </div>
       <div class="scn-cat-legend">
         <span><i style="background:#c9a957"></i>Commodity</span>
@@ -16727,7 +16849,13 @@ function renderScenarioTab() {
       <div class="scn-why-card" id="scn-why-card"></div>
 
       <div class="card" style="margin-top:14px;">
-        <div class="card-title">Country Impact Ranking — top 40 most affected</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
+          <div class="card-title" style="margin:0;">Country Impact Ranking — top 40 most affected</div>
+          <div id="scn-sort-toggle" class="scn-context-toggles" style="display:flex;gap:0;">
+            <button class="on" data-sort="delta" onclick="setStressSort('delta')" style="font-size:10px;padding:4px 10px;">Largest jump</button>
+            <button data-sort="after" onclick="setStressSort('after')" style="font-size:10px;padding:4px 10px;">Highest after-shock</button>
+          </div>
+        </div>
         <div style="overflow-x:auto;max-height:520px;overflow-y:auto;">
           <table class="fs-table" id="impact-table">
             <thead><tr>
@@ -16894,6 +17022,11 @@ const SCENARIO_RESPONSES = {
   conflict:'Alternative trade routes · Regional supply-chain redundancy',
 };
 
+// v21 honesty pass: caches last result so the sort-toggle can re-render without re-simulating.
+let _lastStressResults = null;
+let _lastStressSelected = null;
+let _stressSortMode = 'delta';   // 'delta' = largest jump (default) | 'after' = highest after-shock
+
 function runScenarios() {
   if (!activeScenarios.size) { alert('Please select at least one scenario.'); return; }
   const selected = SCENARIOS.filter(s=>activeScenarios.has(s.id));
@@ -16908,26 +17041,47 @@ function runScenarios() {
     if (scenarioScope === 'vulnerable') pool = pool.filter(c=>c.fdrs >= 51);
   }
 
+  // v21 honesty pass — use _simulateScenario() so every shock goes through the
+  // square-root channel-overlap damper and produces an auditable breakdown.
   const results = pool.map(c=>{
-    const delta = Math.round(selected.reduce((s,sc)=>s + sc.impact(c, scenarioSeverity[sc.id]), 0));
-    return { ...c, newScore:Math.min(100,c.fdrs+delta), delta };
-  }).sort((a,b)=>b.delta-a.delta);
+    const sim = _simulateScenario(c, selected, scenarioSeverity);
+    return { ...c, newScore: Math.min(100, c.fdrs + sim.delta), delta: sim.delta,
+             _breakdown: sim.breakdown, _channelTotals: sim.channelTotals };
+  });
 
-  const top3 = results.slice(0,3).map(c=>c.name).join(', ');
+  _lastStressResults = results;
+  _lastStressSelected = selected;
+  _renderStressResults();
+}
+
+// Sort + render the cached stress-test results.
+function _renderStressResults() {
+  const results = (_lastStressResults || []).slice();
+  const selected = _lastStressSelected || [];
+  if (!results.length) return;
+
+  if (_stressSortMode === 'after') {
+    results.sort((a,b)=> b.newScore - a.newScore);
+  } else {
+    results.sort((a,b)=> b.delta - a.delta);
+  }
+
+  const maxDelta = Math.max(...results.map(r=>r.delta));
+  const peakCountry = results.find(r=>r.delta === maxDelta) || results[0];
   const crossing = results.filter(c=>riskLabel(c.fdrs)!==riskLabel(c.newScore)).length;
   const avgDelta = (results.reduce((s,c)=>s+c.delta,0)/results.length).toFixed(1);
   const newVuln = results.filter(c=>c.newScore>=76 && c.fdrs<76).length;
-  const maxDelta = results[0].delta;
+  const top3 = results.slice(0,3).map(c=>c.name).join(', ');
 
   document.getElementById('scn-results').style.display = 'block';
 
-  // Summary
+  // Summary card
   document.getElementById('scenario-summary').innerHTML = `
     <div class="card-title">Impact Summary</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
       <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:8px;padding:14px;text-align:center;">
         <div style="font-family:'Geist Mono',monospace;font-size:30px;color:#c44b3c;font-weight:500;letter-spacing:-.02em;">+${maxDelta}<span style="font-size:13px;color:var(--t3);margin-left:2px;">pts</span></div>
-        <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-top:4px;">Peak shift · ${results[0].name}</div>
+        <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-top:4px;">Peak shift · ${peakCountry.name}</div>
       </div>
       <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:8px;padding:14px;text-align:center;">
         <div style="font-family:'Geist Mono',monospace;font-size:30px;color:#d27a3e;font-weight:500;letter-spacing:-.02em;">${crossing}</div>
@@ -16940,13 +17094,17 @@ function runScenarios() {
       <b style="color:var(--t1)">Average shift:</b> +${avgDelta} pts · <b style="color:var(--t1)">${newVuln}</b> new structurally vulnerable
     </div>`;
 
-  // Risk-band shift
-  const bands = ['Resilient','Exposed','Dependent','Vulnerable'];
-  const bandCol = ['#6ba36b','#c9a957','#d27a3e','#c44b3c'];
-  const before = [0,0,0,0], after = [0,0,0,0];
+  // v21 honesty pass — risk-band shift now uses the canonical 5-tier system
+  // from riskLabel() (Resilient ≤25 / Exposed ≤50 / Dependent ≤75 /
+  // Vulnerable ≤88 / Severe 89+) instead of the old 4-bucket Math.floor(s/26)
+  // that mislabelled 51 as "Exposed" and 76 as "Dependent".
+  const bands  = ['Resilient','Exposed','Dependent','Vulnerable','Severe'];
+  const bandCol= ['#6ba36b','#c9a957','#d27a3e','#c44b3c','#7a2922'];
+  const bandIdx = s => bands.indexOf(riskLabel(s));   // single source of truth
+  const before = [0,0,0,0,0], after = [0,0,0,0,0];
   results.forEach(c=>{
-    before[ Math.min(3, Math.floor(c.fdrs/26)) ]++;
-    after [ Math.min(3, Math.floor(c.newScore/26)) ]++;
+    before[ bandIdx(c.fdrs) ]++;
+    after [ bandIdx(c.newScore) ]++;
   });
   document.getElementById('scn-shift-body').innerHTML = bands.map((b,i)=>{
     const d = after[i] - before[i];
@@ -16961,31 +17119,55 @@ function runScenarios() {
       </div>`;
   }).join('');
 
-  // Why — explanation card
+  // Why — explanation card. Honest about square-root channel combining.
   const whyEl = document.getElementById('scn-why-card');
   whyEl.innerHTML = `
-    <div class="scn-why-eyebrow">✱ How the simulator works</div>
+    <div class="scn-why-eyebrow">✱ How the stress test works</div>
     <div class="scn-why-body">
-      For each country, every selected shock is converted into an <b>FDRS-point shift</b> using
-      the same weights as the live score. Shifts <b>stack additively</b> — so if a country's wheat
-      exposure adds <b>+4 pts</b> and a fertilizer shock adds <b>+3 pts</b>, the combined shock is
-      <b>+7 pts</b>. Severity sliders linearly scale each shock's contribution.
+      For each country, every selected shock is converted into a heuristic
+      <b>FDRS-point kick</b> on the FDRS sub-component it hits.
+      Shocks on <em>different</em> components add up. Shocks on the <em>same</em>
+      component (e.g. fuel + shipping + conflict all hit conflict/logistics) are
+      combined with a square-root rule —
+      <span style="font-family:'Geist Mono',monospace;color:var(--t3)">combined = √(Σ kick²)</span> —
+      so three +5-pt logistics shocks come out at ~+8.7, not +15. That keeps the model
+      from running out of headroom under multi-shock stacks.
     </div>
     <div class="scn-why-formula">
-      ${selected.map(s=>`<div>${s.label} <span style="color:var(--t3)">(${formatSev(scenarioSeverity[s.id],s.sevUnit)})</span> →  <span style="color:var(--t2)">${s.formula}</span></div>`).join('')}
+      ${selected.map(s=>`<div>${s.label} <span style="color:var(--t3)">(${formatSev(scenarioSeverity[s.id],s.sevUnit)}, c[${s.channel}])</span> →  <span style="color:var(--t2)">${s.formula}</span></div>`).join('')}
     </div>
     <div class="scn-why-body" style="margin-top:10px;font-size:11px;color:var(--t3);">
-      Severity, supplier mix and population are held constant — this is a <b>short-horizon shock test</b>,
-      not a long-run forecast. For the 2030 modeled outlook, use the 2030 Modeled Outlook tab.
+      Heuristic stress test, not an econometric forecast. Severity, supplier mix,
+      and population are held constant. Countries whose wheat / rice / maize
+      exposure comes from <span style="color:#6ba36b">sourced</span> trade data show
+      stronger response; countries on legacy / curated baselines are dampened (×0.6)
+      to avoid over-stressing opaque inputs.
     </div>`;
 
-  // Country impact table
+  // Country impact table — top 40 with audit-breakdown expandable row.
   const respPlan = selected.map(s=>SCENARIO_RESPONSES[s.id]).join(' · ');
   document.getElementById('impact-tbody').innerHTML = results.slice(0,40).map((c,i)=>{
-    // Identify which scenario hits hardest for this country
-    const breakdown = selected.map(s=>({l:s.label, v:s.impact(c, scenarioSeverity[s.id])}))
-                              .sort((a,b)=>b.v-a.v);
-    const worstShock = breakdown[0] ? `${breakdown[0].l} (+${breakdown[0].v})` : '—';
+    const bd = (c._breakdown || []).slice().sort((a,b)=> Math.abs(b.raw)-Math.abs(a.raw));
+    const top = bd[0] ? `${bd[0].label} (+${Math.round(bd[0].raw)})` : '—';
+    const auditId = `audit-${c.iso}-${i}`;
+    const chLabel = {0:'c[0] import dep',1:'c[1] supplier conc',2:'c[2] production trend',
+                     3:'c[3] food inflation',4:'c[4] climate',5:'c[5] conflict/logistics',6:'c[6] supply-chain'};
+    const auditRows = bd.slice(0,3).map(b => {
+      const sevDisp = (function(){
+        const sc = SCENARIOS.find(s=>s.id===b.id);
+        return sc ? formatSev(b.sev, sc.sevUnit) : b.sev;
+      })();
+      return `<div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0;font-family:'Geist Mono',monospace;font-size:10px;">
+        <span style="color:var(--t2)">+${b.raw.toFixed(1)} <span style="color:var(--t3)">${b.label}</span></span>
+        <span style="color:var(--t3)">${chLabel[b.channel]||'—'} · sev ${sevDisp}</span>
+      </div>`;
+    }).join('');
+    const damperNote = (function(){
+      const channels = {};
+      bd.forEach(b => { channels[b.channel] = (channels[b.channel] || 0) + 1; });
+      const overlaps = Object.values(channels).filter(n=>n>1).length;
+      return overlaps ? `<div style="font-size:9.5px;color:var(--t3);margin-top:3px;">Square-root damper applied on ${overlaps} overlapping channel${overlaps>1?'s':''}.</div>` : '';
+    })();
     return `
     <tr>
       <td style="color:var(--t3);font-family:'Geist Mono'">${String(i+1).padStart(2,'0')}</td>
@@ -16994,12 +17176,30 @@ function runScenarios() {
       <td><span class="score-pill" style="background:${riskColor(c.fdrs)}1a;color:${riskColor(c.fdrs)}">${c.fdrs}</span></td>
       <td><span class="score-pill" style="background:${riskColor(c.newScore)}1a;color:${riskColor(c.newScore)}">${c.newScore}</span></td>
       <td class="${c.delta>0?'delta-up':'delta-down'}" style="font-family:'Geist Mono';font-weight:500;">${c.delta>0?'+':''}${c.delta}</td>
-      <td style="font-size:10.5px;color:var(--t2);max-width:200px;line-height:1.4;">
-        <b style="color:var(--t1)">${worstShock}</b><br>
+      <td style="font-size:10.5px;color:var(--t2);max-width:240px;line-height:1.4;">
+        <b style="color:var(--t1)">${top}</b><br>
         <span style="color:var(--t3)">${c.risk.split('+')[0].trim()}</span>
+        <div style="margin-top:4px;"><a href="#" onclick="event.preventDefault();const el=document.getElementById('${auditId}');el.style.display=el.style.display==='none'?'block':'none';this.textContent=el.style.display==='none'?'Show math →':'Hide math';" style="color:var(--accent);font-size:9.5px;text-decoration:none;">Show math →</a></div>
+        <div id="${auditId}" style="display:none;margin-top:6px;padding:6px 8px;background:var(--bg0);border:1px solid var(--b1);border-radius:4px;">
+          ${auditRows}
+          ${damperNote}
+        </div>
       </td>
       <td style="font-size:10px;color:var(--t2);max-width:220px;line-height:1.45;">${respPlan}</td>
     </tr>`;}).join('');
+
+  // Sort-toggle reflection
+  const toggleEl = document.getElementById('scn-sort-toggle');
+  if (toggleEl) {
+    toggleEl.querySelectorAll('button').forEach(b => {
+      b.classList.toggle('on', b.dataset.sort === _stressSortMode);
+    });
+  }
+}
+
+function setStressSort(mode){
+  _stressSortMode = mode;
+  _renderStressResults();
 }
 
 // ════════════════════════════════════════════════════
@@ -17130,12 +17330,12 @@ const INSTRUCTIONS = [
     body: 'The <b>Disturbances</b> tab pulls real-time events from GDACS and ReliefWeb. Toggle <b>Live disturbances</b> on the map to overlay coloured pulse markers. Click any event card to see affected countries (each clickable to open its profile), expected duration, food impact and commodities at risk.'
   },
   {
-    icon: '⚗️', title: 'Scenario Simulator',
-    body: 'Go to <b>Scenario Simulator</b> and pick one or more shocks (drought, conflict, fertilizer spike…). Tune severity with the slider. Switch to <b>Single country</b> mode to focus on specific nations. Hit <b>Run simulation</b> to see which countries cross risk thresholds and by how much.'
+    icon: '⚗️', title: 'Scenario Stress Test',
+    body: 'Go to <b>Scenario Stress Test</b> and pick one or more shocks (drought, conflict, fertilizer spike…). Tune severity with the slider. Switch to <b>Single country</b> mode to focus on specific nations. Hit <b>Run scenario analysis</b> to see which countries cross risk thresholds and by how much.'
   },
   {
     icon: '📈', title: '2030 Modeled Outlook',
-    body: 'The <b>2030 Modeled Outlook</b> tab projects FDRS trajectories to 2030 under a moderate baseline (no major new shock, current climate trajectory, current trade policy). These are <em>modeled scenarios — not predictions</em>: they show what the model produces if today\'s trends continue. Use them to identify worsening trajectories before conditions deteriorate, then stress them in the Scenario Simulator.'
+    body: 'The <b>2030 Modeled Outlook</b> tab projects FDRS trajectories to 2030 under a moderate baseline (no major new shock, current climate trajectory, current trade policy). These are <em>modeled scenarios — not predictions</em>: they show what the model produces if today\'s trends continue. Use them to identify worsening trajectories before conditions deteriorate, then stress them in the Scenario Stress Test.'
   },
   {
     icon: '⚖️', title: 'Country Comparison',
@@ -17174,7 +17374,8 @@ function renderInstructionsBody() {
     'Global Map': 'global',
     'Trade Flow Atlas': 'trade',
     'Live Disturbances': 'livedata',
-    'Scenario Simulator': 'scenario',
+    'Scenario Simulator': 'scenario',   // legacy alias — keep for old deep links
+    'Scenario Stress Test': 'scenario',
     'Forecast 2030': 'forecast',
     '2030 Modeled Outlook': 'forecast',
     'Country Comparison': 'compare',
@@ -17490,7 +17691,7 @@ const TOUR_STEPS = [
   {
     selector: '#tab-scenario',
     title: 'Stress-test the system',
-    body: 'Scenario Simulator — pull a real lever (wheat embargo, drought in India, Suez closure) and see which countries break first. The "what would actually happen if…" tool.',
+    body: 'Scenario Stress Test — pull a heuristic lever (wheat embargo, drought in India, Suez closure) and see which countries shift most. The "what would the model produce if…" tool.',
     before: () => {
       try { showTab('scenario'); } catch(e){}
       return 500;
@@ -19398,7 +19599,7 @@ function renderMethodologyTab() {
           {step:'05',title:'Recalibration Cadence',
            body:'Annual when new structural vintages drop (FAO SOFI, USDA WASDE, ND-GAIN). A formal back-testing pipeline is on the roadmap — not yet built. Until then, the model is a structured expert projection, not a validated forecast.'},
           {step:'06',title:'Uncertainty (not yet calibrated)',
-           body:'Confidence intervals require a backtest pipeline we haven\'t built yet. The displayed 2030 number is a point estimate from the structured projection — treat it as a directional outlook, not a probabilistic forecast. Use the Scenario Simulator to stress-test beyond the baseline.'},
+           body:'Confidence intervals require a backtest pipeline we haven\'t built yet. The displayed 2030 number is a point estimate from the structured projection — treat it as a directional outlook, not a probabilistic forecast. Use the Scenario Stress Test to push beyond the baseline.'},
           {step:'07',title:'Live Overlay (v20, May 2026)',
            body:'Persistent live signals — IPC Phase 3+ status, currency collapse, sticky food inflation, active conflict, sustained drought, fire-driven cropland loss — adjust the 2030 modeled outlook by up to +8 points. Transient signals (single-week flood, AQ spikes, US river noise) do not. The structural f2030 is preserved on each country as <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">_f2030Structural</code>.'},
         ].map(s=>`
