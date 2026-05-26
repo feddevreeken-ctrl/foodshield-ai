@@ -3616,6 +3616,39 @@ abbr.ac:hover, .ac:hover {
 .fc-delta-up   { color: #c44b3c; }
 .fc-delta-down { color: #6ba36b; }
 .fc-delta-flat { color: var(--t3); }
+/* v22.13 — per-country detail block (renders on demand below the lead table) */
+.fc-country-block {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--b1);
+}
+.fc-country-block-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.fc-country-block-title {
+  font-family: 'Instrument Serif', serif;
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: -.012em;
+  color: var(--t1);
+}
+.fc-country-close {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  background: transparent;
+  border: 1px solid var(--b1);
+  color: var(--t3);
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 0;
+}
+.fc-country-close:hover { color: var(--t1); border-color: var(--t3); }
 .fc-global-card {
   padding: 18px 20px 16px;
   background: var(--bg2);
@@ -6366,7 +6399,7 @@ input[type="email"]:focus {
         </div>
         <div class="country-pill-row" style="margin-left:auto;">
           <label>Country</label>
-          <select class="fs-select" id="forecast-sel" onchange="renderForecastTab()" style="font-size:12.5px;padding:8px 28px 8px 12px;"></select>
+          <select class="fs-select" id="forecast-sel" onchange="renderForecastCountry()" style="font-size:12.5px;padding:8px 28px 8px 12px;"></select>
         </div>
       </div>
       <div style="background:var(--bg0);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:12px 16px;margin:0 0 18px;font-size:11.5px;color:var(--t2);line-height:1.7;">
@@ -18198,7 +18231,7 @@ function _renderFcMoverRows() {
       return `${idx===0?'M':'L'}${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(' ');
     return `
-      <tr onclick="document.getElementById('forecast-sel').value='${c.iso}';renderForecastTab();" title="Open ${c.name}'s 2030 trajectory">
+      <tr onclick="renderForecastCountry('${c.iso}');" title="Open ${c.name}'s 2030 trajectory">
         <td class="fc-mover-rank">${String(i+1).padStart(2,'0')}</td>
         <td>
           <div class="fc-mover-country">${c.name}</div>
@@ -18234,19 +18267,14 @@ function _fcClimateDegraded() {
 }
 
 function renderForecastTab() {
-  const c = byISO(document.getElementById('forecast-sel').value); if(!c) return;
-  const t = c.trend;
-  const lastProd = t.production[t.production.length-2];
-  const lastCons = t.consumption[t.consumption.length-2];
-  const gap = lastCons - lastProd;
-  const trendUp = c.f2030 > c.fdrs;
-  const trendCol = trendUp ? '#c44b3c' : '#6ba36b';
-  const todayCol = riskColor(c.fdrs);
-  const futureCol = riskColor(c.f2030);
-  const delta = c.f2030 - c.fdrs;
-  const projImpDep = Math.min(100, c.c[0] + Math.round(delta * 0.4));
+  // v22.13 — split rendering. This function always renders the LEAD view
+  // (degraded bar + global mover table + 3 trajectory cards). The
+  // per-country deep dive is rendered separately by renderForecastCountry()
+  // when the user clicks a row in the table OR picks from the country
+  // dropdown. Previously every render dumped 6 stacked sections for one
+  // country, which made the tab a long scroll.
 
-  // Global trajectory stats — computed once across all countries (dedupe by iso)
+  // Global trajectory stats — dedupe by iso
   const _seen = new Set();
   const allC = COUNTRIES.filter(x => {
     if (!x || !x.iso) return false;
@@ -18320,82 +18348,120 @@ function renderForecastTab() {
       </div>
     </div>
 
-    <!-- Trajectory hero -->
-    <div class="fc-hero">
-      <div class="fc-hero-side">
-        <div class="fc-hero-eyebrow">${c.name} · Today</div>
-        <div class="fc-hero-num" style="color:${todayCol}">${c.fdrs}</div>
-        <div class="fc-hero-label">${riskLabel(c.fdrs)}</div>
-      </div>
-      <div class="fc-hero-arrow">${trendUp ? '▶' : '▶'}</div>
-      <div class="fc-hero-side" style="background:linear-gradient(135deg,rgba(0,0,0,0),rgba(0,0,0,0.18))">
-        <div class="fc-hero-eyebrow" style="color:${trendCol}">2030 modeled · ${trendUp?'▲':'▼'} ${trendUp?'+':''}${delta} pts</div>
-        <div class="fc-hero-num" style="color:${futureCol}">${c.f2030}</div>
-        <div class="fc-hero-label">${riskLabel(c.f2030)} · ${trendUp?'deteriorating':'stable / improving'} <span style="color:var(--t3);font-size:10px;">· modeled</span></div>
-      </div>
-    </div>
+    <!-- v22.13 — Per-country deep dive renders on demand via renderForecastCountry().
+         Stays empty on first render so the lead view fits on one screen. -->
+    <div id="fc-country-detail"></div>`;
+}
 
-    <!-- Metric strip -->
-    <div class="ct-stat-strip">
-      <div class="ct-stat">
-        <div class="ct-stat-label">2030 Import dep.</div>
-        <div class="ct-stat-val" style="color:${riskColor(projImpDep)}">${projImpDep}<span class="ct-stat-unit">%</span></div>
-        <div style="font-size:10px;color:var(--t3);margin-top:4px;">from ${c.c[0]}% today</div>
-      </div>
-      <div class="ct-stat">
-        <div class="ct-stat-label">Supply gap</div>
-        <div class="ct-stat-val" style="color:${gap>0?'#c44b3c':'#6ba36b'}">${gap>0?'+':''}${Math.round(gap/1000)}<span class="ct-stat-unit">K t</span></div>
-        <div style="font-size:10px;color:var(--t3);margin-top:4px;">${gap>0?'Deficit growing':'Surplus maintained'}</div>
-      </div>
-      <div class="ct-stat">
-        <div class="ct-stat-label">Food inflation</div>
-        <div class="ct-stat-val" style="color:${c.fi>15?'#c44b3c':'#6ba36b'}">${c.fi}<span class="ct-stat-unit">%/yr</span></div>
-        <div style="font-size:10px;color:var(--t3);margin-top:4px;">current annual</div>
-      </div>
-      <div class="ct-stat">
-        <div class="ct-stat-label">Population 2030</div>
-        <div class="ct-stat-val">${t.pop[t.pop.length-1]}<span class="ct-stat-unit">M</span></div>
-        <div style="font-size:10px;color:var(--t3);margin-top:4px;">from ${t.pop[t.pop.length-2]}M today</div>
-      </div>
-    </div>
+// v22.13 — Render the per-country trajectory block on demand and scroll to it.
+// Called when user clicks a row in the lead table OR picks from the dropdown.
+function renderForecastCountry(iso) {
+  const target = (typeof iso === 'string' && iso) ? iso : document.getElementById('forecast-sel').value;
+  const c = byISO(target);
+  const host = document.getElementById('fc-country-detail');
+  if (!c || !host) return;
+  // Keep the dropdown in sync with what's actually shown
+  const sel = document.getElementById('forecast-sel');
+  if (sel && sel.value !== target) sel.value = target;
 
-    <div class="card">
-      <div class="card-title"><span class="card-marker"></span> Production vs consumption · historical &amp; 2030 projection</div>
-      <div style="height:260px;"><canvas id="forecast-main"></canvas></div>
-    </div>
+  const t = c.trend;
+  const lastProd = t.production[t.production.length-2];
+  const lastCons = t.consumption[t.consumption.length-2];
+  const gap = lastCons - lastProd;
+  const trendUp = c.f2030 > c.fdrs;
+  const trendCol = trendUp ? '#c44b3c' : '#6ba36b';
+  const todayCol = riskColor(c.fdrs);
+  const futureCol = riskColor(c.f2030);
+  const delta = c.f2030 - c.fdrs;
+  const projImpDep = Math.min(100, c.c[0] + Math.round(delta * 0.4));
 
-    <div class="grid-2">
-      <div class="card">
-        <div class="card-title"><span class="card-marker"></span> Import / export trend</div>
-        <div style="height:220px;"><canvas id="forecast-trade"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-title"><span class="card-marker"></span> Population vs food supply / capita</div>
-        <div style="height:220px;"><canvas id="forecast-pop"></canvas></div>
-      </div>
-    </div>
-
-    <div class="ct-ai-card" style="border-left-color:${futureCol}">
-      <div class="ct-ai-eyebrow" style="color:${futureCol}"><span class="ct-ai-asterisk">✱</span> AI Trend Interpretation</div>
-      <p class="ct-ai-body">
-        ${trendUp
-          ? `Under the moderate baseline, <strong style="color:var(--t1)">${c.name}</strong>'s modeled Food Disruption Risk Score rises from <strong style="color:${todayCol}">${c.fdrs}</strong> today to <strong style="color:${futureCol}">${c.f2030}</strong> by 2030. The primary driver in the model is ${c.risk.split('+')[0].trim().toLowerCase()}. ${c.f2030>88?'On this trajectory the model would cross into <em>Severe</em> territory before 2030.':c.f2030>75?'On this trajectory the model would cross into <em>Vulnerable</em> territory before 2030.':'The model implies a meaningful deterioration in food-system resilience.'} <span style="color:var(--t3);font-size:11px;">Modeled outlook — not a forecast.</span>`
-          : `Under the moderate baseline, <strong style="color:var(--t1)">${c.name}</strong> stays on a stable or improving trajectory in the model. Current FDRS of <strong style="color:${todayCol}">${c.fdrs}</strong> stays near <strong style="color:${futureCol}">${c.f2030}</strong> by 2030. The model treats the country's main food-system strengths as holding. <span style="color:var(--t3);font-size:11px;">Modeled outlook — not a forecast.</span>`}
-      </p>
-      <div class="ct-ai-grid">
+  host.innerHTML = `
+    <div class="fc-country-block">
+      <div class="fc-country-block-head">
         <div>
-          <div class="ct-ai-subhead">Primary watch point</div>
-          <div class="ct-ai-text">${c.risk}</div>
+          <div class="fc-mover-eyebrow">Per-country trajectory · modeled</div>
+          <div class="fc-country-block-title">${c.name} · 2030 outlook</div>
         </div>
-        <div>
-          <div class="ct-ai-subhead">Key intervention</div>
-          <div class="ct-ai-text">${c.resp.split('·')[0].trim()}</div>
+        <button class="fc-country-close" onclick="closeForecastCountry()" title="Hide this country">Close ×</button>
+      </div>
+
+      <!-- Trajectory hero -->
+      <div class="fc-hero">
+        <div class="fc-hero-side">
+          <div class="fc-hero-eyebrow">${c.name} · Today</div>
+          <div class="fc-hero-num" style="color:${todayCol}">${c.fdrs}</div>
+          <div class="fc-hero-label">${riskLabel(c.fdrs)}</div>
+        </div>
+        <div class="fc-hero-arrow">${trendUp ? '▶' : '▶'}</div>
+        <div class="fc-hero-side" style="background:linear-gradient(135deg,rgba(0,0,0,0),rgba(0,0,0,0.18))">
+          <div class="fc-hero-eyebrow" style="color:${trendCol}">2030 modeled · ${trendUp?'▲':'▼'} ${trendUp?'+':''}${delta} pts</div>
+          <div class="fc-hero-num" style="color:${futureCol}">${c.f2030}</div>
+          <div class="fc-hero-label">${riskLabel(c.f2030)} · ${trendUp?'deteriorating':'stable / improving'} <span style="color:var(--t3);font-size:10px;">· modeled</span></div>
         </div>
       </div>
-    </div>
 
-    <!-- WHY THIS FORECAST -->
-    ${renderForecastWhy(c, delta, trendUp, futureCol, todayCol)}`;
+      <!-- Metric strip -->
+      <div class="ct-stat-strip">
+        <div class="ct-stat">
+          <div class="ct-stat-label">2030 Import dep.</div>
+          <div class="ct-stat-val" style="color:${riskColor(projImpDep)}">${projImpDep}<span class="ct-stat-unit">%</span></div>
+          <div style="font-size:10px;color:var(--t3);margin-top:4px;">from ${c.c[0]}% today</div>
+        </div>
+        <div class="ct-stat">
+          <div class="ct-stat-label">Supply gap</div>
+          <div class="ct-stat-val" style="color:${gap>0?'#c44b3c':'#6ba36b'}">${gap>0?'+':''}${Math.round(gap/1000)}<span class="ct-stat-unit">K t</span></div>
+          <div style="font-size:10px;color:var(--t3);margin-top:4px;">${gap>0?'Deficit growing':'Surplus maintained'}</div>
+        </div>
+        <div class="ct-stat">
+          <div class="ct-stat-label">Food inflation</div>
+          <div class="ct-stat-val" style="color:${c.fi>15?'#c44b3c':'#6ba36b'}">${c.fi}<span class="ct-stat-unit">%/yr</span></div>
+          <div style="font-size:10px;color:var(--t3);margin-top:4px;">current annual</div>
+        </div>
+        <div class="ct-stat">
+          <div class="ct-stat-label">Population 2030</div>
+          <div class="ct-stat-val">${t.pop[t.pop.length-1]}<span class="ct-stat-unit">M</span></div>
+          <div style="font-size:10px;color:var(--t3);margin-top:4px;">from ${t.pop[t.pop.length-2]}M today</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="card-marker"></span> Production vs consumption · historical &amp; 2030 projection</div>
+        <div style="height:260px;"><canvas id="forecast-main"></canvas></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title"><span class="card-marker"></span> Import / export trend</div>
+          <div style="height:220px;"><canvas id="forecast-trade"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="card-marker"></span> Population vs food supply / capita</div>
+          <div style="height:220px;"><canvas id="forecast-pop"></canvas></div>
+        </div>
+      </div>
+
+      <div class="ct-ai-card" style="border-left-color:${futureCol}">
+        <div class="ct-ai-eyebrow" style="color:${futureCol}"><span class="ct-ai-asterisk">✱</span> AI Trend Interpretation</div>
+        <p class="ct-ai-body">
+          ${trendUp
+            ? `Under the moderate baseline, <strong style="color:var(--t1)">${c.name}</strong>'s modeled Food Disruption Risk Score rises from <strong style="color:${todayCol}">${c.fdrs}</strong> today to <strong style="color:${futureCol}">${c.f2030}</strong> by 2030. The primary driver in the model is ${c.risk.split('+')[0].trim().toLowerCase()}. ${c.f2030>88?'On this trajectory the model would cross into <em>Severe</em> territory before 2030.':c.f2030>75?'On this trajectory the model would cross into <em>Vulnerable</em> territory before 2030.':'The model implies a meaningful deterioration in food-system resilience.'} <span style="color:var(--t3);font-size:11px;">Modeled outlook — not a forecast.</span>`
+            : `Under the moderate baseline, <strong style="color:var(--t1)">${c.name}</strong> stays on a stable or improving trajectory in the model. Current FDRS of <strong style="color:${todayCol}">${c.fdrs}</strong> stays near <strong style="color:${futureCol}">${c.f2030}</strong> by 2030. The model treats the country's main food-system strengths as holding. <span style="color:var(--t3);font-size:11px;">Modeled outlook — not a forecast.</span>`}
+        </p>
+        <div class="ct-ai-grid">
+          <div>
+            <div class="ct-ai-subhead">Primary watch point</div>
+            <div class="ct-ai-text">${c.risk}</div>
+          </div>
+          <div>
+            <div class="ct-ai-subhead">Key intervention</div>
+            <div class="ct-ai-text">${c.resp.split('·')[0].trim()}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- WHY THIS FORECAST -->
+      ${renderForecastWhy(c, delta, trendUp, futureCol, todayCol)}
+    </div>`;
 
   setTimeout(()=>{
     destroyChart('forecast-main');
@@ -18405,6 +18471,24 @@ function renderForecastTab() {
     destroyChart('forecast-pop');
     chartInstances['forecast-pop'] = mkPopChart('forecast-pop',c);
   },60);
+
+  // Smooth-scroll into view so the user clearly sees the new block.
+  setTimeout(() => {
+    host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 100);
+}
+
+// v22.13 — Close the per-country block and return user to the lead table.
+function closeForecastCountry() {
+  const host = document.getElementById('fc-country-detail');
+  if (host) host.innerHTML = '';
+  // Tear down any charts so the canvases don't leak
+  ['forecast-main','forecast-trade','forecast-pop'].forEach(id => {
+    try { destroyChart(id); } catch(e) {}
+  });
+  // Scroll back to the table top
+  const table = document.querySelector('.fc-mover-card');
+  if (table) table.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ════════════════════════════════════════════════════
