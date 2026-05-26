@@ -14159,6 +14159,21 @@ const GEO_NAME_ALIASES = {
   'palestine':'Palestine',
   'west bank':'Palestine',
   'gaza strip':'Palestine',
+  // v22.16 — Natural Earth full-name spellings → our shorter canonical names
+  'central african republic':'Central African Rep.',
+  'central african rep.':'Central African Rep.',
+  'trinidad and tobago':'Trinidad & Tobago',
+  'bosnia and herzegovina':'Bosnia & Herzegovina',
+  'bosnia and herz.':'Bosnia & Herzegovina',
+  'são tomé and principe':'São Tomé & Príncipe',
+  'sao tome and principe':'São Tomé & Príncipe',
+  'são tomé and príncipe':'São Tomé & Príncipe',
+  'falkland islands':'United Kingdom',
+  'falkland is.':'United Kingdom',
+  'western sahara':'Morocco',
+  'somaliland':'Somalia',
+  'northern cyprus':'Cyprus',
+  'n. cyprus':'Cyprus',
 };
 
 function byGeoName(n) {
@@ -14169,9 +14184,52 @@ function byGeoName(n) {
   return byName(n);
 }
 
+// v22.16 — Natural Earth ships several countries with ISO_A3 = '-99'
+// (sovereignty disputes, recent splits, special administrative regions).
+// For those, ADM0_A3 carries the real ISO. We also fall back to a name map
+// for the small set of features that ship without any usable ISO field.
+const GEO_NAME_TO_ISO = {
+  // Natural Earth occasionally returns ISO_A3='-99' for these
+  'france':'FRA', 'norway':'NOR', 'kosovo':'XKX',
+  'central african republic':'CAF', 'central african rep.':'CAF',
+  'somaliland':'SOM',  // treated under Somalia for FDRS purposes
+  'northern cyprus':'CYP',
+  'n. cyprus':'CYP',
+  'republic of the congo':'COG',
+  "congo":'COG',  // ambiguous; default to Republic of Congo when GeoJSON says just "Congo"
+  "dem. rep. congo":'COD',
+  "democratic republic of the congo":'COD',
+  "côte d'ivoire":'CIV', "cote d'ivoire":'CIV',
+  "guinea-bissau":'GNB', "guinea bissau":'GNB',
+  "south sudan":'SSD',
+  "equatorial guinea":'GNQ',
+  "western sahara":'MAR',  // disputed; default to Morocco for choropleth
+  "falkland islands":'GBR', "falkland is.":'GBR',
+  "south georgia and the islands":'GBR',
+  "republic of serbia":'SRB',
+  "the former yugoslav republic of macedonia":'MKD',
+  "north macedonia":'MKD',
+  "bosnia and herz.":'BIH',
+  "trinidad and tobago":'TTO',
+  "são tomé and principe":'STP',
+  "sao tome and principe":'STP',
+  "antigua and barb.":'ATG',
+  "st. vin. and gren.":'VCT',
+  "saint vincent and the grenadines":'VCT',
+  "saint kitts and nevis":'KNA',
+  "st. kitts and nevis":'KNA',
+  "solomon is.":'SLB',
+  "marshall is.":'MHL',
+};
 function lookupFeature(f) {
-  const iso  = (f.properties.ISO_A3||f.properties.iso_a3||f.properties.ADM0_A3||'').toUpperCase();
+  let iso = (f.properties.ISO_A3||f.properties.iso_a3||f.properties.ADM0_A3||'').toUpperCase();
   const name =  f.properties.name||f.properties.NAME||f.properties.ADMIN||'';
+  // v22.16 — Natural Earth uses '-99' for several sovereigns; fall back to ADM0_A3 (already attempted)
+  // and then to a GEO_NAME_TO_ISO lookup so countries don't paint as "No data" because of a tile quirk.
+  if (!iso || iso === '-99') {
+    const mapped = GEO_NAME_TO_ISO[(name || '').toLowerCase()];
+    if (mapped) iso = mapped;
+  }
   return byISO(iso) || byGeoName(name) || null;
 }
 
