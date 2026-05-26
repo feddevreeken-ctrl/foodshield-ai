@@ -685,16 +685,7 @@ body {
   text-transform: uppercase; letter-spacing: 0.14em;
   margin-bottom: 9px;
 }
-/* v22.21 — plain-English "how to read this map" hint above the legend swatches */
-.legend-howto {
-  font-size: 10.5px;
-  color: var(--t2);
-  line-height: 1.5;
-  margin-bottom: 10px;
-  padding-bottom: 9px;
-  border-bottom: 1px solid var(--b1);
-}
-.legend-howto b { color: var(--t1); font-weight: 600; }
+/* v22.22 — removed .legend-howto block per user request */
 .legend-item {
   display: flex; align-items: center; gap: 9px;
   padding: 2.5px 0;
@@ -6164,10 +6155,6 @@ input[type="email"]:focus {
            so the legend swatches match what users see on the map. -->
       <div id="map-legend" role="region" aria-label="Food Disruption Risk Score legend">
         <div class="legend-title"><abbr class="ac" title="Food Disruption Risk Score — 0–100 composite measuring how exposed a country is to food shocks (imports, climate, conflict, logistics, prices).">Food Disruption Risk Score</abbr></div>
-        <!-- v22.21 — plain-English explainer for first-time visitors per audit feedback -->
-        <div class="legend-howto">
-          <b>How to read:</b> green countries are more resilient, red are more vulnerable to food disruption. <b>Click any country</b> to see why — imports, climate, conflict, logistics, prices, supplier concentration.
-        </div>
         <div class="legend-item">
           <div class="legend-swatch" style="background:#5fa85f"></div>
           <div class="legend-label">Resilient</div>
@@ -17001,6 +16988,18 @@ function openPanel(c, skipDrilldown) {
   const wasHidden = sp.classList.contains('hidden');
   sp.classList.remove('hidden');
 
+  // v22.22 — auto-collapse the global right-rail (legend + filters + stats)
+  // when a country panel opens, so the country brief gets full horizontal
+  // breathing room. closePanel() re-expands it.
+  try {
+    const rail = document.getElementById('global-rail');
+    const tabGlobal = document.getElementById('tab-global');
+    if (rail && !rail.classList.contains('collapsed')) {
+      rail.classList.add('collapsed');
+      if (tabGlobal) tabGlobal.classList.add('rail-collapsed');
+    }
+  } catch (e) {}
+
   // Hook into globe: rotate to country, clear any previous flow
   if (window.Globe) {
     Globe.clearFlows();
@@ -17561,6 +17560,17 @@ function closePanel() {
     if (Globe.state.map) setTimeout(()=>Globe.state.map.invalidateSize(), 320);
   }
   resetTradeFlowsButton();
+  // v22.22 — re-expand the global rail (legend + filters + stats) when the
+  // country panel closes, unless the user explicitly collapsed it themselves.
+  try {
+    const userPref = localStorage.getItem('fs-rail-collapsed');
+    if (userPref !== '1') {
+      const rail = document.getElementById('global-rail');
+      const tabGlobal = document.getElementById('tab-global');
+      if (rail) rail.classList.remove('collapsed');
+      if (tabGlobal) tabGlobal.classList.remove('rail-collapsed');
+    }
+  } catch (e) {}
   // v20.34 — drop country + commodity from URL so the page is shareable in the
   // "no selection" state. Tab + scenario survive.
   try {
@@ -20519,11 +20529,11 @@ window.addEventListener('load',()=>{
       svg.setAttribute('focusable', 'false');
     });
   } catch (e) {}
-  // Restore rail collapse state
-  if (localStorage.getItem('fs-rail-collapsed') === '1') {
-    document.getElementById('global-rail')?.classList.add('collapsed');
-    document.getElementById('tab-global')?.classList.add('rail-collapsed');
-  }
+  // v22.22 — Rail always starts EXPANDED on page load so first-time visitors
+  // see the legend + filters + stats. Auto-collapses when a country is opened
+  // (see openPanel below) and re-expands when the country panel closes.
+  // Saved fs-rail-collapsed preference is intentionally ignored on load —
+  // it's only updated when the user manually clicks the rail toggle.
   // Pre-render tabs so they aren't blank on first visit
   setTimeout(()=>{ renderForecastTab(); renderCountryTab(); renderScenarioTab(); }, 120);
   // Load disturbance data in background — updates map toggle count
