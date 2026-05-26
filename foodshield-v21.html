@@ -24020,46 +24020,12 @@ function renderTopCompaniesForCountry(c) {
     </div>`).join('');
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// v14: FDRS History chart in Forecast tab (add timeline context)
-// ════════════════════════════════════════════════════════════════════════════
-
-// v20.33 — removed dead `renderForecastTabV14` patch-over function.
-// It was defined but never called. The active patch is below — it wraps
-// renderForecastTab via the function-replacement pattern.
-// Hook into renderForecastTab
-if (typeof renderForecastTab === 'function') {
-  const _orig = renderForecastTab;
-  renderForecastTab = function() {
-    _orig();
-    const c = byISO(document.getElementById('forecast-sel')?.value);
-    if (!c) return;
-    setTimeout(() => {
-      const forecastBody = document.getElementById('forecast-body');
-      if (!forecastBody) return;
-      // Check if history card already exists
-      if (document.getElementById('fdrs-hist-fc-wrap')) return;
-      const histDiv = document.createElement('div');
-      histDiv.className = 'card';
-      histDiv.id = 'fdrs-hist-fc-wrap';
-      histDiv.innerHTML = `
-        <div class="card-title"><span class="card-marker"></span> FDRS Historical Context · 2018–2025</div>
-        <div style="height:180px;"><canvas id="fdrs-hist-fc"></canvas></div>
-        <div style="font-size:10px;color:var(--t3);margin-top:8px;">How this country's risk score has evolved through major global shocks</div>`;
-      // Insert after first card
-      const firstCard = forecastBody.querySelector('.fc-hero') || forecastBody.firstChild;
-      if (firstCard && firstCard.nextSibling) {
-        forecastBody.insertBefore(histDiv, firstCard.nextSibling);
-      } else {
-        forecastBody.appendChild(histDiv);
-      }
-      setTimeout(() => {
-        destroyChart('fdrs-hist-fc');
-        chartInstances['fdrs-hist-fc'] = mkFDRSHistoryChart('fdrs-hist-fc', c);
-      }, 80);
-    }, 200);
-  };
-}
+// v22.15 — removed the "FDRS Historical Context · 2018–2025" chart from the
+// forecast lead view. The patch wrapped renderForecastTab and injected a
+// canvas card into forecast-body; per user feedback the chart added little
+// value because the same trajectory information is already visible in the
+// per-country deep dive (production / consumption / trade chart) and in
+// the lead Today/2030/Δ table with sparkline.
 
 
 // ════════════════════════════════════════════════════════════════════════════
