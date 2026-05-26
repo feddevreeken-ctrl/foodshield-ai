@@ -76,10 +76,17 @@ Without both, `acled.json` is written as a setup-required stub.
 
 **FEWS NET FDW**
 
-1. Register at `https://help.fews.net/fdw/fews-net-api`
-2. Add `FEWS_API_TOKEN` to GitHub Actions secrets
+The script tries unauthenticated public access first. If that returns IPC-style data, no setup is needed. If FEWS NET requires partner credentials (typical), you'll need an FDW account:
 
-Without it, `fews.json` is written as an empty stub and the source manifest flags the feed as `setup_required`. With the token configured, the script fetches current + 3-month + 8-month IPC-style phase classifications for ~35 crisis countries every 6h.
+1. Request an account from the FEWS NET Help Desk: `https://fewsnet.atlassian.net/servicedesk/customer/portal/2/group/-1`
+   - Explain that you're building an open-data food-security dashboard and need read-only API access to IPC-style phase classifications
+2. Add two GitHub Actions secrets:
+   - `FDW_USERNAME` — your FDW account username
+   - `FDW_PASSWORD` — your FDW account password
+
+The script POSTs these to `https://fdw.fews.net/api-token-auth/` to obtain a 12-hour JWT, then uses that token on every `ipcphase` request. Without working credentials, `fews.json` is written as an empty stub with a diagnostic note and the source manifest flags the feed as `setup_required`.
+
+With access, the script fetches current (CS) + 3-month (ML1) + 6-month (ML2) IPC-style phase classifications for ~35 crisis countries every 6h.
 
 **UN Comtrade Plus**
 
