@@ -20437,15 +20437,37 @@ document.addEventListener('keydown', (e) => {
 });
 
 // Map disturbance toggle
+// v22.17 — animated ellipsis so the loading state is clearly visible even when
+// the fetch resolves quickly (otherwise the "…" only flashes for <200ms and
+// the user sees the count appear with no indication anything was happening).
+let _distSpinnerTimer = null;
+let _distSpinnerStep = 0;
+function _startDistSpinner() {
+  if (_distSpinnerTimer) return;
+  const el = document.getElementById('map-dist-count');
+  if (!el) return;
+  const frames = ['·', '··', '···'];
+  _distSpinnerStep = 0;
+  el.textContent = frames[0];
+  el.setAttribute('title', 'Loading live disturbances from GDACS + ReliefWeb…');
+  _distSpinnerTimer = setInterval(() => {
+    _distSpinnerStep = (_distSpinnerStep + 1) % frames.length;
+    el.textContent = frames[_distSpinnerStep];
+  }, 280);
+}
+function _stopDistSpinner() {
+  if (_distSpinnerTimer) {
+    clearInterval(_distSpinnerTimer);
+    _distSpinnerTimer = null;
+  }
+}
 function updateMapDistCount(){
   const el = document.getElementById('map-dist-count');
   if (!el || typeof disturbanceEvents === 'undefined') return;
-  // v22.11 — while live feeds are still being fetched the partial baseline
-  // count is misleading (e.g. 103 → 158 jump). Show "…" until done.
   if (window._disturbancesLoading) {
-    el.textContent = '…';
-    el.setAttribute('title', 'Loading live disturbances from GDACS + ReliefWeb…');
+    _startDistSpinner();
   } else {
+    _stopDistSpinner();
     el.textContent = disturbanceEvents.length || '—';
     el.removeAttribute('title');
   }
@@ -22309,7 +22331,11 @@ async function loadDisturbanceData() {
   // and the final count is only assigned at the very end. Mark loading so
   // any UI element that displays the count can show "…" instead of a
   // stale baseline number while the fetch is in flight.
+  // v22.17 — track load start time so we can enforce a minimum-visible spinner
+  // duration (otherwise the indicator only flashes for <200ms when feeds
+  // resolve from HTTP cache).
   window._disturbancesLoading = true;
+  window._disturbancesLoadStart = Date.now();
   try { if (typeof updateMapDistCount === 'function') updateMapDistCount(); } catch(e) {}
 
   const _run = (async () => {
@@ -22697,6 +22723,16 @@ async function loadDisturbanceData() {
 
   disturbanceEvents = events;
   DISTURBANCE_CACHE.ts = Date.now();
+
+  // v22.17 — enforce a minimum-visible spinner duration (900ms total) so users
+  // can perceive that the live feeds are being fetched. Without this, if the
+  // fetch resolves from HTTP cache in <200ms, the loading state flashes too
+  // fast to register and it looks like the count "just appeared".
+  const MIN_SPINNER_MS = 900;
+  const elapsed = Date.now() - (window._disturbancesLoadStart || 0);
+  if (elapsed < MIN_SPINNER_MS) {
+    await new Promise(r => setTimeout(r, MIN_SPINNER_MS - elapsed));
+  }
   window._disturbancesLoading = false;
   window._disturbancesLoadPromise = null;
 
