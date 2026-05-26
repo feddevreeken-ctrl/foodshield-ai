@@ -685,6 +685,16 @@ body {
   text-transform: uppercase; letter-spacing: 0.14em;
   margin-bottom: 9px;
 }
+/* v22.21 — plain-English "how to read this map" hint above the legend swatches */
+.legend-howto {
+  font-size: 10.5px;
+  color: var(--t2);
+  line-height: 1.5;
+  margin-bottom: 10px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--b1);
+}
+.legend-howto b { color: var(--t1); font-weight: 600; }
 .legend-item {
   display: flex; align-items: center; gap: 9px;
   padding: 2.5px 0;
@@ -874,6 +884,34 @@ body {
   margin-top: 6px;
   font-family: 'Geist', sans-serif;
 }
+/* v22.21 — confidence pill next to risk badge. Tells the user how much of
+   this country's FDRS score is backed by live public-source data vs heritage
+   curated values. Color-coded: green = high coverage, amber = mixed,
+   orange = modeled fallback. */
+.sp-confidence {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 7px;
+  border-radius: 2px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 6px;
+  margin-left: 6px;
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  cursor: help;
+  vertical-align: middle;
+}
+.sp-confidence::before {
+  content: '';
+  display: inline-block;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.sp-confidence[data-tier="high"]    { color: #6ba36b; background: rgba(107,163,107,0.10); }
+.sp-confidence[data-tier="mixed"]   { color: #c9a957; background: rgba(201,169,87,0.10); }
+.sp-confidence[data-tier="modeled"] { color: #c47a3c; background: rgba(196,122,60,0.10); }
 .sp-forecast {
   display: flex; align-items: center; gap: 6px;
   margin-top: 6px;
@@ -6126,6 +6164,10 @@ input[type="email"]:focus {
            so the legend swatches match what users see on the map. -->
       <div id="map-legend" role="region" aria-label="Food Disruption Risk Score legend">
         <div class="legend-title"><abbr class="ac" title="Food Disruption Risk Score — 0–100 composite measuring how exposed a country is to food shocks (imports, climate, conflict, logistics, prices).">Food Disruption Risk Score</abbr></div>
+        <!-- v22.21 — plain-English explainer for first-time visitors per audit feedback -->
+        <div class="legend-howto">
+          <b>How to read:</b> green countries are more resilient, red are more vulnerable to food disruption. <b>Click any country</b> to see why — imports, climate, conflict, logistics, prices, supplier concentration.
+        </div>
         <div class="legend-item">
           <div class="legend-swatch" style="background:#5fa85f"></div>
           <div class="legend-label">Resilient</div>
@@ -6181,6 +6223,9 @@ input[type="email"]:focus {
         <div class="sp-score-meta">
           <div class="sp-score-label"><abbr class="ac" title="Food Disruption Risk Score — 0–100 composite measuring how exposed a country is to food shocks (imports, climate, conflict, logistics, prices).">Food Disruption Risk</abbr></div>
           <div id="sp-badge" class="risk-badge">—</div>
+          <!-- v22.21 — confidence pill: shows what fraction of this country's
+               FDRS components are backed by sourced data vs modeled fallback -->
+          <div id="sp-confidence" class="sp-confidence">—</div>
         </div>
       </div>
       <!-- Full-width strip below the score row: structural/nowcast breakdown, -->
@@ -6395,21 +6440,28 @@ input[type="email"]:focus {
         <div>
           <div class="page-eyebrow">2030 Modeled Outlook</div>
           <div class="page-title">Where will <em>pressure build</em> by 2030?</div>
-          <div class="page-sub">A modeled outlook — not a back-tested forecast. Curated structural baseline plus a small modeled live overlay, under a moderate baseline.</div>
+          <div class="page-sub">This is <b>not a prediction</b>. It shows how risk could develop by 2030 if today's trends continue and no major new shock occurs.</div>
         </div>
         <div class="country-pill-row" style="margin-left:auto;">
           <label>Country</label>
           <select class="fs-select" id="forecast-sel" onchange="renderForecastCountry()" style="font-size:12.5px;padding:8px 28px 8px 12px;"></select>
         </div>
       </div>
-      <div style="background:var(--bg0);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:12px 16px;margin:0 0 18px;font-size:11.5px;color:var(--t2);line-height:1.7;">
-        <b style="color:var(--t1)">Modeled outlook — not a back-tested forecast.</b>
-        Each 2030 number is a <b>curated structural baseline plus a small modeled live overlay</b>. It shows what the FDRS model produces if today's trends continue under a <b>moderate baseline</b>
-        (no major new shock, current climate trajectory SSP2-4.5, current trade policy, UN WPP medium-variant population).
-        It is <em>not</em> an econometric forecast of where each country will actually be in 2030 — and no formal back-test pipeline exists yet (it's on the roadmap). Layer shocks on top in the
-        <b style="color:var(--accent)">Scenario Stress Test</b>; see the
-        <b style="color:var(--accent)">Methodology</b> page for inputs.
-      </div>
+      <!-- v22.21 — simplified standfirst per audit feedback; technical
+           "how this is computed" detail moved into a collapsible <details>
+           below so first-time readers see the plain-English framing first. -->
+      <details style="background:var(--bg0);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:12px 16px;margin:0 0 18px;font-size:11.5px;color:var(--t2);line-height:1.7;">
+        <summary style="cursor:pointer;color:var(--t1);font-weight:500;list-style:none;display:flex;align-items:center;gap:8px;font-family:'Geist Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:0.12em;">
+          <span style="color:var(--accent);">▸</span> How this is computed
+        </summary>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--b1);">
+          Each 2030 number is a <b>curated structural baseline plus a small modeled live overlay</b>. It shows what the FDRS model produces if today's trends continue under a <b>moderate baseline</b>
+          (no major new shock, current climate trajectory SSP2-4.5, current trade policy, UN WPP medium-variant population).
+          It is <em>not</em> an econometric forecast of where each country will actually be in 2030 — and no formal back-test pipeline exists yet (it's on the roadmap). Layer shocks on top in the
+          <b style="color:var(--accent)">Scenario Stress Test</b>; see the
+          <b style="color:var(--accent)">Methodology</b> page for inputs.
+        </div>
+      </details>
       <div id="forecast-body" class="fade-in"></div>
     </div>
   </div>
@@ -6618,7 +6670,12 @@ input[type="email"]:focus {
       <button class="instr-close" onclick="closeInstructions()" aria-label="Close Quick Start" title="Close">✕</button>
       <div class="instr-eyebrow">✱ Quick Start · by Fedde Vreeken</div>
       <div class="instr-title" id="instr-title-id">How fragile is the world's <em>food supply</em> right now?</div>
-      <div class="instr-sub">FoodShield AI scores every country on how exposed it is to food shocks — from wheat shortages to droughts to conflict — using 33 data pipelines (FAO, USDA, WFP, World Bank, NASA, ACLED, ND-GAIN, IPC), refreshed every 6 hours. Pick a starting point, or take the 90-second tour.</div>
+      <div class="instr-sub">
+        <b style="color:var(--t1);">FoodShield AI is an open global food-risk intelligence dashboard</b> that shows which countries are most exposed to food shocks — and why. It combines trade dependency, climate exposure, conflict, logistics, prices, supplier concentration, and live disruption feeds into one auditable country-level risk score, refreshed every 6 hours from 33 public data pipelines.
+        <div style="margin-top:10px;font-size:11px;color:var(--t3);font-family:'Geist Mono',ui-monospace,monospace;letter-spacing:.02em;">
+          Built for researchers, journalists, policy teams, supply-chain analysts, and students.
+        </div>
+      </div>
       <a href="https://www.linkedin.com/in/feddevreeken" target="_blank" rel="noopener" class="instr-linkedin">
         <svg viewBox="0 0 24 24" fill="currentColor" style="width:11px;height:11px;"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
         Connect on LinkedIn ↗
@@ -16987,6 +17044,39 @@ function openPanel(c, skipDrilldown) {
   const badge = document.getElementById('sp-badge');
   badge.style.cssText = riskBadgeStyle(c.fdrs);
   badge.textContent   = riskLabel(c.fdrs);
+
+  // v22.21 — Confidence pill. Computes what share of this country's FDRS
+  // input fields carry a `sourced` provenance flag vs `modeled` / `legacy_curated`.
+  // Auditor's recommendation: turn the per-metric provenance system into a
+  // visible per-country confidence label so users can see at a glance how
+  // much of the score is grounded in public data vs heritage values.
+  (function() {
+    const confEl = document.getElementById('sp-confidence');
+    if (!confEl) return;
+    const fields = ['w','r','m','fi','net'];  // structural FDRS feedstock
+    const prov = c._provenance || {};
+    let sourced = 0, modeled = 0, missing = 0;
+    fields.forEach(f => {
+      const p = prov[f];
+      const flag = (p && (p.quality_flag || p)) || null;
+      if (flag === 'sourced') sourced++;
+      else if (flag === 'modeled' || flag === 'manual') modeled++;
+      else missing++;  // legacy_curated / null counts as low-confidence
+    });
+    const total = fields.length;
+    const sourcedPct = Math.round((sourced / total) * 100);
+    let tier, label;
+    if (sourcedPct >= 60) { tier = 'high';    label = `Sourced coverage · ${sourcedPct}%`; }
+    else if (sourcedPct >= 30) { tier = 'mixed';   label = `Mixed sourcing · ${sourcedPct}%`; }
+    else                       { tier = 'modeled'; label = `Modeled fallback · ${sourcedPct}%`; }
+    confEl.setAttribute('data-tier', tier);
+    confEl.textContent = label;
+    confEl.setAttribute('title',
+      `Coverage of the ${total} core structural inputs (wheat / rice / maize caloric share, food inflation, net trade): ` +
+      `${sourced} sourced, ${modeled} modeled, ${missing} legacy curated. ` +
+      `High = 3+ sourced inputs; Mixed = 2 sourced; Modeled = 0–1 sourced. ` +
+      `See methodology for per-metric provenance.`);
+  })();
 
   // v19 — Show structural baseline + nowcast delta when live data is loaded
   (function() {
