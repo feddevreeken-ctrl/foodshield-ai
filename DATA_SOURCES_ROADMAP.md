@@ -2,9 +2,16 @@
 
 Official sources worth integrating next, ordered by impact on FoodShield's data quality.
 
-## 1. FEWS NET acute food insecurity
+## 1. FEWS NET acute food insecurity — ✅ INTEGRATED (v22.18)
 
-Why:
+Status: live via `scripts/refresh_fews.py` calling `fdw.fews.net/api/ipcphase/`.
+Requires `FEWS_API_TOKEN` GitHub Actions secret. Output: `data/fews.json` —
+per-ISO3 worst-phase summary across admin units for current + 3-month projected
++ 8-month projected periods. Surfaced as a FEWS pill on the country profile
+alongside IPC, and pushed into the disturbance feed when current ≥ Phase 3 or
+projection deteriorates by 1+ phase.
+
+Original rationale (kept for reference):
 
 - monthly acute food insecurity maps
 - current and historical downloads
@@ -13,14 +20,8 @@ Why:
 Official references:
 
 - `https://fews.net/data/acute-food-insecurity`
-- `https://help.fews.net/fde/v3/export-data`
-- `https://help.fews.net/fde/v3/data-sources`
-
-Recommended use in FoodShield:
-
-- add a monthly FEWS overlay alongside IPC
-- store country and subnational geometry references
-- mark FEWS-derived rows as sourced, not curated
+- `https://help.fews.net/fdw/fews-net-api`
+- `https://fdw.fews.net/api/`
 
 ## 2. USDA FAS Open Data / PS&D
 

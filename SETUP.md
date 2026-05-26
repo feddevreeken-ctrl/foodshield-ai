@@ -4,7 +4,7 @@ This repo includes a GitHub Actions workflow that refreshes `data/` every day at
 
 ## Current feed inventory
 
-The pipeline currently tracks 17 feeds:
+The pipeline currently tracks 18 feeds:
 
 - `fao_ffpi.json` — FAO Food Price Index
 - `worldbank_pink_sheet.json` — World Bank commodity benchmarks
@@ -23,6 +23,7 @@ The pipeline currently tracks 17 feeds:
 - `comtrade_staples.json` — bilateral staples trade
 - `openaq.json` — PM2.5
 - `nasa_firms.json` — fire detections
+- `fews.json` — FEWS NET IPC-style phase outlook (35 crisis countries)
 
 The workflow also generates:
 
@@ -72,6 +73,13 @@ Without it, `reliefweb_alerts.json` is written as a setup-required stub and the 
    - `ACLED_EMAIL`
 
 Without both, `acled.json` is written as a setup-required stub.
+
+**FEWS NET FDW**
+
+1. Register at `https://help.fews.net/fdw/fews-net-api`
+2. Add `FEWS_API_TOKEN` to GitHub Actions secrets
+
+Without it, `fews.json` is written as an empty stub and the source manifest flags the feed as `setup_required`. With the token configured, the script fetches current + 3-month + 8-month IPC-style phase classifications for ~35 crisis countries every 6h.
 
 **UN Comtrade Plus**
 

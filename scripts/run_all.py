@@ -47,6 +47,7 @@ import refresh_wgi
 import refresh_lpi
 import refresh_hdi
 import refresh_cckp
+import refresh_fews
 import build_countries_dataset
 import build_nowcast
 import build_source_manifest
@@ -84,6 +85,7 @@ STEPS = [
     ("WB LPI logistics",       refresh_lpi.main,                "lpi.json"),
     ("UNDP HDI",               refresh_hdi.main,                "hdi.json"),
     ("WB CCKP climate",        refresh_cckp.main,               "cckp.json"),
+    ("FEWS NET IPC outlook",   refresh_fews.main,               "fews.json"),
     ("WB WDI bulk",            refresh_worldbank_bulk.main,     "worldbank_bulk.json"),
     ("WB WFSO",                refresh_wb_wfso.main,            "wb_wfso.json"),
     ("Countries dataset",      build_countries_dataset.main,    "countries.json"),

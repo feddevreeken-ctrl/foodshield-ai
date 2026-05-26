@@ -233,11 +233,11 @@ SOURCES = [
         "mode": "static_helper",
     },
     {
-        "key": "fewsnet",
-        "file": "fewsnet.json",
-        "label": "FEWS NET Food Security Outlook (static helper)",
-        "cadence": "manual / monthly upstream",
-        "mode": "static_helper",
+        "key": "fews",
+        "file": "fews.json",
+        "label": "FEWS NET IPC Outlook (live FDW API)",
+        "cadence": "6h fetch / quarterly upstream",
+        "mode": "forecast",
     },
     {
         "key": "wfp_acr",

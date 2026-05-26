@@ -94,6 +94,7 @@ EXPECTED_FILES = {
     'lpi.json':                   ('critical', 'dict_nonempty'),
     'hdi.json':                   ('critical', 'dict_nonempty'),
     'cckp.json':                  ('soft',     'dict_or_empty'),
+    'fews.json':                  ('soft',     'dict_or_empty'),  # API token gated
     'wb_wfso.json':               ('critical', 'dict_nonempty'),
     # Environmental (per-country dicts; quiet days OK)
     'openmeteo.json':             ('soft',     'dict_or_empty'),

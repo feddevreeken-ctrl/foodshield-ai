@@ -55,7 +55,7 @@
     {
       "@type": "Dataset",
       "name": "FoodShield AI Food Disruption Risk Score (FDRS)",
-      "description": "Composite food-security risk index for 193 countries + 50 US states, refreshed every 6 hours from 33 open-data pipelines including FAO FFPI, FAOSTAT FBS, USDA PSD, World Bank WDI/WGI/LPI/CCKP, UNDP HDI, WFP HungerMap, IPC, WRI Aqueduct, INFORM Risk, ND-GAIN, ReliefWeb, ACLED, NASA FIRMS, OpenAQ, Open-Meteo, USGS, Eurostat, Comtrade and Feeding America.",
+      "description": "Composite food-security risk index for 193 countries + 50 US states, refreshed every 6 hours from 33 open-data pipelines including FAO FFPI, FAOSTAT FBS, USDA PSD, World Bank WDI/WGI/LPI/CCKP, UNDP HDI, WFP HungerMap, IPC, FEWS NET, WRI Aqueduct, INFORM Risk, ND-GAIN, ReliefWeb, ACLED, NASA FIRMS, OpenAQ, Open-Meteo, USGS, Eurostat, Comtrade and Feeding America.",
       "url": "https://foodshield-ai-fv.vercel.app/",
       "license": "https://creativecommons.org/licenses/by/4.0/",
       "creator": { "@id": "https://foodshield-ai-fv.vercel.app/#org" },
@@ -6463,7 +6463,7 @@ input[type="email"]:focus {
           Live Feed
         </div>
         <div class="page-title">Live <em>Disturbances</em></div>
-        <div class="page-sub">Real-time food security disruptions — droughts, conflicts, price shocks and humanitarian crises. Live data from GDACS and ReliefWeb; baseline events curated from FAO/WFP/IPC/FEWS NET reports (no live FEWS feed in pipeline).</div>
+        <div class="page-sub">Real-time food security disruptions — droughts, conflicts, price shocks and humanitarian crises. Live data from GDACS, ReliefWeb, and the FEWS NET FDW API (IPC-style outlook for ~35 crisis countries); baseline events curated from FAO/WFP/IPC reports.</div>
       </div>
       <div id="disturbances-body" class="fade-in"></div>
     </div>
@@ -12728,7 +12728,7 @@ function showLiveStatusDialog() {
         <div style="display:flex;align-items:baseline;gap:10px;min-width:0;">
           <div style="font-size:13px;font-weight:700;color:var(--t1);letter-spacing:-.01em;">Data status</div>
           <div style="font-size:10.5px;color:var(--t3);">
-            ${summary ? `${(summary.healthy_sources != null ? summary.healthy_sources : (summary.ok_sources || 0) + (summary.manual_sources || 0))}/${summary.total_sources || 0} healthy · 33 pipelines (incl. 4 static deep-link helpers)` : 'loading'}
+            ${summary ? `${(summary.healthy_sources != null ? summary.healthy_sources : (summary.ok_sources || 0) + (summary.manual_sources || 0))}/${summary.total_sources || 0} healthy · 33 pipelines (incl. 3 static deep-link helpers; FEWS NET upgraded to live FDW API in v22.18)` : 'loading'}
             ${summary && summary.loaded_at ? ` · ${formatAge(summary.loaded_at) || formatSnapshotTime(summary.loaded_at)}` : ''}
           </div>
         </div>
@@ -12786,7 +12786,8 @@ const DATASTATUS_FEEDS = {
   usda_psd:      'USDA PSD observed production/imports/exports for staples · commodity panel',
   faostat_fbs:   'FAOSTAT Food Balance Sheets · caloric shares of wheat/rice/maize per country',
   fao_giews:     'FAO GIEWS quarterly country briefs · country-panel deep-link (static)',
-  fewsnet:       'FEWS NET IPC-style classifications · country-panel deep-link (static)',
+  fews:          'FEWS NET IPC-style classifications · live FDW API (current + 3-month + 8-month projection)',
+  fewsnet:       'FEWS NET country reports · per-country deep-link helper (curated)',
   wfp_acr:       'WFP Annual Country Reports · country-panel deep-link (static)',
   usda_gain:     'USDA GAIN attaché reports · commodity-panel deep-link (static)',
 };
@@ -13177,6 +13178,15 @@ async function loadLiveData() {
     const cckpEnv = await _fetchData('cckp');
     LIVE.cckp = (cckpEnv && (cckpEnv.data || cckpEnv)) || {};
   } catch (e) { LIVE.cckp = {}; }
+
+  // v22.18 — FEWS NET IPC-style phase outlook (current + 3-month + 8-month
+  // projection for ~35 crisis countries). Surfaced on the country profile as
+  // a FEWS pill next to IPC, and pushed into the disturbance feed when the
+  // projection deteriorates (Phase ≥3 or +1 phase from current).
+  try {
+    const fewsEnv = await _fetchData('fews');
+    LIVE.fews = (fewsEnv && (fewsEnv.data || fewsEnv)) || {};
+  } catch (e) { LIVE.fews = {}; }
 
   // v20.29 — daily summary headline (build_daily_summary.py output)
   try {
@@ -13787,6 +13797,7 @@ function calibrationAnchors(c) {
   const wb = LIVE.worldbank?.[c.iso] || {};
   const wfp = LIVE.wfp?.[c.iso] || {};
   const ipc = LIVE.ipc?.[c.iso] || {};
+  const fews = LIVE.fews?.[c.iso] || null;
   const wc = LIVE.wfp_country?.[c.iso] || {};
   const om = LIVE.openmeteo?.[c.iso] || {};
   const fl = LIVE.openmeteo_flood?.[c.iso] || {};
@@ -13811,6 +13822,15 @@ function calibrationAnchors(c) {
     ipc_phase3plus_pct: ipc.phase3plus_pct ?? null,
     ipc_phase3plus_count: ipc.phase3plus_count ?? null,
     ipc_period: ipc.period ?? null,
+    // v22.18 — FEWS NET phase + 3-month projection
+    fews_current_phase: fews?.current_phase ?? null,
+    fews_current_label: fews?.current_phase_label ?? null,
+    fews_current_period: fews?.current_period ?? null,
+    fews_projected_phase: fews?.projected_phase ?? null,
+    fews_projected_label: fews?.projected_phase_label ?? null,
+    fews_projected_period: fews?.projected_period ?? null,
+    fews_delta: fews?.delta ?? null,
+    fews_report_url: fews?.report_url ?? null,
     // v20
     fx_currency: wc.fx_currency ?? null,
     fx_90d_change_pct: wc.fx_90d_change_pct ?? null,
@@ -17081,6 +17101,20 @@ function openPanel(c, skipDrilldown) {
       // ── Baseline anchors (always shown when available) ───────────────────
       if (a.undernourishment_pct != null)   items.push(`<b>${a.undernourishment_pct}%</b> undernourished <span style="color:var(--t3)">(FAO)</span>`);
       if (a.ipc_phase3plus_pct != null)     items.push(`<b>${a.ipc_phase3plus_pct}%</b> <abbr class="ac" title="Integrated Food Security Phase Classification — UN/WFP 5-stage hunger scale. Phase 3+ = households in Crisis, Emergency or Catastrophe.">IPC</abbr> Phase 3+ <span style="color:var(--t3)">(${a.ipc_period||'IPC'})</span>`);
+      // v22.18 — FEWS NET projection. Shown for the ~35 crisis countries
+      // FEWS tracks. If the projection is worse than current, color the
+      // delta red; if better, green. Click-through to fews.net report.
+      if (a.fews_current_phase != null) {
+        const dArr = a.fews_delta;
+        const arrow = dArr > 0 ? '<span style="color:#c44b3c">▲</span>' : dArr < 0 ? '<span style="color:#6ba36b">▼</span>' : '→';
+        const projTxt = a.fews_projected_phase != null
+          ? ` ${arrow} <b>Phase ${a.fews_projected_phase}</b>${a.fews_projected_period?` <span style="color:var(--t3)">(${a.fews_projected_period})</span>`:''}`
+          : '';
+        const link = a.fews_report_url
+          ? `<a href="${a.fews_report_url}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;border-bottom:1px dotted var(--t3);">FEWS NET</a>`
+          : 'FEWS NET';
+        items.push(`<b>Phase ${a.fews_current_phase}</b> <abbr class="ac" title="FEWS NET (Famine Early Warning Systems Network) IPC-style acute food insecurity classification, current period. Phase 1=Minimal, 2=Stressed, 3=Crisis, 4=Emergency, 5=Famine.">${link}</abbr>${projTxt}`);
+      }
       if (a.wfp_fcs_pct != null)            items.push(`<b>${a.wfp_fcs_pct}%</b> poor food consumption <span style="color:var(--t3)">(WFP FCS)</span>`);
       if (a.food_inflation_pct != null)     items.push(`<b>${Number(a.food_inflation_pct).toFixed(1)}%</b> ${a.food_inflation_label||'food inflation'} <span style="color:var(--t3)">(${a.food_inflation_source||'WB'})</span>`);
       if (a.stunting_pct != null)           items.push(`<b>${a.stunting_pct}%</b> child stunting <span style="color:var(--t3)">(WFP)</span>`);
@@ -21802,9 +21836,10 @@ function renderMethodologyTab() {
           {src:'OpenAQ',role:'PM2.5 background — labour & crop stress',key:'API key'},
           // US-specific
           {src:'Feeding America (Map the Meal Gap)',role:'US state food-insecurity %',key:'annual manual snapshot'},
+          // v22.18 — FEWS NET upgraded to live FDW API. Used to be a static deep-link helper.
+          {src:'FEWS NET FDW',role:'current + 3-month + 8-month IPC-style projection (~35 crisis countries)',key:'API token'},
           // Static link helpers (no JSON refresh — country-panel deep-links)
           {src:'FAO GIEWS Country Briefs',role:'quarterly food-security briefs (~80 countries) — static link',key:'no fetch'},
-          {src:'FEWS NET',role:'monthly IPC-style classifications (~36 countries) — static link',key:'no fetch'},
           {src:'WFP Annual Country Reports',role:'WFP country-office narrative reports — static link',key:'no fetch'},
           {src:'USDA GAIN attaché reports',role:'weekly commodity intelligence (~80 countries) — static link',key:'no fetch'},
         ].map(d=>`
@@ -21931,7 +21966,7 @@ function renderMethodologyTab() {
           {src:'FAOSTAT food CPI',yr:'quarterly',used:'Global annual food consumer-price index',url:'https://www.fao.org/faostat/en/#data/CP'},
           {src:'Feeding America (Map the Meal Gap)',yr:'2025 (data 2023)',used:'US state food-insecurity %',url:'https://map.feedingamerica.org'},
           {src:'FAO GIEWS Country Briefs',yr:'quarterly',used:'Per-country food-security situation briefs (~80 countries) — static link to FAO',url:'https://www.fao.org/giews/countrybrief/'},
-          {src:'FEWS NET',yr:'monthly',used:'IPC-style classifications for ~36 priority countries — static link to FEWS NET',url:'https://fews.net'},
+          {src:'FEWS NET FDW (live API)',yr:'quarterly',used:'IPC-style current + 3-month + 8-month projected phase classifications for ~35 priority countries — live FDW API (per-country worst-phase summary)',url:'https://fdw.fews.net/api/'},
           {src:'WFP Annual Country Reports',yr:'2025',used:'WFP country-office operational narratives — static link to wfp.org',url:'https://www.wfp.org/annual-country-reports-2025'},
           {src:'USDA GAIN attaché reports',yr:'weekly',used:'Per-country commodity intelligence (~80 FAS posts) — static search link',url:'https://www.fas.usda.gov/data/search'},
           {src:'OECD-FAO Agricultural Outlook',yr:'2025–2034',used:'Reference trajectory informing the curated 2030 structural baseline (not directly ingested)',url:'https://www.oecd.org/en/publications/oecd-fao-agricultural-outlook-2025-2034_601276cd-en.html'},
@@ -22681,6 +22716,32 @@ async function loadDisturbanceData() {
         });
       }
     }
+    // v22.18 — FEWS NET IPC outlook: surface Phase ≥3 or projection-deterioration as events
+    for (const [iso, row] of Object.entries(LIVE.fews || {})) {
+      const co = byISO(iso); if (!co) continue;
+      const ll = (typeof COUNTRY_LL !== 'undefined') ? (COUNTRY_LL[iso] || [0,0]) : [0,0];
+      const cur = row.current_phase;
+      const proj = row.projected_phase;
+      // Surface if currently Phase ≥3 OR projection worsens by 1+ phase
+      const projWorse = (typeof cur === 'number' && typeof proj === 'number' && (proj - cur) >= 1);
+      const inCrisis = (typeof cur === 'number' && cur >= 3);
+      if (!inCrisis && !projWorse) continue;
+      const sev = cur >= 5 ? 'critical' : cur >= 4 ? 'critical' : cur >= 3 ? 'high' : 'medium';
+      const arrow = projWorse ? ` projected to deteriorate to Phase ${proj} (${row.projected_period || 'next quarter'})` : '';
+      events.push({
+        id: 'fews_' + iso,
+        type: 'famine',
+        severity: sev,
+        title: `FEWS NET Phase ${cur || proj} — ${co.name}`,
+        country: co.name, iso, lat: ll[0], lng: ll[1],
+        detail: `FEWS NET classifies ${co.name} at IPC-style Phase ${cur || '—'} (${row.current_phase_label || 'current'})${arrow}. Country-level summary = worst phase observed across admin units.`,
+        source: 'FEWS NET FDW (IPC-style outlook)',
+        date: row.as_of || new Date().toISOString().slice(0,10),
+        live: true,
+        url: row.report_url || 'https://fews.net/',
+      });
+    }
+
     // USGS Water — US-state flow anomalies
     for (const [iso, row] of Object.entries(LIVE.usgs_water || {})) {
       if (!row.flow_anomaly || row.flow_anomaly === 'normal') continue;
