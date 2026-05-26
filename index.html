@@ -19149,7 +19149,7 @@ const TOUR_STEPS = [
   {
     selector: '#sp-score',
     title: 'The headline score',
-    body: 'Egypt sits in the upper range. Why? It imports ~62% of its wheat — mostly from the Black Sea — while servicing a 110m-person population. That structural exposure plus live FX stress drives the number.',
+    body: 'Egypt sits in the upper range. Why? It runs heavy structural import dependency across staples — wheat from the Black Sea, dairy from the EU and New Zealand — while servicing a 110m-person population. That structural exposure plus live FX stress drives the number.',
     before: () => 250,
   },
   {
@@ -19158,7 +19158,7 @@ const TOUR_STEPS = [
     // doesn't trigger the globe to render arcs (that's a separate function).
     selector: '#trade-atlas-cta',
     title: 'Trade Flow Atlas',
-    body: 'We just selected <em>Wheat</em> and pushed the flows to the globe. Watch the red arcs appear — each one is a real Comtrade-recorded wheat import flow into Egypt, weighted by USD value. Pick any commodity for any country to see its real trade pattern.',
+    body: 'We just selected <em>Dairy</em> and pushed the flows to the globe. Watch the arcs appear — each one is a real import flow into Egypt, weighted by USD value. Pick any commodity for any country to see its real trade pattern.',
     before: () => {
       // Ensure Egypt panel is still open
       try {
@@ -19168,16 +19168,29 @@ const TOUR_STEPS = [
       setTimeout(() => {
         const tfa = document.getElementById('trade-atlas-cta');
         if (tfa) tfa.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        // Click the Wheat chip to SELECT it (sets _tfaCommodity = 'Wheat')
+        // Click the Dairy chip to SELECT it (sets _tfaCommodity = 'Dairy').
+        // Falls back: if Dairy isn't in the top chips, open the More… popout
+        // and click the Dairy entry there; otherwise fall back to first chip.
         setTimeout(() => {
           const chips = document.querySelectorAll('.tfa-chip');
-          let wheatChip = null;
+          let dairyChip = null;
           chips.forEach(c => {
-            if (!wheatChip && /wheat/i.test(c.textContent || '')) wheatChip = c;
+            if (!dairyChip && /dairy/i.test(c.textContent || '')) dairyChip = c;
           });
-          if (!wheatChip && chips.length) wheatChip = chips[0];
-          if (wheatChip && !wheatChip.classList.contains('active')) {
-            wheatChip.click();
+          if (!dairyChip) {
+            // Open More… popout and look for Dairy
+            const moreBtn = document.getElementById('tfa-more-btn');
+            if (moreBtn) {
+              moreBtn.click();
+              const popItems = document.querySelectorAll('#tfa-more-pop .tfa-chip, #tfa-more-pop [role="menuitem"], #tfa-more-pop button');
+              popItems.forEach(c => {
+                if (!dairyChip && /dairy/i.test(c.textContent || '')) dairyChip = c;
+              });
+            }
+          }
+          if (!dairyChip && chips.length) dairyChip = chips[0];
+          if (dairyChip && !dairyChip.classList.contains('active')) {
+            dairyChip.click();
             _tourActivatedTFA = true;
           }
           // CRITICAL: now actually push the flows to the globe.
