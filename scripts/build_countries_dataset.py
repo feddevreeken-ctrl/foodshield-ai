@@ -89,6 +89,7 @@ def main():
     existing_meta, existing_rows = _load_existing_overlay()
     caloric_shares = _load_fbs_overlay()
     net_trade = _load_net_trade_overlay()
+    food_inflation = _load_food_inflation_overlay()
 
     countries = {}
     for iso, fields in legacy_rows.items():
@@ -110,6 +111,8 @@ def main():
                 continue
             if field == "net" and iso in net_trade:
                 continue
+            if field == "fi" and iso in food_inflation:
+                continue
             target[field] = meta
 
     for iso, payload in caloric_shares.items():
@@ -126,6 +129,14 @@ def main():
         if iso not in countries:
             continue
         countries[iso]["net"] = _net_field_meta(payload)
+
+    # Food inflation overlay — yoy % from WFP / Eurostat / FAOSTAT live feeds.
+    # Replaces the legacy hand-curated `fi` where a sourced value exists, so the
+    # food-inflation FDRS component stops being a 263/264 legacy field.
+    for iso, payload in food_inflation.items():
+        if iso not in countries:
+            continue
+        countries[iso]["fi"] = _fi_field_meta(payload)
 
     ordered = {}
     for iso in sorted(countries):
@@ -368,6 +379,65 @@ def _load_net_trade_overlay():
     return data if isinstance(data, dict) else {}
 
 
+def _load_food_inflation_overlay():
+    """Year-over-year food inflation % per ISO3, from live feeds.
+
+    Source priority (highest wins): WFP per-country > Eurostat food HICP >
+    FAOSTAT food CPI. Returns {iso3: {"value": float, "source": str,
+    "as_of": str|None}}. Only countries with a real number are included;
+    everyone else keeps their legacy_curated `fi`.
+    """
+    def _read(name):
+        p = DATA_DIR / name
+        if not p.exists():
+            return {}
+        try:
+            obj = json.loads(p.read_text())
+        except Exception:
+            return {}
+        return obj.get("data", obj) if isinstance(obj, dict) else {}
+
+    out = {}
+    # 3. FAOSTAT (lowest priority — written first so higher sources overwrite)
+    for iso, rec in _read("faostat_food.json").items():
+        if not isinstance(rec, dict):
+            continue
+        v = rec.get("food_cpi_yoy") or rec.get("food_inflation_yoy") or rec.get("yoy")
+        if v is not None:
+            try:
+                out[iso.upper()] = {"value": round(float(v), 1),
+                                    "source": "FAOSTAT Consumer Price Indices (food CPI, yoy)",
+                                    "as_of": rec.get("month") or rec.get("year")}
+            except (TypeError, ValueError):
+                pass
+    # 2. Eurostat (EU/EEA member states)
+    for iso, rec in _read("eurostat_food.json").items():
+        if not isinstance(rec, dict):
+            continue
+        v = rec.get("food_hicp_yoy_pct")
+        if v is not None:
+            try:
+                out[iso.upper()] = {"value": round(float(v), 1),
+                                    "source": "Eurostat food HICP (yoy %)",
+                                    "as_of": rec.get("month")}
+            except (TypeError, ValueError):
+                pass
+    # 1. WFP per-country (highest priority — broadest crisis-country coverage)
+    for iso, rec in _read("wfp_country.json").items():
+        if not isinstance(rec, dict):
+            continue
+        v = (rec.get("food_inflation") or rec.get("food_inflation_yoy")
+             or rec.get("headline_food_inflation"))
+        if v is not None:
+            try:
+                out[iso.upper()] = {"value": round(float(v), 1),
+                                    "source": "WFP per-country food inflation",
+                                    "as_of": rec.get("month") or rec.get("as_of")}
+            except (TypeError, ValueError):
+                pass
+    return out
+
+
 def _legacy_field_meta(field, value):
     # v20.7: w/r/m heritage values are import-dependency %, not caloric shares.
     # Tag them with a distinct quality flag so the UI does NOT mis-display them as caloric.
@@ -435,6 +505,22 @@ def _fbs_field_meta(field, payload):
         "note": (
             f"{label_map[field]} share derived from FAOSTAT Food Balance Sheets. "
             "Direct food calories only; indirect feed conversion is excluded."
+        ),
+    }
+
+
+def _fi_field_meta(payload):
+    """Sourced food-inflation envelope for the `fi` field."""
+    return {
+        "value": payload["value"],
+        "source": payload.get("source") or "Live food-inflation feed",
+        "source_url": None,
+        "as_of": payload.get("as_of"),
+        "method": "Year-over-year food price inflation (%), latest available month.",
+        "quality_flag": "sourced",
+        "note": (
+            "Sourced from live WFP / Eurostat / FAOSTAT food-price feeds, replacing "
+            "the legacy embedded baseline. Updated on each data-refresh cycle."
         ),
     }
 
