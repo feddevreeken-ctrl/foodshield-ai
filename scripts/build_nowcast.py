@@ -205,8 +205,30 @@ def main():
         )
         adj = max(-10, min(35, adj))
 
+        # ── v25 — Confidence flag (audit fix) ──────────────────────────────
+        # The nowcast must not present a confident adjustment when the CORE
+        # crisis signals that drive it are absent. IPC (Phase 3+) and WFP
+        # HungerMap (FCS) are the primary live crisis inputs; when BOTH are
+        # missing for a country, the adjustment is built only from secondary
+        # signals (weather, FX, governance) and should be labelled low-confidence
+        # so the UI can show it as provisional rather than authoritative.
+        # Previously a missing signal silently became 0 ("no pressure"), which
+        # made sparse-data countries look calmer and more certain than they are.
+        has_ipc = iso in ipc and (ipc.get(iso) or {}).get("phase3plus_pct") is not None
+        has_wfp = iso in wfp and (wfp.get(iso) or {}).get("fcs_pct") is not None
+        core_signals = sum([has_ipc, has_wfp])
+        if core_signals >= 1:
+            confidence = "high"
+        elif any([fx_shock, inflation_shock, weather_kick, flood_kick, conflict_kick,
+                  inform_amp, governance_drag, psd_shortfall]):
+            confidence = "low"   # adjustment exists but no core crisis feed backs it
+        else:
+            confidence = "none"  # no live signal at all — adjustment is ~0 by absence, not by calm
+
         out[iso] = {
             "adjustment": adj,
+            "confidence": confidence,
+            "core_signals_present": {"ipc": has_ipc, "wfp_hungermap": has_wfp},
             "components": {
                 "ipc_pressure":    round(ipc_pressure, 1),
                 "wfp_pressure":    round(wfp_pressure, 1),
@@ -249,6 +271,15 @@ def main():
             },
         }
 
+    # v25 — coverage summary so the frontend can show an honest banner when the
+    # core crisis feeds are empty (rather than implying every score is live).
+    n_high = sum(1 for v in out.values() if v.get("confidence") == "high")
+    n_low  = sum(1 for v in out.values() if v.get("confidence") == "low")
+    n_none = sum(1 for v in out.values() if v.get("confidence") == "none")
+    ipc_live = bool(ipc)
+    wfp_live = bool(wfp)
+    crisis_feeds_live = ipc_live or wfp_live
+
     envelope = {
         "_meta": {
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -260,18 +291,28 @@ def main():
             ),
             "notes": (
                 "Adjustment range -10 to +35 added to structural FDRS to produce "
-                "nowcast score. See methodology page for component formula."
+                "nowcast score. See methodology page for component formula. v25: each "
+                "country carries a 'confidence' flag (high/low/none). 'high' = a core "
+                "crisis feed (IPC or WFP HungerMap) backs the adjustment; 'low' = only "
+                "secondary signals present; 'none' = no live signal, so the ~0 adjustment "
+                "reflects absence of data, NOT confirmed calm."
             ),
-            "version": "v21",
+            "coverage": {
+                "ipc_feed_live": ipc_live,
+                "wfp_hungermap_feed_live": wfp_live,
+                "crisis_feeds_live": crisis_feeds_live,
+                "countries_high_confidence": n_high,
+                "countries_low_confidence": n_low,
+                "countries_no_live_signal": n_none,
+            },
+            "version": "v25",
         },
         "data": out,
     }
     (DATA / "nowcast.json").write_text(json.dumps(envelope, indent=2))
-    with_signals = sum(
-        1 for v in out.values()
-        if any(s for s in (v.get("signals") or {}).values() if s and s != 0)
-    )
-    print(f"[OK] wrote nowcast.json with {len(out)} ISO3 entries ({with_signals} with at least one live signal)")
+    print(f"[OK] wrote nowcast.json with {len(out)} entries "
+          f"(confidence: {n_high} high, {n_low} low, {n_none} none | "
+          f"IPC live: {ipc_live}, WFP live: {wfp_live})")
 
 
 if __name__ == "__main__":

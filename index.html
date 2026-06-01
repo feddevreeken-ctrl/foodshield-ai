@@ -13499,6 +13499,10 @@ async function loadLiveData() {
       if (c._f2030Structural == null) c._f2030Structural = c.f2030;
       const ncRow = LIVE.nowcast[c.iso] || {};
       const adj = ncRow.adjustment;
+      // v25 — carry the nowcast confidence flag (high/low/none) so the UI can
+      // show when a score has no live crisis feed backing it instead of
+      // presenting every nowcast as equally authoritative.
+      c._nowcastConfidence = ncRow.confidence || (adj != null ? 'low' : 'none');
       if (adj != null) {
         c.fdrs = Math.max(0, Math.min(100, Math.round(c._fdrsStructural + adj)));
         c._fdrsAdj = adj;
@@ -17117,12 +17121,31 @@ function openPanel(c, skipDrilldown) {
     if (sourcedPct >= 60) { tier = 'high';    label = `Sourced coverage · ${sourcedPct}%`; }
     else if (sourcedPct >= 30) { tier = 'mixed';   label = `Mixed sourcing · ${sourcedPct}%`; }
     else                       { tier = 'modeled'; label = `Modeled fallback · ${sourcedPct}%`; }
+    // v25 — fold in LIVE nowcast confidence. If this country's headline carries
+    // a nowcast adjustment but no core crisis feed (IPC/WFP) backs it, downgrade
+    // the pill and say so, so a sparse-data country never reads as a confident
+    // live score. (The structural coverage above is separate from live coverage.)
+    const ncConf = c._nowcastConfidence;
+    const hasAdj = c._fdrsAdj && Math.abs(c._fdrsAdj) >= 0.5;
+    let liveNote = '';
+    if (ncConf === 'none') {
+      liveNote = ' · no live crisis feed';
+      if (tier === 'high') tier = 'mixed';
+    } else if (ncConf === 'low' && hasAdj) {
+      liveNote = ' · live signal provisional';
+      if (tier === 'high') tier = 'mixed';
+    }
     confEl.setAttribute('data-tier', tier);
-    confEl.textContent = label;
+    confEl.textContent = label + liveNote;
     confEl.setAttribute('title',
       `Coverage of the ${total} core structural inputs (wheat / rice / maize caloric share, food inflation, net trade): ` +
       `${sourced} sourced, ${modeled} modeled, ${missing} legacy curated. ` +
       `High = 3+ sourced inputs; Mixed = 2 sourced; Modeled = 0–1 sourced. ` +
+      (ncConf === 'high'
+        ? `Live nowcast: backed by a core crisis feed (IPC/WFP). `
+        : ncConf === 'low'
+          ? `Live nowcast: only secondary signals present — no IPC/WFP crisis feed for this country right now, so the live adjustment is provisional. `
+          : `Live nowcast: no live signal for this country right now — the headline reflects the structural baseline, not confirmed current calm. `) +
       `See methodology for per-metric provenance.`);
   })();
 

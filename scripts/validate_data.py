@@ -111,6 +111,15 @@ EXPECTED_FILES = {
 # Threshold: this many or more 'critical' failures → exit 1
 CRITICAL_FAILURE_THRESHOLD = 4
 
+# v25 (audit fix) — "must-have" crisis feeds. These are the primary humanitarian
+# signals that drive the nowcast. When they are empty, the site is NOT showing
+# live crisis data, even if the overall failure count is under the threshold.
+# We report this loudly and separately so it is never silently tolerated. We do
+# NOT hard-exit on these alone (that would block the daily commit of every OTHER
+# healthy feed), but the report makes the gap impossible to miss in CI logs and
+# the nowcast itself now flags affected countries as low/no-confidence.
+MUST_HAVE_CRISIS_FEEDS = ["wfp_hungermap.json", "ipc.json", "wfp_country.json"]
+
 
 def validate_one(filename, spec):
     """Returns (ok: bool, message: str)."""
@@ -195,6 +204,17 @@ def main():
         # Treat any PSD content failure as critical — these are silent-data-
         # corruption bugs that have re-emerged 3+ times during 2026.
         critical_failures.extend(("usda_psd.json", m) for m in psd_failures)
+
+    # v25 — loud, separate report on the must-have crisis feeds.
+    failed_names = {fn for fn, _ in critical_failures}
+    crisis_down = [f for f in MUST_HAVE_CRISIS_FEEDS if f in failed_names]
+    if crisis_down:
+        print("\n" + "!" * 64)
+        print(f"!! CRISIS FEEDS EMPTY: {', '.join(crisis_down)}")
+        print("!! The nowcast has NO live crisis input for these. Affected")
+        print("!! country scores are flagged low/no-confidence in nowcast.json.")
+        print("!! The site must not present these as confirmed live crisis data.")
+        print("!" * 64)
 
     if len(critical_failures) >= CRITICAL_FAILURE_THRESHOLD:
         print(f"\n{len(critical_failures)} critical failures (>= {CRITICAL_FAILURE_THRESHOLD} threshold). "
