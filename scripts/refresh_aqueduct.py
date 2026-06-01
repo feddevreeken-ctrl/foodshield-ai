@@ -1,206 +1,118 @@
 """
 WRI Aqueduct 4.0 — Country Water Risk Rankings.
 
-Pipeline 8 of the structural-data series. Per-country composite water risk
-scores from the World Resources Institute. Pairs with ND-GAIN (Pipeline 6)
-to give a richer climate/water picture on the country panel.
+v23 (Jun 2026) — REWRITTEN for the World Bank Data360 mirror.
+The old WRI S3 + GitHub CSV URLs are permanently 404. WB Data360 mirrors the
+WRI_AQDT dataset and is the only stable machine-readable source, BUT it exposes
+only TWO of the original five indicators:
+    WRI_AQDT_BASELINE_RFR  — Riverine Flood Risk  -> flood_risk
+    WRI_AQDT_BASELINE_DRR  — Drought Risk         -> drought_risk
+Water stress / depletion / coastal flood are NOT in this mirror. We populate
+what's available (flood + drought — the two most food-relevant), honestly, and
+note the missing indicators in _meta.
 
-WHY AQUEDUCT:
-  Aqueduct is the standard reference for cross-country water risk in ESG and
-  development policy. v4.0 released Aug 2023, still current May 2026.
-
-ARCHITECTURE NOTE:
-  Aqueduct country-rankings is published as a CSV in LONG format:
-    one row per (country, indicator, weight, year/scenario)
-  We filter to weight='Def' (default total water-use weighting) and
-  year='baseline' for current scores. Each country then has rows for
-  bws, bwd, drr, rfr, cfr — 5 indicators we pivot into one country payload.
-
-DOWNLOAD:
-  Primary:  https://wri-public-data.s3.amazonaws.com/Aqueduct40/country_rankings_data/Aq40_country_rankings.csv
-  Mirror:   https://github.com/wri/Aqueduct40/raw/master/data/country_rankings_data/Aq40_country_rankings.csv
-  WB mirror: https://data360-files.worldbank.org/wri/aqueduct40/country_rankings.csv
-  We try in order. If all fail, write empty payload with a clear note.
-
-INDICATORS:
-  bws — Baseline Water Stress: ratio of withdrawals to renewable supply
-  bwd — Baseline Water Depletion: groundwater consumption vs recharge
-  drr — Drought Risk: composite of hazard + exposure + vulnerability
-  rfr — Riverine Flood Risk
-  cfr — Coastal Flood Risk
-
-  Scores are 0-5 (continuous) plus integer category:
-    -1 = arid / no data (NOT zero — distinct meaning)
-     0 = Low (<10%)
-     1 = Low-Medium (10-20%)
-     2 = Medium-High (20-40%)
-     3 = High (40-80%)
-     4 = Extremely High (>80%)
+Data360 CSV is LONG format: one row per (REF_AREA, INDICATOR, weight-combo).
+We keep COMP_BREAKDOWN_1 == 'WRI_AQDT_WEIGHT_POP' (population-weighted, the
+default presentation) and read OBS_VALUE (0-5 score) per REF_AREA (ISO3).
 
 OUTPUT: data/aqueduct.json
-  {
-    "_meta": {...},
-    "data": {
-      "BGD": {
-        "water_stress":   {"score": 1.84, "cat": 1, "label": "Low - Medium (10-20%)"},
-        "water_depletion": {"score": 0.62, "cat": 0, "label": "Low (<10%)"},
-        "drought_risk":   {"score": 2.91, "cat": 2, "label": "Medium - High (20-40%)"},
-        "flood_risk":     {"score": 3.87, "cat": 3, "label": "High (40-80%)"},
-        "coastal_flood":  {"score": 4.21, "cat": 4, "label": "Extremely High (>80%)"},
-        "year": "baseline",
-        "source": "WRI Aqueduct 4.0",
-        "source_url": "https://www.wri.org/data/aqueduct-40-country-rankings",
-        "quality_flag": "sourced",
-      },
-      ...
-    }
-  }
-
-Wired into:
-  - run_all.py STEPS list
-  - build_source_manifest.py (mode='reference')
-  - foodshield-v19.html: LIVE.aqueduct loader + aqueductCardHTML(iso3) renderer
+  { "data": { "SOM": {"drought_risk": {"score": 4.84}, "flood_risk": {...},
+              "source": "...", "quality_flag": "sourced"} } }
 """
 import csv
 import io
 
 from _common import http_get, write_json
 
-# v21 (May 2026) — old WRI S3 + GitHub paths all 404. The `wri/Aqueduct40`
-# GitHub repo doesn't actually contain a /data/ folder — only notebooks and
-# data dictionaries. WRI distributes country rankings through a portal
-# download button rather than a stable file URL.
-#
-# Stable machine-readable mirror: World Bank Data360 mirrors the WRI_AQDT
-# dataset and exposes a JSON/CSV API. We try the WB mirror first; if it
-# fails, scrape the WRI portal page for the current S3 href (WRI rotates
-# the filename per release, e.g. y2023m07d05_sk_*.csv).
-URLS = [
-    # World Bank Data360 mirror (stable; JSON API)
-    "https://data360api.worldbank.org/data360/data?DATABASE_ID=WRI_AQDT&format=csv",
-    "https://data360api.worldbank.org/data360/data?DATABASE_ID=WRI_AQDT",
-    # WRI portal — sometimes serves a direct CSV if S3 indexer is happy
-    "https://files.wri.org/d8/s3fs-public/2023-07/aqueduct-40-country-rankings.csv",
-    "https://www.wri.org/data/aqueduct-40-country-rankings",  # landing page (scrape <a href>)
-    # Legacy URLs kept as final fallback in case anything restores them
-    "https://wri-public-data.s3.amazonaws.com/Aqueduct40/country_rankings_data/Aq40_country_rankings.csv",
-    "https://raw.githubusercontent.com/wri/Aqueduct40/master/data/country_rankings_data/Aq40_country_rankings.csv",
-]
+# WB Data360 mirror — the only stable source as of Jun 2026.
+URL = "https://data360api.worldbank.org/data360/data?DATABASE_ID=WRI_AQDT&format=csv"
 
-# Aqueduct indicator code → our shorthand key on the output
+# Data360 INDICATOR code -> our shorthand key
 INDICATORS = {
-    "bws": "water_stress",       # Baseline Water Stress
-    "bwd": "water_depletion",    # Baseline Water Depletion
-    "drr": "drought_risk",       # Drought Risk
-    "rfr": "flood_risk",         # Riverine Flood Risk
-    "cfr": "coastal_flood",      # Coastal Flood Risk
+    "WRI_AQDT_BASELINE_RFR": "flood_risk",     # Riverine Flood Risk
+    "WRI_AQDT_BASELINE_DRR": "drought_risk",   # Drought Risk
 }
+# Prefer population-weighted aggregation (matches WRI's headline presentation)
+PREFERRED_WEIGHT = "WRI_AQDT_WEIGHT_POP"
 
 
 def main():
-    text = None
-    used_url = None
-    for url in URLS:
-        try:
-            r = http_get(url, timeout=120, retries=2, patient=True)
-            if r.text and len(r.text) > 1000:
-                text = r.text
-                used_url = url
-                print(f"[OK] downloaded {len(text)//1024} KB from {url}")
-                break
-            print(f"  [skip] {url}: response too small")
-        except Exception as e:
-            print(f"  [skip] {url}: {e}")
+    try:
+        r = http_get(URL, timeout=120, retries=3, patient=True)
+    except Exception as e:
+        write_json("aqueduct.json", {}, source="WRI Aqueduct 4.0",
+                   notes=f"WB Data360 mirror fetch failed: {e}")
+        return
 
-    if not text:
-        write_json(
-            "aqueduct.json", {},
-            source="WRI Aqueduct 4.0",
-            notes=(
-                "All download URLs failed. Aqueduct CSV is public but mirrors "
-                "occasionally rate-limit anonymous fetches. Manual fallback: "
-                "https://github.com/wri/Aqueduct40 → data/country_rankings_data/"
-            ),
-        )
+    text = r.text
+    if not text or len(text) < 1000:
+        write_json("aqueduct.json", {}, source="WRI Aqueduct 4.0",
+                   notes="WB Data360 mirror returned too little data.")
         return
 
     reader = csv.DictReader(io.StringIO(text))
-    # Aqueduct long-format columns: gid_0, name_0, weight, indicator_name,
-    # year, scenario, score, label, cat, score_ranked
-    # We want weight=Def and year=baseline only.
-    out = {}
+    # Two passes: prefer population-weighted rows, but fall back to any weight
+    # if a country only has non-pop-weighted rows for an indicator.
+    primary = {}   # (iso3, key) -> score from preferred weight
+    fallback = {}  # (iso3, key) -> score from any weight
     rows_seen = 0
-    rows_kept = 0
     for row in reader:
         rows_seen += 1
-        weight = (row.get("weight") or "").strip()
-        year = (row.get("year") or "").strip().lower()
-        if weight != "Def":
+        ind = (row.get("INDICATOR") or "").strip()
+        key = INDICATORS.get(ind)
+        if not key:
             continue
-        if year and year != "baseline":
+        iso3 = (row.get("REF_AREA") or "").strip().upper()
+        if len(iso3) != 3 or not iso3.isalpha():
             continue
-        ind = (row.get("indicator_name") or "").strip().lower()
-        if ind not in INDICATORS:
+        score = _num(row.get("OBS_VALUE"))
+        if score is None:
             continue
-        iso3 = (row.get("gid_0") or "").strip().upper()
-        if not iso3 or len(iso3) != 3 or not iso3.isalpha():
-            continue
-        score = _num(row.get("score"))
-        cat = _int(row.get("cat"))
-        label = (row.get("label") or "").strip()
-        if score is None and cat is None:
-            continue
-        key = INDICATORS[ind]
-        country_name = (row.get("name_0") or "").strip()
-        country_slot = out.setdefault(iso3, {
-            "country": country_name,
+        weight = (row.get("COMP_BREAKDOWN_1") or "").strip()
+        slot = (iso3, key)
+        if weight == PREFERRED_WEIGHT:
+            primary[slot] = score
+        else:
+            fallback.setdefault(slot, score)
+
+    merged = dict(fallback)
+    merged.update(primary)  # preferred weight wins
+
+    out = {}
+    for (iso3, key), score in merged.items():
+        country = out.setdefault(iso3, {
             "year": "baseline",
-            "source": "WRI Aqueduct 4.0",
+            "source": "WRI Aqueduct 4.0 (World Bank Data360 mirror)",
             "source_url": "https://www.wri.org/data/aqueduct-40-country-rankings",
             "quality_flag": "sourced",
         })
-        country_slot[key] = {
-            "score": round(score, 2) if score is not None else None,
-            "cat": cat,
-            "label": label,
-        }
-        rows_kept += 1
+        country[key] = {"score": round(score, 2)}
 
-    print(f"[INFO] Parsed {rows_seen} rows, kept {rows_kept}, covering {len(out)} countries")
-
-    # Sanity check: a few reference points
-    for ref in ("USA", "NLD", "BGD", "EGY", "IND", "AFG", "AUS"):
+    print(f"[INFO] Aqueduct: parsed {rows_seen} rows, {len(out)} countries "
+          f"(indicators available in mirror: flood_risk, drought_risk)")
+    for ref in ("USA", "NLD", "SOM", "IND", "AFG", "AUS", "EGY"):
         if ref in out:
-            ws = out[ref].get("water_stress", {})
-            df = out[ref].get("drought_risk", {})
-            print(f"  [ref] {ref}: water_stress cat={ws.get('cat')} ({ws.get('label','')[:30]}); "
-                  f"drought cat={df.get('cat')}")
+            d = out[ref]
+            print(f"  [ref] {ref}: drought={d.get('drought_risk',{}).get('score')}, "
+                  f"flood={d.get('flood_risk',{}).get('score')}")
 
     write_json(
-        "aqueduct.json",
-        out,
-        source=f"WRI Aqueduct 4.0 ({used_url})",
+        "aqueduct.json", out,
+        source="WRI Aqueduct 4.0 (World Bank Data360 mirror)",
         notes=(
-            f"Country water risk scores from WRI Aqueduct 4.0 (Aug 2023 release). "
-            f"5 indicators per country: baseline water stress, baseline water depletion, "
-            f"drought risk, riverine flood risk, coastal flood risk. "
-            f"Each indicator has a 0-5 continuous score and a -1 to 4 categorical bucket "
-            f"(-1 = arid/no data, 0 = Low, 4 = Extremely High). "
-            f"Covered {len(out)} countries. Aqueduct refreshes every 3-5 years upstream."
+            f"Country water-risk scores from WRI Aqueduct 4.0, via the World Bank "
+            f"Data360 mirror (the WRI S3/GitHub CSVs are permanently offline as of "
+            f"Jun 2026). This mirror exposes only 2 of the original 5 indicators: "
+            f"riverine flood risk and drought risk (0-5 scale, population-weighted). "
+            f"Water stress, water depletion, and coastal flood are NOT available in "
+            f"this mirror. Covered {len(out)} countries."
         ),
     )
 
 
 def _num(v):
     try:
-        return float(v) if v not in (None, "", "..", "NA") else None
-    except (TypeError, ValueError):
-        return None
-
-
-def _int(v):
-    try:
-        return int(float(v))
+        return float(v) if v not in (None, "", "..", "NA", "_Z") else None
     except (TypeError, ValueError):
         return None
 

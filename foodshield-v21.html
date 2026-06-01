@@ -12155,26 +12155,26 @@ function usdaGainLinkHTML(iso3) {
 function aqueductCardHTML(iso3) {
   const row = LIVE.aqueduct?.[iso3];
   if (!row) return '';
-  const catColor = (cat) => cat == null || cat < 0 ? 'var(--t3)' :
-    cat === 0 ? '#6ba36b' :
-    cat === 1 ? '#c9a957' :
-    cat === 2 ? '#d27a3e' :
-    cat === 3 ? '#c44b3c' : '#a82d20';
+  // v25 — Data360 mirror provides a 0-5 score (no categorical bucket) for two
+  // indicators only: drought_risk + flood_risk. Map score to a colour band.
+  const scoreColor = (s) => s == null ? 'var(--t3)' :
+    s < 1 ? '#6ba36b' :
+    s < 2 ? '#c9a957' :
+    s < 3 ? '#d27a3e' :
+    s < 4 ? '#c44b3c' : '#a82d20';
+  const scoreLabel = (s) => s == null ? '—' :
+    s < 1 ? 'Low' : s < 2 ? 'Low–Medium' : s < 3 ? 'Medium–High' : s < 4 ? 'High' : 'Extremely High';
   const indicators = [
-    { key: 'water_stress',    label: 'Water stress',          tip: 'Ratio of total water withdrawals to renewable supply (WRI bws). 0 = Low, 4 = Extremely High.' },
-    { key: 'water_depletion', label: 'Water depletion',       tip: 'Ratio of consumptive water use to renewable supply (WRI bwd). Captures groundwater stress.' },
-    { key: 'drought_risk',    label: 'Drought risk',          tip: 'Composite drought hazard + exposure + vulnerability (WRI drr).' },
-    { key: 'flood_risk',      label: 'Riverine flood risk',   tip: 'Population + assets exposed to riverine flooding (WRI rfr).' },
-    { key: 'coastal_flood',   label: 'Coastal flood risk',    tip: 'Exposure to coastal storm surge + sea-level rise (WRI cfr).' },
+    { key: 'drought_risk', label: 'Drought risk',        tip: 'WRI Aqueduct 4.0 drought risk — hazard + exposure + vulnerability. 0-5 score.' },
+    { key: 'flood_risk',   label: 'Riverine flood risk', tip: 'WRI Aqueduct 4.0 riverine flood risk — population + assets exposed. 0-5 score.' },
   ];
   const rows = indicators.map(spec => {
     const ind = row[spec.key];
-    if (!ind || ind.cat == null) return '';
-    if (ind.cat < 0) return `<div class="sp-row" title="${spec.tip}"><span class="k">${spec.label}</span><span class="v" style="color:var(--t3);">arid / no data</span></div>`;
-    const lab = (ind.label || '').replace(/\s*\([^)]*\)$/, '');
+    const s = ind && typeof ind.score === 'number' ? ind.score : null;
+    if (s == null) return '';
     return `<div class="sp-row" title="${spec.tip}">
       <span class="k">${spec.label}</span>
-      <span class="v" style="color:${catColor(ind.cat)};">${lab || `cat ${ind.cat}`}</span>
+      <span class="v" style="color:${scoreColor(s)};">${scoreLabel(s)} <span style="color:var(--t3);font-family:'Geist Mono',monospace;font-size:10px;">${s.toFixed(1)}/5</span></span>
     </div>`;
   }).filter(Boolean).join('');
   if (!rows) return '';
@@ -12185,7 +12185,7 @@ function aqueductCardHTML(iso3) {
         <span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">WRI · sourced</span>
       </div>
       ${rows}
-      <div style="font-size:9.5px;color:var(--t3);margin-top:6px;">baseline scenario · WRI Aqueduct 4.0</div>
+      <div style="font-size:9.5px;color:var(--t3);margin-top:6px;">baseline · WRI Aqueduct 4.0 via WB Data360 (drought + flood; the mirror omits water-stress)</div>
     </div>`;
 }
 
@@ -12424,18 +12424,18 @@ function cckpCardHTML(iso3) {
     Math.abs(pct) < 15 ? '#c9a957' :
                          '#c44b3c';
   const rows = [];
-  if (row.hist_temp_c != null) rows.push(`<div class="sp-row" title="Mean annual temperature 1991-2020 (ERA5 reanalysis).">
-    <span class="k">Historical mean temp</span>
+  if (row.hist_temp_c != null) rows.push(`<div class="sp-row" title="Mean annual temperature, 1991-2000 baseline (observed, WB CCKP / ERA5).">
+    <span class="k">Baseline mean temp (1991-2000)</span>
     <span class="v" style="color:var(--t1);font-family:'Geist Mono',monospace;">${row.hist_temp_c.toFixed(1)}°C</span>
   </div>`);
-  if (row.proj_temp_change_c != null) rows.push(`<div class="sp-row" title="CMIP6 ensemble-mean temperature change 2040-2059 vs 1991-2020 under SSP2-4.5 (a 'middle-of-the-road' emissions pathway).">
-    <span class="k">Δ Temp by 2050</span>
-    <span class="v" style="color:${tempCol(row.proj_temp_change_c)};font-family:'Geist Mono',monospace;">+${row.proj_temp_change_c.toFixed(1)}°C</span>
+  if (row.warming_c != null) rows.push(`<div class="sp-row" title="Observed warming: recent decade (2014-2024) mean annual temperature minus the 1991-2000 baseline. Observed, not a model projection.">
+    <span class="k">Observed warming</span>
+    <span class="v" style="color:${tempCol(row.warming_c)};font-family:'Geist Mono',monospace;">${row.warming_c >= 0 ? '+' : ''}${row.warming_c.toFixed(1)}°C</span>
   </div>`);
-  if (row.proj_precip_change_pct != null) {
-    const v = row.proj_precip_change_pct;
-    rows.push(`<div class="sp-row" title="Projected precipitation change 2040-2059 vs 1991-2020 under SSP2-4.5.">
-      <span class="k">Δ Precipitation by 2050</span>
+  if (row.precip_change_pct != null) {
+    const v = row.precip_change_pct;
+    rows.push(`<div class="sp-row" title="Observed precipitation change: recent decade vs 1991-2000 baseline.">
+      <span class="k">Δ Precipitation (observed)</span>
       <span class="v" style="color:${prCol(v)};font-family:'Geist Mono',monospace;">${v >= 0 ? '+' : ''}${v.toFixed(1)}%</span>
     </div>`);
   }
@@ -12443,11 +12443,11 @@ function cckpCardHTML(iso3) {
   return `
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1);">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Climate projection (WB CCKP)</div>
+        <div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Observed climate (WB CCKP)</div>
         <span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">WB · sourced</span>
       </div>
       ${rows.join('')}
-      <div style="font-size:9.5px;color:var(--t3);margin-top:6px;">SSP2-4.5 · CMIP6 ensemble mean · 1991-2020 baseline</div>
+      <div style="font-size:9.5px;color:var(--t3);margin-top:6px;">Observed annual series · recent decade (2014-2024) vs 1991-2000 baseline</div>
     </div>`;
 }
 
@@ -12894,7 +12894,7 @@ const DATASTATUS_FEEDS = {
   worldbank_wgi: '6 governance indicators · structural FDRS conflict/logistics component',
   worldbank_lpi: 'World Bank Logistics Performance Index · structural FDRS conflict/logistics',
   undp_hdi:      'UNDP HDI + sub-indices · structural FDRS context',
-  worldbank_cckp: 'World Bank Climate Change Knowledge Portal · 2030 modeled-outlook climate component (when populated; currently degraded)',
+  worldbank_cckp: 'World Bank Climate Change Knowledge Portal · observed temperature + precipitation, feeds the structural climate component',
   ndgain:        'ND-GAIN climate vulnerability + readiness · structural FDRS climate',
   aqueduct:      'WRI Aqueduct 4.0 water-stress, drought, flood risk · structural FDRS climate',
   inform:        'EU JRC INFORM Risk Index · structural FDRS amplifier',
@@ -13253,8 +13253,8 @@ async function loadLiveData() {
   } catch (e) { LIVE.psd = {}; }
 
   // v20.20 — Pipeline 6: ND-GAIN climate vulnerability + readiness per country.
-  // Feeds the climate dimension of the FDRS (today still partly heuristic) and
-  // shows on the country panel as a sourced 'ND-GAIN' card.
+  // Feeds the climate dimension of the FDRS (blended 60% sourced / 40% heritage,
+  // alongside Aqueduct + CCKP) and shows on the country panel as a sourced card.
   try {
     const ndgainEnv = await _fetchData('ndgain');
     LIVE.ndgain = (ndgainEnv && (ndgainEnv.data || ndgainEnv)) || {};
@@ -13440,15 +13440,19 @@ async function loadLiveData() {
       if (ndg.food_vulnerability != null) {
         climateParts.push({ v: ndg.food_vulnerability * 100, w: 0.45 });
       }
-      if (aqu.drought_risk?.cat != null && aqu.drought_risk.cat >= 0) {
-        climateParts.push({ v: aqu.drought_risk.cat * 25, w: 0.20 });
+      // v25 — Aqueduct (Data360 mirror) emits {drought_risk:{score 0-5}, flood_risk:{score 0-5}}.
+      // No categorical `cat` and no water_stress in the mirror; map the 0-5 score directly.
+      if (aqu.drought_risk?.score != null) {
+        climateParts.push({ v: Math.min(100, aqu.drought_risk.score * 20), w: 0.20 });  // 5 → 100
       }
-      if (aqu.water_stress?.cat != null && aqu.water_stress.cat >= 0) {
-        climateParts.push({ v: aqu.water_stress.cat * 25, w: 0.15 });
+      if (aqu.flood_risk?.score != null) {
+        climateParts.push({ v: Math.min(100, aqu.flood_risk.score * 20), w: 0.15 });
       }
-      if (ccp.proj_temp_change_c != null) {
-        // 1°C → 25, 2°C → 50, 3°C → 75, 4°C → 100
-        climateParts.push({ v: Math.min(100, ccp.proj_temp_change_c * 25), w: 0.20 });
+      // v25 — CCKP (Data360 observed series) emits `warming_c` (observed °C rise,
+      // recent decade vs 1991-2000 baseline). Replaces the old `proj_temp_change_c`.
+      // ~+0.5°C → 25, +1°C → 50, +2°C → 100.
+      if (ccp.warming_c != null) {
+        climateParts.push({ v: Math.max(0, Math.min(100, ccp.warming_c * 50)), w: 0.20 });
       }
       if (climateParts.length >= 2) {
         const sumW = climateParts.reduce((s, p) => s + p.w, 0);
@@ -13559,10 +13563,13 @@ async function loadLiveData() {
       const ccp2030 = LIVE.cckp?.[c.iso];
       const ndg2030 = LIVE.ndgain?.[c.iso];
       let climateKick = 0;
-      if (ccp2030?.proj_temp_change_c != null) {
-        // 1°C → 0.5, 2°C → 1.5, 3°C → 3.0 (food-system damage non-linear above 2°C)
-        const dT = ccp2030.proj_temp_change_c;
-        climateKick += dT < 2 ? dT * 0.75 : 1.5 + (dT - 2) * 1.5;
+      // v25 — CCKP now provides OBSERVED warming (`warming_c`, recent decade vs
+      // 1991-2000 baseline) rather than a 2050 projection. Observed warming runs
+      // ~0.3-1.5°C; we treat it as the trend signal toward 2030. Faster observed
+      // warming → larger upward forecast drift. +0.5°C → ~0.6, +1°C → ~1.5, +1.5°C → ~2.6.
+      if (ccp2030?.warming_c != null) {
+        const dT = ccp2030.warming_c;
+        climateKick += dT < 1 ? dT * 1.2 : 1.2 + (dT - 1) * 2.2;
       }
       if (ndg2030?.food_vulnerability != null) {
         // >0.5 vuln adds up to +2; below 0.35 subtracts up to -1 (improving systems)
@@ -17319,16 +17326,16 @@ function openPanel(c, skipDrilldown) {
         liveShocks.push(`<b style="color:#d27a3e">${lpiRow.overall.value.toFixed(2)}/5</b> logistics index <span style="color:var(--t3)">(WB LPI)</span>`);
       }
       const ccpRow = LIVE.cckp?.[c.iso];
-      if (ccpRow?.proj_temp_change_c != null && ccpRow.proj_temp_change_c >= 2.0) {
-        liveShocks.push(`<b style="color:#c44b3c">+${ccpRow.proj_temp_change_c.toFixed(1)}°C</b> projected by 2050 <span style="color:var(--t3)">(WB CCKP)</span>`);
+      if (ccpRow?.warming_c != null && ccpRow.warming_c >= 1.0) {
+        liveShocks.push(`<b style="color:#c44b3c">+${ccpRow.warming_c.toFixed(1)}°C</b> observed warming <span style="color:var(--t3)">(WB CCKP)</span>`);
       }
       const ndgRow = LIVE.ndgain?.[c.iso];
       if (ndgRow?.food_vulnerability != null && ndgRow.food_vulnerability >= 0.55) {
         liveShocks.push(`<b style="color:#d27a3e">${ndgRow.food_vulnerability.toFixed(2)}</b> food-system climate exposure <span style="color:var(--t3)">(ND-GAIN)</span>`);
       }
       const aquRow = LIVE.aqueduct?.[c.iso];
-      if (aquRow?.water_stress?.cat != null && aquRow.water_stress.cat >= 3) {
-        liveShocks.push(`<b style="color:#c44b3c">${aquRow.water_stress.label || 'High'}</b> water stress <span style="color:var(--t3)">(WRI Aqueduct)</span>`);
+      if (aquRow?.drought_risk?.score != null && aquRow.drought_risk.score >= 3) {
+        liveShocks.push(`<b style="color:#c44b3c">High</b> drought risk <span style="color:var(--t3)">(WRI Aqueduct ${aquRow.drought_risk.score.toFixed(1)}/5)</span>`);
       }
       if (items.length === 0 && liveShocks.length === 0) {
         anchEl.style.display = 'none';
@@ -18490,7 +18497,7 @@ function renderForecastWhy(c, delta, trendUp, futureCol, todayCol){
         </div>
         <div class="fc-method-list">
           <div><span class="fc-method-step">01</span><span><b style="color:var(--t1)">Baseline</b> · curated heritage structural vintage (FAO/USDA/WB)</span></div>
-          <div><span class="fc-method-step">02</span><span><b style="color:var(--t1)">Climate component</b> · when ${ac('CCKP')}/${ac('ND-GAIN')} coverage is populated, the climate component derives from them; today, with both sources degraded, the component falls back to the heritage structural value (see Data Status)</span></div>
+          <div><span class="fc-method-step">02</span><span><b style="color:var(--t1)">Climate component</b> · derived from sourced inputs — WB ${ac('CCKP')} observed warming + WRI Aqueduct drought/flood risk + ${ac('ND-GAIN')} food vulnerability — blended 60% sourced / 40% heritage. If a climate pipeline is temporarily degraded, that country falls back to its heritage value (live status on the Data Status page)</span></div>
           <div><span class="fc-method-step">03</span><span><b style="color:var(--t1)">Demographic scale</b> · UN WPP medium-scenario population</span></div>
           <div><span class="fc-method-step">04</span><span><b style="color:var(--t1)">Geopolitical overlay</b> · ${ac('ACLED')} conflict + active sanctions (qualitative)</span></div>
           <div><span class="fc-method-step">05</span><span><b style="color:var(--t1)">Live overlay</b> · persistent shocks nudge the 2030 number by up to +8 pts</span></div>
@@ -20254,7 +20261,7 @@ const TOUR_STEPS = [
   {
     selector: '#tab-forecast',
     title: '2030 Modeled Outlook',
-    body: `An illustrative scenario estimate, not a back-tested forecast. Each country's 2030 number combines the current baseline with legacy embedded assumptions and available risk proxies. When ${ac('CCKP')}/${ac('ND-GAIN')} coverage is populated, the climate component derives from them; today, with both sources degraded, the component falls back to the heritage structural value (see Data Status).`,
+    body: `An illustrative scenario estimate, not a back-tested forecast. Each country's 2030 number combines the current baseline with legacy embedded assumptions and available risk proxies. The climate component is derived from sourced inputs — WB ${ac('CCKP')} observed warming + ${ac('ND-GAIN')} food vulnerability — where those pipelines are healthy; a country falls back to its heritage value only if its climate feed is temporarily degraded (see Data Status).`,
     before: () => {
       try { showTab('forecast'); } catch(e){}
       return 500;
@@ -21860,7 +21867,7 @@ function renderMethodologyTab() {
           {w:'14%',label:'Food Inflation',col:'#c9a957',
            desc:`Annual food CPI change. Live-sourced from ${ac('WFP')} HungerMap → Eurostat HICP → ${ac('FAO')}STAT food CPI → World Bank CPI fallback. Captures affordability deterioration. 100 = >60% inflation.`},
           {w:'9%',label:'Climate Vulnerability',col:'#6ba36b',
-           desc:`v20.27 — 60% sourced composite (${ac('ND-GAIN')} food_vulnerability × 0.45 + Aqueduct drought_risk × 0.20 + Aqueduct water_stress × 0.15 + ${ac('CCKP')} projected temp Δ × 0.20), 40% heritage. Captures exposure of food/water systems to climate hazards.`},
+           desc:`v25 — 60% sourced composite (${ac('ND-GAIN')} food vulnerability × 0.45 + Aqueduct drought risk × 0.20 + Aqueduct riverine flood risk × 0.15 + WB ${ac('CCKP')} observed warming × 0.20), 40% heritage. Captures exposure of food/water systems to climate hazards.`},
           {w:'9%',label:'Conflict / Logistics',col:'#6ba36b',
            desc:`v20.27 — 60% sourced composite (${ac('INFORM')} Risk × 0.45 + ${ac('WGI')} Rule of Law × 0.25 + ${ac('LPI')} Overall × 0.20 + INFORM lack_coping_capacity × 0.10), 40% heritage. High composite humanitarian risk + weak rule of law + poor logistics = 100.`},
           {w:'8%',label:'Supply-Chain Exposure (trade) · v20.2',col:'#8aa6c4',
@@ -21946,7 +21953,7 @@ function renderMethodologyTab() {
         <br><b style="color:var(--t1)">v20.1.</b> Food-inflation signal now reads from the freshest available source per country: WFP HungerMap (crisis countries) &gt; Eurostat HICP (EU monthly) &gt; FAOSTAT food CPI (global annual) &gt; World Bank headline CPI fallback.
         <br><b style="color:var(--t1)">v20.2.</b> Added <b>Supply-Chain Exposure</b> as a 7th structural sub-component (weight 8%). Captures TRADE import dependency, distinct from caloric reliance. Resolves the "Netherlands shows 0% rice dependency despite importing $481M of rice annually" class of issue. Commodity rows in country panels now display <b>both caloric share AND trade dependency</b>. Existing weights re-balanced (28/18/14/14/9/9/8 = 100). Country FDRS values may shift by up to ±7 points; relative rankings preserved.
         <br><b style="color:var(--t1)">v20.5–v20.25.</b> Per-metric provenance system added (see card below). Pipelines added: FAOSTAT FBS (caloric shares for 174 countries), FAOSTAT TCL (observed net food trade ~190 countries), WB WDI bulk (20 structural indicators), WB WGI (6 governance indicators), WB WFSO (food-security outlook), USDA PSD (observed staples production/imports/exports for wheat/rice/corn/soybeans), ND-GAIN climate, WRI Aqueduct water risk, EU JRC INFORM risk. Static-link helpers for FAO GIEWS, FEWS NET, WFP ACR, USDA GAIN. Cron cadence moved from daily 06:00 UTC to every 6h. Source-health pill now shows last-refresh age in human terms.
-        <br><b style="color:var(--t1)">v20.26–v20.27.</b> Pipelines added: WB LPI (logistics performance), UNDP HDI (human development), WB CCKP (climate projections). Calculations wiring (when source coverage is populated): <b>structural FDRS climate component</b> (c[4]) blends ND-GAIN food_vulnerability + Aqueduct drought/water_stress + CCKP projected temp Δ at 60%, 40% heritage; <b>conflict/logistics component</b> (c[5]) blends INFORM risk + WGI rule_of_law + LPI overall + INFORM lack_coping_capacity at 60%, 40% heritage; <b>nowcast Δ</b> extended with INFORM amplifier (+0-3), governance drag (+0-2), USDA PSD shortfall (+0-3); <b>2030 modeled outlook</b> climate kick uses sourced CCKP temp Δ + ND-GAIN food vulnerability (capped +5). <b>Today CCKP and ND-GAIN are degraded</b> — CCKP covers 0 countries in the served data and ND-GAIN's last download failed; the climate component falls back to the heritage structural value, and the 2030 figure is illustrative rather than CCKP/ND-GAIN-derived. All overlays preserve the heritage values on c._cOriginal / c._fdrsRaw / c._f2030Structural for reference.
+        <br><b style="color:var(--t1)">v20.26–v25.</b> Climate &amp; governance pipelines now sourced: <b>structural FDRS climate component</b> (c[4]) blends ND-GAIN food vulnerability + WRI Aqueduct drought/flood risk + WB CCKP observed warming at 60%, 40% heritage; <b>conflict/logistics component</b> (c[5]) blends EU JRC INFORM risk + WB WGI rule-of-law + INFORM lack-of-coping-capacity (LPI when available) at 60%, 40% heritage; <b>nowcast Δ</b> extended with INFORM amplifier (+0-3), governance drag (+0-2), USDA PSD shortfall (+0-3); <b>2030 modeled outlook</b> climate kick uses observed CCKP warming + ND-GAIN food vulnerability (capped +5). <b>v25 source fixes (Jun 2026):</b> INFORM rewired to the committed 2026 edition (191 countries); Aqueduct, CCKP and WGI repointed to the WB Data360 mirror after their direct endpoints drifted — CCKP now serves observed temperature/precipitation (not a 2050 projection), WGI all six governance dimensions. A country falls back to its heritage value only where its specific feed is temporarily degraded; live per-source status is on the Data Status page. All overlays preserve heritage values on c._cOriginal / c._fdrsRaw / c._f2030Structural for reference.
       </div>
     </div>
 
@@ -22163,7 +22170,7 @@ function renderMethodologyTab() {
       <summary>
         <span class="meth-acc-marker"></span>
         <span class="meth-acc-title">2030 Modeled Outlook</span>
-        <span class="meth-acc-teaser">Illustrative scenario estimate · legacy embedded assumptions · CCKP/ND-GAIN climate kick when populated (currently degraded) · UN WPP demographics · modeled live overlay</span>
+        <span class="meth-acc-teaser">Illustrative scenario estimate · legacy embedded baseline · sourced CCKP/ND-GAIN climate kick · UN WPP demographics · modeled live overlay</span>
         <span class="meth-acc-chev">▾</span>
       </summary>
       <div class="meth-acc-body">
@@ -22176,7 +22183,7 @@ function renderMethodologyTab() {
           {step:'01',title:'2030 baseline — illustrative scenario estimate',
            body:'<b style="color:var(--t1)">2030 values are illustrative scenario estimates.</b> They combine the current country baseline with legacy embedded assumptions and available risk proxies. Read them as directional stress-test indicators, not as official FAO-OECD, CCKP, or ND-GAIN forecasts. Where live source coverage is unavailable (CCKP currently 0 countries; ND-GAIN last download failed), the model falls back to embedded assumptions and marks the result as illustrative.'},
           {step:'02',title:'Climate component (degraded today)',
-           body:'When CCKP/ND-GAIN coverage is populated, the climate component derives from them; today, with both sources degraded, the component falls back to the heritage structural value. Formula (when populated): <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">climate_kick = piecewise(temp_Δ) + max(0, (food_vuln − 0.5) × 8)</code>, capped at +5 points. See Data Status for current coverage.'},
+           body:'The climate component derives from sourced inputs — WB CCKP observed warming + ND-GAIN food vulnerability — blended with the heritage value. Formula: <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">climate_kick = piecewise(observed_warming) + max(0, (food_vuln − 0.5) × 8)</code>, capped at +5 points. A country falls back to its heritage value only if its climate feed is temporarily degraded — see Data Status for live coverage.'},
           {step:'03',title:'Demographic Scaling',
            body:'UN WPP medium-scenario population growth is applied to consumption. Countries with >2% annual population growth face increasing import dependency unless production growth matches pace.'},
           {step:'04',title:'Policy & Geopolitical Overlay',
@@ -23616,16 +23623,16 @@ async function fetchAINarrative(iso, forceRefresh, targetElId) {
     liveShocks.push(`rule-of-law score ${wgiRow.rule_of_law.value.toFixed(2)} (WB WGI, -2.5 worst)`);
   }
   const ccpRow = LIVE.cckp?.[c.iso];
-  if (ccpRow?.proj_temp_change_c != null && ccpRow.proj_temp_change_c >= 2.0) {
-    liveShocks.push(`+${ccpRow.proj_temp_change_c.toFixed(1)}°C projected by 2050 (WB CCKP)`);
+  if (ccpRow?.warming_c != null && ccpRow.warming_c >= 1.0) {
+    liveShocks.push(`+${ccpRow.warming_c.toFixed(1)}°C observed warming (WB CCKP)`);
   }
   const ndgRow = LIVE.ndgain?.[c.iso];
   if (ndgRow?.food_vulnerability != null && ndgRow.food_vulnerability >= 0.55) {
     liveShocks.push(`ND-GAIN food-vulnerability ${ndgRow.food_vulnerability.toFixed(2)}`);
   }
   const aquRow = LIVE.aqueduct?.[c.iso];
-  if (aquRow?.water_stress?.cat != null && aquRow.water_stress.cat >= 3) {
-    liveShocks.push(`Aqueduct water stress ${aquRow.water_stress.label || 'high'}`);
+  if (aquRow?.drought_risk?.score != null && aquRow.drought_risk.score >= 3) {
+    liveShocks.push(`Aqueduct drought risk ${aquRow.drought_risk.score.toFixed(1)}/5`);
   }
   const liveShocksStr = liveShocks.length ? liveShocks.join('; ') : 'none currently flagged';
   const adj = c._fdrsAdj || 0;
@@ -24591,12 +24598,12 @@ function renderCompareTab() {
               const hdiCol = v => v == null ? 'var(--t3)' : v >= 0.8 ? '#6ba36b' : v >= 0.7 ? '#9cc299' : v >= 0.55 ? '#c9a957' : '#c44b3c';
               const tempCol = v => v == null ? 'var(--t3)' : v < 1 ? '#c9a957' : v < 2 ? '#d27a3e' : v < 3 ? '#c44b3c' : '#a82d20';
               const ndgCol = v => v == null ? 'var(--t3)' : v < 0.35 ? '#6ba36b' : v < 0.5 ? '#c9a957' : v < 0.65 ? '#d27a3e' : '#c44b3c';
-              const aquCatLabel = (a, key) => {
+              // v25 — Aqueduct (Data360 mirror) gives a 0-5 score per indicator (no cat).
+              const aquScore = (a, key) => {
                 const ind = a && a[key];
-                if (!ind || ind.cat == null || ind.cat < 0) return null;
-                return ind.cat;  // 0-4 scale
+                return (ind && typeof ind.score === 'number') ? ind.score : null;
               };
-              const aquCol = v => v == null ? 'var(--t3)' : v >= 3 ? '#c44b3c' : v === 2 ? '#d27a3e' : v === 1 ? '#c9a957' : '#6ba36b';
+              const aquCol = v => v == null ? 'var(--t3)' : v >= 4 ? '#c44b3c' : v >= 3 ? '#d27a3e' : v >= 2 ? '#c9a957' : '#6ba36b';
               return [
                 sec(`Diet composition (${ac('FAO')}STAT ${ac('FBS')} · 2023)`),
                 r('Wheat caloric share', ac('FBS'), fmtPct, c => c.w, fbsCol),
@@ -24650,11 +24657,11 @@ function renderCompareTab() {
                 r('ND-GAIN food vulnerability', 'ND-GAIN', fmtNum2, c => LIVE.ndgain?.[c.iso]?.food_vulnerability ?? null, ndgCol),
                 r('ND-GAIN composite (0-100)', 'ND-GAIN', fmtInt, c => LIVE.ndgain?.[c.iso]?.gain_index ?? null,
                   v => v == null ? 'var(--t3)' : v >= 60 ? '#6ba36b' : v >= 45 ? '#c9a957' : v >= 35 ? '#d27a3e' : '#c44b3c'),
-                r('Water stress (cat 0-4)', 'WRI Aqueduct', fmtInt, c => aquCatLabel(LIVE.aqueduct?.[c.iso], 'water_stress'), aquCol),
-                r('Drought risk (cat 0-4)', 'WRI Aqueduct', fmtInt, c => aquCatLabel(LIVE.aqueduct?.[c.iso], 'drought_risk'), aquCol),
-                r('Hist mean temp (°C)', 'WB CCKP', fmtNum1, c => LIVE.cckp?.[c.iso]?.hist_temp_c ?? null),
-                r('Δ Temp by 2050 (°C)', 'WB CCKP', v => v == null ? '—' : '+' + v.toFixed(1) + '°C',
-                  c => LIVE.cckp?.[c.iso]?.proj_temp_change_c ?? null, tempCol),
+                r('Drought risk (0-5)', 'WRI Aqueduct', fmtNum1, c => aquScore(LIVE.aqueduct?.[c.iso], 'drought_risk'), aquCol),
+                r('Flood risk (0-5)', 'WRI Aqueduct', fmtNum1, c => aquScore(LIVE.aqueduct?.[c.iso], 'flood_risk'), aquCol),
+                r('Baseline mean temp (°C)', 'WB CCKP', fmtNum1, c => LIVE.cckp?.[c.iso]?.hist_temp_c ?? null),
+                r('Observed warming (°C)', 'WB CCKP', v => v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(1) + '°C',
+                  c => LIVE.cckp?.[c.iso]?.warming_c ?? null, tempCol),
 
                 sec('Live signals (today)'),
                 r(`${ac('IPC')} Phase 3+ population %`, `${ac('WFP')} HungerMap`, fmtPct,
