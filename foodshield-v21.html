@@ -12853,7 +12853,7 @@ const DATASTATUS_FEEDS = {
   reliefweb_alerts: 'Humanitarian alerts (Food & Nutrition theme) · Disturbances tab',
   acled:         'Conflict events + fatalities · nowcast conflict amplifier',
   comtrade_staples: 'Bilateral staples trade flows · Trade Flow Atlas + commodity exposure',
-  feeding_america_states: 'US state food-insecurity % · USA country detail',
+  feeding_america_states: 'US state food-insecurity % · live nowcast signal for all 50 US states',
   openmeteo:     'Past-14-day precipitation + temperature anomaly · weather extremes signal',
   openmeteo_flood: 'River discharge anomalies for flood-exposed countries · flood signal',
   usgs_water:    '17 major US river gages · drought/flood signal for US',
@@ -17129,23 +17129,26 @@ function openPanel(c, skipDrilldown) {
     const hasAdj = c._fdrsAdj && Math.abs(c._fdrsAdj) >= 0.5;
     let liveNote = '';
     if (ncConf === 'none') {
-      liveNote = ' · no live crisis feed';
+      liveNote = ' · no live signal';
       if (tier === 'high') tier = 'mixed';
     } else if (ncConf === 'low' && hasAdj) {
       liveNote = ' · live signal provisional';
       if (tier === 'high') tier = 'mixed';
     }
+    // 'monitored' (live food-price feed, no humanitarian crisis feed) and 'high'
+    // both leave the structural tier as-is — they're legitimately live.
     confEl.setAttribute('data-tier', tier);
     confEl.textContent = label + liveNote;
+    const liveDesc =
+      ncConf === 'high'      ? `Live nowcast: backed by a core crisis feed (IPC / WFP HungerMap). ` :
+      ncConf === 'monitored' ? `Live nowcast: backed by current food-price monitoring (Eurostat / FAOSTAT). No humanitarian crisis feed applies to this country. ` :
+      ncConf === 'low'       ? `Live nowcast: only secondary signals present — no crisis or price feed for this country right now, so the live adjustment is provisional. ` :
+                               `Live nowcast: no live signal for this country right now — the headline reflects the structural baseline, not confirmed current calm. `;
     confEl.setAttribute('title',
       `Coverage of the ${total} core structural inputs (wheat / rice / maize caloric share, food inflation, net trade): ` +
       `${sourced} sourced, ${modeled} modeled, ${missing} legacy curated. ` +
       `High = 3+ sourced inputs; Mixed = 2 sourced; Modeled = 0–1 sourced. ` +
-      (ncConf === 'high'
-        ? `Live nowcast: backed by a core crisis feed (IPC/WFP). `
-        : ncConf === 'low'
-          ? `Live nowcast: only secondary signals present — no IPC/WFP crisis feed for this country right now, so the live adjustment is provisional. `
-          : `Live nowcast: no live signal for this country right now — the headline reflects the structural baseline, not confirmed current calm. `) +
+      liveDesc +
       `See methodology for per-metric provenance.`);
   })();
 

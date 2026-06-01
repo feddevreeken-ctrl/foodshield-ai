@@ -64,6 +64,11 @@ def main():
     inform  = load("inform_risk.json")["data"]
     wgi     = load("wgi.json")["data"]
     psd     = load("usda_psd.json")["data"]
+    # v25 — US-state live coverage. Feeding America (food insecurity %) + USGS
+    # water (river-flow anomaly) are the live US-state signals we hold. Seeding
+    # these lets US- rows exist in the nowcast instead of being absent — so the
+    # "50 US states" claim is backed by a real (if partial) live layer.
+    feeding = load("feeding_america_states.json")["data"]
 
     global_food_kick = 0
     if isinstance(ffpi, dict):
@@ -81,7 +86,8 @@ def main():
             rw_by_iso.setdefault(iso, []).append(ev)
 
     all_iso = (set(wfp) | set(ipc) | set(acled) | set(om) | set(wfp_c)
-               | set(estat) | set(faostat) | set(inform) | set(wgi) | set(psd))
+               | set(estat) | set(faostat) | set(inform) | set(wgi) | set(psd)
+               | set(usgs) | set(feeding))   # v25 — include US-state feeds so US- rows exist
     out = {}
     for iso in all_iso:
         ipc_p3   = (ipc.get(iso) or {}).get("phase3plus_pct") or 0
@@ -150,6 +156,16 @@ def main():
         if iso.startswith("US-") and usg_row.get("flow_anomaly") in ("low", "high"):
             us_water_kick = 2
 
+        # v25 — US-state food-insecurity signal (Feeding America). State-level
+        # food insecurity above the ~13% US average adds a small structural-stress
+        # kick, scaled, capped at +3. This is the primary live signal that makes
+        # US states real nowcast rows rather than empty placeholders.
+        us_fi_kick = 0
+        fa_row = feeding.get(iso) or {}
+        fa_pct = fa_row.get("food_insecurity_pct")
+        if iso.startswith("US-") and isinstance(fa_pct, (int, float)):
+            us_fi_kick = min(3, max(0, (fa_pct - 13) * 0.4))
+
         # v20.27 — INFORM amplifier: composite humanitarian risk above 7.0
         # piles on the IPC/conflict picture. Capped at +3 so it doesn't
         # double-count what IPC + ACLED already capture.
@@ -198,7 +214,7 @@ def main():
         adj = round(
             ipc_pressure + wfp_pressure + conflict_kick + global_food_kick
             + fx_shock + inflation_shock + weather_kick + flood_kick
-            + fire_kick + aq_kick + us_water_kick
+            + fire_kick + aq_kick + us_water_kick + us_fi_kick
             + inform_amp + governance_drag + psd_shortfall
             + relief_damp,
             1
@@ -216,12 +232,25 @@ def main():
         # made sparse-data countries look calmer and more certain than they are.
         has_ipc = iso in ipc and (ipc.get(iso) or {}).get("phase3plus_pct") is not None
         has_wfp = iso in wfp and (wfp.get(iso) or {}).get("fcs_pct") is not None
-        core_signals = sum([has_ipc, has_wfp])
+        # v25 — US states have their own core feed (Feeding America food insecurity),
+        # so a US- row with FA data is high-confidence on its own terms.
+        has_us_core = iso.startswith("US-") and isinstance(fa_pct, (int, float))
+        # v25 — a current, sourced food-price reading is a legitimate live signal in
+        # its own right. Stable developed economies (NL, DE, ...) never trip an IPC
+        # crisis feed, but a fresh Eurostat/FAOSTAT food-inflation figure IS live
+        # monitoring — so a present reading counts toward confidence rather than
+        # leaving these countries mislabelled "no live signal".
+        has_food_price = isinstance(food_infl, (int, float))
+        core_signals = sum([has_ipc, has_wfp, has_us_core])
         if core_signals >= 1:
             confidence = "high"
+        elif has_food_price:
+            # live price monitoring present, but no humanitarian crisis feed — a
+            # solid "monitored" tier between full-crisis-backed and unknown.
+            confidence = "monitored"
         elif any([fx_shock, inflation_shock, weather_kick, flood_kick, conflict_kick,
-                  inform_amp, governance_drag, psd_shortfall]):
-            confidence = "low"   # adjustment exists but no core crisis feed backs it
+                  inform_amp, governance_drag, psd_shortfall, us_water_kick]):
+            confidence = "low"   # only secondary signals; no crisis or price feed
         else:
             confidence = "none"  # no live signal at all — adjustment is ~0 by absence, not by calm
 
@@ -241,6 +270,7 @@ def main():
                 "fire_kick":       fire_kick,
                 "aq_kick":         aq_kick,
                 "us_water_kick":   us_water_kick,
+                "us_fi_kick":      round(us_fi_kick, 1),
                 "inform_amp":      round(inform_amp, 1),
                 "governance_drag": round(governance_drag, 1),
                 "psd_shortfall":   psd_shortfall,
@@ -264,6 +294,7 @@ def main():
                 "fire_flag":            fi_row.get("fire_flag"),
                 "pm25_latest":          aq_row.get("pm25_latest"),
                 "us_flow_anomaly":      usg_row.get("flow_anomaly"),
+                "us_food_insecurity_pct": fa_pct,
                 # v20.27 — sourced structural signals (slow-moving)
                 "inform_risk":          inform_score,
                 "wgi_rule_of_law":      rol,
@@ -274,6 +305,7 @@ def main():
     # v25 — coverage summary so the frontend can show an honest banner when the
     # core crisis feeds are empty (rather than implying every score is live).
     n_high = sum(1 for v in out.values() if v.get("confidence") == "high")
+    n_mon  = sum(1 for v in out.values() if v.get("confidence") == "monitored")
     n_low  = sum(1 for v in out.values() if v.get("confidence") == "low")
     n_none = sum(1 for v in out.values() if v.get("confidence") == "none")
     ipc_live = bool(ipc)
@@ -302,6 +334,7 @@ def main():
                 "wfp_hungermap_feed_live": wfp_live,
                 "crisis_feeds_live": crisis_feeds_live,
                 "countries_high_confidence": n_high,
+                "countries_monitored": n_mon,
                 "countries_low_confidence": n_low,
                 "countries_no_live_signal": n_none,
             },
@@ -311,7 +344,7 @@ def main():
     }
     (DATA / "nowcast.json").write_text(json.dumps(envelope, indent=2))
     print(f"[OK] wrote nowcast.json with {len(out)} entries "
-          f"(confidence: {n_high} high, {n_low} low, {n_none} none | "
+          f"(confidence: {n_high} high, {n_mon} monitored, {n_low} low, {n_none} none | "
           f"IPC live: {ipc_live}, WFP live: {wfp_live})")
 
 
