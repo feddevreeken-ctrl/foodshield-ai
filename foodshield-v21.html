@@ -2116,6 +2116,16 @@ abbr.ac:hover, .ac:hover {
   transition: background-color .12s;
 }
 .cmd-card:hover { background: var(--bg2); }
+/* v25 — subtle hover lift + accent the family stripe on hover for a more
+   premium, interactive feel (commodity-desk audience). Transform is GPU-cheap
+   and the stripe brightening cues "this is clickable / selected". */
+.cmd-card { transition: background-color .12s, transform .12s ease, box-shadow .12s ease; }
+.cmd-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.28);
+  z-index: 2;
+}
+.cmd-card:hover::before { height: 3px; filter: brightness(1.25); }
 /* v22.12 — family color stripe on top edge */
 .cmd-card::before {
   content: '';
@@ -2123,6 +2133,7 @@ abbr.ac:hover, .ac:hover {
   top: 0; left: 0; right: 0;
   height: 2px;
   background: var(--cmd-family-color, var(--b2));
+  transition: height .12s ease, filter .12s ease;
 }
 /* v22.12 — interpretation + provenance row */
 .cmd-card-interp {
@@ -2218,6 +2229,12 @@ abbr.ac:hover, .ac:hover {
   font-family: 'Geist Mono', monospace;
   font-size: 12px; font-weight: 600;
   letter-spacing: 0.02em;
+  /* v25 — subtle chip behind the % change so up/down reads at a glance
+     (markets audience scans red/green fast). Tint comes from inline color. */
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: currentColor;
+  background: color-mix(in srgb, currentColor 12%, transparent);
 }
 .cmd-card-unit {
   font-family: 'Geist Mono', monospace;
@@ -18150,7 +18167,7 @@ function renderTradeTab() {
             <div class="tr-hhi-tier" style="color:${riskColor(c.c[1])}">${hhiTier}</div>
           </div>
           <div class="tr-conc-sup-list">
-            ${commoditySuppliers(c, null).map(s=>`
+            ${commoditySuppliers(c, null).slice().sort((a,b)=>(b.pct||0)-(a.pct||0)).map(s=>`
               <div class="supplier-row" style="padding:5px 0;">
                 <div class="supplier-name">${s.name}</div>
                 <div class="supplier-bar-wrap" style="width:140px"><div class="supplier-bar-fill" style="width:${s.pct||20}%"></div></div>
@@ -18172,7 +18189,7 @@ function renderTradeTab() {
     // v21.x — derive labels + data from commoditySuppliers() so the doughnut
     // stays in sync with the supplier-list table above (heritage fallback
     // since this card is all-commodities scope).
-    const _pieMix = commoditySuppliers(c, null);
+    const _pieMix = commoditySuppliers(c, null).slice().sort((a,b)=>(b.pct||0)-(a.pct||0));
     const _pieLabels = _pieMix.map(s => s.name);
     const _pieData   = _pieMix.map(s => s.pct);
     chartInstances['supplier-pie'] = _safeChart(document.getElementById('supplier-pie'),{
