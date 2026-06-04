@@ -19793,32 +19793,50 @@ function _renderScenarioBrief(results, selected, stats) {
     .sort((a,b)=> Math.abs(a.delta) - Math.abs(b.delta))
     .slice(0, 4);
 
-  // Who profits — find net exporters of the shocked commodities
-  const exportISOs = new Set();
-  selected.forEach(s => {
-    const route = COMMODITY_TRADE_ROUTES[
-      s.id.includes('wheat') ? 'wheat' :
-      s.id.includes('rice')  ? 'rice'  :
-      s.id.includes('maize') ? 'maize' :
-      s.id.includes('fert')  ? 'fertilizer' : null
-    ];
-    if (route && route.exporters) route.exporters.slice(0,4).forEach(e => exportISOs.add(e.iso));
-  });
-  // v23 — "profiters" must show a REAL benefit (negative delta), not just be a
-  // known exporter. With the trade-direction factor, net exporters of a shocked
-  // staple now get a negative delta (the shock lowers their food-disruption risk),
-  // so we surface exactly those. Exporters whose delta is still ~0 are not claimed
-  // as winners. This kills the old "US 20→35 but labeled a profiter" contradiction.
-  const exporterBeneficiaries = Array.from(exportISOs)
-    .map(iso => results.find(r => r.iso === iso))
-    .filter(c => c && c.delta < 0)
-    .sort((a,b)=> a.delta - b.delta);
+  // ── WHO PROFITS — v23 quantified formula ──────────────────────────────────
+  // A country profits from a shock when it's a NET EXPORTER of the shocked
+  // commodity and the shock raises prices. We score this directly from trade
+  // structure (not from whether the FDRS delta happened to round negative), so a
+  // grower/exporter is ALWAYS recognised as a winner. Two evidence sources:
+  //   (a) commodity-specific: top-exporter share in COMMODITY_TRADE_ROUTES for the
+  //       shocked staple (wheat/rice/maize/fertilizer) — strongest signal.
+  //   (b) general: sourced net food-trade balance (c.net > 0 = net exporter).
+  // profitScore (0-100) = price-pressure of the shock × the country's export
+  // leverage. Higher = gains more. We also report the FDRS delta it produces.
+  const shockKeys = selected.map(s =>
+    s.id.includes('wheat') ? 'wheat' : s.id.includes('rice') ? 'rice' :
+    s.id.includes('maize') ? 'maize' : s.id.includes('fert') ? 'fertilizer' :
+    (s.cat||'').toLowerCase().includes('commodity') ? 'generic' :
+    (s.cat||'').toLowerCase().includes('geopolit') ? 'generic' : null
+  ).filter(Boolean);
+  // Aggregate severity of the price-driven shocks (0..~1.5), drives how big the win is.
+  const priceShockSeverity = selected
+    .filter(s => _PRICE_DRIVEN_SHOCKS.has(s.id))
+    .reduce((sum,s)=> sum + ((scenarioSeverity && scenarioSeverity[s.id]) ?? s.baseSev), 0);
+
+  const profitScored = results.map(c => {
+    // commodity-specific export leverage (top-exporter share of any shocked staple)
+    let exportLeverage = 0, basis = null;
+    for (const key of shockKeys) {
+      const route = (key !== 'generic') && COMMODITY_TRADE_ROUTES[key];
+      const exp = route && route.exporters && route.exporters.find(e => e.iso === c.iso);
+      if (exp && exp.share > exportLeverage) { exportLeverage = exp.share; basis = key; }
+    }
+    // general net-export leverage from sourced net food-trade balance (Musd → 0..1)
+    const net = (typeof c.net === 'number') ? c.net : 0;
+    const netLeverage = net > 0 ? Math.min(1, net / 20000) : 0;   // saturates ~$20B
+    // combined export leverage 0..1 (commodity share is /25 to a fraction)
+    const leverage = Math.max(exportLeverage / 25, netLeverage);
+    if (leverage <= 0 || priceShockSeverity <= 0) return null;
+    // profit score: price pressure × leverage, scaled 0-100
+    const profitScore = Math.round(Math.min(100, leverage * priceShockSeverity * 120));
+    if (profitScore < 5) return null;   // negligible
+    return { ...c, profitScore, exportBasis: basis,
+             netExporter: net > 0, exportShare: exportLeverage };
+  }).filter(Boolean).sort((a,b)=> b.profitScore - a.profitScore);
+
   const negatives = sorted.filter(c => c.delta < 0).sort((a,b)=> a.delta - b.delta);
-  // prefer named exporters that benefit; fall back to any beneficiary; dedupe.
-  const _seen = new Set();
-  const profitList = [...exporterBeneficiaries, ...negatives]
-    .filter(c => c && !_seen.has(c.iso) && _seen.add(c.iso))
-    .slice(0, 4);
+  const profitList = profitScored.slice(0, 4);
 
   // When it lands — heuristic from shock categories
   const cats = selected.map(s => (s.cat || '').toLowerCase());
@@ -19880,6 +19898,20 @@ function _renderScenarioBrief(results, selected, stats) {
 
   const today = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }).toUpperCase();
 
+  // v23 — profit rows show the PROFIT SCORE (export gain) + the FDRS move, since a
+  // winner's own risk barely moves; the story is the upside, not a risk delta.
+  const profitRows = (list) => list.length
+    ? list.map(c => {
+        const fdrsDir = c.delta > 0 ? 'up' : (c.delta < 0 ? 'down' : 'neutral');
+        return `<div class="scn-brief-table-row" title="Profit score ${c.profitScore}/100 — export leverage on the shocked commodity × shock severity. Own FDRS moves ${c.delta>0?'+':''}${c.delta} pts.">
+          <span class="name">${c.name}</span>
+          <span class="from" style="color:#6ba36b;font-weight:600;">↑ ${c.profitScore}</span>
+          <span class="arr">profit</span>
+          <span class="to ${fdrsDir}">${c.newScore}</span>
+        </div>`;
+      }).join('')
+    : `<div class="scn-brief-table-row empty">No tracked exporter in dataset.</div>`;
+
   // Build table rows: from → to with the "to" colored by direction
   const fromToRows = (list) => list.length
     ? list.map(c => {
@@ -19907,8 +19939,13 @@ function _renderScenarioBrief(results, selected, stats) {
 
   // "Who profits" lede
   const profitLede = profitList.length
-    ? `<b>${profitList[0].name}</b> sees its food-disruption risk <span class="down">fall ${Math.abs(profitList[0].delta).toFixed(1)} pts</span> — a net exporter of the shocked staple gains from higher prices${profitList.slice(1,3).length ? `, alongside ${profitList.slice(1,3).map(c=>`<b>${c.name}</b>`).join(' and ')}` : ''}.`
-    : `No clear winners — the shock hits both producers and consumers, and no tracked exporter benefits enough to lower its own risk.`;
+    ? (function(){
+        const p = profitList[0];
+        const why = p.exportShare ? `the #${(COMMODITY_TRADE_ROUTES[p.exportBasis]?.exporters||[]).findIndex(e=>e.iso===p.iso)+1 || ''} ${p.exportBasis} exporter` : 'a net food exporter';
+        const others = profitList.slice(1,3).map(c=>`<b>${c.name}</b>`).join(' and ');
+        return `<b>${p.name}</b> — ${why} — is the biggest winner: rising prices lift export revenue and bargaining power (profit score <b>${p.profitScore}</b>/100)${others ? `, alongside ${others}` : ''}. Its own food-disruption risk holds or eases (${p.delta<=0?'':'+'}${p.delta.toFixed(1)} pts) while importers absorb the shock.`;
+      })()
+    : `No tracked exporter of these commodities is in the dataset — the shock hits importers; winners would be the major producing/exporting nations not shown here.`;
 
   el.style.display = 'block';
   el.innerHTML = `
@@ -19934,7 +19971,7 @@ function _renderScenarioBrief(results, selected, stats) {
         <span class="scn-brief-panel-num">03</span>
         <span class="scn-brief-panel-title">Who <em>profits</em></span>
         <div class="scn-brief-panel-lede">${profitLede}</div>
-        <div class="scn-brief-table">${fromToRows(profitList)}</div>
+        <div class="scn-brief-table">${profitRows(profitList)}</div>
       </div>
       <div class="scn-brief-panel">
         <span class="scn-brief-panel-num">04</span>
