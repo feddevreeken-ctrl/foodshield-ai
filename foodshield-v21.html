@@ -14651,6 +14651,24 @@ const _PRICE_DRIVEN_SHOCKS = new Set([
   'wheat20','rice20','maize20','ban','oil25','ship','fx','fxcrisis','conflict','reservedraw'
 ]);
 
+// v23 — apply a scenario delta with DIMINISHING RETURNS near the cap. Adding a raw
+// delta linearly and clamping at 100 makes every high-baseline country peg at exactly
+// 100 (Somalia, S.Sudan, Afghanistan, Syria all → 100), which is unrealistic and
+// destroys differentiation. Instead a positive shock consumes a FRACTION of the
+// remaining headroom (100 − base), so a country at 74 rises a lot but approaches 100
+// asymptotically and stays distinct from one at 61. Negative deltas (exporters who
+// benefit) apply linearly with a 0 floor. The math:
+//   headroom = 100 − base ;  applied = headroom × (1 − e^(−delta/HALF))
+// where HALF≈22 means a +22 raw shock uses ~63% of headroom. Pure structural-risk
+// realism, not a hard cap.
+function _applyScenarioDelta(base, delta) {
+  if (delta <= 0) return Math.max(0, Math.round(base + delta));
+  const headroom = Math.max(0, 100 - base);
+  const HALF = 22;
+  const applied = headroom * (1 - Math.exp(-delta / HALF));
+  return Math.round(base + applied);
+}
+
 function _simulateScenario(c, selected, severityById) {
   const byChannel = {};        // channel -> array of raw kicks
   const breakdown = [];        // ordered list for audit display
@@ -19093,7 +19111,8 @@ function renderScenarioTab() {
       const pool = COUNTRIES.filter(c => !c.iso.startsWith('US-'));
       const out = pool.map(c => {
         const sim = _simulateScenario(c, selected, sev);
-        return { name: c.name, fdrs: c.fdrs, newScore: Math.min(100, c.fdrs + sim.delta), delta: sim.delta };
+        const _ns = _applyScenarioDelta(c.fdrs, sim.delta);
+        return { name: c.name, fdrs: c.fdrs, newScore: _ns, delta: _ns - c.fdrs };
       }).sort((a,b)=> b.delta - a.delta);
       const crossingVuln = out.filter(r => r.fdrs < 76 && r.newScore >= 76).length;
       return {
@@ -19604,9 +19623,11 @@ function runScenarios() {
   // square-root channel-overlap damper and produces an auditable breakdown.
   const results = pool.map(c=>{
     const sim = _simulateScenario(c, selected, scenarioSeverity);
-    // v23 — clamp 0–100 on BOTH ends; net exporters can now get a negative delta
-    // (a price shock lowers their own food-disruption risk), so the floor matters.
-    return { ...c, newScore: Math.max(0, Math.min(100, c.fdrs + sim.delta)), delta: sim.delta,
+    // v23 — diminishing-returns combine (not a hard linear cap), so high-baseline
+    // countries don't all peg at 100. `delta` is the EFFECTIVE point change shown to
+    // the user, so "shifts +X pts" always matches the from→to numbers.
+    const newScore = _applyScenarioDelta(c.fdrs, sim.delta);
+    return { ...c, newScore, delta: newScore - c.fdrs, rawDelta: sim.delta,
              _breakdown: sim.breakdown, _channelTotals: sim.channelTotals };
   });
 
