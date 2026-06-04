@@ -149,17 +149,25 @@ def _normalize_one(company_json):
     primary = sorted(domains.items(), key=lambda x: -x[1])
     primary_citation = primary[0][0] if primary else None
 
-    # research_status from per-company _meta — used to gate the "sourced" badge.
-    # Only mark data_quality="sourced" if we have at least 1 strong-evidence
-    # claim. Otherwise downgrade to "partial".
+    # research_status from per-company _meta — the ONLY signal that earns the
+    # "sourced" badge (matches data/companies/README.md rule). Files that are
+    # partial/scaffolded/historical render as MODELED/CITED·PARTIAL on the
+    # frontend even if they carry strong-evidence claims, until they are
+    # re-verified to complete. (Fixed Jun 2026 / v23 — the old rule promoted any
+    # partial file with 5+ claims to "sourced", which is why all 12 companies
+    # wrongly flew a SOURCED badge — the "wrong company data" reviewers saw.)
     has_strong = any(cl.get("evidence_strength") == "strong" for cl in claims)
     research_status = meta.get("research_status", "scaffolded")
-    if research_status == "complete":
+    if research_status == "complete" and len(claims) >= 1:
         data_quality = "sourced"
     elif has_strong and len(claims) >= 5:
-        data_quality = "sourced"   # frontend treats partial+strong same as full
+        # Strong-but-unverified: cited claims exist and may be shown, but the
+        # file hasn't passed the completion criteria. "cited_partial" lets the
+        # frontend show the cited rows WITH an honest amber badge — never a
+        # clean SOURCED badge.
+        data_quality = "cited_partial"
     else:
-        data_quality = "partial"
+        data_quality = "modeled"
 
     return {
         "display_name":      display,

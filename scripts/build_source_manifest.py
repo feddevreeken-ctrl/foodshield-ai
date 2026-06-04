@@ -152,9 +152,16 @@ SOURCES = [
     {
         "key": "worldbank_bulk",
         "file": "worldbank_bulk.json",
-        "label": "World Bank WDI bulk (20 indicators)",
+        "label": "World Bank WDI bulk (22 indicators)",
         "cadence": "6h fetch / quarterly upstream",
         "mode": "reference",
+    },
+    {
+        "key": "fx_rates",
+        "file": "fx_rates.json",
+        "label": "FX rates (ER-API + ECB Frankfurter)",
+        "cadence": "6h fetch / daily upstream",
+        "mode": "market",
     },
     {
         "key": "usda_psd",
@@ -273,7 +280,9 @@ def payload_count(key, payload):
         return len((payload.get("series") or {}).keys())
     if key == "reliefweb_alerts":
         return len(payload.get("events") or [])
-    return len(payload)
+    # Ignore internal underscore-prefixed keys (e.g. fx_rates' _ccy_history rolling
+    # store) so they don't inflate the per-source country count on the Data Status page.
+    return len([k for k in payload if not str(k).startswith("_")])
 
 
 def parse_iso_date(value):

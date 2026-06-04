@@ -45,8 +45,9 @@ jobs:
 
       - name: Run all refresh scripts
         env:
-          ACLED_API_KEY: ${{ secrets.ACLED_API_KEY }}
           ACLED_EMAIL: ${{ secrets.ACLED_EMAIL }}
+          ACLED_PASSWORD: ${{ secrets.ACLED_PASSWORD }}
+          ACLED_API_KEY: ${{ secrets.ACLED_API_KEY }}
           COMTRADE_API_KEY: ${{ secrets.COMTRADE_API_KEY }}
           RELIEFWEB_APPNAME: ${{ secrets.RELIEFWEB_APPNAME }}
           IPC_API_KEY: ${{ secrets.IPC_API_KEY }}
@@ -71,6 +72,15 @@ jobs:
         run: |
           cd scripts
           python validate_data.py
+
+      # v23 — content-level QA gate (dup-ISO, coverage floors, freshness SLA,
+      # provenance-ratio guard, US-state semantic test, crisis-feed honesty).
+      # Runs after validate_data.py. Non-blocking (|| true) so a WARN never
+      # blocks the data commit, but the report is visible in the CI log.
+      - name: QA content checks
+        run: |
+          cd scripts
+          python qa_checks.py || true
 
       - name: Commit refreshed data
         run: |

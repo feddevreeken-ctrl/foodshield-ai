@@ -43,7 +43,14 @@ STRUCTURAL_FIELDS = [
     "exportDests",
     "suppliers",
     "supPct",
+    # v23 FDRS-v2 — the two new structural components, stored alongside `c` for
+    # auditability. The frontend reads c.c[7]/c.c[8]; these mirror them with provenance.
+    "econ_access",
+    "grain_buffer",
 ]
+
+# FDRS v2 weight vector (Option B, 9 components — see FDRS_V2_IMPLEMENTATION_SPEC §2).
+FDRS_V2_WEIGHTS = [0.23, 0.16, 0.11, 0.09, 0.09, 0.08, 0.06, 0.12, 0.06]
 
 QUALITY_FLAGS = {
     "sourced": "Verified against a public dataset; source_url + as_of populated.",
@@ -82,6 +89,127 @@ LEGACY_TRADE_NOTE = (
     "Structural dashboard snapshot only. The UI may normalize this into a food-only display; "
     "it is not a live customs ledger."
 )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# v23 — FDRS v2 components: Economic Access (c[7]) + Grain Reserve Buffer (c[8])
+# Formulas per FDRS_V2_IMPLEMENTATION_SPEC §3. Each sub-input maps a SOURCED number
+# to a 0–100 fragility score (higher = more fragile); blends degrade gracefully.
+# ─────────────────────────────────────────────────────────────────────────────
+import math
+
+WDI_RESERVES = "FI.RES.TOTL.MO"
+WDI_DEBT_SVC = "DT.TDS.DECT.EX.ZS"
+
+
+def _read_data(name):
+    p = DATA_DIR / name
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text()).get("data", {}) or {}
+    except Exception:
+        return {}
+
+
+def _clip(x, lo=0.0, hi=100.0):
+    return max(lo, min(hi, x))
+
+
+def _fx_sub(depr_12m):
+    if depr_12m is None:
+        return None
+    return _clip((depr_12m - 5) / (40 - 5) * 100)
+
+
+def _reserves_sub(m):
+    if m is None:
+        return None
+    if m >= 12:
+        return 0.0
+    if m <= 1:
+        return 100.0
+    return _clip(((12 - m) / 11) ** 1.6 * 100)
+
+
+def _debt_sub(dsx):
+    if dsx is None:
+        return None
+    return _clip((dsx - 5) / (35 - 5) * 100)
+
+
+def _income_sub(gnipc):
+    if gnipc is None:
+        return None
+    g = _clip(gnipc, 1000, 40000)
+    return _clip(100 * (math.log10(40000) - math.log10(g)) / (math.log10(40000) - math.log10(1000)))
+
+
+def compute_economic_access(iso, fx, wdi, hdi):
+    """Economic Access fragility 0–100 + provenance. Spec §3.1–3.2."""
+    fx_row = (fx.get(iso) or {})
+    depr = ((fx_row.get("structural") or {}).get("depr_12m_pct"))
+    fx_v = _fx_sub(depr)
+    res_v = _reserves_sub((wdi.get(iso, {}).get(WDI_RESERVES, {}) or {}).get("value"))
+    debt_v = _debt_sub((wdi.get(iso, {}).get(WDI_DEBT_SVC, {}) or {}).get("value"))
+    inc_v = _income_sub((hdi.get(iso, {}).get("gnipc", {}) or {}).get("value"))
+
+    subs = [("fx", fx_v, 0.30), ("reserves", res_v, 0.30),
+            ("debt", debt_v, 0.25), ("income", inc_v, 0.15)]
+    present = [(k, v, w) for k, v, w in subs if v is not None]
+    if not present:
+        return None, {"fx": "heritage", "reserves": "heritage",
+                      "debt": "heritage", "income": "heritage", "_n_sourced": 0}
+    wsum = sum(w for _, _, w in present)
+    val = round(sum(v * w for _, v, w in present) / wsum, 1)
+    prov = {k: ("sourced" if v is not None else "heritage") for k, v, _ in subs}
+    prov["_n_sourced"] = len(present)
+    return val, prov
+
+
+def compute_grain_buffer(iso, psd):
+    """Grain Reserve Buffer fragility 0–100 from USDA PSD stocks-to-use. Spec §3.1.
+    stocks-to-use = ending stocks / consumption across tracked staples; LOW s/u = fragile.
+    """
+    crow = psd.get(iso)
+    if not crow:
+        return None, "heritage"
+    tot_stocks = tot_cons = 0.0
+    for cmd, rec in crow.items():
+        if not isinstance(rec, dict):
+            continue
+        s = rec.get("stocks_kt")
+        c = rec.get("consumption_kt")
+        if s is not None and c:
+            tot_stocks += s
+            tot_cons += c
+    if tot_cons <= 0:
+        return None, "heritage"
+    stu = tot_stocks / tot_cons          # stocks-to-use ratio
+    # Normalise: s/u >= 0.40 (ample, ~5 months) -> 0 ; <= 0.05 (very thin) -> 100.
+    frag = _clip((0.40 - stu) / (0.40 - 0.05) * 100)
+    return round(frag, 1), "sourced"
+
+
+def _component_meta(field, value, prov, method, source):
+    flag = "sourced" if (isinstance(prov, str) and prov == "sourced") else (
+        "sourced" if (isinstance(prov, dict) and prov.get("_n_sourced", 0) >= 3) else
+        "partial" if (isinstance(prov, dict) and prov.get("_n_sourced", 0) == 2) else "heritage")
+    return {
+        "value": value, "source": source, "as_of": "2024",
+        "method": method, "quality_flag": flag,
+        "sub_provenance": prov if isinstance(prov, dict) else {"status": prov},
+    }
+
+
+def _fdrs_v2(cv):
+    """v2 score from a length-9 component vector. Mirrors index.html fdrsV2()."""
+    base = sum(FDRS_V2_WEIGHTS[i] * (cv[i] if i < len(cv) and cv[i] is not None else 0)
+               for i in range(9))
+    c0 = cv[0] if len(cv) > 0 and cv[0] is not None else 0
+    c7 = cv[7] if len(cv) > 7 and cv[7] is not None else 0
+    amp = min(6 * (c0 / 100) * (c7 / 100), 6)
+    return int(round(_clip(base + amp)))
 
 
 def main():
@@ -138,6 +266,71 @@ def main():
             continue
         countries[iso]["fi"] = _fi_field_meta(payload)
 
+    # ── v23 FDRS v2: compute Economic Access (c[7]) + Grain Reserve Buffer (c[8]),
+    # extend each country's component vector to length 9, recompute fdrs with the
+    # v2 formula (BASE + amplifier). Components missing data degrade to heritage and
+    # contribute 0 (resilient) rather than a fabricated value. See spec §2/§3/§7.
+    fx = _read_data("fx_rates.json")
+    wdi = _read_data("worldbank_bulk.json")
+    hdi = _read_data("hdi.json")
+    psd = _read_data("usda_psd.json")
+
+    v2_applied = ea_sourced = gb_sourced = 0
+    for iso, row in countries.items():
+        if iso.startswith("US-"):
+            continue
+        c_meta = row.get("c")
+        if not c_meta or not isinstance(c_meta.get("value"), list):
+            continue
+        cv = list(c_meta["value"])
+        # ensure SCE slot c[6] exists (legacy vectors are length 6); leave 0 if absent —
+        # the frontend supplies live SCE at render time, but we store a placeholder so
+        # the stored vector is a consistent length 9.
+        while len(cv) < 7:
+            cv.append(0)
+
+        ea_val, ea_prov = compute_economic_access(iso, fx, wdi, hdi)
+        gb_val, gb_prov = compute_grain_buffer(iso, psd)
+
+        cv = cv[:7] + [ea_val if ea_val is not None else 0,
+                       gb_val if gb_val is not None else 0]
+        c_meta["value"] = cv
+
+        if ea_val is not None:
+            row["econ_access"] = _component_meta(
+                "econ_access", ea_val, ea_prov,
+                "Economic Access fragility: blend of FX 12m depreciation, reserves-in-months "
+                "(convex cliff), debt-service %% of exports, and GNI per capita (log). "
+                "No CPI (price stress stays in Food Inflation).",
+                "WDI (reserves, debt-service) + UNDP HDI (income) + FX pipeline")
+            if isinstance(ea_prov, dict) and ea_prov.get("_n_sourced", 0) >= 3:
+                ea_sourced += 1
+        if gb_val is not None:
+            row["grain_buffer"] = _component_meta(
+                "grain_buffer", gb_val, gb_prov,
+                "Grain Reserve Buffer fragility: 100 = thin stocks-to-use (ending stocks / "
+                "consumption across staples), 0 = ample cushion. Source: USDA PSD.",
+                "USDA PSD ending stocks / consumption")
+            gb_sourced += 1
+
+        # Recompute the structural score under v2 from the length-9 vector.
+        new_fdrs = _fdrs_v2(cv)
+        if isinstance(row.get("fdrs"), dict):
+            row["fdrs"]["value"] = new_fdrs
+            row["fdrs"]["method"] = ("FDRS v2 (9-component weighted composite + "
+                                     "import×economic-access amplifier). See methodology.")
+            # The score is now COMPUTED from a blend of sourced (econ_access, net,
+            # w/r/m, suppliers) and still-legacy (c[0..5]) inputs — so it's "modeled",
+            # not "legacy_curated". The frontend recomputes with live SCE + nowcast.
+            row["fdrs"]["quality_flag"] = "modeled"
+            row["fdrs"]["note"] = ("Computed by the FDRS v2 formula from the component "
+                                   "vector. Some components are sourced, some still legacy; "
+                                   "displayed score adds live supply-chain exposure + nowcast.")
+        v2_applied += 1
+
+    print(f"[v2] recomputed FDRS for {v2_applied} countries; "
+          f"Economic Access sourced(>=3/4): {ea_sourced}; Grain Buffer sourced: {gb_sourced}")
+
     ordered = {}
     for iso in sorted(countries):
         row = countries[iso]
@@ -145,6 +338,7 @@ def main():
 
     meta = {
         "schema_version": "v20.6",
+        "release_version": "v23",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "purpose": (
             "Canonical per-country structural overlay for the FoodShield frontend. "

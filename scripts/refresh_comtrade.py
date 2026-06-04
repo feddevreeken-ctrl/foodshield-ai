@@ -46,9 +46,23 @@ from _common import env, write_json, UA
 URL = "https://comtradeapi.un.org/public/v1/preview/C/A/HS"
 
 # M49 numeric → ISO3 — needed because the public preview endpoint returns
-# partnerCode (numeric) but partnerISO is null. Built from the PRIORITY_IMPORTERS
-# reverse plus the top global staple-trade partner countries we expect to see.
-M49_TO_ISO3 = {
+# partnerCode (numeric) but partnerISO is null.
+#
+# CANONICAL SOURCE (v23): the single source of truth for this map is
+# trade_pipeline/config.py (M49_TO_ISO3), which includes the corrected USA code
+# (842, not 840), the alternate codes Comtrade uses (699=IND, 251=FRA, 757=CHE),
+# and deliberately EXCLUDES non-country aggregates (490/899). We import it so this
+# legacy refresher and the trade_pipeline can never diverge — the bug that made
+# the same country resolve differently in two scripts. The inline dict below is a
+# fallback only, used if the import fails (e.g. run from an odd CWD).
+try:
+    import os as _os, sys as _sys
+    _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), "trade_pipeline"))
+    from config import M49_TO_ISO3 as _CANON_M49
+except Exception:
+    _CANON_M49 = None
+
+_M49_TO_ISO3_FALLBACK = {
     4:"AFG",8:"ALB",12:"DZA",24:"AGO",32:"ARG",36:"AUS",40:"AUT",50:"BGD",
     51:"ARM",56:"BEL",68:"BOL",70:"BIH",72:"BWA",76:"BRA",84:"BLZ",90:"SLB",
     96:"BRN",100:"BGR",104:"MMR",108:"BDI",112:"BLR",116:"KHM",120:"CMR",124:"CAN",
@@ -72,6 +86,9 @@ M49_TO_ISO3 = {
     826:"GBR",834:"TZA",840:"USA",854:"BFA",858:"URY",860:"UZB",862:"VEN",882:"WSM",
     887:"YEM",894:"ZMB",
 }
+# Use the canonical map when available; otherwise the fallback above.
+M49_TO_ISO3 = _CANON_M49 if _CANON_M49 else _M49_TO_ISO3_FALLBACK
+
 COMMODITIES = {
     "1001": "wheat",
     "1005": "maize",

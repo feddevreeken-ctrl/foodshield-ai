@@ -69,7 +69,7 @@ def write_json(filename, payload, *, source=None, notes=None):
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "source": source or "unknown",
             "notes": notes or "",
-            "version": "v21",
+            "version": "v23",
         },
         "data": payload,
     }

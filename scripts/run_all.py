@@ -39,6 +39,13 @@ import refresh_faostat_fbs
 import refresh_net_food_trade
 import refresh_wb_wfso
 import refresh_worldbank_bulk
+import refresh_fx
+import build_company_overlay
+# Trade-field re-verification (sources suppliers/supPct/imports/exports from the
+# Comtrade pulls). Lives in the trade_pipeline/ package; import its build().
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), "trade_pipeline"))
+import build_fields as _trade_build_fields
 import refresh_usda_psd
 import refresh_ndgain
 import refresh_aqueduct
@@ -88,11 +95,18 @@ STEPS = [
     ("FEWS NET IPC outlook",   refresh_fews.main,               "fews.json"),
     ("WB WDI bulk",            refresh_worldbank_bulk.main,     "worldbank_bulk.json"),
     ("WB WFSO",                refresh_wb_wfso.main,            "wb_wfso.json"),
+    ("FX rates (v23)",         refresh_fx.main,                 "fx_rates.json"),
     ("Countries dataset",      build_countries_dataset.main,    "countries.json"),
+    # v23 — re-verify trade fields (suppliers/supPct/imports/exports) from the
+    # Comtrade pulls, patching countries.json AFTER it's built. Must run after
+    # "Countries dataset". build_fields.build() is the entrypoint.
+    ("Trade re-verify (v23)",  _trade_build_fields.build,       "reverify_records.json"),
     ("Nowcast build",          build_nowcast.main,              "nowcast.json"),
     ("Daily summary",          build_daily_summary.main,        "daily_summary.json"),
     ("Source manifest",        build_source_manifest.main,      "source_manifest.json"),
     ("Companies aggregate",    build_companies.main,            "companies.json"),
+    # v23 — modeled origin overlay (USDA PSD × disclosed footprint). After companies.
+    ("Company overlay (v23)",  build_company_overlay.main,      "company_overlay.json"),
 ]
 
 

@@ -73,8 +73,9 @@ EXPECTED_FILES = {
     # we can re-promote each to critical.
     #
     # Specific issues being tracked:
-    #   net_food_trade.json — FAOSTAT TCL ships dual Item Code cols + new
-    #     CPC string codes; legacy 1841/1842 item-code-match returns 0 rows
+    #   net_food_trade.json — FIXED Jun 2026: FAOSTAT moved the trade aggregates
+    #     to the CPC string column (F1982 "Food Excluding Fish"); parser now
+    #     matches on CPC code. Returns ~180 countries. Promoted to 'critical'.
     #   ndgain.json         — gain-new.crc.nd.edu/sites/.../resources.zip dead;
     #     IMF ArcGIS mirror returns CORS-blocked content for non-browser clients
     #   aqueduct.json       — WRI 4.0 distributed only via portal JS download;
@@ -85,7 +86,7 @@ EXPECTED_FILES = {
     #     (WGI is biennial 2002-2024; 2025-2026 rows are empty placeholders)
     #   cckp.json           — API now requires 12 path segments; old URLs return
     #     "Number of parameters mismatch. Needed: 11. Given: 10"
-    'net_food_trade.json':        ('soft',     'dict_or_empty'),
+    'net_food_trade.json':        ('critical', 'dict_nonempty'),
     'usda_psd.json':              ('critical', 'dict_nonempty'),
     'ndgain.json':                ('soft',     'dict_or_empty'),
     'aqueduct.json':              ('soft',     'dict_or_empty'),

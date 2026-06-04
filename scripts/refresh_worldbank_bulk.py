@@ -112,6 +112,10 @@ INDICATORS = {
     "SN.ITK.MSFI.ZS":      "Prevalence of moderate or severe food insecurity (%)",
     "SH.STA.STNT.ZS":      "Prevalence of stunting, height for age (% of children under 5)",
     "SH.STA.WAST.ZS":      "Prevalence of wasting, weight for height (% of children under 5)",
+    # Economic access / external liquidity (v23 — feed the FDRS v2 Economic Access
+    # component: structural capacity to keep paying for food imports).
+    "FI.RES.TOTL.MO":      "Total reserves in months of imports",
+    "DT.TDS.DECT.EX.ZS":   "Total debt service (% of exports of goods, services and primary income)",
     # Water / climate
     "ER.H2O.FWST.ZS":      "Level of water stress: freshwater withdrawal as a proportion of available freshwater resources",
     # Population
@@ -319,7 +323,7 @@ def main():
         out,
         source="World Bank WDI bulk download (databank.worldbank.org/data/download/WDI_CSV.zip)",
         notes=(
-            f"20 indicators × ~{len(out)} countries. Most-recent non-null year "
+            f"{len(INDICATORS)} indicators × ~{len(out)} countries. Most-recent non-null year "
             f"per (country, indicator). Source refreshes quarterly upstream "
             f"(Jan, Apr, Jul, Oct); we re-download every 6h but the file rarely "
             f"changes between WB releases. ISO3-only — WB aggregates (WLD, EUU, "

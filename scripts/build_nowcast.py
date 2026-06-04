@@ -92,7 +92,12 @@ def main():
     for iso in all_iso:
         ipc_p3   = (ipc.get(iso) or {}).get("phase3plus_pct") or 0
         wfp_fcs  = (wfp.get(iso) or {}).get("fcs_pct") or 0
-        conflict = (acled.get(iso) or {}).get("intensity_score") or 0
+        # v23 — ACLED only counts as a LIVE nowcast signal when the feed is actually
+        # live (is_live=true). On a 12-month-lagged access tier it's a STRUCTURAL
+        # baseline (already in the FDRS conflict component), so it must NOT add to the
+        # live nowcast delta — that would present year-old conflict as a live disturbance.
+        _acled_row = acled.get(iso) or {}
+        conflict = (_acled_row.get("intensity_score") or 0) if _acled_row.get("is_live") else 0
         relief_n = len(rw_by_iso.get(iso, []))
         wc       = wfp_c.get(iso) or {}
         om_row   = om.get(iso) or {}
