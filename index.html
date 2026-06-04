@@ -19814,25 +19814,45 @@ function _renderScenarioBrief(results, selected, stats) {
     .filter(s => _PRICE_DRIVEN_SHOCKS.has(s.id))
     .reduce((sum,s)=> sum + ((scenarioSeverity && scenarioSeverity[s.id]) ?? s.baseSev), 0);
 
+  // Whether the selected shocks name a SPECIFIC staple (wheat/rice/maize/fert).
+  // If so, the net-food-balance fallback is OFF — only documented exporters of
+  // THAT staple can profit (a generic net exporter like NZ shouldn't show up as a
+  // "maize winner"). The fallback only applies to broad/geopolitical price shocks.
+  const specificStaples = shockKeys.filter(k => k !== 'generic');
+  const hasSpecificStaple = specificStaples.length > 0;
+
   const profitScored = results.map(c => {
+    // Exclude US states — this panel ranks NATIONS. (Iowa etc. are US- prefixed.)
+    if (!c.iso || c.iso.startsWith('US-')) return null;
+
     // commodity-specific export leverage (top-exporter share of any shocked staple)
-    let exportLeverage = 0, basis = null;
-    for (const key of shockKeys) {
-      const route = (key !== 'generic') && COMMODITY_TRADE_ROUTES[key];
+    let exportShare = 0, basis = null;
+    for (const key of specificStaples) {
+      const route = COMMODITY_TRADE_ROUTES[key];
       const exp = route && route.exporters && route.exporters.find(e => e.iso === c.iso);
-      if (exp && exp.share > exportLeverage) { exportLeverage = exp.share; basis = key; }
+      if (exp && exp.share > exportShare) { exportShare = exp.share; basis = key; }
     }
-    // general net-export leverage from sourced net food-trade balance (Musd → 0..1)
     const net = (typeof c.net === 'number') ? c.net : 0;
-    const netLeverage = net > 0 ? Math.min(1, net / 20000) : 0;   // saturates ~$20B
-    // combined export leverage 0..1 (commodity share is /25 to a fraction)
-    const leverage = Math.max(exportLeverage / 25, netLeverage);
+
+    let leverage = 0;
+    if (hasSpecificStaple) {
+      // A specific staple was shocked → ONLY documented exporters of it profit.
+      // (No net-balance backdoor, so non-exporters of that staple don't appear.)
+      if (exportShare <= 0) return null;
+      leverage = exportShare / 25;                       // share% → 0..~0.9
+      basis = basis;
+    } else {
+      // Broad/geopolitical price shock → use the sourced net food-trade balance.
+      if (net <= 0) return null;
+      leverage = Math.min(1, net / 20000);               // saturates ~$20B
+      basis = 'net food exporter';
+    }
     if (leverage <= 0 || priceShockSeverity <= 0) return null;
-    // profit score: price pressure × leverage, scaled 0-100
+
     const profitScore = Math.round(Math.min(100, leverage * priceShockSeverity * 120));
-    if (profitScore < 5) return null;   // negligible
+    if (profitScore < 5) return null;
     return { ...c, profitScore, exportBasis: basis,
-             netExporter: net > 0, exportShare: exportLeverage };
+             netExporter: net > 0, exportShare };
   }).filter(Boolean).sort((a,b)=> b.profitScore - a.profitScore);
 
   const negatives = sorted.filter(c => c.delta < 0).sort((a,b)=> a.delta - b.delta);
@@ -19941,11 +19961,20 @@ function _renderScenarioBrief(results, selected, stats) {
   const profitLede = profitList.length
     ? (function(){
         const p = profitList[0];
-        const why = p.exportShare ? `the #${(COMMODITY_TRADE_ROUTES[p.exportBasis]?.exporters||[]).findIndex(e=>e.iso===p.iso)+1 || ''} ${p.exportBasis} exporter` : 'a net food exporter';
+        const rank = p.exportShare ? ((COMMODITY_TRADE_ROUTES[p.exportBasis]?.exporters||[]).findIndex(e=>e.iso===p.iso)+1) : 0;
+        const why = p.exportShare ? `a top-${rank||'5'} ${p.exportBasis} exporter` : 'a net food exporter';
         const others = profitList.slice(1,3).map(c=>`<b>${c.name}</b>`).join(' and ');
-        return `<b>${p.name}</b> — ${why} — is the biggest winner: rising prices lift export revenue and bargaining power (profit score <b>${p.profitScore}</b>/100)${others ? `, alongside ${others}` : ''}. Its own food-disruption risk holds or eases (${p.delta<=0?'':'+'}${p.delta.toFixed(1)} pts) while importers absorb the shock.`;
+        // Honest on the FDRS move: revenue gain ≠ lower own-risk. An exporter of one
+        // staple can still see its own FDRS rise if it's a net food importer overall
+        // (e.g. the US exports maize but net-imports food). State both truthfully.
+        const fdrsClause = p.delta < -0.5
+          ? `Its own food-disruption risk also eases (${p.delta.toFixed(1)} pts).`
+          : p.delta > 0.5
+          ? `Note: its <em>own</em> food-disruption risk still rises (+${p.delta.toFixed(1)} pts) — the export revenue is an economic gain, not lower domestic risk (it is a net food importer overall).`
+          : `Its own food-disruption risk is roughly unchanged (${p.delta>0?'+':''}${p.delta.toFixed(1)} pts).`;
+        return `<b>${p.name}</b> — ${why} — gains the most on the trade side: rising prices lift export revenue and bargaining power (profit score <b>${p.profitScore}</b>/100)${others ? `, alongside ${others}` : ''}. ${fdrsClause}`;
       })()
-    : `No tracked exporter of these commodities is in the dataset — the shock hits importers; winners would be the major producing/exporting nations not shown here.`;
+    : `No tracked exporter of the shocked commodity is in the dataset — the shock hits importers; the winners would be its major producing/exporting nations.`;
 
   el.style.display = 'block';
   el.innerHTML = `
