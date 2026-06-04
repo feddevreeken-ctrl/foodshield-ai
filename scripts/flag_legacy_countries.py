@@ -44,6 +44,9 @@ import sys
 STRUCTURAL_FIELDS = [
     "fdrs", "c", "f2030", "w", "r", "m", "fi",
     "net", "imports", "exports", "exportDests", "suppliers", "supPct",
+    # v23 — FDRS v2 components, so the legacy-ratio measurement matches the UI
+    # confidence pill and reflects the sourced Economic Access / Grain Buffer work.
+    "econ_access", "grain_buffer",
 ]
 
 # Quality flags that count as "still needs re-verification".

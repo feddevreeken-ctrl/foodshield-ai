@@ -19804,12 +19804,21 @@ function _renderScenarioBrief(results, selected, stats) {
     ];
     if (route && route.exporters) route.exporters.slice(0,4).forEach(e => exportISOs.add(e.iso));
   });
-  const profiters = Array.from(exportISOs)
+  // v23 — "profiters" must show a REAL benefit (negative delta), not just be a
+  // known exporter. With the trade-direction factor, net exporters of a shocked
+  // staple now get a negative delta (the shock lowers their food-disruption risk),
+  // so we surface exactly those. Exporters whose delta is still ~0 are not claimed
+  // as winners. This kills the old "US 20→35 but labeled a profiter" contradiction.
+  const exporterBeneficiaries = Array.from(exportISOs)
     .map(iso => results.find(r => r.iso === iso))
-    .filter(Boolean)
+    .filter(c => c && c.delta < 0)
+    .sort((a,b)=> a.delta - b.delta);
+  const negatives = sorted.filter(c => c.delta < 0).sort((a,b)=> a.delta - b.delta);
+  // prefer named exporters that benefit; fall back to any beneficiary; dedupe.
+  const _seen = new Set();
+  const profitList = [...exporterBeneficiaries, ...negatives]
+    .filter(c => c && !_seen.has(c.iso) && _seen.add(c.iso))
     .slice(0, 4);
-  const negatives = sorted.filter(c => c.delta < 0).sort((a,b)=> a.delta - b.delta).slice(0, 4);
-  const profitList = negatives.length >= 2 ? negatives : profiters;
 
   // When it lands — heuristic from shock categories
   const cats = selected.map(s => (s.cat || '').toLowerCase());
@@ -19898,10 +19907,8 @@ function _renderScenarioBrief(results, selected, stats) {
 
   // "Who profits" lede
   const profitLede = profitList.length
-    ? (negatives.length >= 2
-        ? `<b>${profitList[0].name}</b> sees its score <span class="down">improve ${profitList[0].delta.toFixed(1)}</span> under this stack.`
-        : `Major exporters of the shocked commodities — <b>${profitList.slice(0,3).map(c=>c.name).join(', ')}</b> — are positioned to gain share as prices rise.`)
-    : `No clear winners — the shock hits both producers and consumers.`;
+    ? `<b>${profitList[0].name}</b> sees its food-disruption risk <span class="down">fall ${Math.abs(profitList[0].delta).toFixed(1)} pts</span> — a net exporter of the shocked staple gains from higher prices${profitList.slice(1,3).length ? `, alongside ${profitList.slice(1,3).map(c=>`<b>${c.name}</b>`).join(' and ')}` : ''}.`
+    : `No clear winners — the shock hits both producers and consumers, and no tracked exporter benefits enough to lower its own risk.`;
 
   el.style.display = 'block';
   el.innerHTML = `
