@@ -17291,13 +17291,18 @@ function openPanel(c, skipDrilldown) {
   (function() {
     const confEl = document.getElementById('sp-confidence');
     if (!confEl) return;
-    const fields = ['w','r','m','fi','net'];  // structural FDRS feedstock
+    // v23 — count ALL the structural feedstock that can now be sourced, not just
+    // the original 5. Adding econ_access + grain_buffer (FDRS v2 components) and
+    // suppliers/supPct (sourced via the Comtrade pulls) means the pill reflects the
+    // real sourcing work; the old 5-field list under-reported coverage badly
+    // (e.g. Egypt read 0% despite sourced net/econ_access/suppliers).
+    const fields = ['w','r','m','fi','net','suppliers','supPct','econ_access','grain_buffer'];
     const prov = c._provenance || {};
     let sourced = 0, modeled = 0, missing = 0;
     fields.forEach(f => {
       const p = prov[f];
       const flag = (p && (p.quality_flag || p)) || null;
-      if (flag === 'sourced') sourced++;
+      if (flag === 'sourced' || flag === 'partial') sourced++;   // partial = mostly-sourced
       else if (flag === 'modeled' || flag === 'manual') modeled++;
       else missing++;  // legacy_curated / null counts as low-confidence
     });
