@@ -127,11 +127,16 @@ def pull(importers, dry_run=False, flow="M"):
         shaped[iso] = {}
         for cmd_name, e in commodities.items():
             total = e["total_usd_m"]
+            # v23 — keep ALL partners (not just top-5) so the frontend can show every
+            # country this importer/exporter trades the commodity with. Capped at 40
+            # to bound file size — that covers essentially all non-trivial partners
+            # (a long tail of <0.1% partners adds noise, not signal). Sorted by value.
             partners = sorted(({"iso3": s, "usd_m": round(v, 2),
                             "share_pct": round(v/total*100, 1) if total else 0}
                            for s, v in e["by_supplier"].items()),
-                          key=lambda x: -x["usd_m"])[:5]
+                          key=lambda x: -x["usd_m"])[:40]
             shaped[iso][cmd_name] = {"total_kt": None, "total_usd_m": round(total, 2),
+                "n_partners": len(partners),
                 partner_key: partners,
                 "value_basis": "USD millions (primaryValue from Comtrade public preview)"}
     return shaped

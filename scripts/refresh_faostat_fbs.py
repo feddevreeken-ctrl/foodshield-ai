@@ -108,6 +108,11 @@ FAO_AREA_TO_ISO3 = {
     233: "BFA", 234: "URY", 235: "UZB", 236: "VEN", 237: "VNM", 238: "ETH",
     244: "WSM", 249: "YEM", 250: "COD", 251: "ZMB", 255: "BEL", 256: "LUX",
     272: "SRB", 273: "MNE",
+    # v23 — missing FAOSTAT area codes found via the all-country sourcing sweep.
+    # France/Finland/Brunei/Fiji/Eq.Guinea/Dominica were absent from this map, so
+    # their w/r/m caloric shares fell back to legacy 0 (France stuck at 33% sourced).
+    # These are the correct FAO area codes; FAO DOES publish FBS for them.
+    68: "FRA", 67: "FIN", 26: "BRN", 66: "FJI", 61: "GNQ", 55: "DMA",
 }
 
 # Some FAO area codes are ambiguous in older mappings. We resolve at parse time
