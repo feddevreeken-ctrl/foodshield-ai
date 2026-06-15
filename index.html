@@ -21318,14 +21318,19 @@ function _simulateScenario(c, selected, severityById) {
     // unplaceable. This is what makes the FULL set appear "straight away" even when
     // the overlay is switched on before the map polygons finish loading.
     try {
-      const placeable = events.filter(ev =>
-        (ev.lat || ev.lng) ||
-        (ev.iso && ((G.centroids && G.centroids.has(ev.iso)) ||
-                    (typeof COUNTRY_LL !== 'undefined' && COUNTRY_LL[ev.iso])))
-      ).length;
-      if (_rendered < placeable || (!G.ready && _rendered < events.length)) {
+      // v39 — initial-load fix. The old guard compared _rendered against a
+      // SNAPSHOT "placeable" count taken at this same instant. On first paint
+      // the geojson centroids and COUNTRY_LL aren't populated yet, so most
+      // 0,0/ISO-only events aren't "placeable" right now → _rendered === placeable
+      // → no retry fired, and the overlay was left showing only the handful of
+      // events that had explicit lat/lng. Result: "not all disturbances load
+      // straight away." We now retry until EVERY event is placed (or we exhaust a
+      // generous budget), re-checking placeability on each pass as the map finishes
+      // loading. We also keep retrying while the geojson layer isn't ready yet.
+      const allPlaced = _rendered >= events.length;
+      if (!allPlaced) {
         G._distRetry = (G._distRetry || 0) + 1;
-        if (G._distRetry <= 5) {
+        if (G._distRetry <= 15) {   // ~15 × 400ms = up to 6s of map warm-up
           setTimeout(() => { if (G.disturbancesActive) showDisturbances(events); }, 400);
         }
       } else {
@@ -21333,6 +21338,12 @@ function _simulateScenario(c, selected, severityById) {
       }
     } catch (e) {}
   }
+  // v39 — expose showDisturbances on G so the post-geojson-ready hook (in the map
+  // loader) can re-render the overlay once centroids exist. Previously this was
+  // never assigned, so `typeof G.showDisturbances === 'function'` was always false
+  // and the re-render silently no-opped — a primary cause of "not all disturbances
+  // load straight away" on initial reload.
+  G.showDisturbances = showDisturbances;
 
   function clearDisturbances() {
     G.disturbancesActive = false;
@@ -27283,6 +27294,56 @@ const TOUR_STEPS = [
     },
   },
   {
+    // v39 — Live commodity-flow example. The previous step shows ONE country's
+    // imports; this shows the GLOBAL picture for a single commodity. We pick
+    // Wheat and push every cited corridor to the globe via the map's
+    // "Commodity flows…" overlay (solid green = observed, dashed blue = modeled,
+    // stroke weight = tonnage). Cleaned up in `after`.
+    selector: '#map-commodity-flows',
+    title: 'Live commodity flows · the whole world at once',
+    body: 'We just pushed <em>Wheat</em> to the globe — every cited trade corridor on Earth, at once. <strong>Solid green</strong> = observed (real customs/FAOSTAT data), <strong>dashed blue</strong> = modeled, and line thickness = tonnage. Switch the commodity in this dropdown to trace rice, maize, soy, fertiliser and more across the whole map.',
+    before: () => {
+      try { showTab('global'); } catch(e){}
+      closePanelIfOpen();
+      const sel = document.getElementById('map-commodity-flows');
+      if (sel) sel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // v39.1 — the arcs are placed via getCoord(), which needs the map's country
+      // centroids (G.centroids) to be loaded. On a cold tour start they may not be
+      // ready yet, so drawAtlasFlows would draw 0 and the step looked empty. Wait
+      // for BOTH the function AND centroids, then draw; retry up to ~6s. Also bump
+      // _distRetry-style attempts and re-issue the draw if nothing rendered.
+      const tryDraw = (attempt = 0) => {
+        const fnReady = window.Globe && typeof Globe.drawAtlasFlows === 'function'
+                        && typeof toggleCommodityFlowOverlay === 'function';
+        const centroidsReady = window.Globe && Globe.state && Globe.state.centroids
+                               && Globe.state.centroids.size > 0;
+        if (fnReady && centroidsReady) {
+          try {
+            if (typeof populateCommodityFlowSelect === 'function') populateCommodityFlowSelect();
+            if (sel) sel.value = 'wheat';            // reflect choice in the dropdown UI
+            toggleCommodityFlowOverlay('wheat');     // draw the corridors
+            _tourActivatedFlows = true;
+            // verify something actually drew; if not (centroids raced), retry once more
+            const drew = window.Globe && Globe.isActive && Globe.isActive();
+            if (!drew && attempt < 12) setTimeout(() => tryDraw(attempt + 1), 500);
+          } catch(e) { console.warn('[tour] commodity flow draw failed', e); }
+        } else if (attempt < 12) {
+          setTimeout(() => tryDraw(attempt + 1), 500);
+        }
+      };
+      tryDraw();
+      return 2200; // dwell so the arcs are visible drawing
+    },
+    after: () => {
+      try {
+        const sel = document.getElementById('map-commodity-flows');
+        if (sel) sel.value = '';
+        if (typeof toggleCommodityFlowOverlay === 'function') toggleCommodityFlowOverlay('');
+      } catch(e) {}
+      _tourActivatedFlows = false;
+    },
+  },
+  {
     // v22 — tab steps highlight the WHOLE tab page (the spotlight will clip to
     // viewport for large targets, see _positionTourStep) so the user sees the
     // full tab content + sub-nav button in one frame, not a tiny button alone.
@@ -27316,17 +27377,11 @@ const TOUR_STEPS = [
   {
     selector: '#tab-methodology',
     title: 'Everything is sourced',
-    body: 'Methodology lists exactly which data feeds power each score, what\'s live vs modelled, and where the gaps are. Transparency by default — no black box.',
+    body: 'Methodology lists exactly which data feeds power each score, what\'s live vs modelled, and where the gaps are. Transparency by default — no black box. That\'s the tour — explore!',
     before: () => {
       try { showTab('methodology'); } catch(e){}
       return 500;
     },
-  },
-  {
-    selector: '#bb-status-dot',
-    title: 'Live health for 34 feeds',
-    body: 'Green dot = every data source is fresh. If FAO\'s server is slow or USDA returns an error, it shows here. Click it for source-by-source health and last-refresh timestamps. That\'s the tour — explore!',
-    before: () => 150,
   },
 ];
 
@@ -27344,6 +27399,7 @@ let _tourEscHandler = null;
 // v22 — track side-effects the tour caused so we can revert on end
 let _tourActivatedDisturbances = false;
 let _tourActivatedTFA = false;
+let _tourActivatedFlows = false;   // v39 — global commodity-flow overlay shown by the tour
 
 function startTour() {
   _tourIdx = 0;
@@ -27539,8 +27595,16 @@ function endTour() {
     document.querySelectorAll('.tfa-chip.active').forEach(c => c.classList.remove('active'));
     if (typeof _tfaCommodity !== 'undefined') _tfaCommodity = null;
   } catch(e) {}
+  // v39 — also clear the global commodity-flow overlay if the tour drew it,
+  // so exiting mid-tour never leaves wheat corridors stuck on the map.
+  try {
+    const sel = document.getElementById('map-commodity-flows');
+    if (sel) sel.value = '';
+    if (typeof toggleCommodityFlowOverlay === 'function') toggleCommodityFlowOverlay('');
+  } catch(e) {}
   _tourActivatedDisturbances = false;
   _tourActivatedTFA = false;
+  _tourActivatedFlows = false;
 
   // Leave the user on the Global map with the Egypt panel closed.
   // Defer so any in-flight tab-switch animations finish before we override.
@@ -30592,6 +30656,30 @@ async function loadDisturbanceData() {
     if (tg && tg.getAttribute('aria-pressed') === 'true' && window.Globe && Globe.showDisturbances) {
       Globe.showDisturbances(disturbanceEvents);
       if (typeof updateMapDistCount === 'function') updateMapDistCount();
+    }
+  } catch(e) {}
+
+  // v39 — SELF-HEALING cold-load fix. On the very first page load the external
+  // feeds (GDACS, ReliefWeb) frequently time out (6s race), so this run finishes
+  // with only baseline + LIVE.* events (~101). On a manual reload they're HTTP-
+  // cached and resolve instantly (~193) — which is exactly the "shows 101, reload
+  // to see 193" the user reported. Fix: if the live feeds did NOT come through,
+  // automatically re-fetch in the background a few seconds later (when the network
+  // has settled / the feeds are now warm) and re-render — WITHOUT a manual reload.
+  // Bounded to 3 attempts so a genuinely-offline visitor doesn't loop forever.
+  try {
+    if (!_liveOk) {
+      window._distFeedRetry = (window._distFeedRetry || 0) + 1;
+      if (window._distFeedRetry <= 3) {
+        setTimeout(() => {
+          // bypass the cache + the in-flight de-dupe guard so the retry actually runs
+          DISTURBANCE_CACHE.ts = 0;
+          window._disturbancesLoadPromise = null;
+          if (typeof loadDisturbanceData === 'function') loadDisturbanceData();
+        }, 3500 * window._distFeedRetry);  // 3.5s, 7s, 10.5s — feeds warm up
+      }
+    } else {
+      window._distFeedRetry = 0;  // got the full set; stop retrying
     }
   } catch(e) {}
 
