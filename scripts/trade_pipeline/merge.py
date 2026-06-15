@@ -3,7 +3,8 @@ trade_pipeline/merge.py — JOB: safely fold a new pull into comtrade_staples.js
 
 The merge rule (so batched pulls accumulate and a sparse run can't wipe data):
   - Per (country, commodity): the NEW pull wins ONLY if it has a positive
-    total_usd_m. An empty/zero new entry never overwrites an existing good one.
+    total_value_usd (or the legacy alias total_usd_m). An empty/zero new entry
+    never overwrites an existing good one.
   - Countries/commodities not in the new pull are left untouched.
   - A backup (.bak) is written before any change.
 
@@ -38,7 +39,7 @@ def _merge(new_data, path, source_label):
     for iso, commodities in new_data.items():
         slot = existing.setdefault(iso, {})
         for cmd, rec in commodities.items():
-            new_total = rec.get("total_usd_m") or 0
+            new_total = rec.get("total_value_usd") or rec.get("total_usd_m") or 0
             if cmd not in slot:
                 slot[cmd] = rec
                 added += 1

@@ -33,6 +33,7 @@ import sys
 from pathlib import Path
 
 from _common import DATA_DIR
+from trade_schema import summarize_trade_surface, validate_trade_surface
 
 # Per-file validation spec:
 #   filename → (criticality, expected_shape)
@@ -205,6 +206,15 @@ def main():
         # Treat any PSD content failure as critical — these are silent-data-
         # corruption bugs that have re-emerged 3+ times during 2026.
         critical_failures.extend(("usda_psd.json", m) for m in psd_failures)
+
+    trade_failures = validate_countries_trade_surface()
+    if trade_failures:
+        print("\nCountry trade-surface failures:")
+        for msg in trade_failures[:30]:
+            print(f"  - {msg}")
+        if len(trade_failures) > 30:
+            print(f"  - ... plus {len(trade_failures) - 30} more")
+        critical_failures.extend(("countries.json", m) for m in trade_failures)
 
     # v25 — loud, separate report on the must-have crisis feeds.
     failed_names = {fn for fn, _ in critical_failures}
@@ -379,6 +389,40 @@ def validate_usda_psd():
         marker = name if name else "(absent)"
         print(f"  {k}: {marker}")
 
+    return failures
+
+
+def validate_countries_trade_surface():
+    """Hard-fail if countries.json trade fields drift back into ambiguous metadata."""
+    p = DATA_DIR / "countries.json"
+    if not p.exists():
+        return ["countries.json missing"]
+    try:
+        env = json.loads(p.read_text())
+    except json.JSONDecodeError as e:
+        return [f"countries.json parse error: {e}"]
+
+    countries = (((env.get("data") or {}).get("countries")) if isinstance(env, dict) else None) or {}
+    if not isinstance(countries, dict) or not countries:
+        return ["countries.json data.countries missing/empty"]
+
+    failures = []
+    raw_failures = validate_trade_surface(countries)
+    for item in raw_failures:
+        failures.append(
+            f"{item['iso3']}.{item['field']}: {item['problem']} "
+            f"(quality={item.get('quality_flag')}, source={item.get('source')})"
+        )
+
+    print()
+    print("=== Country trade schema checks ===")
+    summary = summarize_trade_surface(countries)
+    for field, counts in summary.items():
+        print(
+            f"  {field:12s} total={counts['total']:3d} "
+            f"sourced={counts['sourced']:3d} partial={counts['partial']:3d} legacy={counts['legacy']:3d}"
+        )
+    print(f"  metadata failures: {len(failures)}")
     return failures
 
 

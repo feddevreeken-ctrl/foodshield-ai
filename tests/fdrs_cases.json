@@ -1,0 +1,75 @@
+{
+  "_meta": {
+    "title": "FDRS v2 formula regression fixtures",
+    "generated": "2026-06-09",
+    "purpose": "Pins the EXPECTED behaviour of the FDRS v2 score so any weight/amplifier change is caught. Each case has a 9-component vector and an expected score (clipped 0-100). Run with scripts/test_fdrs_v2.py.",
+    "formula": "base = Sum(weight[i]*c[i]); amp = min(6*(c0/100)*(c7/100), 6); FDRS = clip(round(base+amp), 0, 100)",
+    "weights": [0.23, 0.16, 0.11, 0.09, 0.09, 0.08, 0.06, 0.12, 0.06],
+    "components": ["import_dep", "supplier_conc", "prod_trend", "food_infl", "climate", "conflict_logistics", "supply_chain_exposure", "econ_access", "grain_buffer"]
+  },
+  "cases": [
+    {
+      "name": "high_import_high_econ_fragility",
+      "desc": "Import-dependent AND can't finance imports -> amplifier fires strongly. Should be high.",
+      "c": [90, 80, 70, 60, 60, 50, 40, 90, 40],
+      "expected_fdrs": 76,
+      "assert": "amplifier active (>=5 pts above base-only)"
+    },
+    {
+      "name": "high_import_low_econ_fragility",
+      "desc": "Import-dependent but can afford imports -> amplifier small. Should be lower than the high-fragility twin.",
+      "c": [90, 80, 70, 60, 60, 50, 40, 10, 40],
+      "expected_fdrs": 63,
+      "assert": "score < high_import_high_econ_fragility (amplifier interaction works)"
+    },
+    {
+      "name": "low_import_high_econ_fragility",
+      "desc": "Poor but not import-dependent -> amplifier small (needs BOTH). Moderate score.",
+      "c": [10, 20, 30, 20, 30, 20, 20, 90, 80],
+      "expected_fdrs": 32,
+      "assert": "amplifier small despite high econ_access (import_dep gates it)"
+    },
+    {
+      "name": "resilient_exporter",
+      "desc": "Low import dependence, strong reserves, low fragility -> low score.",
+      "c": [5, 10, 20, 15, 25, 10, 10, 15, 90],
+      "expected_fdrs": 17,
+      "assert": "score < 25 (resilient)"
+    },
+    {
+      "name": "conflict_importer",
+      "desc": "Import-dependent, conflict-affected, fragile -> high score.",
+      "c": [80, 70, 60, 55, 70, 90, 50, 75, 30],
+      "expected_fdrs": 72,
+      "assert": "score > 65 (high risk)"
+    },
+    {
+      "name": "all_zero",
+      "desc": "Empty vector -> floor.",
+      "c": [0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "expected_fdrs": 0,
+      "assert": "clip floor at 0"
+    },
+    {
+      "name": "all_max_clips_at_100",
+      "desc": "Max vector: base 100 + amp 6 = 106 -> MUST clip to 100. Validates the ceiling.",
+      "c": [100, 100, 100, 100, 100, 100, 100, 100, 100],
+      "expected_fdrs": 100,
+      "assert": "clip ceiling at 100 (raw would be 106)"
+    },
+    {
+      "name": "missing_econ_access_no_amplifier",
+      "desc": "econ_access=0 -> amplifier is exactly 0 regardless of import_dep. Validates the calm-by-absence concern.",
+      "c": [90, 80, 70, 60, 60, 50, 40, 0, 40],
+      "expected_fdrs": 61,
+      "assert": "amplifier == 0 when econ_access == 0 (and note: this understates a real high-import country)"
+    },
+    {
+      "name": "missing_grain_buffer",
+      "desc": "grain_buffer=0 -> loses 0.06*value contribution only; no amplifier effect.",
+      "c": [70, 60, 50, 40, 40, 30, 30, 50, 0],
+      "expected_fdrs": 51,
+      "assert": "grain_buffer absence costs <=6 pts"
+    }
+  ]
+}

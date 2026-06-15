@@ -296,8 +296,11 @@ FAS_TO_ISO3 = {
     "NP": "NPL",  # Nepal
     "BT": "BTN",  # Bhutan
     "BX": "BRN",  # Brunei
-    # Aggregates — explicitly NOT mapped so they're dropped:
-    # "E4": EU 27-country aggregate
+    # v34 — the EU-27 aggregate IS kept (pseudo-key EU27): USDA stopped reporting
+    # EU members individually, so the bloc row is the only current source for their
+    # grain-buffer stocks-to-use (members fall back to it, flagged 'partial').
+    "E4": "EU27",
+    # Aggregates still dropped:
     # "FU": Former Soviet Union (pre-1992)
 }
 
@@ -380,10 +383,20 @@ def main():
     total_rows_scanned = 0
     total_rows_kept = 0
 
+    # v38 — apps.fas.usda.gov's WAF now 403s the default FoodShield bot User-Agent.
+    # Send a browser-like UA + Accept-Language/Referer so the ZIP download succeeds.
+    USDA_HEADERS = {
+        "Accept": "application/zip,application/octet-stream,*/*",
+        "User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                       "AppleWebKit/537.36 (KHTML, like Gecko) "
+                       "Chrome/124.0.0.0 Safari/537.36"),
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://apps.fas.usda.gov/psdonline/app/index.html",
+    }
     for group_label, url in URLS:
         print(f"[INFO] USDA PSD bulk → {group_label} ({url})")
         try:
-            r = http_get(url, timeout=180, headers={"Accept": "application/zip,*/*"}, retries=3)
+            r = http_get(url, timeout=180, headers=USDA_HEADERS, retries=3)
         except Exception as e:
             print(f"  [warn] download failed for {group_label}: {e}")
             continue

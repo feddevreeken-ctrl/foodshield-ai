@@ -1,0 +1,200 @@
+{
+  "_meta": {
+    "title": "FoodShield Scenario Stress Test — constant specification",
+    "generated": "2026-06-09",
+    "purpose": "Documents every magnitude constant in the scenario engine: its rationale, plausible range, and basis. The engine in index.html is the live source of truth; this file makes the constants auditable and is the staging ground for moving them out of index.html (audit fix #3).",
+    "honesty": "Magnitudes are MODELED, not empirically calibrated against observed shock outcomes. The ordinal logic (concentrated importer > diversified > exporter) is data-driven; the cardinal size of each delta is a reasoned modeling choice. Results carry a basis chip (cited flows / sourced indicator / modeled component) so users can see how each was derived.",
+    "basis_tiers": {
+      "sourced_flows": "magnitude derived from real cited bilateral trade flows (realShares / rankedDependencies)",
+      "sourced_indicator": "from a sourced indicator (FX rates, USDA PSD grain buffer), provenance-damped",
+      "modeled_component": "from a heritage FDRS component scalar × a modeling constant; NOT from flows"
+    },
+    "scope": "FOOD-security shocks only. Commodity weights (FOOD_WEIGHT) crush non-food (wine/beer/spices/coffee ≤ 0.15) so they cannot move a food-disruption score like a calorie staple.",
+    "updated": "2026-06-11 (v33: sector-shock constants documented; fxcrisis/reservedraw provenance damp fixed to read quality_flag)"
+  },
+  "constants": {
+    "staple_spike_anchor": {
+      "value": 24,
+      "used_by": [
+        "wheat20",
+        "rice20",
+        "maize20"
+      ],
+      "basis": "sourced_flows",
+      "formula": "dependence × 24 × severity × provenance_factor × (1 + 0.4×topSupplierShare)",
+      "rationale": "A fully import-dependent, concentrated importer at default severity (0.20) lands ~+4–5 structural before the diminishing-returns curve. Replaces the old 30/25/20 magic numbers with one anchor.",
+      "plausible_range": [
+        18,
+        30
+      ],
+      "calibrated": false
+    },
+    "concentration_premium": {
+      "value": 0.4,
+      "used_by": [
+        "staple spikes",
+        "ban"
+      ],
+      "basis": "sourced_flows",
+      "formula": "1 + 0.4 × topSupplierShare (0..1)",
+      "rationale": "A single-source importer is up to +40% more exposed to a price/ban shock than a diversified one. Derived from the real cited top-supplier share.",
+      "plausible_range": [
+        0.3,
+        0.6
+      ],
+      "calibrated": false
+    },
+    "supplier_ban_anchor": {
+      "value": 18,
+      "used_by": [
+        "ban"
+      ],
+      "basis": "sourced_flows",
+      "formula": "realTopSupplierShare(largest cited food-staple import) × 18 × FOOD_WEIGHT × severity",
+      "rationale": "v31: rebuilt onto real flows. A country whose largest food staple comes single-source loses ~+12 when that supplier exits; diversified importers far less. Fallback to heritage supplier-concentration component × 0.18 only when no cited food flow exists.",
+      "plausible_range": [
+        14,
+        22
+      ],
+      "calibrated": false
+    },
+    "fertilizer_base": {
+      "value": 8,
+      "used_by": [
+        "fert30"
+      ],
+      "basis": "sourced_flows",
+      "formula": "8 + topSupplierShare×0.08, scaled by shock/0.30 (uses COMMODITY_TRADE_ROUTES.fertilizer; net exporters get 1–2 pts)",
+      "rationale": "Importers with concentrated fertilizer supplier mixes see +10–15; exporters barely move. Real exporter/importer lists drive direction.",
+      "plausible_range": [
+        6,
+        12
+      ],
+      "calibrated": false
+    },
+    "fx_crisis_rate": {
+      "value": 0.16,
+      "used_by": [
+        "fxcrisis"
+      ],
+      "basis": "sourced_indicator",
+      "formula": "economic_access(c[7]) × 0.16 × (shock/0.30) × damp; damp=1.0 if FX sourced else 0.6",
+      "rationale": "Currency depreciation impairs import-financing capacity proportional to economic-access fragility. Provenance-damped when econ_access isn't sourced.",
+      "plausible_range": [
+        0.12,
+        0.2
+      ],
+      "calibrated": false
+    },
+    "reserve_draw_rate": {
+      "value": 0.12,
+      "used_by": [
+        "reservedraw"
+      ],
+      "basis": "sourced_indicator",
+      "formula": "grain_buffer(c[8]) × 0.12 × (shock/0.40) × damp; damp=1.0 if PSD sourced else 0.6",
+      "rationale": "Thinner stocks-to-use = less cushion against the next shock. Buffer comes from USDA PSD where available.",
+      "plausible_range": [
+        0.08,
+        0.16
+      ],
+      "calibrated": false
+    },
+    "drought_rate": {
+      "value": 0.12,
+      "used_by": [
+        "drought"
+      ],
+      "basis": "modeled_component",
+      "formula": "production_trend(c[2], fragility 0-100) × 0.12 × (shock/0.15)",
+      "rationale": "Domestic production shock; no trade flow exists for a domestic harvest failure, so this stays component-driven. Flags INPUT MISSING when c[2] is absent (rather than defaulting to 50 = mid-risk silently). v34 polarity fix: c[2] is risk-coded (high = collapsing production); the hit scales WITH fragility — resilient systems absorb the shortfall.",
+      "plausible_range": [
+        0.08,
+        0.16
+      ],
+      "calibrated": false,
+      "note": "Cannot be moved to sourced_flows — it is a domestic-production shock, not a trade flow. Best future upgrade: USDA PSD production-vs-5yr-trend."
+    },
+    "oil_logistics_rate": {
+      "value": 0.08,
+      "floor": 2,
+      "used_by": [
+        "oil25"
+      ],
+      "basis": "modeled_component",
+      "formula": "conflict_logistics(c[5]) × 0.08 × (shock/0.25) + 2",
+      "rationale": "Fuel/logistics cost cascades through fertilizer, transport, cold-chain. Component-driven; flags INPUT MISSING when c[5] is absent.",
+      "plausible_range": [
+        0.06,
+        0.12
+      ],
+      "calibrated": false,
+      "note": "Partial upgrade path: LPI / real freight-cost index could replace the heritage logistics component."
+    },
+    "diminishing_returns_half_life": {
+      "value": 22,
+      "used_by": [
+        "_applyScenarioDelta (all positive deltas)"
+      ],
+      "basis": "engine",
+      "formula": "applied = min(delta, headroom × (1 − e^(−delta/22)))  — v34: capped at the raw delta so low-baseline countries are never amplified",
+      "rationale": "Prevents scores from exceeding 100 and makes the marginal point harder to add as a country approaches the cap. 22 means a +22 raw delta fills ~63% of remaining headroom.",
+      "plausible_range": [
+        18,
+        28
+      ],
+      "calibrated": false
+    },
+    "channel_overlap_rule": {
+      "value": "sqrt(sum of squares)",
+      "used_by": [
+        "_simulateScenario (same-channel stacking)"
+      ],
+      "basis": "engine",
+      "rationale": "Two +6 shocks on the SAME FDRS channel combine to ~+8.5, not +12 — prevents runaway stacking of correlated shocks. Cross-channel shocks add linearly (different stress vectors), caught by the diminishing-returns curve.",
+      "calibrated": false
+    },
+    "sector_shock_anchor": {
+      "value": 38,
+      "used_by": [
+        "all ~173 commodity sector shocks (wheat_black_sea_disruption, palm oil bans, etc.)"
+      ],
+      "basis": "sourced_flows",
+      "formula": "(country share of the shocked flow)^0.85 × severity × 38; non-shocked exporters of the same commodity get minor relief −min(5, severity×8)",
+      "rationale": "Sub-linear (^0.85) so the most-exposed importer of a cited flow lands ~+8–13 at default severities while mid-share importers still register. The 38 anchor is larger than the staple anchor (24) because sector shocks scale on the country's share of ONE specific cited flow, not total import reliance.",
+      "plausible_range": [
+        28,
+        48
+      ],
+      "calibrated": false
+    },
+    "sector_relief": {
+      "value": 8,
+      "used_by": [
+        "sector shocks (exporter side)"
+      ],
+      "basis": "modeled_component",
+      "formula": "non-shocked exporters: −min(5, severity × 8)",
+      "rationale": "Competing exporters gain market share when a rival's flow is shocked; capped at −5 so relief can never dominate a stack.",
+      "plausible_range": [
+        4,
+        12
+      ],
+      "calibrated": false
+    }
+  },
+  "improvement_backlog": {
+    "done_2026_06_09": [
+      "ban moved from heritage component to real cited supplier concentration (sourced_flows)",
+      "every shock tagged with _basis; basis chip surfaced in the UI",
+      "calm-by-absence guard: drought/oil25 flag INPUT MISSING when their component is absent for a country",
+      "constants documented here with rationale + plausible range"
+    ],
+    "next": [
+      "wire the engine to READ these constants from this file instead of inline literals (true externalization)",
+      "drought -> USDA PSD production-vs-trend (the one modeled shock with a real-data upgrade path)",
+      "add a sensitivity view: show delta as mid (low–high) using plausible_range",
+      "back-test the staple anchor against 2022 Russia/Ukraine and 2023 India rice-ban observed disruption"
+    ]
+  }
+}

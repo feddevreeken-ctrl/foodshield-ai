@@ -384,8 +384,15 @@ def main():
         "setup_required_sources": 0,
         "failed_sources": 0,
         "healthy_sources": 0,
+        "stale_sources": 0,
         "loaded_at": None,
     }
+
+    # v38 — freshness threshold. Feeds that haven't refreshed in this many days are
+    # flagged stale so the headline can fold freshness in (previously the pill counted
+    # only status buckets, so a 12-day-old feed still read "healthy"). Manual annual
+    # snapshots are exempt — they're SUPPOSED to be old.
+    STALE_AFTER_DAYS = 5
 
     newest = None
     for spec in SOURCES:
@@ -413,6 +420,14 @@ def main():
             "latest_period": period,
             "age_days": (TODAY - dt).days if dt else None,
         }
+        # v38 — flag stale (refresh overdue). Exempt manual/annual snapshots and
+        # static deep-link helpers, which are expected to be old by design.
+        _age = rows[spec["key"]]["age_days"]
+        _is_manual = (status == "manual") or (spec.get("mode") == "manual")
+        _is_stale = (_age is not None) and (_age > STALE_AFTER_DAYS) and not _is_manual
+        rows[spec["key"]]["stale"] = bool(_is_stale)
+        if _is_stale:
+            summary["stale_sources"] += 1
         if status == "ok":
             summary["ok_sources"] += 1
             summary["healthy_sources"] += 1
@@ -427,11 +442,14 @@ def main():
             summary["failed_sources"] += 1
 
     summary["loaded_at"] = newest
+    # v38 — headline now folds in freshness: stale feeds also raise "attention" so the
+    # top-line signal can't read healthy while feeds are days overdue for a refresh.
     summary["headline_status"] = (
         "healthy"
         if summary["degraded_sources"] == 0
         and summary["setup_required_sources"] == 0
         and summary["failed_sources"] == 0
+        and summary["stale_sources"] == 0
         else "attention"
     )
 

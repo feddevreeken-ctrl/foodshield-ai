@@ -43,6 +43,40 @@ URL_PRIMARY = "https://api.hungermapdata.org/v2/adm0data.json"
 URL_FALLBACK = "https://api.hungermapdata.org/v2/adm0summary.json"
 
 
+# v35 (Jun 2026) — WFP retired the public adm0data aggregate (its own upstream
+# v1/alerts/country 500s) and moved FCS predictions behind authenticated ew-tool
+# endpoints. Until WFP exposes public FCS again (or an EW-tool key is configured),
+# we keep this file alive with the public IPC layer so the nowcast never starves:
+# fcs_* / alerts are written as null — signal-absent, never fabricated.
+URL_IPC_EWTOOL = "https://ew-tool-api.hungermapdata.org/ew/v1/ipc/food/insecurity/global/recent"
+
+
+def _fetch_ipc_layer():
+    r = http_get(URL_IPC_EWTOOL, timeout=45)
+    rows = r.json()
+    if isinstance(rows, dict) and isinstance(rows.get("body"), list):
+        rows = rows["body"]
+    out = {}
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        iso3 = (row.get("iso3Alpha3") or "").upper()
+        if len(iso3) != 3 or not iso3.isalpha():
+            continue
+        pct = row.get("phase35Percentage")
+        out[iso3] = {
+            "fcs_pct": None, "fcs_people_total": None,
+            "ipc_phase3plus_pct": round(pct * 100, 2) if isinstance(pct, (int, float)) else None,
+            "ipc_people": int(row.get("phase35Population") or 0) or None,
+            "undernourishment_pct": None, "alerts": {},
+            "country": None, "period": row.get("referencePeriod"),
+            "analysis_date": row.get("analysisDate"),
+        }
+    if not out:
+        raise RuntimeError("ew-tool IPC layer parsed to zero countries")
+    return out
+
+
 def main():
     out = {}
     used_url = None
@@ -51,8 +85,13 @@ def main():
         used_url = URL_PRIMARY
     except Exception as e:
         print(f"[WARN] primary HungerMap endpoint failed ({e}); trying fallback")
-        out = _fetch(URL_FALLBACK)
-        used_url = URL_FALLBACK
+        try:
+            out = _fetch(URL_FALLBACK)
+            used_url = URL_FALLBACK
+        except Exception as e2:
+            print(f"[WARN] legacy endpoints dead ({e2}); writing public IPC layer (fcs null)")
+            out = _fetch_ipc_layer()
+            used_url = URL_IPC_EWTOOL
 
     write_json(
         "wfp_hungermap.json",

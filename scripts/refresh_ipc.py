@@ -23,24 +23,64 @@ Output: data/ipc.json
 """
 from _common import http_get, write_json, env
 
+# v35 (Jun 2026) — HungerMap migrated public IPC to the ew-tool API; the v2 path
+# still answers but with older analyses. Primary = ew-tool, fallbacks = v2 + official.
+URL_EWTOOL = "https://ew-tool-api.hungermapdata.org/ew/v1/ipc/food/insecurity/global/recent"
 URL_HUNGERMAP = "https://api.hungermapdata.org/v2/ipc.json"
 URL_OFFICIAL = "https://api.ipcinfo.org/population"
+
+
+def _fetch_ewtool():
+    """v35 primary: fresh IPC/CH analyses from the HungerMap ew-tool API."""
+    r = http_get(URL_EWTOOL, timeout=45)
+    rows = r.json()
+    if isinstance(rows, dict) and isinstance(rows.get("body"), list):
+        rows = rows["body"]
+    if not isinstance(rows, list) or not rows:
+        raise RuntimeError("ew-tool IPC returned no rows")
+    out = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        iso3 = (row.get("iso3Alpha3") or "").upper()
+        if len(iso3) != 3 or not iso3.isalpha():
+            continue
+        pct = row.get("phase35Percentage")
+        out[iso3] = {
+            "phase3plus_pct": round(pct * 100, 2) if isinstance(pct, (int, float)) else None,
+            "phase3plus_count": _int(row.get("phase35Population")),
+            "phase4_count": _int(row.get("phase45Population")),
+            "phase5_count": _int(row.get("phase5Population")),
+            "period": row.get("referencePeriod"),
+            "analysis_date": row.get("analysisDate") or row.get("dateOfAnalysis"),
+            "country": None,
+            "source_via": "hungermap (ew-tool-api)",
+            "data_source": row.get("dataSource"),
+        }
+    if not out:
+        raise RuntimeError("ew-tool IPC parsed to zero countries")
+    return out
 
 
 def main():
     out = {}
     try:
-        out = _fetch_hungermap()
-        source_label = "WFP HungerMap re-publishes IPC (api.hungermapdata.org/v2/ipc.json)"
-    except Exception as e:
-        print(f"  [warn] HungerMap IPC failed ({e}); falling back to official endpoint")
+        out = _fetch_ewtool()
+        source_label = "WFP HungerMap LIVE re-publishing IPC/CH (ew-tool-api .../ew/v1/ipc/food/insecurity/global/recent)"
+    except Exception as e0:
+        print(f"  [warn] ew-tool IPC failed ({e0}); trying legacy v2 endpoint")
         try:
-            out = _fetch_official()
-            source_label = "IPC Info official (api.ipcinfo.org)"
-        except Exception as e2:
-            print(f"  [warn] Official IPC also failed: {e2}")
-            out = {}
-            source_label = "IPC sources unavailable"
+            out = _fetch_hungermap()
+            source_label = "WFP HungerMap re-publishes IPC (api.hungermapdata.org/v2/ipc.json)"
+        except Exception as e:
+            print(f"  [warn] HungerMap IPC failed ({e}); falling back to official endpoint")
+            try:
+                out = _fetch_official()
+                source_label = "IPC Info official (api.ipcinfo.org)"
+            except Exception as e2:
+                print(f"  [warn] Official IPC also failed: {e2}")
+                out = {}
+                source_label = "IPC sources unavailable"
 
     write_json(
         "ipc.json",

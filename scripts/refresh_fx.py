@@ -63,6 +63,17 @@ CCY_TO_ISO3 = {
     "TWD": ["TWN"], "AUD": ["AUS"], "NZD": ["NZL"], "CAD": ["CAN"], "SGD": ["SGP"],
     "HKD": ["HKG"], "ILS": ["ISR"], "SAR": ["SAU"], "AED": ["ARE"], "QAR": ["QAT"],
     "KWD": ["KWT"], "OMR": ["OMN"], "BHD": ["BHR"],
+    # v33 — crisis-currency expansion (these were the FX-fragile gaps the component
+    # exists for). ZWE moved from the retired ZWL to ZiG (ZWG). NOTE: SDG (Sudan) and
+    # CUP (Cuba) official rates are administered and diverge badly from the parallel
+    # market — the depr signal will read ~0; that follows the feed's official-rate
+    # semantics (same as the GCC pegs) but understates real stress. SYP redenominated
+    # in late 2025 (new pound) — pre-redenomination points must not be mixed in.
+    "SDG": ["SDN"], "SSP": ["SSD"], "SYP": ["SYR"], "LYD": ["LBY"], "BIF": ["BDI"],
+    "CUP": ["CUB"], "CDF": ["COD"], "GNF": ["GIN"], "LRD": ["LBR"], "SLE": ["SLE"],
+    "SOS": ["SOM"], "ERN": ["ERI"], "DJF": ["DJI"], "MGA": ["MDG"], "RWF": ["RWA"],
+    "PGK": ["PNG"], "KMF": ["COM"], "AOA": ["AGO"], "GMD": ["GMB"], "MRU": ["MRT"],
+    "ZWG": ["ZWE"],
 }
 
 

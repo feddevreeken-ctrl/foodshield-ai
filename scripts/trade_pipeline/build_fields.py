@@ -2,9 +2,9 @@
 trade_pipeline/build_fields.py — JOB: turn sourced data into country fields.
 
 Reads the sourced inputs already on disk (comtrade_staples.json + usda_psd.json)
-and writes data/countries.json's suppliers / supPct / imports fields with honest
-provenance. It does NOT fetch anything — pull.py does that. Run this after a pull
-(or any time the sourced files change) to refresh the country fields.
+and writes data/countries.json's trade-facing fields with honest provenance. It
+does NOT fetch anything — pull.py does that. Run this after a pull (or any time
+the sourced files change) to refresh the country fields.
 
 Three tiers, honest by construction:
   TIER 1  country in comtrade_staples → suppliers+supPct+imports sourced (Comtrade)
@@ -18,13 +18,15 @@ Outputs:
 """
 import json
 import shutil
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 DATA = Path(__file__).resolve().parents[2] / "data"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-COMTRADE_URL = "https://comtradeplus.un.org/"
-PSD_URL = "https://apps.fas.usda.gov/psdonline/"
+from trade_schema import COMTRADE_URL, PSD_URL, normalize_trade_surface
+
 STAPLE_LABEL = {
     "wheat": "Wheat", "maize": "Maize", "corn": "Maize", "rice": "Rice",
     "soybeans": "Soybeans", "palm_oil": "Palm oil", "sugar": "Sugar",
@@ -43,6 +45,10 @@ def _name_map(countries):
     m.update({"RUS": "Russia", "UKR": "Ukraine", "USA": "United States",
               "CIV": "Côte d'Ivoire"})
     return m
+
+
+def _total_value_usd(rec):
+    return rec.get("total_value_usd") or rec.get("total_usd_m") or 0
 
 
 def _load_optional(path):
@@ -87,9 +93,9 @@ def build():
         # this country exports ranked by value; exportDests = top destinations of its
         # largest export staple. Left legacy if no export pull yet for this country.
         erow = exports.get(iso)
-        if erow and any(v.get("total_usd_m") for v in erow.values()):
-            eranked = sorted(((k, v) for k, v in erow.items() if v.get("total_usd_m")),
-                             key=lambda kv: -(kv[1]["total_usd_m"] or 0))
+        if erow and any(_total_value_usd(v) for v in erow.values()):
+            eranked = sorted(((k, v) for k, v in erow.items() if _total_value_usd(v)),
+                             key=lambda kv: -_total_value_usd(kv[1]))
             edom_key, edom = eranked[0]
             dests = sorted(edom.get("top_destinations", []),
                            key=lambda s: -(s.get("share_pct") or 0))[:5]
@@ -106,11 +112,11 @@ def build():
             exp_sourced += 1
 
         crow = comtrade.get(iso)
-        has_ct = crow and any(v.get("total_usd_m") for v in crow.values())
+        has_ct = crow and any(_total_value_usd(v) for v in crow.values())
 
         if has_ct:
-            ranked = sorted(((k, v) for k, v in crow.items() if v.get("total_usd_m")),
-                            key=lambda kv: -(kv[1]["total_usd_m"] or 0))
+            ranked = sorted(((k, v) for k, v in crow.items() if _total_value_usd(v)),
+                            key=lambda kv: -_total_value_usd(kv[1]))
             dom_key, dom = ranked[0]
             sup = sorted(dom.get("top_suppliers", []),
                          key=lambda s: -(s.get("share_pct") or 0))[:5]
@@ -122,7 +128,7 @@ def build():
             lbl = STAPLE_LABEL.get(dom_key, dom_key)
             row["suppliers"] = {**prov, "value": sup_names, "_supplier_basis": dom_key,
                 "method": f"Top-5 suppliers of {lbl} (largest staple import, "
-                          f"${dom['total_usd_m']/1e9:.2f}B), UN Comtrade 2024."}
+                          f"${_total_value_usd(dom)/1e9:.2f}B), UN Comtrade 2024."}
             row["supPct"] = {**prov, "value": sup_pct, "_supplier_basis": dom_key,
                 "method": f"Import-value shares of top-5 {lbl} suppliers, UN Comtrade 2024."}
             row["imports"] = {**prov, "value": food_imports,
@@ -155,6 +161,7 @@ def build():
                 "verdict": "flag_for_review",
                 "note": "No Comtrade/PSD coverage; trade fields remain legacy_curated."})
 
+    changes = normalize_trade_surface(countries)
     shutil.copy(DATA / "countries.json", DATA / "countries.json.bak")
     env["data"]["countries"] = countries
     (DATA / "countries.json").write_text(json.dumps(env, indent=2, ensure_ascii=False))
@@ -170,6 +177,7 @@ def build():
           f"Tier3 none: {t3}")
     print(f"[build_fields] exports sourced (reporter-side pull): {exp_sourced} countries"
           + ("" if exp_sourced else " — run pull.py --flow X to populate"))
+    print(f"[build_fields] trade schema normalized: {len(changes)} field updates")
     print(f"[build_fields] patched countries.json (.bak saved) + wrote reverify_records.json")
     return t1, t2, t3
 

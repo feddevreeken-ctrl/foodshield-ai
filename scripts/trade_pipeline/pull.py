@@ -71,7 +71,7 @@ def pull(importers, dry_run=False, flow="M"):
 
     session = requests.Session()
     session.headers.update({"User-Agent": UA, "Accept": "application/json"})
-    out = defaultdict(lambda: defaultdict(lambda: {"total_usd_m": 0.0,
+    out = defaultdict(lambda: defaultdict(lambda: {"total_value_usd": 0.0,
                        "by_supplier": defaultdict(float)}))
     ok = skip = 0
 
@@ -101,14 +101,14 @@ def pull(importers, dry_run=False, flow="M"):
                     unresolved_codes[int(p)] += 1
                     dropped_partner += 1
                     continue
-                usdm = row.get("primaryValue") or 0
-                if usdm <= 0:
+                value_usd = row.get("primaryValue") or 0
+                if value_usd <= 0:
                     dropped_zero += 1
                     continue
                 kept += 1
                 e = out[iso][cmd_name]
-                e["total_usd_m"] += usdm
-                e["by_supplier"][sup] += usdm
+                e["total_value_usd"] += value_usd
+                e["by_supplier"][sup] += value_usd
         # per-country visibility — so a country that produces no entry is never silent
         produced = iso in out and any(out[iso].values())
         flag = "" if produced else "  ← NO ENTRY (all rows dropped)"
@@ -126,19 +126,22 @@ def pull(importers, dry_run=False, flow="M"):
     for iso, commodities in out.items():
         shaped[iso] = {}
         for cmd_name, e in commodities.items():
-            total = e["total_usd_m"]
+            total = e["total_value_usd"]
             # v23 — keep ALL partners (not just top-5) so the frontend can show every
             # country this importer/exporter trades the commodity with. Capped at 40
             # to bound file size — that covers essentially all non-trivial partners
             # (a long tail of <0.1% partners adds noise, not signal). Sorted by value.
-            partners = sorted(({"iso3": s, "usd_m": round(v, 2),
+            partners = sorted(({"iso3": s, "value_usd": round(v, 2),
+                            "usd_m": round(v, 2),
                             "share_pct": round(v/total*100, 1) if total else 0}
                            for s, v in e["by_supplier"].items()),
-                          key=lambda x: -x["usd_m"])[:40]
-            shaped[iso][cmd_name] = {"total_kt": None, "total_usd_m": round(total, 2),
+                          key=lambda x: -x["value_usd"])[:40]
+            shaped[iso][cmd_name] = {"total_kt": None, "total_value_usd": round(total, 2),
+                "total_usd_m": round(total, 2),
                 "n_partners": len(partners),
                 partner_key: partners,
-                "value_basis": "USD millions (primaryValue from Comtrade public preview)"}
+                "value_basis": "USD (raw primaryValue from Comtrade public preview)",
+                "schema_note": "Canonical value fields are total_value_usd and partner value_usd; total_usd_m/usd_m are legacy aliases kept for compatibility."}
     return shaped
 
 

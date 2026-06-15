@@ -24,7 +24,9 @@ Formula (extended May 2026, expanded May 2026 v20.27):
     + us_water_kick      (0-2)   — only for US-XX state codes
     + inform_amp         (0-3)   — INFORM risk >7.0 → composite humanitarian crisis amplifier
     + governance_drag    (0-2)   — WGI rule_of_law < -1.0 → governance brittleness amplifier
-    + psd_shortfall      (0-3)   — USDA PSD staple production shortfall ≥10% vs 5-yr avg
+    + psd_shortfall      (0-3)   — USDA PSD production-vs-consumption gap proxy for the latest
+                                   marketing year (a true 5-yr-baseline shortfall needs a history
+                                   table not yet wired in; this is a cross-sectional gap signal)
     - relief_present     (-2)    — active humanitarian response damps shock
 """
 import json
@@ -85,9 +87,30 @@ def main():
         if iso:
             rw_by_iso.setdefault(iso, []).append(ev)
 
-    all_iso = (set(wfp) | set(ipc) | set(acled) | set(om) | set(wfp_c)
-               | set(estat) | set(faostat) | set(inform) | set(wgi) | set(psd)
-               | set(usgs) | set(feeding))   # v25 — include US-state feeds so US- rows exist
+    # v38 — canonical country/profile set. Previously all_iso was the union of the
+    # live feeds only, which (a) produced ~12 orphan rows for territories/aggregates
+    # (AIA, REU, EU27, …) that have no country profile and are never displayed, and
+    # (b) left ~5 visible profiles (BES, FRO, IMN, MAF, MNP) with no nowcast row at
+    # all because no feed covers them. We now seed all_iso with the canonical profiles
+    # so EVERY visible profile gets a row (zero-adjustment if no live signal), and we
+    # restrict the OUTPUT to canonical profiles so no orphan rows are emitted. This
+    # keeps nowcast.json and countries.json on the same entity set.
+    try:
+        _co = load("../data/countries.json") if False else json.loads((DATA / "countries.json").read_text())
+        _profiles = (_co.get("data", _co).get("countries", {}) or {})
+        canonical_iso = set(_profiles.keys())
+    except Exception as e:
+        print(f"  [warn] countries.json profile set unavailable ({e}) — falling back to feed union only")
+        canonical_iso = set()
+
+    feed_iso = (set(wfp) | set(ipc) | set(acled) | set(om) | set(wfp_c)
+                | set(estat) | set(faostat) | set(inform) | set(wgi) | set(psd)
+                | set(usgs) | set(feeding))   # v25 — include US-state feeds so US- rows exist
+    # Compute over feeds ∪ profiles so profiles with no feed still get a (zero) row;
+    # if we have a canonical set, drop orphan rows that aren't real profiles.
+    all_iso = (feed_iso | canonical_iso)
+    if canonical_iso:
+        all_iso = {iso for iso in all_iso if iso in canonical_iso}
     out = {}
     for iso in all_iso:
         ipc_p3   = (ipc.get(iso) or {}).get("phase3plus_pct") or 0

@@ -1,10 +1,12 @@
 # FoodShield AI — Setup & Daily Data Refresh
 
+> ℹ️ **Feed count updated 2026-06-15.** The pipeline now has **32 `refresh_*.py` feed scripts** (plus the build/rebuild steps in `run_all.py`). The "18 feeds" list below is an early subset kept for setup context — for the live, health-tracked inventory open the source-health pill in the app or read `data/source_manifest.json`. Authoritative status: **HANDOVER_2026-06-15.md**.
+
 This repo includes a GitHub Actions workflow that refreshes `data/` every day at `06:00 UTC`, rebuilds the nowcast, writes a per-source health manifest, and redeploys the frontend.
 
 ## Current feed inventory
 
-The pipeline currently tracks 18 feeds:
+The pipeline currently tracks 32 feed scripts (this section lists an early 18-feed subset; see note above):
 
 - `fao_ffpi.json` — FAO Food Price Index
 - `worldbank_pink_sheet.json` — World Bank commodity benchmarks

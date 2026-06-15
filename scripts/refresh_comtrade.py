@@ -19,8 +19,8 @@ Output: data/comtrade_staples.json
     iso3_importer: {
       commodity_name: {
         "total_kt": <thousand tonnes imported>,
-        "total_usd_m": <USD millions>,
-        "top_suppliers": [{"iso3", "share_pct", "kt"}, ...]
+        "total_value_usd": <USD value>,
+        "top_suppliers": [{"iso3", "share_pct", "value_usd"}, ...]
       }
     }
   }
@@ -155,7 +155,7 @@ def main():
     if key:
         print("  [info] COMTRADE_API_KEY present but public endpoint used (no auth needed)")
 
-    out = defaultdict(lambda: defaultdict(lambda: {"total_kt": 0, "total_usd_m": 0, "by_supplier": defaultdict(lambda: {"kt": 0, "usd_m": 0})}))
+    out = defaultdict(lambda: defaultdict(lambda: {"total_kt": 0, "total_value_usd": 0, "by_supplier": defaultdict(lambda: {"kt": 0, "value_usd": 0})}))
     year = 2024  # most recent full year for free tier as of May 2026
     skipped = 0
     succeeded = 0
@@ -201,29 +201,28 @@ def main():
             for row in rows:
                 # Public preview endpoint returns partnerISO as null; only partnerCode
                 # (numeric M49) is populated. Resolve to ISO3 via the reverse lookup.
-                # netWgt is also null on the public endpoint — primaryValue (USD millions
-                # already, despite the legacy /1e6 divisor below) is the only volumetric
-                # signal. Treat primaryValue AS the USD-million value and skip the kt
-                # conversion that the paid endpoint supported.
+                # netWgt is also null on the public endpoint — primaryValue is the only
+                # value signal. We store it as raw USD in total_value_usd/value_usd and
+                # keep the legacy total_usd_m/usd_m aliases for backward compatibility.
+                # Skip the kt conversion that the paid endpoint supported.
                 p_code = row.get("partnerCode")
                 if not p_code or p_code == 0:
                     continue
                 sup = M49_TO_ISO3.get(int(p_code))
                 if not sup:
                     continue
-                usdm = row.get("primaryValue") or 0
-                if usdm <= 0:
+                value_usd = row.get("primaryValue") or 0
+                if value_usd <= 0:
                     continue
-                # Public endpoint already returns USD millions directly, NOT raw USD.
-                # Verified May 19 2026: Egypt 2024 wheat from Turkey shows primaryValue=10.899
-                # which matches Egypt-Turkey wheat trade of $10.9M (Comtrade data viewer).
+                # Public preview values in current saved files are stored as raw USD.
+                # Example: Egypt 2024 wheat total is ~4.44e9 in data/comtrade_staples.json.
                 entry = out[importer_iso][cmd_name]
-                entry["total_usd_m"] += usdm
+                entry["total_value_usd"] += value_usd
                 # netWgt is null on public preview — we cannot compute kt. Set to 0
                 # so downstream code knows volumes aren't available; UI must label as
                 # "obs · aggregate (USD only)" rather than implying kt accuracy.
                 s = entry["by_supplier"][sup]
-                s["usd_m"] += usdm
+                s["value_usd"] += value_usd
 
     print(f"  Fetched {succeeded} commodity-importer combos; skipped {skipped}")
 
@@ -233,18 +232,20 @@ def main():
     for imp, commodities in out.items():
         final[imp] = {}
         for cmd_name, e in commodities.items():
-            total_usd = e["total_usd_m"]
+            total_usd = e["total_value_usd"]
             suppliers = [
-                {"iso3": s, "usd_m": round(v["usd_m"], 2),
-                 "share_pct": round(v["usd_m"] / total_usd * 100, 1) if total_usd else 0}
+                {"iso3": s, "value_usd": round(v["value_usd"], 2),
+                 "usd_m": round(v["value_usd"], 2),
+                 "share_pct": round(v["value_usd"] / total_usd * 100, 1) if total_usd else 0}
                 for s, v in e["by_supplier"].items()
             ]
-            suppliers.sort(key=lambda x: -x["usd_m"])
+            suppliers.sort(key=lambda x: -x["value_usd"])
             final[imp][cmd_name] = {
                 "total_kt": None,   # not available on public preview endpoint
+                "total_value_usd": round(total_usd, 2),
                 "total_usd_m": round(total_usd, 2),
                 "top_suppliers": suppliers[:5],
-                "value_basis": "USD millions (primaryValue from Comtrade public preview)",
+                "value_basis": "USD (raw primaryValue from Comtrade public preview)",
             }
 
     # Safety: if we got very little data this run (e.g. heavy rate-limiting),

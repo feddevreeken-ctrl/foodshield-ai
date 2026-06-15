@@ -60,19 +60,41 @@ SERIES_MAP = {
 }
 
 
+# v38 — worldbank.org WAFs the default FoodShield bot UA; use a browser UA.
+_BROWSER_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+               "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+
+# Stable direct fallbacks if the landing-page scrape is blocked or the regex misses.
+WORKBOOK_FALLBACKS = [
+    "https://thedocs.worldbank.org/en/doc/5d903e848db1d1b83e0ec8f744e55570-0350012021/related/CMO-Historical-Data-Monthly.xlsx",
+]
+
+
 def resolve_workbook_url():
-    html = http_get(LANDING_URL, headers={"Accept": "text/html,*/*"}, timeout=45).text
-    match = WORKBOOK_RE.search(html)
-    if not match:
-        raise RuntimeError("Could not find Pink Sheet monthly workbook link on landing page")
-    return unescape(match.group(0))
+    try:
+        html = http_get(LANDING_URL,
+                        headers={"Accept": "text/html,*/*", "User-Agent": _BROWSER_UA,
+                                 "Accept-Language": "en-US,en;q=0.9"},
+                        timeout=45).text
+        match = WORKBOOK_RE.search(html)
+        if match:
+            return unescape(match.group(0))
+    except Exception as e:
+        print(f"  [warn] Pink Sheet landing-page scrape failed: {e}")
+    # Fall back to known-good direct URLs.
+    for fb in WORKBOOK_FALLBACKS:
+        print(f"  [info] trying Pink Sheet fallback workbook URL")
+        return fb
+    raise RuntimeError("Could not find Pink Sheet monthly workbook link on landing page")
 
 
 def load_workbook_rows(url):
     blob = http_get(
         url,
         headers={
-            "Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*"
+            "Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*",
+            "User-Agent": _BROWSER_UA,
+            "Accept-Language": "en-US,en;q=0.9",
         },
         timeout=90,
     ).content
@@ -122,29 +144,81 @@ def latest_points(data_rows, col_idx):
     return latest, previous, history
 
 
+def _norm_code(c):
+    return str(c).strip().upper().replace(" ", "_").replace("-", "_") if c is not None else ""
+
+
+def _find_header_block(rows):
+    """v38 — World Bank periodically shifts the metadata rows, which broke the
+    hardcoded rows[6]=codes assumption (→ zero benchmarks). Instead, scan the first
+    ~12 rows for the one that contains the most known SERIES_MAP source codes; that
+    is the code row. labels/units are the rows just above it; data starts below.
+    Returns (labels, units, codes, data_rows, code_row_idx)."""
+    wanted = {_norm_code(v) for v in SERIES_MAP.values()}
+    best_idx, best_hits = None, 0
+    for i, row in enumerate(rows[:14]):
+        if not row:
+            continue
+        hits = sum(1 for c in row if _norm_code(c) in wanted)
+        if hits > best_hits:
+            best_hits, best_idx = hits, i
+    if best_idx is None or best_hits == 0:
+        raise RuntimeError("Pink Sheet: could not locate the source-code header row")
+    codes = rows[best_idx]
+    labels = rows[best_idx - 2] if best_idx >= 2 else rows[max(0, best_idx - 1)]
+    units = rows[best_idx - 1] if best_idx >= 1 else codes
+    data_rows = rows[best_idx + 1:]
+    return labels, units, codes, data_rows, best_idx
+
+
 def main():
     workbook_url = resolve_workbook_url()
     rows = load_workbook_rows(workbook_url)
     if len(rows) < 8:
         raise RuntimeError("Pink Sheet workbook structure is unexpectedly short")
 
-    dataset_updated_on = str(rows[3][0]).replace("Updated on ", "").strip() if rows[3] else None
-    labels = rows[4]
-    units = rows[5]
-    codes = rows[6]
-    data_rows = rows[7:]
+    # Updated-on banner is usually in the first few rows; find it tolerantly.
+    dataset_updated_on = None
+    for row in rows[:6]:
+        for cell in (row or []):
+            if isinstance(cell, str) and "updated on" in cell.lower():
+                dataset_updated_on = cell.replace("Updated on ", "").replace("updated on ", "").strip()
+                break
+        if dataset_updated_on:
+            break
 
+    labels, units, codes, data_rows, _code_row = _find_header_block(rows)
+
+    # Case/format-tolerant code → column index map.
     col_by_code = {}
     for idx, code in enumerate(codes):
-        if isinstance(code, str) and code.strip():
-            col_by_code[code.strip()] = idx
+        nc = _norm_code(code)
+        if nc:
+            col_by_code[nc] = idx
+
+    # Known World Bank code aliases (the workbook occasionally renames columns).
+    CODE_ALIASES = {
+        "WHEAT_US_SRW": ["WHEAT_US_SRW", "WHEAT_US_HRW", "WHEAT_US"],
+        "MAIZE": ["MAIZE", "MAIZE_US"],
+        "RICE_05": ["RICE_05", "RICE_25", "RICE_A1", "RICE_THAI_5"],
+        "SOYBEANS": ["SOYBEANS", "SOYBEAN"],
+        "PALM_OIL": ["PALM_OIL", "PALMOIL"],
+        "SUGAR_WLD": ["SUGAR_WLD", "SUGAR_WORLD", "SUGAR"],
+        "COFFEE_ARABIC": ["COFFEE_ARABIC", "COFFEE_ARABICA"],
+        "COCOA": ["COCOA"],
+        "UREA_EE_BULK": ["UREA_EE_BULK", "UREA"],
+        "PHOSROCK": ["PHOSROCK", "PHOSPHATE_ROCK"],
+        "DAP": ["DAP"],
+        "BEEF": ["BEEF"],
+    }
 
     out = {}
     as_of_months = []
     for key, source_code in SERIES_MAP.items():
-        if source_code not in col_by_code:
+        aliases = CODE_ALIASES.get(source_code, [source_code])
+        idx = next((col_by_code[_norm_code(a)] for a in aliases if _norm_code(a) in col_by_code), None)
+        if idx is None:
             continue
-        idx = col_by_code[source_code]
         latest, previous, history = latest_points(data_rows, idx)
         if not latest:
             continue

@@ -326,6 +326,17 @@ def check_freshness(rep):
 
 def check_schema_shape(rep):
     files = sorted(DATA_DIR.glob("*.json"))
+    # v32 — scope the shape check to SHIPPED feed files only. Archives, scratch
+    # worklists and intentionally different shapes (commodity atlas keyed on
+    # 'commodities', scenario_spec) were producing ~70 false FAILs that buried
+    # the real signal.
+    SHAPE_EXEMPT = {"commodity_flows.json", "scenario_spec.json"}
+    files = [p for p in files
+             if not p.name.startswith((".archive", "_"))
+             and not p.name.endswith((".rebuilt.json", ".bak"))
+             and ".bak_" not in p.name
+             and p.name not in SHAPE_EXEMPT
+             and not (p.name.startswith("commodity_flows_") or p.name.startswith("_wave"))]
     if not files:
         rep.fail("schema-shape", "no data/*.json files found")
         return

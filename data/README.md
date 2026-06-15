@@ -35,7 +35,11 @@ Auto-generated JSON snapshots used by the frontend.
 | `usgs_water.json` | USGS Water Services |
 | `openaq.json` | OpenAQ |
 | `nasa_firms.json` | NASA FIRMS |
-| `comtrade_staples.json` | UN Comtrade Plus |
+| `comtrade_staples.json` | UN Comtrade Plus import-side bilateral structure |
+| `comtrade_exports.json` | UN Comtrade Plus export-side bilateral structure |
+| `commodity_flows.json` | FoodShield commodity-flow atlas source of truth |
+| `trade_rebuild_priorities.json` | Generated country-by-country trade rebuild queue |
+| `companies.json` | Company footprint / commodity exposure surface |
 
 ## Manual snapshot
 
@@ -65,4 +69,8 @@ All files use the same wrapper:
 - The frontend should treat `source_manifest.json` as the authority for health, freshness, and setup state.
 - `countries.json` is the preferred structural baseline for the frontend. The embedded `COUNTRIES`
   array in `index.html` is now fallback-only.
+- `comtrade_staples.json` and `comtrade_exports.json` are the primary bilateral trade backbones for
+  the country trade cards; `countries.json` stores the normalized display-facing envelopes built from them.
+- `commodity_flows.json` is the atlas layer. Sidecar files like `commodity_flows_wheat.json` are reviewed
+  inputs, not the final merged truth.
 - Some files intentionally exist as empty or degraded stubs so the workflow never hard-fails on one missing upstream.

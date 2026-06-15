@@ -9,9 +9,11 @@
 
    Run from the FoodShield project root:
      node scripts/build_commodity_flows_from_beefmap.js \
-          "/Users/fedde/Documents/Claude/Projects/Beefmap preview/beef-data.js"
+          "/Users/fedde/Documents/Claude/Projects/Beefmap preview/beef-data.js" \
+          "data/commodity_flows.beef.json"
 
-   (If no path is given it tries the default Beefmap location.)
+   (If no path is given it tries the default Beefmap location. If no output path
+   is given it overwrites data/commodity_flows.json.)
 
    FAITHFUL IMPORT — what carries over verbatim from the Beefmap:
      • FLOWS      → flows[]            (from,to,value(kt),kind,src,note)
@@ -28,7 +30,9 @@ const path = require('path');
 
 const DEFAULT_BEEFMAP = '/Users/fedde/Documents/Claude/Projects/Beefmap preview/beef-data.js';
 const beefmapPath = process.argv[2] || DEFAULT_BEEFMAP;
-const OUT = path.join(__dirname, '..', 'data', 'commodity_flows.json');
+const OUT = process.argv[3]
+  ? path.resolve(process.argv[3])
+  : path.join(__dirname, '..', 'data', 'commodity_flows.json');
 
 function loadBeef(p) {
   const src = fs.readFileSync(p, 'utf8');

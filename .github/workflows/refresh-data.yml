@@ -73,14 +73,22 @@ jobs:
           cd scripts
           python validate_data.py
 
-      # v23 — content-level QA gate (dup-ISO, coverage floors, freshness SLA,
-      # provenance-ratio guard, US-state semantic test, crisis-feed honesty).
-      # Runs after validate_data.py. Non-blocking (|| true) so a WARN never
-      # blocks the data commit, but the report is visible in the CI log.
-      - name: QA content checks
+      # v35 — FDRS regression gate: pinned formula fixtures (11 checks) must pass
+      # before any data commit. This is the "no silent formula drift" release gate.
+      - name: FDRS formula regression gate
         run: |
           cd scripts
-          python qa_checks.py || true
+          python test_fdrs_v2.py
+
+      # v23/v35 — content-level QA gate (dup-ISO, coverage floors, freshness SLA,
+      # provenance-ratio guard, US-state semantic test, crisis-feed honesty).
+      # v35: now BLOCKING — hard FAILs stop the commit (freshness issues are WARNs
+      # and never fail; the schema-shape scan was scoped to shipped files, so a
+      # clean run is the expected state).
+      - name: QA content checks (blocking)
+        run: |
+          cd scripts
+          python qa_checks.py
 
       - name: Commit refreshed data
         run: |

@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from _common import DATA_DIR, ROOT
+from trade_schema import normalize_trade_surface
 
 HTML_PATH = ROOT / "index.html"
 OUT_PATH = DATA_DIR / "countries.json"
@@ -54,19 +55,21 @@ FDRS_V2_WEIGHTS = [0.23, 0.16, 0.11, 0.09, 0.09, 0.08, 0.06, 0.12, 0.06]
 
 QUALITY_FLAGS = {
     "sourced": "Verified against a public dataset; source_url + as_of populated.",
+    "partial": "Uses real source lineage but the audit trail is incomplete or composite; basis/unit metadata is present, but treat with caution.",
     "legacy_curated": "Hand-authored heritage value, not yet re-verified. Treated as draft.",
     "legacy_import_dependency": (
         "Heritage value originally meant 'fraction of consumption imported' (0-100), "
         "NOT the caloric-share definition the field name now implies. Mis-display would "
         "be misleading; UI should treat as import-dependency only until replaced by FBS-sourced caloric share."
     ),
+    "heritage": "Inherited historical value with no current direct-source audit trail.",
     "modeled": "Computed from sourced inputs or explicit structural assumptions.",
     "manual": "Hand-maintained snapshot from an annual or static public release.",
 }
 
 FIELD_DESCRIPTIONS = {
     "fdrs": "Composite Food Dependency Risk Score 0-100.",
-    "c": "6-component structural FDRS vector [import_dep, supplier_conc, prod_trend, food_infl, climate, conflict].",
+    "c": "9-component structural FDRS vector [import_dep, supplier_conc, prod_trend, food_infl, climate, conflict, supply_chain_exposure, econ_access, grain_buffer].",
     "f2030": "Structural 2030 FDRS projection.",
     "w": "Wheat caloric share % (fraction of national caloric supply).",
     "r": "Rice caloric share %.",
@@ -145,6 +148,20 @@ def _income_sub(gnipc):
     return _clip(100 * (math.log10(40000) - math.log10(g)) / (math.log10(40000) - math.log10(1000)))
 
 
+# v33 audit fix — months-of-import-cover is not a fragility signal for economies that
+# issue (or belong to a union that issues) a global reserve currency: they settle
+# imports in their own money and structurally hold thin FX reserves (the US holds ~2
+# months and was scoring riskier than Venezuela). Drop the reserves sub for them and
+# let fx/debt/income carry the score. Dollarized/euroized NON-issuers (ECU, SLV, PAN,
+# MNE, XKX) are NOT exempt — they can't print, so reserves matter more, not less.
+RESERVE_CURRENCY_ISSUERS = {
+    "USA", "JPN", "GBR", "CHE",
+    # euro area members (ECB backstop)
+    "DEU", "FRA", "ITA", "ESP", "NLD", "BEL", "AUT", "IRL", "PRT", "GRC",
+    "FIN", "LUX", "SVK", "SVN", "EST", "LVA", "LTU", "CYP", "MLT", "HRV",
+}
+
+
 def compute_economic_access(iso, fx, wdi, hdi):
     """Economic Access fragility 0–100 + provenance. Spec §3.1–3.2."""
     fx_row = (fx.get(iso) or {})
@@ -154,9 +171,39 @@ def compute_economic_access(iso, fx, wdi, hdi):
     debt_v = _debt_sub((wdi.get(iso, {}).get(WDI_DEBT_SVC, {}) or {}).get("value"))
     inc_v = _income_sub((hdi.get(iso, {}).get("gnipc", {}) or {}).get("value"))
 
+    if iso in RESERVE_CURRENCY_ISSUERS:
+        res_v = None
+
+    # v33 audit fix — the reserves cliff is a buffer test for economies that NEED an
+    # FX buffer. High-income economies with deep capital markets and hard-float
+    # currencies (AUS holds ~2 months by choice, CAN, SWE, NZL...) are not fragile
+    # the way a low-income 2-months country is — the cliff was scoring Australia
+    # alongside Mozambique. Skip the reserves sub above the World Bank high-income
+    # line (GNIpc ≈ $14k); genuine stress in a rich economy still surfaces through
+    # the one-sided FX sub and the debt sub.
+    gnipc_raw = (hdi.get(iso, {}).get("gnipc", {}) or {}).get("value")
+    if gnipc_raw is not None and gnipc_raw >= 14000:
+        res_v = None
+
+    # v33 audit fix — FX is a ONE-SIDED stress indicator. A large 12m depreciation is
+    # hard evidence of access fragility; a flat official rate is NOT evidence of
+    # strength (administered/frozen regimes — SDG pegged at 600, official CUP — read
+    # "stable" while the parallel market collapses). _fx_sub is already 0 for any
+    # depreciation ≤5%, so a zero contributes nothing but its 0.30 weight, which
+    # DILUTES the reserves/debt/income signal exactly for the crisis economies the
+    # component exists to flag. Treat fx_v==0 as "no signal" instead.
+    if fx_v is not None and fx_v <= 0:
+        fx_v = None
+
     subs = [("fx", fx_v, 0.30), ("reserves", res_v, 0.30),
             ("debt", debt_v, 0.25), ("income", inc_v, 0.15)]
     present = [(k, v, w) for k, v, w in subs if v is not None]
+    # v33 audit fix — a reserves-only score is too thin to assert anything extreme
+    # (Cayman scored 100, tied with South Sudan, off a single input). One sub with no
+    # corroboration from income/fx/debt → treat as unscored rather than authoritative.
+    if len(present) == 1 and present[0][0] == "reserves":
+        return None, {"fx": "heritage", "reserves": "sourced",
+                      "debt": "heritage", "income": "heritage", "_n_sourced": 0}
     if not present:
         return None, {"fx": "heritage", "reserves": "heritage",
                       "debt": "heritage", "income": "heritage", "_n_sourced": 0}
@@ -167,34 +214,57 @@ def compute_economic_access(iso, fx, wdi, hdi):
     return val, prov
 
 
+# v34 — EU members: USDA PSD stopped reporting them individually after accession
+# (the bloc reports as "European Union", FAS code E4, which the parser used to drop).
+# Their residual per-country rows are 1990–1998 relics — the Netherlands' grain
+# buffer was being scored 100 off a single 1990 soybeans row presented as current.
+EU27_MEMBERS = {
+    "AUT", "BEL", "BGR", "HRV", "CYP", "CZE", "DNK", "EST", "FIN", "FRA",
+    "DEU", "GRC", "HUN", "IRL", "ITA", "LVA", "LTU", "LUX", "MLT", "NLD",
+    "POL", "PRT", "ROU", "SVK", "SVN", "ESP", "SWE",
+}
+
+PSD_MIN_YEAR = 2015   # v34 — records older than this are relics, not current stocks
+
+
 def compute_grain_buffer(iso, psd):
     """Grain Reserve Buffer fragility 0–100 from USDA PSD stocks-to-use. Spec §3.1.
     stocks-to-use = ending stocks / consumption across tracked staples; LOW s/u = fragile.
+    v34: ignores pre-2015 relic rows; EU members fall back to the EU-27 bloc aggregate
+    (single market, shared CAP storage) and are flagged 'partial' (bloc-level value).
     """
-    crow = psd.get(iso)
-    if not crow:
+    def _stu(crow):
+        tot_stocks = tot_cons = 0.0
+        for cmd, rec in (crow or {}).items():
+            if not isinstance(rec, dict):
+                continue
+            yr = rec.get("year")
+            if yr is not None and yr < PSD_MIN_YEAR:
+                continue
+            s = rec.get("stocks_kt")
+            c = rec.get("consumption_kt")
+            if s is not None and c:
+                tot_stocks += s
+                tot_cons += c
+        return (tot_stocks / tot_cons) if tot_cons > 0 else None
+
+    stu = _stu(psd.get(iso))
+    prov = "sourced"
+    if stu is None and iso in EU27_MEMBERS:
+        stu = _stu(psd.get("EU27"))
+        prov = "partial"          # bloc-level aggregate applied to a member state
+    if stu is None:
         return None, "heritage"
-    tot_stocks = tot_cons = 0.0
-    for cmd, rec in crow.items():
-        if not isinstance(rec, dict):
-            continue
-        s = rec.get("stocks_kt")
-        c = rec.get("consumption_kt")
-        if s is not None and c:
-            tot_stocks += s
-            tot_cons += c
-    if tot_cons <= 0:
-        return None, "heritage"
-    stu = tot_stocks / tot_cons          # stocks-to-use ratio
     # Normalise: s/u >= 0.40 (ample, ~5 months) -> 0 ; <= 0.05 (very thin) -> 100.
     frag = _clip((0.40 - stu) / (0.40 - 0.05) * 100)
-    return round(frag, 1), "sourced"
+    return round(frag, 1), prov
 
 
 def _component_meta(field, value, prov, method, source):
     flag = "sourced" if (isinstance(prov, str) and prov == "sourced") else (
+        "partial" if (isinstance(prov, str) and prov == "partial") else (
         "sourced" if (isinstance(prov, dict) and prov.get("_n_sourced", 0) >= 3) else
-        "partial" if (isinstance(prov, dict) and prov.get("_n_sourced", 0) == 2) else "heritage")
+        "partial" if (isinstance(prov, dict) and prov.get("_n_sourced", 0) == 2) else "heritage"))
     return {
         "value": value, "source": source, "as_of": "2024",
         "method": method, "quality_flag": flag,
@@ -287,14 +357,30 @@ def main():
         # the frontend supplies live SCE at render time, but we store a placeholder so
         # the stored vector is a consistent length 9.
         while len(cv) < 7:
-            cv.append(0)
+            cv.append(None)   # v35 — SCE placeholder is unscored (null), not 0; the
+                              # frontend injects live SCE at render time (inline convention)
 
         ea_val, ea_prov = compute_economic_access(iso, fx, wdi, hdi)
         gb_val, gb_prov = compute_grain_buffer(iso, psd)
 
-        cv = cv[:7] + [ea_val if ea_val is not None else 0,
-                       gb_val if gb_val is not None else 0]
+        # v35 — unscored stays null. Writing 0 for an unscored component made a
+        # data gap (Haiti grain buffer: no PSD rows) indistinguishable from a
+        # sourced zero (China grain buffer: huge stocks, s/u >= 0.40). _fdrs_v2
+        # treats null exactly like 0 (counts 0), so scores are unchanged — but the
+        # UI can now render "NO DATA · COUNTS 0" instead of a confident-looking 0.
+        cv = cv[:7] + [ea_val, gb_val]
         c_meta["value"] = cv
+        c_meta["method"] = (
+            "FDRS v2 structural component vector "
+            "[import_dep, supplier_conc, prod_trend, food_infl, climate, conflict, "
+            "supply_chain_exposure, econ_access, grain_buffer]."
+        )
+        c_meta["quality_flag"] = "modeled"
+        c_meta["note"] = (
+            "Stored as the canonical 9-component structural vector. The frontend may inject "
+            "live supply-chain exposure and nowcast adjustments at render time; this file "
+            "preserves the structural baseline plus sourced v2 components."
+        )
 
         if ea_val is not None:
             row["econ_access"] = _component_meta(
@@ -331,6 +417,8 @@ def main():
     print(f"[v2] recomputed FDRS for {v2_applied} countries; "
           f"Economic Access sourced(>=3/4): {ea_sourced}; Grain Buffer sourced: {gb_sourced}")
 
+    trade_changes = normalize_trade_surface(countries)
+
     ordered = {}
     for iso in sorted(countries):
         row = countries[iso]
@@ -360,7 +448,8 @@ def main():
         },
         "notes": [
             "Caloric shares (w/r/m) come from FAOSTAT FBS; net food trade from FAOSTAT TCL.",
-            "Per-commodity import/supplier lists (imports, exports, suppliers, supPct) remain legacy_curated.",
+            "Trade-facing fields carry explicit basis/unit metadata via trade_schema.py so value-ranked and quantity-ranked rows are not silently mixed.",
+            "Rows labeled partial are derived from real source lineage but are not yet directly auditable from a single public extract.",
             "Food-only UI menus may be normalized at render time; canonical raw structural values remain stored here.",
             "The frontend supports both the historical top-level countries schema and this v20.6 envelope schema for safe rollout.",
         ],
@@ -377,6 +466,7 @@ def main():
     OUT_PATH.write_text(
         json.dumps({"_meta": meta, "data": payload}, indent=2, ensure_ascii=False)
     )
+    print(f"[trade] normalized {len(trade_changes)} trade field envelopes")
     print(f"[OK] wrote {OUT_PATH} ({len(ordered)} countries)")
 
 
@@ -666,7 +756,7 @@ def _legacy_field_meta(field, value):
 def _legacy_method(field):
     methods = {
         "fdrs": "Legacy embedded structural score from index.html.",
-        "c": "Legacy embedded 6-factor structural vector from index.html.",
+        "c": "Legacy embedded structural vector from index.html. Expanded to the 9-component FDRS v2 schema during rebuild.",
         "f2030": "Legacy embedded 2030 scenario from index.html.",
         "w": "Legacy embedded caloric share baseline from index.html.",
         "r": "Legacy embedded caloric share baseline from index.html.",
