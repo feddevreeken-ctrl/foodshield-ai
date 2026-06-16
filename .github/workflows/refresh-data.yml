@@ -27,6 +27,11 @@ env:
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    # v39 — hard ceiling. A normal run is ~25-40 min; a hung feed (e.g. FEWS
+    # read-timeout retry loops) once dragged a run to ~1h50m before failing.
+    # Cap the whole job so a stuck feed can't burn Actions minutes — GitHub
+    # kills it cleanly and the next 6-hourly run retries.
+    timeout-minutes: 50
     permissions:
       contents: write
     steps:
@@ -91,31 +96,62 @@ jobs:
           python qa_checks.py
 
       - name: Commit refreshed data
+        id: commit
         run: |
+          # v39 — commit as the owner's GitHub email. Vercel's Git integration only
+          # deploys commits whose email maps to a GitHub account; the old
+          # bot@foodshield.ai address didn't, so it blocked every refresh deploy.
           git config user.name  "foodshield-bot"
-          git config user.email "bot@foodshield.ai"
+          git config user.email "fedde.vreeken@gmail.com"
           git add data/
           if git diff --cached --quiet; then
             echo "No data changes today."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
           else
             git commit -m "data: daily refresh $(date -u +%Y-%m-%d)"
-            # v20.7: handle race condition where origin/main moved during the ~25-min refresh run.
-            # Rebase-and-push-with-retry. If rebase fails (conflict in data/*.json against new
-            # remote work), we abort cleanly rather than corrupt history; a human re-runs.
+            # v20.7: handle race condition where origin/main moved during the refresh run.
+            # Rebase-and-push-with-retry. v39: on a rebase conflict (data/*.json vs new
+            # remote work) we now AUTO-RESOLVE in favour of this fresh run (-X theirs)
+            # instead of aborting the whole workflow — a daily refresh failing because two
+            # data commits touched the same JSON shouldn't take the site offline.
+            pushed=false
             for attempt in 1 2 3; do
               echo "Push attempt $attempt/3"
-              git pull --rebase --autostash origin main || {
-                echo "Rebase failed on attempt $attempt — aborting and exiting non-zero"
+              if ! git pull --rebase -X theirs --autostash origin main; then
+                echo "Rebase hit an unresolved conflict — aborting this attempt"
                 git rebase --abort 2>/dev/null || true
-                exit 1
-              }
+                sleep 10
+                continue
+              fi
               if git push origin main; then
                 echo "Push succeeded on attempt $attempt"
-                exit 0
+                pushed=true
+                break
               fi
               echo "Push race detected — retrying after 10s"
               sleep 10
             done
-            echo "All 3 push attempts failed — exiting non-zero"
-            exit 1
+            echo "pushed=$pushed" >> "$GITHUB_OUTPUT"
+            if [ "$pushed" != "true" ]; then
+              echo "::warning::All 3 push attempts failed — data committed locally but not pushed this run; next run will retry."
+            fi
           fi
+
+      # v39 — Trigger the Vercel deploy explicitly via a Deploy Hook.
+      # WHY: after the repo went private, Vercel's Git integration refuses to deploy
+      # commits authored by the bot ("foodshield-bot is not a team member"), so the
+      # live site stopped updating on the 6-hourly refresh. A Deploy Hook deploys on
+      # ANY trigger regardless of git-author identity and needs no Pro plan. Create the
+      # hook in Vercel (Project → Settings → Git → Deploy Hooks), then store the URL as
+      # the repo secret VERCEL_DEPLOY_HOOK. If the secret is absent this step is skipped.
+      - name: Trigger Vercel deploy
+        if: steps.commit.outputs.pushed == 'true'
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::warning::VERCEL_DEPLOY_HOOK secret not set — skipping deploy trigger. Add it in repo Settings → Secrets."
+            exit 0
+          fi
+          echo "Triggering Vercel deploy hook…"
+          curl -fsS -X POST "$HOOK" && echo "Deploy triggered." || echo "::warning::Deploy hook call failed."
