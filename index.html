@@ -30172,7 +30172,7 @@ async function loadDisturbanceData() {
     const gdacsUrl = `https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?alertlevel=Red,Orange&eventlist=DR,FL,TC,EQ,VO&limit=30&fromdate=${_gdacsFromDate}`;
     const res = await Promise.race([
       fetch(gdacsUrl),
-      new Promise((_,r) => setTimeout(()=>r(new Error('timeout')), 6000))
+      new Promise((_,r) => setTimeout(()=>r(new Error('timeout')), 10000)) // v39.2 — was 6s; cold-load races needed more headroom
     ]);
     if (res.ok) {
       const json = await res.json();
@@ -30246,7 +30246,7 @@ async function loadDisturbanceData() {
       + '&fields[include][]=source.name';
     const res = await Promise.race([
       fetch(rwUrl, { cache: 'no-store' }),
-      new Promise((_,r) => setTimeout(()=>r(new Error('timeout')), 8000))
+      new Promise((_,r) => setTimeout(()=>r(new Error('timeout')), 12000)) // v39.2 — was 8s; cold-load races needed more headroom
     ]);
     if (res.ok) {
       const json = await res.json();
@@ -30659,27 +30659,35 @@ async function loadDisturbanceData() {
     }
   } catch(e) {}
 
-  // v39 — SELF-HEALING cold-load fix. On the very first page load the external
-  // feeds (GDACS, ReliefWeb) frequently time out (6s race), so this run finishes
-  // with only baseline + LIVE.* events (~101). On a manual reload they're HTTP-
-  // cached and resolve instantly (~193) — which is exactly the "shows 101, reload
-  // to see 193" the user reported. Fix: if the live feeds did NOT come through,
-  // automatically re-fetch in the background a few seconds later (when the network
-  // has settled / the feeds are now warm) and re-render — WITHOUT a manual reload.
-  // Bounded to 3 attempts so a genuinely-offline visitor doesn't loop forever.
+  // v39.2 — SELF-HEALING cold-load fix (now handles PARTIAL loads).
+  // On first page load the external feeds (GDACS, ReliefWeb) race a 6s timeout.
+  // Often ONE comes back and the other doesn't, so the run finishes with ~101
+  // events instead of the full ~193. The earlier fix only retried when BOTH feeds
+  // failed (_liveOk === false) — so this partial case slipped through and the user
+  // still had to reload manually. New approach: remember the most events we've ever
+  // assembled (window._distBest), and if this run came back materially short of
+  // that, re-fetch in the background and re-render. Also retry on the very first
+  // ever load (no baseline yet) until both feeds have had a chance to warm up.
   try {
-    if (!_liveOk) {
+    const _count = events.length;
+    const _best = window._distBest || 0;
+    window._distBest = Math.max(_best, _count);
+    // "short" = missing a live feed OR fewer events than the best we've seen
+    const _gdacsOk = events.some(e => String(e.id||'').startsWith('gdacs_'));
+    const _rwOk    = events.some(e => String(e.id||'').startsWith('rw_'));
+    const _short = !_gdacsOk || !_rwOk || (_best > 0 && _count < _best);
+    if (_short) {
       window._distFeedRetry = (window._distFeedRetry || 0) + 1;
-      if (window._distFeedRetry <= 3) {
+      if (window._distFeedRetry <= 4) {
         setTimeout(() => {
           // bypass the cache + the in-flight de-dupe guard so the retry actually runs
           DISTURBANCE_CACHE.ts = 0;
           window._disturbancesLoadPromise = null;
           if (typeof loadDisturbanceData === 'function') loadDisturbanceData();
-        }, 3500 * window._distFeedRetry);  // 3.5s, 7s, 10.5s — feeds warm up
+        }, 3000 * window._distFeedRetry);  // 3s, 6s, 9s, 12s — feeds warm up
       }
     } else {
-      window._distFeedRetry = 0;  // got the full set; stop retrying
+      window._distFeedRetry = 0;  // full set, both feeds in; stop retrying
     }
   } catch(e) {}
 
