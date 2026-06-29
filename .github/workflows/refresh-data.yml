@@ -27,11 +27,16 @@ env:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    # v39 — hard ceiling. A normal run is ~25-40 min; a hung feed (e.g. FEWS
-    # read-timeout retry loops) once dragged a run to ~1h50m before failing.
-    # Cap the whole job so a stuck feed can't burn Actions minutes — GitHub
-    # kills it cleanly and the next 6-hourly run retries.
-    timeout-minutes: 50
+    # v40 — job ceiling raised 50 -> 120 min. Context: the 50-min cap was set when
+    # the repo was PRIVATE and Actions minutes were a scarce budget. The repo is now
+    # PUBLIC (free unlimited Actions minutes), so the only reason for a tight cap is
+    # gone. A cold-start run (e.g. after a multi-day gap) re-downloads every bulk feed
+    # and legitimately exceeds 50 min, which killed it before the commit step (run #175
+    # hit exactly 50m and never committed). Individual hung feeds are already bounded by
+    # the 15-min per-feed wall-clock cap in scripts/_common.py::safe_run, so this job
+    # ceiling is now just a generous backstop against a pathological whole-run hang.
+    # Steady-state runs are ~25-40 min, well within 120.
+    timeout-minutes: 120
     permissions:
       contents: write
     steps:
