@@ -55,6 +55,7 @@ import refresh_lpi
 import refresh_hdi
 import refresh_cckp
 import refresh_fews
+import refresh_trade_restrictions
 import build_countries_dataset
 import build_nowcast
 import build_source_manifest
@@ -96,6 +97,10 @@ STEPS = [
     ("WB WDI bulk",            refresh_worldbank_bulk.main,     "worldbank_bulk.json"),
     ("WB WFSO",                refresh_wb_wfso.main,            "wb_wfso.json"),
     ("FX rates (v23)",         refresh_fx.main,                 "fx_rates.json"),
+    # v40 — trade-restriction monitor. Preserve-safe stub: ships empty and never
+    # clobbers owner-curated cited entries. restrictionExposure() in the app computes
+    # who's exposed live from the atlas; restrictions must be sourced, never fabricated.
+    ("Trade restrictions",     refresh_trade_restrictions.main, "trade_restrictions.json"),
     ("Countries dataset",      build_countries_dataset.main,    "countries.json"),
     # v23 — re-verify trade fields (suppliers/supPct/imports/exports) from the
     # Comtrade pulls, patching countries.json AFTER it's built. Must run after
