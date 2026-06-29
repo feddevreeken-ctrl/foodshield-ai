@@ -6,7 +6,9 @@ Designed to run in GitHub Actions (Ubuntu, Python 3.11+).
 """
 import json
 import os
+import signal
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +22,17 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 UA = "FoodShield-AI/21 (+https://foodshield-ai-fv.vercel.app)"
 DEFAULT_TIMEOUT = 30
+
+# v40 — per-feed wall-clock cap for safe_run(). http_get has a per-REQUEST
+# timeout, but a feed doing many sequential requests or a retry loop (the
+# documented FEWS read-timeout failure mode) can still run for many minutes
+# in-process with nothing to stop it — long enough to blow the 50-min job
+# cap in refresh-data.yml before the commit step runs, so the live site goes
+# stale. This cap bounds ANY single feed's wall-clock time. 15 min is generous
+# headroom for the heaviest legit feeds (FAOSTAT TCL ~250MB, WB WFSO ~60 pages)
+# while still letting ~40 feeds finish well under the 50-min job budget even if
+# one hangs and burns its full cap. Lowering Actions-minutes burn is a bonus.
+DEFAULT_STEP_TIMEOUT = int(os.environ.get("FOODSHIELD_STEP_TIMEOUT", "900"))
 
 
 def http_get(url, *, params=None, headers=None, timeout=DEFAULT_TIMEOUT, retries=3, backoff=2, patient=False):
@@ -79,12 +92,38 @@ def write_json(filename, payload, *, source=None, notes=None):
     return path
 
 
-def safe_run(label, fn, output_name=None):
+class _StepTimeout(Exception):
+    """Raised by safe_run's SIGALRM handler when a feed exceeds its wall-clock cap."""
+
+
+def _has_existing_data(filename):
+    """True if data/<filename> already exists with a non-trivial payload.
+
+    Used so a transient timeout preserves last-good data (goes honestly stale)
+    instead of blanking it. A payload is "trivial" if absent, empty, or an
+    empty list/dict — i.e. nothing worth preserving.
+    """
+    try:
+        obj = json.loads((DATA_DIR / filename).read_text())
+    except Exception:
+        return False
+    payload = obj.get("data") if isinstance(obj, dict) else obj
+    if payload is None:
+        return False
+    if isinstance(payload, (list, dict, str)) and len(payload) == 0:
+        return False
+    return True
+
+
+def safe_run(label, fn, output_name=None, timeout=DEFAULT_STEP_TIMEOUT):
     """Run a refresh function and never crash the workflow.
 
     Args:
         label: human-readable step name printed in workflow logs
         fn:    the refresh function to run
+        timeout: per-feed wall-clock cap in seconds (SIGALRM, main-thread/POSIX
+                 only; no-op elsewhere). On timeout, last-good output is
+                 preserved if present (see DEFAULT_STEP_TIMEOUT).
         output_name: canonical data file the script is supposed to produce
                      (e.g. 'lpi.json'). If the function raises, we still
                      write an empty envelope to data/<output_name> so the
@@ -98,8 +137,38 @@ def safe_run(label, fn, output_name=None):
     saw silent 404s instead of an empty 'no data yet' state.
     """
     print(f"\n=== {label} ===")
+    started = time.time()
+
+    # v40 — bound this feed's wall-clock time so one hung feed can't eat the
+    # whole 50-min job budget. SIGALRM is POSIX-only and fires on the main
+    # thread only; run_all.py is single-threaded on Linux CI, so this applies.
+    # On any other platform/thread it's a no-op and behaviour is unchanged.
+    use_alarm = (
+        timeout
+        and hasattr(signal, "SIGALRM")
+        and threading.current_thread() is threading.main_thread()
+    )
+    prev_handler = None
+    if use_alarm:
+        def _on_alarm(signum, frame):
+            raise _StepTimeout(f"step exceeded {int(timeout)}s wall-clock cap")
+        prev_handler = signal.signal(signal.SIGALRM, _on_alarm)
+        signal.alarm(int(timeout))
+
     try:
         fn()
+    except _StepTimeout as e:
+        print(f"[TIMEOUT] {label}: {e} after {time.time()-started:.0f}s", file=sys.stderr)
+        # A timeout is a transient network stall, NOT a data-quality signal.
+        # Preserve the last-good file if one exists (it goes honestly stale via
+        # the freshness SLA) instead of blanking real data. Only stub if the
+        # feed has never produced output.
+        if output_name and not _has_existing_data(output_name):
+            write_json(output_name, {}, source=label,
+                       notes=f"Last refresh timed out after {int(timeout)}s")
+        elif output_name:
+            print(f"[KEEP] {label}: preserved existing {output_name} "
+                  f"(will show as stale, not empty)", file=sys.stderr)
     except Exception as e:
         print(f"[FAIL] {label}: {e}", file=sys.stderr)
         if output_name:
@@ -111,6 +180,11 @@ def safe_run(label, fn, output_name=None):
                   f"writing legacy stub {stub_name} (frontend will still 404 on "
                   f"the real path)", file=sys.stderr)
             write_json(stub_name, {}, source=label, notes=f"Last refresh failed: {e}")
+    finally:
+        if use_alarm:
+            signal.alarm(0)
+            if prev_handler is not None:
+                signal.signal(signal.SIGALRM, prev_handler)
 
 
 def env(key, default=None, required=False):
