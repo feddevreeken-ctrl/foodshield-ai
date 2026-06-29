@@ -7242,6 +7242,12 @@ body::before {
 .fs-restr-exp{margin-top:9px;max-width:46ch;}
 .fs-restr-exp-cap{font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--t-meta);margin-bottom:5px;}
 .fs-restr-you{color:#c44b3c;font-weight:600;}
+.fs-cflag{margin-top:14px;border:1px solid rgba(196,75,60,0.28);border-left:3px solid #c44b3c;border-radius:8px;background:rgba(196,75,60,0.06);padding:10px 12px;max-width:48ch;}
+.fs-cflag-cap{font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#c44b3c;margin-bottom:6px;}
+.fs-cflag-row{display:flex;gap:7px;font-size:11.5px;color:var(--t2);line-height:1.45;margin-top:5px;}
+.fs-cflag-row b{color:var(--t1);}
+.fs-cflag-dot{color:#c44b3c;flex:none;}
+.fs-cflag-src{color:var(--accent);text-decoration:none;white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -22441,6 +22447,42 @@ function restrictionsPanelHTML(selectedISO) {
   return `<div class="fs-restr"><div class="fs-restr-eyebrow">⚠ Active export restrictions · who's exposed</div>${items}</div>`;
 }
 
+// For a given importer ISO, the SOURCED restrictions that hit it — i.e. it imports the
+// restricted commodity from the restricting exporter. Returns [{r, share_pct}], sorted.
+function restrictionsAffecting(iso) {
+  const list = (typeof LIVE !== 'undefined' && Array.isArray(LIVE.restrictions)) ? LIVE.restrictions : [];
+  if (!list.length || !iso) return [];
+  const c = (typeof byISO === 'function') ? byISO(iso) : null;
+  if (!c) return [];
+  const hits = [];
+  for (const r of list) {
+    if (!r || !r.source_url || !r.iso || !r.commodity || r.iso === iso) continue;
+    let sup;
+    try { sup = commoditySuppliers(c, r.commodity); } catch (e) { continue; }
+    if (!Array.isArray(sup)) continue;
+    const exName = (typeof _nameFromISO === 'function') ? _nameFromISO(r.iso) : '';
+    const m = sup.find(s => (s.iso && s.iso === r.iso) || (exName && s.name === exName));
+    if (m && m.pct > 0) hits.push({ r, share_pct: Math.round(m.pct) });
+  }
+  hits.sort((a, b) => b.share_pct - a.share_pct);
+  return hits;
+}
+
+// Country-profile flag: SOURCED restrictions hitting the selected country. Empty -> ''.
+function countryRestrictionFlagHTML(iso) {
+  const hits = restrictionsAffecting(iso);
+  if (!hits.length) return '';
+  const rows = hits.slice(0, 3).map(h => {
+    const r = h.r;
+    return `<div class="fs-cflag-row"><span class="fs-cflag-dot">⚠</span>`
+      + `<span><b>${r.country || _nameFromISO(r.iso)}</b> ${r.measure || 'export restriction'} on <b>${r.commodity}</b> — `
+      + `<span style="color:#c44b3c">${h.share_pct}% of ${String(r.commodity).toLowerCase()} imports</span> `
+      + `${restrictionStatusBadge(r.status)} `
+      + `<a href="${r.source_url}" target="_blank" rel="noopener" class="fs-cflag-src">source ↗</a></span></div>`;
+  }).join('');
+  return `<div class="fs-cflag"><div class="fs-cflag-cap">Active export restrictions affecting this country</div>${rows}</div>`;
+}
+
 function commodityDestinations(c, commodity) {
   if (!c) return [];
   const heritage = () => (c.exportDests || []).map(name => ({
@@ -24169,6 +24211,7 @@ function renderCountryTab() {
         <div class="ct-hero-name">${c.name}</div>
         ${fsVerdictLine(c, riskLabel)}
         ${fsDriverBars(ctComp9, compLabels, compWeights, riskColor, 3)}
+        ${countryRestrictionFlagHTML(c.iso)}
       </div>
       <div class="ct-hero-score" style="--accent:${col}">
         <div class="ct-hero-score-num" style="color:${col}">${c.fdrs}</div>
