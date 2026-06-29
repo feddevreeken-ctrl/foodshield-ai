@@ -7228,6 +7228,7 @@ body::before {
 .fs-bandscale-ends{display:flex;justify-content:space-between;font-family:'Geist Mono',monospace;font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--t-meta);margin-top:3px;}
 .fs-caret{font-size:10px;margin-left:3px;vertical-align:1px;}
 .cmd-card-topbar .fs-pricemove{font-family:'Geist Mono',monospace;font-size:9.5px;font-weight:600;letter-spacing:.02em;margin-right:auto;display:inline-flex;align-items:center;gap:2px;}
+.cmd-card-topbar .cmd-card-restr{font-family:'Geist Mono',monospace;font-size:8px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#c44b3c;border:1px solid rgba(196,75,60,0.4);border-radius:3px;padding:1px 5px;margin-right:6px;}
 .fs-tentry{margin-top:9px;display:flex;flex-direction:column;gap:3px;}
 .fs-tentry-row{font-size:10.5px;color:var(--t2);line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .fs-tentry-row .fs-tentry-pct{float:right;color:var(--t-meta);font-family:'Geist Mono',monospace;}
@@ -22469,6 +22470,17 @@ function restrictionsAffecting(iso) {
 }
 
 // Country-profile flag: SOURCED restrictions hitting the selected country. Empty -> ''.
+// Commodity-card badge: active export restriction(s) on this commodity. Empty -> ''.
+function commodityRestrictionBadge(commodityKey) {
+  const list = (typeof LIVE !== 'undefined' && Array.isArray(LIVE.restrictions)) ? LIVE.restrictions : [];
+  if (!list.length || !commodityKey) return '';
+  const hits = list.filter(r => r && r.source_url && r.commodity
+    && String(r.commodity).toLowerCase() === String(commodityKey).toLowerCase());
+  if (!hits.length) return '';
+  const who = hits.slice(0, 2).map(r => r.country || _nameFromISO(r.iso)).filter(Boolean).join(', ');
+  return `<span class="cmd-card-restr" title="Active export restriction on ${commodityKey} (${who}). See Trade Flows for who's exposed.">⚠ Restricted · ${who}</span>`;
+}
+
 function countryRestrictionFlagHTML(iso) {
   const hits = restrictionsAffecting(iso);
   if (!hits.length) return '';
@@ -33673,7 +33685,7 @@ function renderCommodityGrid() {
       : `<span class="cmd-card-prov-badge cmd-prov-modeled" title="${cm.obsPct!=null?cm.obsPct+'% observed; remainder exporter-mirror/modeled with basis stated.':'Route shares modeled from top exporters.'}">${cm.obsPct!=null?cm.obsPct+'% observed':'Modeled route'}</span>`;
     return `
     <div class="cmd-card" onclick="showCommodityDetail('${cm.key}')" style="--cmd-family-color:${fam.color}" role="button" tabindex="0" aria-label="View details for ${cm.key}" onkeydown="_kbdClick(event)">
-      <div class="cmd-card-topbar">${(!isNaN(chgNum) && chgNum !== 0 && chgDir) ? `<span class="fs-pricemove" style="color:${chgDir>0?'#c44b3c':'#6ba36b'}" title="World Bank Pink Sheet price move, month-on-month — rising prices raise import-cost stress">${chgDir>0?'▲':'▼'} ${Math.abs(chgNum).toFixed(1)}% MoM</span>` : ''}${alertPill}</div>
+      <div class="cmd-card-topbar">${(typeof commodityRestrictionBadge === 'function') ? commodityRestrictionBadge(cm.key) : ''}${(!isNaN(chgNum) && chgNum !== 0 && chgDir) ? `<span class="fs-pricemove" style="color:${chgDir>0?'#c44b3c':'#6ba36b'}" title="World Bank Pink Sheet price move, month-on-month — rising prices raise import-cost stress">${chgDir>0?'▲':'▼'} ${Math.abs(chgNum).toFixed(1)}% MoM</span>` : ''}${alertPill}</div>
       <div class="cmd-card-name-row">
         <span class="cmd-card-name">${cm.key}</span>
         <span class="cmd-card-cat">${cm.cat || ''}</span>
