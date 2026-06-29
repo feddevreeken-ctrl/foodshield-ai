@@ -22,7 +22,8 @@ def fdrs_v2(cv, weights):
     c0 = cv[0] if len(cv) > 0 and cv[0] is not None else 0
     c7 = cv[7] if len(cv) > 7 and cv[7] is not None else 0
     amp = min(6 * (c0 / 100) * (c7 / 100), 6)
-    return max(0, min(100, round(base + amp)))
+    # half-up to match JS Math.round (index.html::fdrsV2) and build_countries_dataset.py::_fdrs_v2
+    return int(min(100, max(0, base + amp)) + 0.5)
 
 def main():
     fx = json.load(open(FIX))

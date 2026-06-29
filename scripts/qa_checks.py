@@ -541,6 +541,24 @@ def check_crisis_honesty(rep):
 # Driver
 # ─────────────────────────────────────────────────────────────────────────────
 
+def check_formula_integrity(rep):
+    """Cross-implementation formula gate (delegates to audit_formulas.py): FDRS weights
+    agree across the 3 copies, the amplifier expression matches, FOOD_WEIGHT covers every
+    scenario commodity, and no flow-based scenario is a dead shock vs the trade atlas."""
+    import subprocess
+    script = Path(__file__).with_name("audit_formulas.py")
+    if not script.exists():
+        rep.warn("formula-integrity", "audit_formulas.py not found (skipped)")
+        return
+    r = subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
+    if r.returncode == 0:
+        rep.pass_("formula-integrity",
+                  "FDRS weights/amplifier consistent across builder+runtime, FOOD_WEIGHT complete, no dead shocks")
+    else:
+        bad = [ln.strip() for ln in (r.stdout + r.stderr).splitlines() if "FAIL" in ln or ln.strip().startswith("!!")]
+        rep.fail("formula-integrity", "; ".join(bad) or "audit_formulas.py reported a failure")
+
+
 def main():
     print("=== QA content checks (runs after validate_data.py) ===")
     rep = Report()
@@ -553,6 +571,7 @@ def main():
         ("5. Provenance ratio guard",         check_provenance_ratio),
         ("6. US-state semantic test",         check_us_states),
         ("7. Crisis-feed honesty",            check_crisis_honesty),
+        ("8. Formula integrity (FDRS/scenarios)", check_formula_integrity),
     ]
 
     for title, fn in checks:

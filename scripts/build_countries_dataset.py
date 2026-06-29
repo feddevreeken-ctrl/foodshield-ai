@@ -279,7 +279,9 @@ def _fdrs_v2(cv):
     c0 = cv[0] if len(cv) > 0 and cv[0] is not None else 0
     c7 = cv[7] if len(cv) > 7 and cv[7] is not None else 0
     amp = min(6 * (c0 / 100) * (c7 / 100), 6)
-    return int(round(_clip(base + amp)))
+    # half-up rounding to match JS Math.round in index.html::fdrsV2 (was int(round(...)),
+    # i.e. banker's rounding, which could disagree with the client by 1 on exact .5 values).
+    return int(_clip(base + amp) + 0.5)
 
 
 def main():
