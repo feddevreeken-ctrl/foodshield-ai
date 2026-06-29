@@ -22353,6 +22353,38 @@ function commoditySuppliers(c, commodity) {
   return heritage();
 }
 
+// ── Trade-restriction exposure (v40) ────────────────────────────────────────
+// Given "exporter ISO restricts `commodity` for export", return the importers most
+// EXPOSED, computed live from the SAME sourced supplier mix the atlas already uses
+// (commoditySuppliers). Pure + deterministic: it only re-reads existing flow data,
+// invents nothing. The "restriction" is just a query input; the exposure is real.
+// Used by the trade-restriction monitor (data/trade_restrictions.json) to turn a
+// cited restriction flag into "here is who it actually hits, ranked by fragility".
+function restrictionExposure(exporterISO, commodity, n) {
+  n = n || 5;
+  if (!exporterISO || !commodity || typeof COUNTRIES === 'undefined' || !Array.isArray(COUNTRIES)) return [];
+  const exName = (typeof _nameFromISO === 'function') ? _nameFromISO(exporterISO) : '';
+  const out = [];
+  for (const imp of COUNTRIES) {
+    if (!imp || imp.iso === exporterISO) continue;
+    let sup;
+    try { sup = commoditySuppliers(imp, commodity); } catch (e) { continue; }
+    if (!Array.isArray(sup) || !sup.length) continue;
+    const hit = sup.find(s =>
+      (s.iso && s.iso === exporterISO) || (exName && s.name && s.name === exName));
+    if (!hit || !(hit.pct > 0)) continue;
+    out.push({
+      iso: imp.iso,
+      name: imp.name,
+      share_pct: Math.round(hit.pct),
+      fdrs: (typeof imp.fdrs === 'number') ? imp.fdrs : null,
+    });
+  }
+  // Rank by exposure × fragility (high share into a high-FDRS importer = worst).
+  out.sort((a, b) => (b.share_pct * (b.fdrs || 0)) - (a.share_pct * (a.fdrs || 0)));
+  return out.slice(0, n);
+}
+
 function commodityDestinations(c, commodity) {
   if (!c) return [];
   const heritage = () => (c.exportDests || []).map(name => ({
