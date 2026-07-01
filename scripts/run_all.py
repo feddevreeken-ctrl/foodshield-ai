@@ -57,6 +57,7 @@ import refresh_cckp
 import refresh_fews
 import refresh_trade_restrictions
 import build_countries_dataset
+import snapshot_fdrs
 import build_nowcast
 import build_source_manifest
 import build_daily_summary
@@ -102,6 +103,9 @@ STEPS = [
     # who's exposed live from the atlas; restrictions must be sourced, never fabricated.
     ("Trade restrictions",     refresh_trade_restrictions.main, "trade_restrictions.json"),
     ("Countries dataset",      build_countries_dataset.main,    "countries.json"),
+    # v40 — daily point-in-time snapshot of the structural FDRS (idempotent/preserve-safe);
+    # builds the immutable history the hindcast/validation needs. Reads the fresh countries.json.
+    ("FDRS snapshot",          snapshot_fdrs.main,              "fdrs_history.json"),
     # v23 — re-verify trade fields (suppliers/supPct/imports/exports) from the
     # Comtrade pulls, patching countries.json AFTER it's built. Must run after
     # "Countries dataset". build_fields.build() is the entrypoint.
