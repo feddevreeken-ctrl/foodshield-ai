@@ -7246,6 +7246,34 @@ body::before {
 .fs-spark-tbl td{padding:1.5px 8px 1.5px 0;color:var(--t2);border-bottom:1px solid var(--b1);}
 .fs-spark-tbl tbody{display:block;max-height:170px;overflow-y:auto;}
 .fs-spark-tbl thead,.fs-spark-tbl tbody tr{display:table;width:100%;table-layout:fixed;}
+/* Ask FoodShield — deterministic data explainer (no LLM, no hallucination) */
+#fs-ask-btn{display:inline-flex;align-items:center;gap:5px;background:var(--bg2);border:1px solid var(--b2);color:var(--t2);font-size:10px;font-weight:600;letter-spacing:.02em;padding:5px 10px;border-radius:6px;cursor:pointer;font-family:inherit;}
+#fs-ask-btn:hover{color:var(--t1);border-color:var(--accent);}
+#fs-ask-btn kbd{font-family:'Geist Mono',monospace;font-size:9px;background:var(--bg1);border:1px solid var(--b1);border-radius:3px;padding:0 3px;color:var(--t3);}
+#fs-ask-overlay{position:fixed;inset:0;z-index:3000;background:rgba(6,7,10,.6);backdrop-filter:blur(3px);display:none;align-items:flex-start;justify-content:center;}
+#fs-ask-overlay.open{display:flex;}
+#fs-ask-modal{margin-top:9vh;width:min(640px,92vw);background:var(--bg1);border:1px solid var(--b2);border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.5);overflow:hidden;}
+#fs-ask-inbar{display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:1px solid var(--b1);}
+#fs-ask-input{flex:1;background:transparent;border:none;outline:none;color:var(--t1);font-size:15px;font-family:inherit;}
+#fs-ask-input::placeholder{color:var(--t3);}
+#fs-ask-esc{cursor:pointer;color:var(--t3);font-size:10px;font-family:'Geist Mono',monospace;border:1px solid var(--b1);border-radius:4px;padding:2px 6px;}
+#fs-ask-body{max-height:56vh;overflow-y:auto;padding:6px 16px 16px;}
+.fs-ask-hint{font-size:11.5px;color:var(--t3);line-height:1.7;padding:8px 0;}
+.fs-ask-hint b{color:var(--t2);font-weight:600;}
+.fs-ask-chip{display:inline-block;font-family:'Geist Mono',monospace;font-size:10px;color:var(--accent);background:var(--bg2);border:1px solid var(--b1);border-radius:4px;padding:3px 8px;margin:3px 5px 3px 0;cursor:pointer;}
+.fs-ask-chip:hover{border-color:var(--accent);}
+.fs-ask-ans{padding:6px 0;}
+.fs-ask-ans h4{font-size:15px;color:var(--t1);margin:8px 0 3px;display:flex;align-items:baseline;gap:8px;font-weight:600;}
+.fs-ask-ans .fs-ask-score{font-family:'Geist Mono',monospace;font-weight:700;}
+.fs-ask-ans p{font-size:12.5px;color:var(--t2);line-height:1.6;margin:6px 0;}
+.fs-ask-row{display:flex;align-items:center;gap:8px;font-size:12px;margin:4px 0;}
+.fs-ask-row .fs-ask-lab{width:150px;color:var(--t2);flex:none;}
+.fs-ask-row .fs-ask-track{flex:1;height:5px;background:var(--bg3);border-radius:3px;overflow:hidden;}
+.fs-ask-row .fs-ask-fill{height:100%;border-radius:3px;}
+.fs-ask-row .fs-ask-num{width:62px;text-align:right;font-family:'Geist Mono',monospace;color:var(--t3);font-size:10.5px;flex:none;}
+.fs-ask-foot{font-size:10px;color:var(--t3);border-top:1px solid var(--b1);margin-top:10px;padding-top:8px;line-height:1.5;}
+.fs-ask-open{display:inline-block;margin-top:8px;margin-right:6px;font-size:11px;font-weight:600;color:var(--accent);cursor:pointer;border:1px solid var(--b2);border-radius:5px;padding:4px 10px;}
+.fs-ask-open:hover{border-color:var(--accent);}
 .cmd-card-topbar .fs-pricemove{font-family:'Geist Mono',monospace;font-size:9.5px;font-weight:600;letter-spacing:.02em;margin-right:auto;display:inline-flex;align-items:center;gap:2px;}
 .cmd-card-topbar .cmd-card-restr{font-family:'Geist Mono',monospace;font-size:8px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#c44b3c;border:1px solid rgba(196,75,60,0.4);border-radius:3px;padding:1px 5px;margin-right:6px;}
 .fs-tentry{margin-top:9px;display:flex;flex-direction:column;gap:3px;}
@@ -7347,6 +7375,23 @@ body::before {
     <div class="status-pill" id="live-status-pill" title="Click for per-source status." style="cursor:pointer;padding:4px 9px;font-size:10px;" onclick="showLiveStatusDialog()">
       <div class="live-dot" style="width:6px;height:6px;"></div>
       <span class="status-label" id="live-status-label" style="font-size:10px;letter-spacing:.04em;">…</span>
+    </div>
+
+    <button id="fs-ask-btn" onclick="fsAskOpen()" title="Ask a plain-language question about the data (press /)">
+      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/><path d="M9 8.6a2 2 0 0 1 3.4 1.3c0 1.3-1.6 1.5-1.6 2.6"/><path d="M10.8 15h.01"/></svg>
+      Ask <kbd>/</kbd>
+    </button>
+
+    <!-- Ask FoodShield — deterministic explainer overlay (position:fixed) -->
+    <div id="fs-ask-overlay" onclick="if(event.target===this)fsAskClose()">
+      <div id="fs-ask-modal" role="dialog" aria-label="Ask FoodShield">
+        <div id="fs-ask-inbar">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="var(--t3)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <input id="fs-ask-input" placeholder="Ask about a country… e.g. why is Egypt's score high?" oninput="fsAskRun()" autocomplete="off" spellcheck="false">
+          <span id="fs-ask-esc" onclick="fsAskClose()">esc</span>
+        </div>
+        <div id="fs-ask-body"></div>
+      </div>
     </div>
 
     <button class="fs-filter-btn" id="filter-btn" onclick="toggleFilterPanel(event)" aria-haspopup="true" aria-expanded="false">
@@ -24253,6 +24298,118 @@ function fsToggleSparkHistory(el){
   const more = el.querySelector('.fs-spark-more');
   if (more) more.textContent = open ? '▸ audit' : '▾ audit';
 }
+
+// ── Ask FoodShield — deterministic data explainer ────────────────────────────
+// A plain-language query box that answers from LIVE page data by parsing intent
+// and templating real figures. NO LLM: it cannot invent a number, so it can't
+// hallucinate — every value traces to COUNTRIES/commoditySuppliers, on brand with
+// "synthesis, not fabrication". Handles: score explanation, supplier lookup, compare.
+const FS_ASK_LABELS = ['Staple Import Dep.','Supplier Concentration','Production Trend','Food Inflation','Climate Volatility','Conflict / Logistics','Supply-Chain Exposure','Economic Access','Grain Reserve Buffer'];
+const FS_ASK_WEIGHTS = [0.23, 0.16, 0.11, 0.09, 0.09, 0.08, 0.06, 0.12, 0.06];
+const FS_ASK_COMMODITIES = {wheat:'Wheat', rice:'Rice', maize:'Maize', corn:'Maize', soy:'Soybeans', soybean:'Soybeans', soybeans:'Soybeans', 'palm oil':'Palm oil', palm:'Palm oil', sugar:'Sugar', beef:'beef', coffee:'Coffee', barley:'Barley', sorghum:'Sorghum', poultry:'poultry', pork:'pork', dairy:'dairy'};
+
+function fsAskOpen(){
+  const o = document.getElementById('fs-ask-overlay'); if (!o) return;
+  o.classList.add('open');
+  const i = document.getElementById('fs-ask-input'); if (i){ i.value=''; }
+  fsAskRun();
+  setTimeout(() => { if (i) i.focus(); }, 30);
+}
+function fsAskClose(){ const o = document.getElementById('fs-ask-overlay'); if (o) o.classList.remove('open'); }
+function fsAskSet(q){ const i = document.getElementById('fs-ask-input'); if (!i) return; i.value = q; i.focus(); fsAskRun(); }
+
+function fsAskFindCountries(q, qRaw){
+  const hits = [], seen = new Set();
+  // Consume matched spans (longest name first) so a shorter name that is a substring of a
+  // longer one — "Niger" inside "Nigeria" — can't double-match. Keep query order via position.
+  let work = ' ' + q + ' ';
+  const byName = (typeof COUNTRIES !== 'undefined' ? [...COUNTRIES] : []).filter(c => c && c.name && !c.iso.startsWith('US-'))
+    .sort((a, b) => b.name.length - a.name.length);
+  for (const c of byName){
+    const n = c.name.toLowerCase(), idx = work.indexOf(n);
+    if (idx !== -1 && !seen.has(c.iso)){ hits.push({ c, pos: idx }); seen.add(c.iso); work = work.slice(0, idx) + ' '.repeat(n.length) + work.slice(idx + n.length); }
+  }
+  // ISO codes: match only tokens the user actually typed in UPPERCASE (raw input), so common
+  // words ("can", "the") don't get read as CAN/THE.
+  for (const m of ((qRaw || '').match(/\b[A-Z]{3}\b/g) || [])){ const c = byISO(m); if (c && !seen.has(c.iso)){ hits.push({ c, pos: 1000 + (qRaw.indexOf(m)) }); seen.add(c.iso); } }
+  hits.sort((a, b) => a.pos - b.pos);
+  return hits.map(h => h.c);
+}
+function fsAskFindCommodity(q){
+  for (const k of Object.keys(FS_ASK_COMMODITIES).sort((a, b) => b.length - a.length)){ if (q.includes(k)) return FS_ASK_COMMODITIES[k]; }
+  return null;
+}
+function fsAskHint(){
+  const ex = ["Why is Egypt's score high?", "Who supplies Egypt wheat?", "Compare Nigeria and Ethiopia", "Sudan"];
+  return `<div class="fs-ask-hint"><b>Ask about the data.</b> Every answer is templated from live figures on this page — nothing is generated, so there are no hallucinated numbers. Try:<div style="margin-top:8px">`
+    + ex.map(x => `<span class="fs-ask-chip" onclick="fsAskSet(this.textContent)">${x}</span>`).join('') + `</div></div>`;
+}
+function fsAskRun(){
+  const input = document.getElementById('fs-ask-input'); const body = document.getElementById('fs-ask-body');
+  if (!body) return;
+  const qRaw = ((input && input.value) || '').trim();
+  const q = qRaw.toLowerCase();
+  if (!q){ body.innerHTML = fsAskHint(); return; }
+  const countries = fsAskFindCountries(q, qRaw);
+  const commodity = fsAskFindCommodity(q);
+  const isCompare  = /\b(compare|versus|vs\.?|against)\b/.test(q) && countries.length >= 2;
+  const isSupplier = /\b(suppl|provid|import|buy|sourc|sell)/.test(q) && countries.length >= 1;
+  if (isCompare)        body.innerHTML = fsAskCompare(countries[0], countries[1]);
+  else if (isSupplier)  body.innerHTML = fsAskSuppliers(countries[0], commodity);
+  else if (countries.length) body.innerHTML = fsAskExplain(countries[0]);
+  else                  body.innerHTML = `<div class="fs-ask-hint">No country matched “${q.replace(/</g,'')}”. Use a country name or 3-letter ISO code.</div>` + fsAskHint();
+}
+function fsAskExplain(c){
+  const cv = c.c || [];
+  const drivers = cv.map((v, i) => ({ lab: FS_ASK_LABELS[i], v, w: FS_ASK_WEIGHTS[i], contrib: (v == null ? 0 : v) * FS_ASK_WEIGHTS[i] }))
+    .filter(d => d.v != null).sort((a, b) => b.contrib - a.contrib).slice(0, 3);
+  const col = riskColor(c.fdrs), bnd = riskLabel(c.fdrs);
+  const amp = (typeof window.fdrsV2Amp === 'function') ? window.fdrsV2Amp(cv) : null;
+  const sup = (c.suppliers && c.suppliers[0]) || null, supP = (c.supPct && c.supPct[0]) || null;
+  const spark = (typeof fsFdrsSparkline === 'function') ? fsFdrsSparkline(c.iso) : '';
+  let h = `<div class="fs-ask-ans"><h4>${c.name} <span class="fs-ask-score" style="color:${col}">FDRS ${c.fdrs}</span> <span style="font-size:11px;color:${col}">${bnd}</span></h4>`;
+  h += `<p>${c.name}'s food-disruption risk is <b>${c.fdrs}/100</b> (${bnd}). The score is a weighted composite of 9 structural components; the largest contributors are:</p>`;
+  drivers.forEach(d => { const dc = riskColor(d.v); h += `<div class="fs-ask-row"><span class="fs-ask-lab">${d.lab}</span><span class="fs-ask-track"><span class="fs-ask-fill" style="width:${Math.min(d.v,100)}%;background:${dc}"></span></span><span class="fs-ask-num">${Math.round(d.v)} · w${d.w}</span></div>`; });
+  if (amp != null && amp > 0.05) h += `<p style="font-size:11.5px;color:var(--t3)">Plus a +${amp.toFixed(1)} import×access amplifier — high import dependence and constrained economic access compound each other.</p>`;
+  if (sup) h += `<p>Top staple supplier: <b>${_nameFromISO(sup) || sup}</b>${supP ? ` (~${Math.round(supP)}% of tracked staple imports)` : ''}.</p>`;
+  if (spark) h += spark;
+  h += `<div class="fs-ask-open" onclick="fsAskClose();openPanel(byISO('${c.iso}'))">Open full ${c.name} profile →</div>`;
+  h += `<div class="fs-ask-foot">Every figure above is read live from this page's data — templated, not generated. FDRS is a structural synthesis, not a forecast.</div></div>`;
+  return h;
+}
+function fsAskSuppliers(c, commodity){
+  let sup = [];
+  try { sup = commoditySuppliers(c, commodity) || []; } catch (e) {}
+  if (!sup.length && c.suppliers && c.suppliers.length){
+    sup = c.suppliers.map((s, i) => ({ name: _nameFromISO(s) || s, pct: (c.supPct && c.supPct[i]) || 0 }));
+  }
+  const lbl = commodity ? commodity.toLowerCase() : 'staple foods';
+  let h = `<div class="fs-ask-ans"><h4>Who supplies ${c.name}${commodity ? `'s ${lbl}` : ''}?</h4>`;
+  if (!sup.length){ h += `<p>No cited supplier flows for ${c.name}${commodity ? ` in ${lbl}` : ''} in the current data.</p>`; }
+  else sup.slice(0, 6).forEach(s => { const p = Math.round(s.pct || 0); h += `<div class="fs-ask-row"><span class="fs-ask-lab">${s.name}</span><span class="fs-ask-track"><span class="fs-ask-fill" style="width:${Math.min(p,100)}%;background:${p>=50?'#c44b3c':'#d27a3e'}"></span></span><span class="fs-ask-num">${p ? p + '%' : '—'}</span></div>`; });
+  h += `<div class="fs-ask-open" onclick="fsAskClose();openPanel(byISO('${c.iso}'))">Open full ${c.name} profile →</div>`;
+  h += `<div class="fs-ask-foot">Supplier shares from UN Comtrade / curated trade flows where available.</div></div>`;
+  return h;
+}
+function fsAskCompare(a, b){
+  const head = c => `<h4>${c.name} <span class="fs-ask-score" style="color:${riskColor(c.fdrs)}">FDRS ${c.fdrs}</span> <span style="font-size:11px;color:${riskColor(c.fdrs)}">${riskLabel(c.fdrs)}</span></h4>`;
+  const topDriver = c => { const cv = c.c || []; let bi = -1, bv = -1; cv.forEach((v, i) => { if (v != null && v * FS_ASK_WEIGHTS[i] > bv){ bv = v * FS_ASK_WEIGHTS[i]; bi = i; } }); return bi >= 0 ? FS_ASK_LABELS[bi] : '—'; };
+  const d = a.fdrs - b.fdrs;
+  const verdict = d === 0 ? 'a tie' : (d > 0 ? `${Math.abs(d)} points higher risk for ${a.name}` : `${Math.abs(d)} points higher risk for ${b.name}`);
+  let h = `<div class="fs-ask-ans">${head(a)}${head(b)}`;
+  h += `<p><b>${a.name}</b> ${a.fdrs} vs <b>${b.name}</b> ${b.fdrs} — ${verdict}. Leading driver: ${a.name} → ${topDriver(a)}; ${b.name} → ${topDriver(b)}.</p>`;
+  h += `<div class="fs-ask-open" onclick="fsAskClose();openPanel(byISO('${a.iso}'))">Open ${a.name} →</div><div class="fs-ask-open" onclick="fsAskClose();openPanel(byISO('${b.iso}'))">Open ${b.name} →</div>`;
+  h += `<div class="fs-ask-foot">Structural synthesis from live data; not a forecast.</div></div>`;
+  return h;
+}
+document.addEventListener('keydown', e => {
+  const o = document.getElementById('fs-ask-overlay'); if (!o) return;
+  if (e.key === 'Escape' && o.classList.contains('open')) { fsAskClose(); return; }
+  if (e.key === '/' && !o.classList.contains('open')){
+    const t = e.target, tag = ((t && t.tagName) || '').toLowerCase();
+    if (tag !== 'input' && tag !== 'textarea' && tag !== 'select' && !(t && t.isContentEditable)){ e.preventDefault(); fsAskOpen(); }
+  }
+});
 // Compact FDRS trend chip for dense rank rows — net change over the recorded
 // history (first vs last day). '' if <2 days on record. Shares LIVE.fdrs_history
 // with the fuller fsFdrsSparkline on the country profile.
