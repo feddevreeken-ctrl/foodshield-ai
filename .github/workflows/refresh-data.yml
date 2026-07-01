@@ -90,6 +90,13 @@ jobs:
           cd scripts
           python test_fdrs_v2.py
 
+      # v40 — JS formula parity gate. test_fdrs_v2.py above tests a PYTHON reimplementation
+      # of the formula; this runs the ACTUAL shipped `fdrsV2` extracted from index.html
+      # against the same pinned fixtures, so the number users see in the browser can't
+      # silently drift from the fixtures. Node is preinstalled on ubuntu-latest; no deps.
+      - name: FDRS JS-parity gate
+        run: node scripts/test_fdrs_v2_js.mjs
+
       # v23/v35 — content-level QA gate (dup-ISO, coverage floors, freshness SLA,
       # provenance-ratio guard, US-state semantic test, crisis-feed honesty).
       # v35: now BLOCKING — hard FAILs stop the commit (freshness issues are WARNs
@@ -160,3 +167,28 @@ jobs:
           fi
           echo "Triggering Vercel deploy hook…"
           curl -fsS -X POST "$HOOK" && echo "Deploy triggered." || echo "::warning::Deploy hook call failed."
+
+      # v40 — dead-man's-switch + stale-data alert. Fixes the "green-but-silently-stale"
+      # blind spot: a run can commit fine while a core crisis feed quietly rots, and a solo
+      # maintainer never hears about it. This step pings a healthcheck ONLY on a fully
+      # successful run — the SUCCESS url if the core feeds (WFP/IPC/FEWS/ReliefWeb) are
+      # fresh, the /fail url if any is stale (so green-but-stale still alerts). If an
+      # earlier step failed, this step is SKIPPED (if: success()) → no ping → the
+      # healthcheck service alerts on the missed check-in. Freshness never blocks the
+      # commit (honest degradation preserved). Setup: create a check at healthchecks.io
+      # (or Cronitor), store its ping URL as the repo secret HEALTHCHECK_URL. Skips if absent.
+      - name: Freshness heartbeat (dead-man's-switch)
+        if: success()
+        env:
+          HC: ${{ secrets.HEALTHCHECK_URL }}
+        run: |
+          if [ -z "$HC" ]; then
+            echo "::warning::HEALTHCHECK_URL secret not set — no stale-data / dead-man's-switch alerting. Add a healthchecks.io URL as HEALTHCHECK_URL."
+            exit 0
+          fi
+          cd scripts
+          if python3 check_core_freshness.py; then
+            curl -fsS "$HC" >/dev/null && echo "Heartbeat: healthy ✓"
+          else
+            curl -fsS "${HC%/}/fail" >/dev/null && echo "::warning::Core feeds stale — pinged healthcheck /fail (owner alerted)."
+          fi

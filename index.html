@@ -93,8 +93,8 @@
       media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;500;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap"></noscript>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js" integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous"></script>
 <!-- v20.34 — Chart.js is only needed once the user opens a country panel or
      the commodity/score tab. Removed the eager <script> tag from the critical
      path and replaced it with on-demand loadChartJS() (defined below) which
@@ -31024,6 +31024,16 @@ async function loadDisturbanceData() {
   // Sort: critical first, then high, then by date
   const sevOrder = { critical:0, high:1, medium:2, low:3 };
   events.sort((a,b) => (sevOrder[a.severity]||3) - (sevOrder[b.severity]||3) || (b.date||'').localeCompare(a.date||''));
+
+  // v40 security — HTML-escape the free-text feed fields (country, source) ONCE at the
+  // source. These come from external feeds (GDACS/ReliefWeb/WFP/IPC) and were interpolated
+  // raw into innerHTML at ~11 render points. title/detail are already escaped at render via
+  // _escFeed; country/source are never wrapped there, so escaping them here is safe (no
+  // double-escape) and closes the latent stored-XSS path in one place.
+  events.forEach(e => {
+    if (e.country != null) e.country = _escFeed(e.country);
+    if (e.source  != null) e.source  = _escFeed(e.source);
+  });
 
   disturbanceEvents = events;
   // v34 — if BOTH runtime feeds failed (offline / blocked), don't lock the 10-min
