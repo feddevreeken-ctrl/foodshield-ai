@@ -7227,6 +7227,9 @@ body::before {
 .fs-bandscale-mark{position:absolute;top:-3px;width:2px;height:12px;background:var(--t1);box-shadow:0 0 0 1px var(--bg0);transform:translateX(-1px);}
 .fs-bandscale-ends{display:flex;justify-content:space-between;font-family:'Geist Mono',monospace;font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--t-meta);margin-top:3px;}
 .fs-caret{font-size:10px;margin-left:3px;vertical-align:1px;}
+.fs-spark{display:flex;align-items:center;gap:8px;margin-top:9px;}
+.fs-spark svg{flex:none;}
+.fs-spark-lbl{font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--t-meta);}
 .cmd-card-topbar .fs-pricemove{font-family:'Geist Mono',monospace;font-size:9.5px;font-weight:600;letter-spacing:.02em;margin-right:auto;display:inline-flex;align-items:center;gap:2px;}
 .cmd-card-topbar .cmd-card-restr{font-family:'Geist Mono',monospace;font-size:8px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#c44b3c;border:1px solid rgba(196,75,60,0.4);border-radius:3px;padding:1px 5px;margin-right:6px;}
 .fs-tentry{margin-top:9px;display:flex;flex-direction:column;gap:3px;}
@@ -14830,6 +14833,14 @@ async function loadLiveData() {
     const trEnv = await _fetchData('trade_restrictions');
     LIVE.restrictions = (trEnv && (trEnv.data || trEnv)) || [];
   } catch (e) { LIVE.restrictions = []; }
+
+  // v40 — point-in-time FDRS history (data/fdrs_history.json): {ISO:{date:{fdrs,f2030}}}.
+  // Real daily structural-score history; surfaced as a trajectory sparkline on the country
+  // profile so "the score is tracked over time, reproducible" is tangible, not asserted.
+  try {
+    const fhEnv = await _fetchData('fdrs_history');
+    LIVE.fdrs_history = (fhEnv && (fhEnv.data || fhEnv)) || {};
+  } catch (e) { LIVE.fdrs_history = {}; }
 
   // v20.29 — daily summary headline (build_daily_summary.py output)
   try {
@@ -24150,6 +24161,29 @@ function populateSelects() {
 
 // ── Score-hero deepening helpers (Plan 1, v40). Pure functions; unit-tested.
 //    Deterministic + source-grounded — they assemble existing fields, never invent. ──
+// Country FDRS trajectory sparkline from the real point-in-time history
+// (LIVE.fdrs_history[iso] = {date:{fdrs,f2030}}). Renders nothing if <2 days on record.
+function fsFdrsSparkline(iso){
+  const h = (typeof LIVE !== 'undefined' && LIVE.fdrs_history) ? LIVE.fdrs_history[iso] : null;
+  if (!h) return '';
+  const pts = Object.keys(h).sort().map(d => ({ d, v: h[d] && h[d].fdrs })).filter(p => typeof p.v === 'number');
+  if (pts.length < 2) return '';
+  const W = 104, H = 26, pad = 3;
+  const vs = pts.map(p => p.v), min = Math.min(...vs), max = Math.max(...vs), span = (max - min) || 1;
+  const X = i => pad + i * (W - 2 * pad) / (pts.length - 1);
+  const Y = v => H - pad - (v - min) / span * (H - 2 * pad);
+  const path = pts.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(p.v).toFixed(1)}`).join(' ');
+  const first = vs[0], last = vs[vs.length - 1], delta = last - first;
+  const col = delta > 0 ? '#c44b3c' : delta < 0 ? '#6ba36b' : 'var(--t-meta)';
+  const arrow = delta > 0 ? '▲' : delta < 0 ? '▼' : '▬';
+  return `<div class="fs-spark" title="Structural FDRS over ${pts.length} recorded days (${pts[0].d} → ${pts[pts.length-1].d}) — real daily point-in-time snapshots, reproducible.">
+    <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">
+      <path d="${path}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${X(pts.length-1).toFixed(1)}" cy="${Y(last).toFixed(1)}" r="2.2" fill="${col}"/>
+    </svg>
+    <span class="fs-spark-lbl">${pts.length}-day trend <span style="color:${col}">${arrow} ${delta>0?'+':''}${delta}</span></span>
+  </div>`;
+}
 function fsBandScale(value){
   const v = Math.max(0, Math.min(100, Number(value)||0));
   return `<div class="fs-bandscale"><div class="fs-bandscale-track">`
@@ -24268,6 +24302,7 @@ function renderCountryTab() {
           <div style="font-family:'Geist Mono',monospace;font-size:9px;color:var(--t3);background:var(--bg1);border:1px solid var(--b1);padding:2px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;margin-top:4px;display:inline-block;" title="The 2030 number is a curated heritage baseline plus a small modeled live overlay. It is not a back-tested forecast.">CURATED baseline + MODELED live overlay</div>
           ${(typeof fdrsPeerBlockHTML === 'function') ? fdrsPeerBlockHTML(c) : ''}
           ${fsBandScale(c.fdrs)}
+          ${fsFdrsSparkline(c.iso)}
         </div>
       </div>
     </div>
