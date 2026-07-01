@@ -107,6 +107,43 @@ def main():
         print(f"  {impact:.3f}  c{idx} {name:<22} via {feed}  [{ready}]")
     print("\nEach upgrade recomputes the score → validate against test_fdrs_v2 fixtures and "
           "review rank shifts (scripts/report_fdrs_rank_diffs.py) before shipping.")
+    _semantic_caveats()
+
+
+def _semantic_caveats():
+    """A re-sourcing is NOT a mechanical swap. Demonstrated with real data: the heritage
+    supplier_conc component is NOT raw supplier concentration — it is contextualised by
+    import-dependency, so exporters with concentrated (but irrelevant) import shares are
+    correctly scored low. Swapping in raw concentration would inflate their risk."""
+    import statistics as st
+    cs = json.loads((DATA / "countries.json").read_text())["data"]["countries"]
+    examples, divs = [], []
+    for iso, r in cs.items():
+        if iso.startswith("US-"):
+            continue
+        c = r.get("c", {}).get("value") if isinstance(r.get("c"), dict) else None
+        sp = r.get("supPct", {}).get("value") if isinstance(r.get("supPct"), dict) else None
+        if not (isinstance(c, list) and len(c) > 1 and isinstance(c[1], (int, float))):
+            continue
+        if not (isinstance(sp, list) and sp and isinstance(sp[0], (int, float))):
+            continue
+        divs.append(abs(c[1] - sp[0]))
+        # exporters whose heritage conc is far BELOW their raw top-1 share
+        if sp[0] - c[1] >= 40:
+            examples.append((iso, c[1], sp[0]))
+    print("\n" + "=" * 72)
+    print("CAVEAT — re-sourcing is methodology work, not a mechanical swap:")
+    if divs:
+        print(f"  heritage supplier_conc vs raw top-1 supplier share: median gap "
+              f"{st.median(divs):.0f} pts across {len(divs)} countries.")
+    if examples:
+        ex = ", ".join(f"{iso} ({conc}→{top1})" for iso, conc, top1 in sorted(examples, key=lambda t: t[2]-t[1], reverse=True)[:5])
+        print(f"  {len(examples)} EXPORTERS are scored LOW despite concentrated imports "
+              f"(heritage → raw top-1): {ex}.")
+    print("  Heritage supplier_conc contextualises concentration by IMPORT-DEPENDENCY — a "
+          "self-sufficient\n  exporter's concentrated (but immaterial) imports must stay low-risk. "
+          "A correct re-source is\n  ~ concentration × import-dependency, NOT raw supPct. This is a "
+          "methodology decision (owner's\n  call); the same care applies to every component above.")
 
 
 if __name__ == "__main__":
