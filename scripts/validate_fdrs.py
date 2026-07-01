@@ -20,6 +20,8 @@ Usage: python3 scripts/validate_fdrs.py   → prints report, writes data/fdrs_va
 import json
 from pathlib import Path
 
+from _common import DATA_DIR, write_json
+
 REPO = Path(__file__).resolve().parent.parent
 DATA = REPO / "data"
 
@@ -157,7 +159,14 @@ def main():
     report["misses_crisis_low_fdrs"] = misses
     report["structural_watch_high_fdrs_no_current_crisis"] = watch
 
-    (DATA / "fdrs_validation.json").write_text(json.dumps(report, indent=2))
+    write_json(
+        "fdrs_validation.json", report,
+        source="FoodShield FDRS structural validation vs IPC + FEWS NET",
+        notes=(f"ROC-AUC {report['tests']['auc_crisis_vs_noncrisis']['auc']} (crisis vs non-crisis); "
+               f"Spearman vs IPC {report['tests']['spearman_fdrs_vs_ipc_pct']['rho']}. "
+               "Independent ground truth (not an FDRS input). Concurrent structural validation, "
+               "not an ex-ante backtest — see LIMITATIONS in scripts/validate_fdrs.py."),
+    )
 
     # ── printout ──────────────────────────────────────────────────────────────
     def pct(x):

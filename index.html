@@ -7237,6 +7237,20 @@ body::before {
 .ct-brief-btn{margin-top:12px;align-self:flex-start;display:inline-flex;align-items:center;gap:6px;background:color-mix(in srgb, var(--accent) 14%, transparent);border:1px solid color-mix(in srgb, var(--accent) 45%, transparent);color:var(--accent);font-size:11px;font-weight:600;letter-spacing:.02em;padding:6px 12px;border-radius:7px;cursor:pointer;font-family:inherit;transition:background .12s;}
 .ct-brief-btn:hover{background:color-mix(in srgb, var(--accent) 24%, transparent);}
 .ct-brief-btn:disabled{opacity:.6;cursor:wait;}
+/* FDRS validation callout (Methodology page) */
+.fs-val{grid-column:1/-1;background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 9%,var(--bg1)),var(--bg1));border:1px solid color-mix(in srgb,var(--accent) 32%,var(--b2));border-radius:12px;padding:20px 22px;margin:0 0 4px;}
+.fs-val-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
+.fs-val-eyebrow{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.16em;color:var(--accent);font-weight:600;padding-top:6px;}
+.fs-val-auc{display:flex;align-items:center;gap:9px;flex:none;}
+.fs-val-auc-num{font-family:'Geist Mono',monospace;font-size:36px;font-weight:700;color:var(--accent);line-height:1;}
+.fs-val-auc-lbl{font-size:8.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;line-height:1.35;}
+.fs-val-p{font-size:12.5px;color:var(--t2);line-height:1.6;margin:12px 0 8px;}
+.fs-val-chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;}
+.fs-val-chip{font-family:'Geist Mono',monospace;font-size:10px;color:var(--t2);background:var(--bg2);border:1px solid var(--b1);border-radius:5px;padding:3px 8px;}
+.fs-val-chip b{color:#c44b3c;}
+.fs-val-miss{font-size:11.5px;color:var(--t3);line-height:1.55;margin:8px 0;border-left:2px solid color-mix(in srgb,var(--accent) 40%,transparent);padding-left:10px;}
+.fs-val-note{font-size:10px;color:var(--t3);line-height:1.5;margin-top:10px;}
+.fs-val-note a{color:var(--accent);text-decoration:none;}
 .fs-spark{display:flex;align-items:center;gap:8px;margin-top:9px;cursor:pointer;}
 .fs-spark svg{flex:none;}
 .fs-spark-lbl{font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--t-meta);}
@@ -14923,6 +14937,14 @@ async function loadLiveData() {
     const fhEnv = await _fetchData('fdrs_history');
     LIVE.fdrs_history = (fhEnv && (fhEnv.data || fhEnv)) || {};
   } catch (e) { LIVE.fdrs_history = {}; }
+
+  // v40 — FDRS structural validation vs independent IPC/FEWS ground truth
+  // (scripts/validate_fdrs.py output). Surfaced on the Methodology page as the
+  // credibility payload: does the score correspond to realised crises? (AUC etc.)
+  try {
+    const fvEnv = await _fetchData('fdrs_validation');
+    LIVE.fdrs_validation = (fvEnv && (fvEnv.data || fvEnv)) || null;
+  } catch (e) { LIVE.fdrs_validation = null; }
 
   // v20.29 — daily summary headline (build_daily_summary.py output)
   try {
@@ -29882,6 +29904,31 @@ function renderSignal(){
 // ════════════════════════════════════════════════════
 // METHODOLOGY TAB
 // ════════════════════════════════════════════════════
+// Validation callout for the Methodology page — the credibility payload. Reads
+// LIVE.fdrs_validation (scripts/validate_fdrs.py output). '' if unavailable.
+function fsValidationHTML(){
+  const v = (typeof LIVE !== 'undefined') ? LIVE.fdrs_validation : null;
+  if (!v || !v.tests) return '';
+  const t = v.tests, ac = t.auc_crisis_vs_noncrisis;
+  const auc = ac && ac.auc;
+  if (typeof auc !== 'number') return '';
+  const rhoI = (t.spearman_fdrs_vs_ipc_pct || {}).rho, rhoF = (t.spearman_fdrs_vs_fews_phase || {}).rho;
+  const sgn = x => (typeof x === 'number' ? (x >= 0 ? '+' : '') + x.toFixed(2) : '—');
+  const hits = (v.hits_top_crisis || []).slice(0, 6)
+    .map(h => `<span class="fs-val-chip"><b>${h[0]}</b> FDRS ${h[1]} · IPC ${Math.round(h[2])}%</span>`).join('');
+  const miss = (v.misses_crisis_low_fdrs || [])
+    .map(m => `<b>${m[0]}</b> (FDRS ${m[1]}, yet ${Math.round(m[2])}% in crisis)`).join(', ');
+  return `<div class="fs-val">
+    <div class="fs-val-head">
+      <div class="fs-val-eyebrow">VALIDATION · DOES THE SCORE CORRESPOND TO REALITY?</div>
+      <div class="fs-val-auc"><span class="fs-val-auc-num">${auc.toFixed(2)}</span><span class="fs-val-auc-lbl">ROC-AUC<br>crisis vs<br>non-crisis</span></div>
+    </div>
+    <p class="fs-val-p">FDRS is checked against <b>independent</b> ground truth it does not use to compute itself — the IPC/CH classification (share of population in Phase&nbsp;3+ &ldquo;crisis or worse&rdquo;) and FEWS&nbsp;NET phase. An AUC of <b>${auc.toFixed(2)}</b> (0.5&nbsp;=&nbsp;chance, 1.0&nbsp;=&nbsp;perfect) means the structural score cleanly separates the ${ac.n_crisis} countries in documented crisis from the other ${ac.n_total - ac.n_crisis}. Rank correlation: <b>${sgn(rhoI)}</b> vs IPC&nbsp;%, <b>${sgn(rhoF)}</b> vs FEWS phase.</p>
+    <div class="fs-val-chips">${hits}</div>
+    ${miss ? `<p class="fs-val-miss"><b>Honest miss:</b> ${miss}. The structural model ranks these low because they are food-<i>exporting</i>, not import-fragile — their food insecurity is conflict-driven and acute, which a structural exposure score is not designed to catch. FDRS measures standing structural fragility, not acute shocks.</p>` : ''}
+    <p class="fs-val-note">Concurrent structural validation, not an ex-ante backtest (reproducible point-in-time scores exist only from 2026-05). IPC/FEWS monitor already-stressed countries, so read the rank correlations alongside the AUC. Reproduce it: <a href="/data/fdrs_validation.json" target="_blank" rel="noopener">fdrs_validation.json&nbsp;&#8599;</a> · scripts/validate_fdrs.py.</p>
+  </div>`;
+}
 function renderMethodologyTab() {
   const el = document.getElementById('methodology-body');
   if (!el) return;
@@ -30025,6 +30072,7 @@ function renderMethodologyTab() {
       </div>
 
     <!-- v29 — provenance split bar -->
+    ${fsValidationHTML()}
     <div class="mth-prov card mth-fade" style="grid-column:1/-1;animation-delay:.08s">
       <div class="card-title" id="mth-provenance"><span class="card-marker"></span> Provenance of the ${_mthFmt(_mthStats.flows)} trade flows</div>
       <div class="mth-prov-bar">

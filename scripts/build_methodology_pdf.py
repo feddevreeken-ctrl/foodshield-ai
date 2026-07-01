@@ -154,6 +154,7 @@ def main():
         F.append(Paragraph("Run scripts/validate_fdrs.py to populate this section.", S["small"]))
     else:
         vr = json.loads(vp.read_text())
+        vr = vr.get("data", vr) if isinstance(vr, dict) else vr   # unwrap envelope
         tt = vr["tests"]
         auc = tt["auc_crisis_vs_noncrisis"]["auc"]
         rho_i = tt["spearman_fdrs_vs_ipc_pct"]["rho"]
