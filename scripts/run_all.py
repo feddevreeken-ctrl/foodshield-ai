@@ -58,6 +58,7 @@ import refresh_fews
 import refresh_trade_restrictions
 import build_countries_dataset
 import snapshot_fdrs
+import validate_fdrs
 import build_nowcast
 import build_source_manifest
 import build_daily_summary
@@ -106,6 +107,10 @@ STEPS = [
     # v40 — daily point-in-time snapshot of the structural FDRS (idempotent/preserve-safe);
     # builds the immutable history the hindcast/validation needs. Reads the fresh countries.json.
     ("FDRS snapshot",          snapshot_fdrs.main,              "fdrs_history.json"),
+    # v40 — structural validation of FDRS against independent IPC/FEWS crisis ground
+    # truth (ROC-AUC / Spearman / hits+misses). Keeps data/fdrs_validation.json fresh so
+    # the methodology whitepaper and any in-app credibility surface stay current.
+    ("FDRS validation",        validate_fdrs.main,              "fdrs_validation.json"),
     # v23 — re-verify trade fields (suppliers/supPct/imports/exports) from the
     # Comtrade pulls, patching countries.json AFTER it's built. Must run after
     # "Countries dataset". build_fields.build() is the entrypoint.
