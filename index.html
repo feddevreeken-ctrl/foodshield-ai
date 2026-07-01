@@ -21363,12 +21363,12 @@ function _simulateScenario(c, selected, severityById) {
 
     const TYPE_GLYPH = {
       famine:'☠', drought:'☀', flood:'≈',
-      conflict:'⚠', price_spike:'$', earthquake:'⊕', cyclone:'❀', chokepoint:'⚓',
+      conflict:'⚠', price_spike:'$', earthquake:'⊕', cyclone:'❀', chokepoint:'⚓', restriction:'⛔',
     };
     const TYPE_COLOR = {
       famine:'#c44b3c', drought:'#c47a3c', flood:'#4a7ab3',
       conflict:'#9b4a9b', price_spike:'#c9a957',
-      earthquake:'#6b5a8a', cyclone:'#4a8a9b', chokepoint:'#3a8f8f',
+      earthquake:'#6b5a8a', cyclone:'#4a8a9b', chokepoint:'#3a8f8f', restriction:'#c9683c',
     };
     const SEV_RING = { critical:3, high:2.5, medium:2, low:1.5 };
 
@@ -21432,7 +21432,7 @@ function _simulateScenario(c, selected, severityById) {
           // v38 — chokepoints (and any event without an ISO) can't use
           // showDisturbanceImpact (it returns early when !ev.iso, so the click did
           // nothing). Route them straight to the detail/analysis modal.
-          if (ev.type === 'chokepoint' || !ev.iso) {
+          if (ev.type === 'chokepoint' || ev.type === 'restriction' || !ev.iso) {
             if (typeof openDisturbanceDetail === 'function' && ev.id) openDisturbanceDetail(ev.id);
           } else if (typeof showDisturbanceImpact === 'function') {
             showDisturbanceImpact(ev);
@@ -28409,19 +28409,19 @@ function toggleMapDisturbances(){
 function renderMapDistLegend(){
   const leg = document.getElementById('map-dist-legend');
   if (!leg || typeof disturbanceEvents === 'undefined') return;
-  const types = ['famine','drought','flood','conflict','price_spike','earthquake','cyclone','chokepoint'];
+  const types = ['famine','drought','flood','conflict','price_spike','earthquake','cyclone','chokepoint','restriction'];
   const TYPE_GLYPH = {
     famine:'☠', drought:'☀', flood:'≈', conflict:'⚠',
-    price_spike:'$', earthquake:'⊕', cyclone:'❀', chokepoint:'⚓',
+    price_spike:'$', earthquake:'⊕', cyclone:'❀', chokepoint:'⚓', restriction:'⛔',
   };
   const TYPE_COLOR = {
     famine:'#c44b3c', drought:'#c47a3c', flood:'#4a7ab3',
     conflict:'#9b4a9b', price_spike:'#c9a957',
-    earthquake:'#6b5a8a', cyclone:'#4a8a9b', chokepoint:'#3a8f8f',
+    earthquake:'#6b5a8a', cyclone:'#4a8a9b', chokepoint:'#3a8f8f', restriction:'#c9683c',
   };
   const TYPE_LABEL = {
     famine:'Hunger alerts', drought:'Drought', flood:'Flood', conflict:'Conflict',
-    price_spike:'Price spike', earthquake:'Earthquake', cyclone:'Cyclone', chokepoint:'Chokepoint',
+    price_spike:'Price spike', earthquake:'Earthquake', cyclone:'Cyclone', chokepoint:'Chokepoint', restriction:'Export restriction',
   };
   const counts = {};
   types.forEach(t => counts[t] = disturbanceEvents.filter(e => e.type === t).length);
@@ -30358,6 +30358,7 @@ const EV_TYPE = {
   conflict:    { label:'Conflict', color:'#9b4a9b', icon:'⚔', bgColor:'rgba(155,74,155,0.12)' },
   price_spike: { label:'Price Spike', color:'#c9a957', icon:'📈', bgColor:'rgba(201,169,87,0.12)' },
   chokepoint:  { label:'Chokepoint', color:'#3a8f8f', icon:'⚓', bgColor:'rgba(58,143,143,0.12)' },
+  restriction: { label:'Export restriction', color:'#c9683c', icon:'⛔', bgColor:'rgba(201,104,60,0.12)' },
   earthquake:  { label:'Earthquake', color:'#6b5a8a', icon:'🌍', bgColor:'rgba(107,90,138,0.12)' },
   cyclone:     { label:'Cyclone', color:'#4a8a9b', icon:'🌀', bgColor:'rgba(74,138,155,0.12)' },
 };
@@ -30973,6 +30974,38 @@ async function loadDisturbanceData() {
     });
   } catch (e) {
     console.warn('[FoodShield] v38 chokepoint injection failed:', e);
+  }
+
+  // v40 — trade-restriction monitor. Inject on-record export restrictions
+  // (data/trade_restrictions.json) as 'restriction' disturbances at the RESTRICTING
+  // country's centroid (iso -> centroid resolution, same as ReliefWeb events). The
+  // detail carries the LIVE exposed-importer list (restrictionExposure). Sourced-only:
+  // any item without a source_url is skipped. Not a breaking event -> live:false.
+  try {
+    const rlist = Array.isArray(LIVE.restrictions) ? LIVE.restrictions : [];
+    rlist.forEach(r => {
+      if (!r || !r.source_url || !r.iso || !r.commodity) return;
+      const exp = (typeof restrictionExposure === 'function') ? restrictionExposure(r.iso, r.commodity, 4) : [];
+      const expTxt = exp.length
+        ? ' Most exposed importers: ' + exp.map(e => `${e.name} ${e.share_pct}% (FDRS ${e.fdrs != null ? e.fdrs : '—'})`).join(', ') + '.'
+        : ' Exposure not computable from current cited flows.';
+      const tierTxt = ({ official: 'Official', reported: 'Reported', historical: 'On record' })[r.status] || 'On record';
+      events.push({
+        id: 'restr_' + r.iso + '_' + String(r.commodity).replace(/\s+/g, ''),
+        type: 'restriction',
+        severity: r.status === 'official' ? 'high' : 'medium',
+        title: (r.country || r.iso) + ' — ' + (r.measure || 'export restriction') + ' on ' + r.commodity,
+        country: r.country || r.iso,
+        iso: r.iso,
+        lat: 0, lng: 0,
+        detail: `${tierTxt}: ${r.measure || 'export restriction'} on ${r.commodity}.${expTxt}`,
+        source: (r.source_name || 'source') + ' — ' + r.source_url,
+        date: r.effective_date || r.announced_date || '',
+        live: false,
+      });
+    });
+  } catch (e) {
+    console.warn('[FoodShield] v40 restriction injection failed:', e);
   }
 
   // v21 — dedupe by event ID so each unique upstream record survives. The
