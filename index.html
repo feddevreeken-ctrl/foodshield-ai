@@ -7234,6 +7234,9 @@ body::before {
 .fs-bandscale-mark{position:absolute;top:-3px;width:2px;height:12px;background:var(--t1);box-shadow:0 0 0 1px var(--bg0);transform:translateX(-1px);}
 .fs-bandscale-ends{display:flex;justify-content:space-between;font-family:'Geist Mono',monospace;font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--t-meta);margin-top:3px;}
 .fs-caret{font-size:10px;margin-left:3px;vertical-align:1px;}
+.ct-brief-btn{margin-top:12px;align-self:flex-start;display:inline-flex;align-items:center;gap:6px;background:color-mix(in srgb, var(--accent) 14%, transparent);border:1px solid color-mix(in srgb, var(--accent) 45%, transparent);color:var(--accent);font-size:11px;font-weight:600;letter-spacing:.02em;padding:6px 12px;border-radius:7px;cursor:pointer;font-family:inherit;transition:background .12s;}
+.ct-brief-btn:hover{background:color-mix(in srgb, var(--accent) 24%, transparent);}
+.ct-brief-btn:disabled{opacity:.6;cursor:wait;}
 .fs-spark{display:flex;align-items:center;gap:8px;margin-top:9px;cursor:pointer;}
 .fs-spark svg{flex:none;}
 .fs-spark-lbl{font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--t-meta);}
@@ -24288,6 +24291,99 @@ function fsToggleSparkHistory(el){
   if (more) more.textContent = open ? '▸ audit' : '▾ audit';
 }
 
+// ── Client-side exposure-brief PDF (lazy-loads jsPDF only on click) ───────────
+// Mirrors scripts/generate_exposure_brief.py but runs in the browser from live data,
+// so any country profile can be exported as a 1-page PDF. jsPDF core fonts are Latin-1
+// only, so ALL text here is kept ASCII-safe (no ▲/⚠/→/en-dash glyphs).
+let _jspdfPromise = null;
+function loadJsPDF(){
+  if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve(window.jspdf.jsPDF);
+  if (_jspdfPromise) return _jspdfPromise;
+  _jspdfPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js';
+    s.async = true;
+    s.onload = () => resolve(window.jspdf && window.jspdf.jsPDF);
+    s.onerror = () => { _jspdfPromise = null; reject(new Error('jsPDF failed to load')); };
+    document.head.appendChild(s);
+  });
+  return _jspdfPromise;
+}
+function _briefRgb(h){ h = String(h||'').replace('#',''); if (h.length===3) h = h.split('').map(x=>x+x).join(''); const n = parseInt(h,16)||0; return [(n>>16)&255,(n>>8)&255,n&255]; }
+async function downloadCountryBrief(iso, btn){
+  const c = (typeof byISO === 'function') ? byISO(iso) : null;
+  if (!c) return;
+  if (btn){ btn.disabled = true; btn._lbl = btn.textContent; btn.textContent = 'Generating…'; }
+  const done = (msg) => { if (btn){ btn.disabled = false; btn.textContent = btn._lbl || 'Download brief (PDF)'; } if (msg && typeof showToast === 'function') showToast(msg); };
+  let JsPDF;
+  try { JsPDF = await loadJsPDF(); } catch (e) { return done('PDF library failed to load — check your connection.'); }
+  try {
+    const doc = new JsPDF({ unit:'pt', format:'a4' });
+    const W = 595.28, H = 841.89, ML = 50, MR = W - 50;
+    const ink=[33,36,43], mute=[107,115,128], hair=[214,216,222], track=[236,238,240], navy=[23,28,41], head=[174,184,204];
+    const col = _briefRgb(riskColor(c.fdrs)), band = riskLabel(c.fdrs);
+    const T = (x,y,s,size,rgb,font,align) => { doc.setFont('helvetica', font||'normal'); doc.setFontSize(size||9); const g = rgb||ink; doc.setTextColor(g[0],g[1],g[2]); doc.text(String(s), x, y, align?{align:align}:undefined); };
+    const bar = (x,y,w,val,rgb) => { doc.setFillColor(track[0],track[1],track[2]); doc.roundedRect(x,y,w,4,2,2,'F'); doc.setFillColor(rgb[0],rgb[1],rgb[2]); doc.roundedRect(x,y,w*Math.max(0,Math.min(val,100))/100,4,2,2,'F'); };
+    // header band
+    doc.setFillColor(navy[0],navy[1],navy[2]); doc.rect(0,0,W,66,'F');
+    T(ML,30,'FoodShield AI',15,[255,255,255],'bold');
+    T(ML,49,'COUNTRY EXPOSURE BRIEF',8.5,head,'bold');
+    T(MR,30,'Structural food-disruption synthesis',8.5,head,'normal','right');
+    T(MR,49,'Generated '+new Date().toISOString().slice(0,10),8.5,head,'normal','right');
+    // name + score
+    let y = 108;
+    T(ML,y,c.name,22,ink,'bold');
+    T(ML,y+16,c.region||'',10,mute);
+    doc.setFont('helvetica','bold'); doc.setFontSize(40); doc.setTextColor(col[0],col[1],col[2]); doc.text(String(c.fdrs),MR,y+8,{align:'right'});
+    T(MR-74,y-4,'FDRS',8,mute,'bold','right');
+    const cw = 92; doc.setDrawColor(col[0],col[1],col[2]); doc.setLineWidth(0.9); doc.roundedRect(MR-cw,y+16,cw,16,3,3,'S');
+    T(MR-cw/2,y+27,band.toUpperCase(),8.5,col,'bold','center');
+    if (typeof c.f2030 === 'number'){ const d = c.f2030 - c.fdrs; T(MR,y+47,'2030 modeled '+c.f2030+'  ('+(d>0?'+':'')+d+')',9,mute,'normal','right'); }
+    y += 70; doc.setDrawColor(hair[0],hair[1],hair[2]); doc.setLineWidth(0.7); doc.line(ML,y,MR,y); y += 22;
+    // drivers
+    T(ML,y,'STRUCTURAL RISK DRIVERS',9.5,ink,'bold'); T(MR,y,'value / weight',8,mute,'normal','right'); y += 16;
+    const cv = c.c || [];
+    const rows = cv.map((v,i)=>({lab:FS_ASK_LABELS[i],v,w:FS_ASK_WEIGHTS[i],k:(v==null?0:v)*FS_ASK_WEIGHTS[i]})).filter(d=>d.v!=null).sort((a,b)=>b.k-a.k);
+    const bx = ML+150, bw = 250;
+    rows.forEach(d => { T(ML,y+3,d.lab,9,ink); bar(bx,y,bw,d.v,_briefRgb(riskColor(d.v))); T(MR,y+3,Math.round(d.v)+'  /  '+d.w.toFixed(2),8.5,mute,'normal','right'); y += 17; });
+    const c0 = cv[0]||0, c7 = (cv[7]!=null?cv[7]:0), amp = Math.min(6*(c0/100)*(c7/100),6);
+    T(ML,y+2,'+ import x access amplifier: +'+amp.toFixed(1)+'  (import-dep '+Math.round(c0)+' x econ-access '+Math.round(c7)+')',8,mute,'italic'); y += 24;
+    // supply exposure
+    T(ML,y,'SUPPLY EXPOSURE',9.5,ink,'bold'); y += 16;
+    const sup = c.suppliers||[], pct = c.supPct||[];
+    T(ML,y,'Top suppliers',8.5,mute,'bold'); y += 15;
+    sup.slice(0,5).forEach((s,i) => { const nm = (typeof _nameFromISO==='function'?_nameFromISO(s):s)||s; const p = pct[i]; T(ML,y+3,nm,9,ink); if (typeof p === 'number'){ bar(bx-40,y,190,p,p>=50?[209,77,61]:[209,122,62]); T(MR,y+3,Math.round(p)+'%',8.5,mute,'normal','right'); } y += 16; });
+    const imports = c.imports||[]; if (imports.length){ y += 2; T(ML,y,'Key imports: '+imports.slice(0,8).join(', '),8.5,mute); y += 20; }
+    // restrictions
+    T(ML,y,'EXPORT RESTRICTIONS ON RECORD',9.5,ink,'bold'); y += 16;
+    let aff = []; try { aff = (typeof restrictionsAffecting==='function') ? restrictionsAffecting(iso) : []; } catch (e) {}
+    if (aff.length) aff.slice(0,4).forEach(h => { const r = h.r; T(ML,y+3,'!  '+((r.country)||(typeof _nameFromISO==='function'?_nameFromISO(r.iso):r.iso))+' '+(r.measure||'export restriction')+' on '+r.commodity+'  ['+String(r.status||'on record').toUpperCase()+']',8.5,[184,77,61]); y += 15; });
+    else { T(ML,y+3,"None on record affecting this country's cited supply.",8.5,mute,'italic'); y += 15; }
+    y += 12;
+    // trajectory
+    T(ML,y,'SCORE TRAJECTORY (RECORDED HISTORY)',9.5,ink,'bold'); y += 16;
+    const hist = (typeof LIVE!=='undefined' && LIVE.fdrs_history) ? LIVE.fdrs_history[iso] : null;
+    const pts = hist ? Object.keys(hist).sort().map(d=>({d,v:hist[d]&&hist[d].fdrs})).filter(p=>typeof p.v==='number') : [];
+    if (pts.length >= 2){
+      const vs = pts.map(p=>p.v), lo = Math.min(...vs), hi = Math.max(...vs), sp = (hi-lo)||1;
+      const sw = 260, sh = 32, sx = ML, sy = y + sh;
+      doc.setDrawColor(col[0],col[1],col[2]); doc.setLineWidth(1.4);
+      for (let i=1;i<pts.length;i++){ const x1=sx+(i-1)*sw/(pts.length-1), Y1=sy-(pts[i-1].v-lo)/sp*sh, x2=sx+i*sw/(pts.length-1), Y2=sy-(pts[i].v-lo)/sp*sh; doc.line(x1,Y1,x2,Y2); }
+      const dl = vs[vs.length-1]-vs[0];
+      T(sx+sw+16, y+sh/2+2, pts.length+' days  ('+(dl>0?'+':'')+dl+')', 9, mute);
+      T(ML, sy+14, pts[0].d+' to '+pts[pts.length-1].d+'  .  reproducible point-in-time snapshots', 7.5, mute);
+      y = sy + 30;
+    } else { T(ML,y+3,'History accumulates daily from 2026-05; under 2 days on record for this country.',8,mute,'italic'); y += 20; }
+    // footer
+    const fy = H - 64; doc.setDrawColor(hair[0],hair[1],hair[2]); doc.setLineWidth(0.7); doc.line(ML,fy,MR,fy);
+    const foot = 'FDRS = 9-component weighted structural composite (weights shown) + an import x access amplifier, clipped 0-100. It is a SYNTHESIS of public data, not a forecast. Sources: UN Comtrade, FAOSTAT, USDA PSD, World Bank, WFP, IPC/FEWS, IFPRI. Figures match the live dashboard; nothing is invented for this brief.';
+    doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(mute[0],mute[1],mute[2]);
+    doc.text(doc.splitTextToSize(foot, MR-ML), ML, fy+12);
+    T(ML, H-20, 'foodshield-ai-fv.vercel.app', 8, navy, 'bold');
+    doc.save('FoodShield_Brief_'+iso+'.pdf');
+    done();
+  } catch (e) { done('Could not generate the brief: ' + (e && e.message || e)); }
+}
 // ── Ask FoodShield — deterministic data explainer ────────────────────────────
 // A plain-language query box that answers from LIVE page data by parsing intent
 // and templating real figures. NO LLM: it cannot invent a number, so it can't
@@ -24550,6 +24646,10 @@ function renderCountryTab() {
         ${fsVerdictLine(c, riskLabel)}
         ${fsDriverBars(ctComp9, compLabels, compWeights, riskColor, 3)}
         ${countryRestrictionFlagHTML(c.iso)}
+        <button class="ct-brief-btn" onclick="downloadCountryBrief('${c.iso}', this)" title="Download a 1-page PDF exposure brief for ${c.name} — generated in your browser from the live data">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+          Download brief (PDF)
+        </button>
       </div>
       <div class="ct-hero-score" style="--accent:${col}">
         <div class="ct-hero-score-num" style="color:${col}">${c.fdrs}</div>
