@@ -24329,7 +24329,7 @@ function fsAskFindCommodity(q){
   return null;
 }
 function fsAskHint(){
-  const ex = ["Why is Egypt's score high?", "Who supplies Egypt wheat?", "Compare Nigeria and Ethiopia", "Sudan"];
+  const ex = ["Why is Egypt's score high?", "What if Russia bans wheat?", "Who's most at risk in Africa?", "Who supplies Egypt wheat?", "Compare Nigeria and Ethiopia"];
   return `<div class="fs-ask-hint"><b>Ask about the data.</b> Every answer is templated from live figures on this page — nothing is generated, so there are no hallucinated numbers. Try:<div style="margin-top:8px">`
     + ex.map(x => `<span class="fs-ask-chip" onclick="fsAskSet(this.textContent)">${x}</span>`).join('') + `</div></div>`;
 }
@@ -24341,9 +24341,13 @@ function fsAskRun(){
   if (!q){ body.innerHTML = fsAskHint(); return; }
   const countries = fsAskFindCountries(q, qRaw);
   const commodity = fsAskFindCommodity(q);
+  const isWhatIf   = /\b(ban|bans|banned|embargo|restrict|restricts|cuts?\s*off|stops?\s*export|halts?|blockade)\b/.test(q) && countries.length >= 1 && commodity;
+  const isRanking  = /\b(most at risk|highest risk|most vulnerable|most exposed|riskiest|top risk|worst|most fragile|least resilient)\b/.test(q);
   const isCompare  = /\b(compare|versus|vs\.?|against)\b/.test(q) && countries.length >= 2;
   const isSupplier = /\b(suppl|provid|import|buy|sourc|sell)/.test(q) && countries.length >= 1;
-  if (isCompare)        body.innerHTML = fsAskCompare(countries[0], countries[1]);
+  if (isWhatIf)         body.innerHTML = fsAskWhatIf(countries[0], commodity);
+  else if (isCompare)   body.innerHTML = fsAskCompare(countries[0], countries[1]);
+  else if (isRanking)   body.innerHTML = fsAskRanking(q);
   else if (isSupplier)  body.innerHTML = fsAskSuppliers(countries[0], commodity);
   else if (countries.length) body.innerHTML = fsAskExplain(countries[0]);
   else                  body.innerHTML = `<div class="fs-ask-hint">No country matched “${q.replace(/[<>&]/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[ch]))}”. Use a country name or 3-letter ISO code.</div>` + fsAskHint();
@@ -24389,6 +24393,34 @@ function fsAskCompare(a, b){
   h += `<p><b>${a.name}</b> ${a.fdrs} vs <b>${b.name}</b> ${b.fdrs} — ${verdict}. Leading driver: ${a.name} → ${topDriver(a)}; ${b.name} → ${topDriver(b)}.</p>`;
   h += `<div class="fs-ask-open" onclick="fsAskClose();openPanel(byISO('${a.iso}'))">Open ${a.name} →</div><div class="fs-ask-open" onclick="fsAskClose();openPanel(byISO('${b.iso}'))">Open ${b.name} →</div>`;
   h += `<div class="fs-ask-foot">Structural synthesis from live data; not a forecast.</div></div>`;
+  return h;
+}
+const FS_ASK_REGIONS = ['Middle East','North Africa','Sub-Saharan Africa','Latin America','South America','Central America','North America','Africa','Asia','Europe','Americas','Oceania','Caribbean'];
+// "What if <exporter> bans <commodity>?" → most-exposed importers (reuses restrictionExposure).
+function fsAskWhatIf(exporter, commodity){
+  let exposed = [];
+  try { exposed = restrictionExposure(exporter.iso, commodity, 6) || []; } catch (e) {}
+  const lc = commodity.toLowerCase();
+  let h = `<div class="fs-ask-ans"><h4>If ${exporter.name} restricted ${lc} exports…</h4>`;
+  h += `<p>Structurally most-exposed importers — share of their ${lc} supply from ${exporter.name}, ranked by that share × their own fragility:</p>`;
+  if (!exposed.length) h += `<p>No cited importers currently source ${lc} from ${exporter.name} in the trade data.</p>`;
+  else exposed.forEach(e => { const p = e.share_pct; h += `<div class="fs-ask-row"><span class="fs-ask-lab">${e.name}</span><span class="fs-ask-track"><span class="fs-ask-fill" style="width:${Math.min(p,100)}%;background:${p>=50?'#c44b3c':'#d27a3e'}"></span></span><span class="fs-ask-num">${p}% · FDRS ${e.fdrs != null ? e.fdrs : '—'}</span></div>`; });
+  h += `<div class="fs-ask-foot">Hypothetical exposure from cited trade shares — who relies on ${exporter.name}, not a claim that a ban will happen. Structural, not a forecast.</div></div>`;
+  return h;
+}
+// "Who is most at risk [in <region>]?" → FDRS ranking (optionally region-filtered).
+function fsAskRanking(q){
+  let region = null;
+  for (const r of FS_ASK_REGIONS){ if (q.includes(r.toLowerCase())){ region = r; break; } }
+  let pool = (typeof COUNTRIES !== 'undefined' ? COUNTRIES : []).filter(c => c && c.name && !c.iso.startsWith('US-') && typeof c.fdrs === 'number');
+  if (region) pool = pool.filter(c => (c.region || '').toLowerCase().includes(region.toLowerCase()));
+  pool.sort((a, b) => b.fdrs - a.fdrs);
+  const top = pool.slice(0, 7);
+  let h = `<div class="fs-ask-ans"><h4>Most at risk${region ? ` · ${region}` : ''}</h4>`;
+  if (!top.length) h += `<p>No countries matched${region ? ` in ${region}` : ''}.</p>`;
+  else top.forEach((c, i) => { const col = riskColor(c.fdrs); h += `<div class="fs-ask-row"><span class="fs-ask-lab">${i+1}. ${c.name}</span><span class="fs-ask-track"><span class="fs-ask-fill" style="width:${Math.min(c.fdrs,100)}%;background:${col}"></span></span><span class="fs-ask-num" style="color:${col}">${c.fdrs} · ${riskLabel(c.fdrs)}</span></div>`; });
+  if (top[0]) h += `<div class="fs-ask-open" onclick="fsAskClose();openPanel(byISO('${top[0].iso}'))">Open ${top[0].name} →</div>`;
+  h += `<div class="fs-ask-foot">Ranked by current FDRS from live page data.</div></div>`;
   return h;
 }
 document.addEventListener('keydown', e => {
