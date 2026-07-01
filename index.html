@@ -5953,7 +5953,7 @@ abbr.ac:hover, .ac:hover {
   top: 84px;
   left: 18px;
   z-index: 600;
-  display: flex;
+  display: none;  /* v40 — region zoom-to bar removed per owner; frees the top-left for the layers panel */
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
@@ -7250,9 +7250,9 @@ body::before {
 .fs-cflag-dot{color:#c44b3c;flex:none;}
 .fs-cflag-src{color:var(--accent);text-decoration:none;white-space:nowrap;}
 /* v40 — MAP LAYERS panel (below the stat strip on the Global Map) */
-#map-layers{position:absolute;top:140px;left:18px;z-index:850;width:250px;background:rgba(13,13,15,0.94);
-  border:1px solid var(--b2);border-radius:10px;padding:12px 13px;box-shadow:0 12px 34px rgba(0,0,0,.45);
-  font-family:'Geist',sans-serif;backdrop-filter:blur(6px);}
+#map-layers{position:absolute;top:84px;left:18px;z-index:850;width:250px;background:var(--glass);
+  border:1px solid var(--b2);border-radius:8px;padding:12px 13px;box-shadow:0 12px 34px rgba(0,0,0,.45);
+  font-family:'Geist',sans-serif;backdrop-filter:blur(8px);}
 .mlp-head{font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--t-meta);margin-bottom:9px;}
 .mlp-row{display:flex;align-items:center;gap:9px;padding:5px 2px;cursor:pointer;user-select:none;border-radius:5px;transition:background .12s;}
 .mlp-row:hover{background:rgba(255,255,255,0.03);}
@@ -7273,6 +7273,13 @@ body::before {
 .mlp-select{width:100%;margin:4px 0 2px;background:var(--bg2);border:1px solid var(--b2);color:var(--t2);
   font:500 11px 'Geist',sans-serif;border-radius:6px;padding:5px 8px;appearance:auto;-webkit-appearance:menulist;}
 .mlp-foot{margin-top:9px;padding-top:8px;border-top:1px solid var(--b1);font-size:8.5px;color:var(--t3);line-height:1.5;}
+/* v40 — trade-flow panel folds into the right rail (replaces Today's Signal while a flow is selected) */
+#map-flow-legend{display:none;}
+#global-rail.flow-mode > .signal-card, #global-rail.flow-mode > .rail-card{display:none;}
+#global-rail.flow-mode > #map-flow-legend{display:block;background:var(--bg2);border:1px solid var(--b1);
+  border-left:3px solid var(--accent);border-radius:10px;padding:15px 16px;font-size:11px;color:var(--t2);
+  line-height:1.55;animation:railFlowIn .26s ease;}
+@keyframes railFlowIn{from{opacity:0;transform:translateX(22px);}to{opacity:1;transform:none;}}
 </style>
 </head>
 <body>
@@ -7453,7 +7460,6 @@ body::before {
 
       <!-- Disturbance overlay legend (shown when toggle is on) -->
       <div id="map-dist-legend"></div>
-      <div id="map-flow-legend" style="display:none;position:absolute;right:14px;top:84px;z-index:740;background:var(--bg1);border:1px solid var(--b1);border-left:3px solid var(--accent);padding:14px 16px;font-size:11px;color:var(--t2);width:295px;max-height:calc(100% - 140px);overflow-y:auto;line-height:1.5;box-shadow:0 10px 30px rgba(0,0,0,.35);"></div>
 
       <!-- v21 (#16) — persistent 5-tier legend, always visible on the Global Map
            tab. Uses the same saturated palette as the map polygons (mapRiskColor)
@@ -7661,6 +7667,9 @@ body::before {
 
     <!-- Right rail -->
     <div id="global-rail">
+      <!-- v40 — commodity trade-flow panel. When a Trade-flows commodity is selected,
+           #global-rail gets .flow-mode: the default cards fold out and this slides in. -->
+      <div id="map-flow-legend"></div>
       <div class="signal-card" id="signal-card">
         <div class="signal-eyebrow"><span class="signal-pulse"></span> Today's signal</div>
         <div class="signal-headline" id="signal-headline">—</div>
@@ -28344,15 +28353,17 @@ function populateCommodityFlowSelect() {
 function toggleCommodityFlowOverlay(dataKey) {
   _atlasFlowKey = dataKey || null;
   const legend = document.getElementById('map-flow-legend');
+  const rail = document.getElementById('global-rail');
   if (!dataKey) {
     if (window.Globe && Globe.clearFlows) Globe.clearFlows();
-    if (legend) legend.style.display = 'none';
+    if (rail) rail.classList.remove('flow-mode');   // fold the default rail cards back out
+    if (legend) legend.innerHTML = '';
     return;
   }
   try {
     const com = (typeof _beefData === 'function') ? _beefData()[dataKey] : null;
     const flows = com && Array.isArray(com.flows) ? com.flows.slice() : [];
-    if (!flows.length) { if (window.Globe && Globe.clearFlows) Globe.clearFlows(); if (legend){legend.style.display='block';legend.innerHTML='No cited flows for this commodity.';} return; }
+    if (!flows.length) { if (window.Globe && Globe.clearFlows) Globe.clearFlows(); if (rail) rail.classList.add('flow-mode'); if (legend){legend.innerHTML='No cited flows for this commodity.';} return; }
     flows.sort((a,b)=> (parseFloat(b.value)||0) - (parseFloat(a.value)||0));
     const cap = 150;
     const shown = flows.slice(0, cap);
@@ -28377,7 +28388,7 @@ function toggleCommodityFlowOverlay(dataKey) {
             ${nm(f.from)} → ${nm(f.to)}</span>
           <span style="font-family:'Geist Mono',monospace;color:var(--t1);flex-shrink:0;">${fmtKt(parseFloat(f.value)||0)}</span>
         </div>`).join('');
-      legend.style.display = 'block';
+      if (rail) rail.classList.add('flow-mode');   // fold Today's Signal out; show flows in the rail
       legend.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
           <div style="font-family:'Instrument Serif',serif;font-size:17px;color:var(--t1);">${label}</div>
