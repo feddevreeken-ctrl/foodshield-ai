@@ -24,21 +24,25 @@ DATA = REPO / "data"
 WEIGHTS = [0.23, 0.16, 0.11, 0.09, 0.09, 0.08, 0.06, 0.12, 0.06]
 
 # component index -> (name, current status, candidate feed file, what the feed provides)
+# STATUS reflects the DISPLAYED score (structural baseline + runtime re-sourcing), not just
+# the countries.json baseline. "runtime" = heritage in countries.json but re-sourced at render
+# time in index.html (a 40% heritage / 60% live-feed blend); "live" = computed live in JS only.
 COMPONENTS = [
     (0, "import_dep",            "heritage",    "net_food_trade.json",  "net food trade balance / FBS import share"),
     (1, "supplier_conc",         "heritage",    "comtrade_staples.json", "top-supplier shares (already sourced in suppliers/supPct)"),
     (2, "prod_trend",            "heritage",    "usda_psd.json",        "production/consumption trend by commodity"),
     (3, "food_infl",             "partial",     "faostat_food.json",    "food CPI yr/yr (also eurostat_food.json for EU)"),
-    (4, "climate",               "heritage",    "inform_risk.json",     "climate/hazard risk (also aqueduct.json, cckp.json)"),
-    (5, "conflict",              "heritage",    "acled.json",           "conflict event intensity"),
-    (6, "supply_chain_exposure", "unscored",    None,                   "deliberately null (SCE placeholder, unscored)"),
+    (4, "climate",               "runtime",     "aqueduct.json",        "RUNTIME 60/40 blend from Aqueduct (drought/flood) + CCKP (warming_c)"),
+    (5, "conflict",              "runtime",     "inform_risk.json",     "RUNTIME 60/40 blend from INFORM + WGI rule-of-law + LPI logistics"),
+    (6, "supply_chain_exposure", "live",        None,                   "computed LIVE in JS (staple trade-dep + supplier conc); null in baseline"),
     (7, "econ_access",           "sourced",     "worldbank_wdi.json",   "reserves/debt-service (WDI) + HDI — DONE in builder"),
     (8, "grain_buffer",          "sourced",     "usda_psd.json",        "ending stocks / consumption (USDA PSD) — DONE in builder"),
 ]
 
-STATUS_ORDER = {"heritage": 0, "partial": 1, "unscored": 2, "sourced": 3}
-# still-legacy fraction used for the impact score
-LEGACY_FRAC = {"heritage": 1.0, "partial": 0.5, "unscored": 0.0, "sourced": 0.0}
+STATUS_ORDER = {"heritage": 0, "partial": 1, "runtime": 2, "live": 3, "unscored": 4, "sourced": 5}
+# still-legacy fraction (in the DISPLAYED score) used for the impact score. "runtime" carries
+# only its 40% heritage remainder; "live" is fully computed (0 heritage).
+LEGACY_FRAC = {"heritage": 1.0, "partial": 0.5, "runtime": 0.4, "live": 0.0, "unscored": 0.0, "sourced": 0.0}
 
 
 def feed_coverage(fname):
@@ -91,22 +95,34 @@ def main():
                 feed_note = f"{feed} ({b}B) ⚠ looks like a stub"
             else:
                 feed_note = f"{feed} ⚠ MISSING"
-        flag = "→ upgrade" if impact > 0 else ("· done" if status == "sourced" else "· n/a")
+        flag = ({"sourced": "· done (builder)", "runtime": "~ runtime-sourced 60/40",
+                 "live": "~ live-computed (JS)"}).get(status, "→ upgrade")
         print(f"c{idx:<2}{name:<22}{w:>5.2f} {status:<9}{impact:>7.3f}  {flag}")
         print(f"     {feed_note}")
         print(f"     provides: {provides}\n")
 
-    legacy = [r for r in rows if r[0] > 0]
+    # true upgrade targets = still fully/partly on heritage in the DISPLAYED score
+    upgrade = [r for r in rows if r[3] in ("heritage", "partial")]
+    upgrade_wt = sum(r[4] for r in upgrade)   # r[4] = weight
     print("-" * 72)
-    print(f"Remaining re-sourceable weight (Σ impact): {total_impact:.3f} of 1.00 total FDRS weight.")
-    print(f"{len(legacy)} component(s) still (partly) on heritage values, all with a public "
-          f"feed already in data/ that could source them.")
-    print("\nSuggested order (highest score-impact first, feed already present):")
-    for impact, idx, name, status, w, feed, provides, exists, n, b in legacy:
+    print("PROVENANCE OF THE DISPLAYED SCORE (structural baseline + runtime re-sourcing):")
+    print(f"  Fully sourced now: econ_access (0.12) + grain_buffer (0.06) in the builder;")
+    print(f"    climate (0.09) + conflict (0.08) re-sourced 60/40 at runtime; SCE (0.06) live.")
+    print(f"  → ~{0.12 + 0.06 + 0.6*(0.09+0.08) + 0.06:.2f} of the 1.00 weight is sourced/live in what users see.")
+    print(f"  Still heritage: {', '.join(f'{r[2]}({r[4]:.2f})' for r in upgrade)} "
+          f"= {upgrade_wt:.2f} weight — plus the 40% heritage remainder inside climate+conflict.")
+    print("\nSuggested re-source order (heritage components, feed already present):")
+    for impact, idx, name, status, w, feed, provides, exists, n, b in sorted(upgrade, key=lambda r: -r[4]):
         ready = "feed ready" if (exists and b > 1000) else ("feed is a stub — refresh first" if exists else "feed missing")
-        print(f"  {impact:.3f}  c{idx} {name:<22} via {feed}  [{ready}]")
+        print(f"  {w:.2f}  c{idx} {name:<22} via {feed}  [{ready}]")
     print("\nEach upgrade recomputes the score → validate against test_fdrs_v2 fixtures and "
           "review rank shifts (scripts/report_fdrs_rank_diffs.py) before shipping.")
+    print("\nRECONCILIATION: an earlier version of this audit read only countries.json (the "
+          "structural baseline) and reported ~0.715 heritage. That OVERSTATED it — the shipped\n"
+          "  score re-sources climate + conflict at render time and computes SCE live. This audit "
+          "now reflects the DISPLAYED score. (The FDRS VALIDATION deliberately tests the STRUCTURAL\n"
+          "  baseline, not the displayed score, because the live nowcast overlay ingests IPC — "
+          "validating the live number against IPC would be circular.)")
     _semantic_caveats()
 
 
