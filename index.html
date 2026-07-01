@@ -2194,6 +2194,13 @@ abbr.ac:hover, .ac:hover {
   border-radius: 3px;
   font-family: 'Geist Mono', monospace;
 }
+.rank-trend {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px; font-weight: 600;
+  letter-spacing: .02em; flex-shrink: 0;
+  min-width: 22px; text-align: right;
+}
+.rank-trend-flat { color: var(--t-meta); opacity: .5; }
 
 .insight-card {
   background: transparent;
@@ -7227,9 +7234,18 @@ body::before {
 .fs-bandscale-mark{position:absolute;top:-3px;width:2px;height:12px;background:var(--t1);box-shadow:0 0 0 1px var(--bg0);transform:translateX(-1px);}
 .fs-bandscale-ends{display:flex;justify-content:space-between;font-family:'Geist Mono',monospace;font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--t-meta);margin-top:3px;}
 .fs-caret{font-size:10px;margin-left:3px;vertical-align:1px;}
-.fs-spark{display:flex;align-items:center;gap:8px;margin-top:9px;}
+.fs-spark{display:flex;align-items:center;gap:8px;margin-top:9px;cursor:pointer;}
 .fs-spark svg{flex:none;}
 .fs-spark-lbl{font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--t-meta);}
+.fs-spark-more{color:var(--t3);margin-left:2px;border-bottom:1px dotted var(--b2);}
+.fs-spark:hover .fs-spark-more{color:var(--t1);}
+.fs-spark-table{margin-top:7px;max-width:240px;}
+.fs-spark-table-cap{font-family:'Geist Mono',monospace;font-size:8.5px;line-height:1.4;letter-spacing:.02em;color:var(--t3);margin-bottom:5px;}
+.fs-spark-tbl{width:100%;border-collapse:collapse;font-family:'Geist Mono',monospace;font-size:10px;max-height:180px;}
+.fs-spark-tbl th{text-align:left;color:var(--t-meta);font-weight:500;font-size:8.5px;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px 3px 0;border-bottom:1px solid var(--b2);}
+.fs-spark-tbl td{padding:1.5px 8px 1.5px 0;color:var(--t2);border-bottom:1px solid var(--b1);}
+.fs-spark-tbl tbody{display:block;max-height:170px;overflow-y:auto;}
+.fs-spark-tbl thead,.fs-spark-tbl tbody tr{display:table;width:100%;table-layout:fixed;}
 .cmd-card-topbar .fs-pricemove{font-family:'Geist Mono',monospace;font-size:9.5px;font-weight:600;letter-spacing:.02em;margin-right:auto;display:inline-flex;align-items:center;gap:2px;}
 .cmd-card-topbar .cmd-card-restr{font-family:'Geist Mono',monospace;font-size:8px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#c44b3c;border:1px solid rgba(196,75,60,0.4);border-radius:3px;padding:1px 5px;margin-right:6px;}
 .fs-tentry{margin-top:9px;display:flex;flex-direction:column;gap:3px;}
@@ -24110,6 +24126,7 @@ function updateRail() {
     <div class="rank-row" onclick="openPanel(COUNTRIES.find(x=>x.iso==='${c.iso}'))">
       <div class="rank-num">${i+1}</div>
       <div class="rank-name">${c.name}</div>
+      ${fsTrendMini(c.iso)}
       <div class="rank-score" style="background:${riskColor(c.fdrs)}1a;color:${riskColor(c.fdrs)}">${c.fdrs}</div>
     </div>`).join('');
 
@@ -24119,6 +24136,7 @@ function updateRail() {
     <div class="rank-row" onclick="openPanel(COUNTRIES.find(x=>x.iso==='${c.iso}'))">
       <div class="rank-num">${i+1}</div>
       <div class="rank-name">${c.name}</div>
+      ${fsTrendMini(c.iso)}
       <div class="rank-score" style="background:${riskColor(c.fdrs)}1a;color:${riskColor(c.fdrs)}">${c.fdrs}</div>
     </div>`).join('');
 
@@ -24176,13 +24194,49 @@ function fsFdrsSparkline(iso){
   const first = vs[0], last = vs[vs.length - 1], delta = last - first;
   const col = delta > 0 ? '#c44b3c' : delta < 0 ? '#6ba36b' : 'var(--t-meta)';
   const arrow = delta > 0 ? '▲' : delta < 0 ? '▼' : '▬';
-  return `<div class="fs-spark" title="Structural FDRS over ${pts.length} recorded days (${pts[0].d} → ${pts[pts.length-1].d}) — real daily point-in-time snapshots, reproducible.">
-    <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">
-      <path d="${path}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
-      <circle cx="${X(pts.length-1).toFixed(1)}" cy="${Y(last).toFixed(1)}" r="2.2" fill="${col}"/>
-    </svg>
-    <span class="fs-spark-lbl">${pts.length}-day trend <span style="color:${col}">${arrow} ${delta>0?'+':''}${delta}</span></span>
+  // Audit table — the dated record itself. Reproducibility is the credibility mechanism:
+  // a skeptic can see the score existed on each past date, not backfilled after the fact.
+  const CAP = 30;
+  const recent = pts.slice().reverse().slice(0, CAP);
+  const rows = recent.map(p => `<tr><td>${p.d}</td><td style="color:${p.v>=70?'#c44b3c':p.v>=55?'#d27a3e':'var(--t2)'}">${p.v}</td></tr>`).join('');
+  const capNote = pts.length > CAP ? `latest ${CAP} of ${pts.length}` : `${pts.length} recorded days`;
+  return `<div class="fs-spark-wrap">
+    <div class="fs-spark" onclick="fsToggleSparkHistory(this)" title="Structural FDRS over ${pts.length} recorded days (${pts[0].d} → ${pts[pts.length-1].d}) — real daily point-in-time snapshots. Click to inspect the dated record.">
+      <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">
+        <path d="${path}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+        <circle cx="${X(pts.length-1).toFixed(1)}" cy="${Y(last).toFixed(1)}" r="2.2" fill="${col}"/>
+      </svg>
+      <span class="fs-spark-lbl">${pts.length}-day trend <span style="color:${col}">${arrow} ${delta>0?'+':''}${delta}</span> <span class="fs-spark-more">▸ audit</span></span>
+    </div>
+    <div class="fs-spark-table" style="display:none">
+      <div class="fs-spark-table-cap">Recorded structural-FDRS snapshots · ${capNote} · reproducible point-in-time values, not backfilled.</div>
+      <table class="fs-spark-tbl"><thead><tr><th>Date</th><th>FDRS</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>
   </div>`;
+}
+// Toggle the dated audit table under a country's FDRS sparkline.
+function fsToggleSparkHistory(el){
+  const t = el.parentElement.querySelector('.fs-spark-table');
+  if (!t) return;
+  const open = t.style.display !== 'none';
+  t.style.display = open ? 'none' : 'block';
+  const more = el.querySelector('.fs-spark-more');
+  if (more) more.textContent = open ? '▸ audit' : '▾ audit';
+}
+// Compact FDRS trend chip for dense rank rows — net change over the recorded
+// history (first vs last day). '' if <2 days on record. Shares LIVE.fdrs_history
+// with the fuller fsFdrsSparkline on the country profile.
+function fsTrendMini(iso){
+  const h = (typeof LIVE !== 'undefined' && LIVE.fdrs_history) ? LIVE.fdrs_history[iso] : null;
+  if (!h) return '';
+  const ds = Object.keys(h).sort();
+  const vs = ds.map(d => h[d] && h[d].fdrs).filter(v => typeof v === 'number');
+  if (vs.length < 2) return '';
+  const d = vs[vs.length - 1] - vs[0];
+  const span = `${vs.length}d (${ds[0]} → ${ds[ds.length-1]})`;
+  if (d === 0) return `<span class="rank-trend rank-trend-flat" title="No change over ${span}">▬</span>`;
+  const up = d > 0;
+  return `<span class="rank-trend" style="color:${up ? '#c44b3c' : '#6ba36b'}" title="${up ? 'Rose' : 'Fell'} ${Math.abs(d)} over ${span}">${up ? '▲' : '▼'}${Math.abs(d)}</span>`;
 }
 function fsBandScale(value){
   const v = Math.max(0, Math.min(100, Number(value)||0));
