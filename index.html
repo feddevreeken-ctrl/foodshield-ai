@@ -14513,6 +14513,19 @@ function renderDataStatusTab() {
       </tr>`;
   }).join('');
 
+  // FDRS history depth — reproducibility stat tying the tracked score history into
+  // the transparency page. Reads the same LIVE.fdrs_history the sparklines use.
+  let fdrsDays = 0, fdrsSpan = '';
+  try {
+    const fh = (typeof LIVE !== 'undefined' && LIVE.fdrs_history) ? LIVE.fdrs_history : null;
+    if (fh) {
+      const allDates = new Set();
+      for (const iso in fh) for (const d in fh[iso]) allDates.add(d);
+      fdrsDays = allDates.size;
+      if (fdrsDays) { const s = [...allDates].sort(); fdrsSpan = `${s[0]} → ${s[s.length - 1]}`; }
+    }
+  } catch (e) {}
+
   host.innerHTML = `
     <!-- Summary strip -->
     <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:12px;padding:18px 22px;margin-bottom:18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:18px;align-items:center;">
@@ -14537,10 +14550,18 @@ function renderDataStatusTab() {
         <div style="font-family:'Geist Mono',monospace;font-size:18px;font-weight:600;color:var(--t1);">${nextRefresh}</div>
         <div style="font-size:10.5px;color:var(--t3);margin-top:4px;">Cron runs 00 / 06 / 12 / 18 UTC</div>
       </div>
+      ${fdrsDays ? `<div>
+        <div style="font-size:10.5px;color:var(--t3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;">FDRS history</div>
+        <div style="font-family:'Geist Mono',monospace;font-size:18px;font-weight:600;color:var(--t1);" title="Daily point-in-time structural-FDRS snapshots — reproducible from data/fdrs_history.json. The score's dated record, not backfilled after the fact.">${fdrsDays} days on record</div>
+        <div style="font-size:10.5px;color:var(--t3);margin-top:4px;">${fdrsSpan}</div>
+      </div>` : ''}
       <div>
         <div style="font-size:10.5px;color:var(--t3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;">Manifest</div>
-        <div><a href="/data/source_manifest.json" target="_blank" rel="noopener" style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--accent);text-decoration:none;">source_manifest.json &#8599;</a></div>
-        <div style="font-size:10.5px;color:var(--t3);margin-top:4px;">Raw machine-readable file</div>
+        <div style="display:flex;flex-direction:column;gap:2px;">
+          <a href="/data/source_manifest.json" target="_blank" rel="noopener" style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--accent);text-decoration:none;">source_manifest.json &#8599;</a>
+          ${fdrsDays ? `<a href="/data/fdrs_history.json" target="_blank" rel="noopener" style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--accent);text-decoration:none;">fdrs_history.json &#8599;</a>` : ''}
+        </div>
+        <div style="font-size:10.5px;color:var(--t3);margin-top:4px;">Raw machine-readable files</div>
       </div>
     </div>
 
