@@ -7249,6 +7249,30 @@ body::before {
 .fs-cflag-row b{color:var(--t1);}
 .fs-cflag-dot{color:#c44b3c;flex:none;}
 .fs-cflag-src{color:var(--accent);text-decoration:none;white-space:nowrap;}
+/* v40 — MAP LAYERS panel (below the stat strip on the Global Map) */
+#map-layers{position:absolute;top:84px;left:18px;z-index:850;width:250px;background:rgba(13,13,15,0.94);
+  border:1px solid var(--b2);border-radius:10px;padding:12px 13px;box-shadow:0 12px 34px rgba(0,0,0,.45);
+  font-family:'Geist',sans-serif;backdrop-filter:blur(6px);}
+.mlp-head{font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--t-meta);margin-bottom:9px;}
+.mlp-row{display:flex;align-items:center;gap:9px;padding:5px 2px;cursor:pointer;user-select:none;border-radius:5px;transition:background .12s;}
+.mlp-row:hover{background:rgba(255,255,255,0.03);}
+.mlp-check{width:15px;height:15px;flex:none;border:1.5px solid var(--b2);border-radius:4px;display:inline-flex;
+  align-items:center;justify-content:center;font-size:10px;color:transparent;transition:.12s;}
+.mlp-check.on{background:var(--accent);border-color:var(--accent);color:#0b0b0d;}
+.mlp-check.sm{width:13px;height:13px;font-size:9px;}
+.mlp-icon{width:15px;flex:none;text-align:center;font-size:12px;line-height:1;}
+.mlp-label{flex:1;font-size:12px;color:var(--t1);}
+.mlp-count{font-family:'Geist Mono',monospace;font-size:10px;color:var(--t-meta);}
+.mlp-chev{color:var(--t-meta);font-size:9px;padding:2px 3px;transition:transform .15s;}
+.mlp-chev.open{transform:rotate(90deg);}
+.mlp-sub{margin:1px 0 4px 7px;border-left:1px solid var(--b1);padding-left:9px;}
+.mlp-subrow{display:flex;align-items:center;gap:8px;padding:3.5px 2px;cursor:pointer;border-radius:4px;transition:background .12s;}
+.mlp-subrow:hover{background:rgba(255,255,255,0.03);}
+.mlp-subrow .mlp-label{font-size:11px;color:var(--t2);}
+.mlp-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+.mlp-select{width:100%;margin:4px 0 2px;background:var(--bg2);border:1px solid var(--b2);color:var(--t2);
+  font:500 11px 'Geist',sans-serif;border-radius:6px;padding:5px 8px;appearance:auto;-webkit-appearance:menulist;}
+.mlp-foot{margin-top:9px;padding-top:8px;border-top:1px solid var(--b1);font-size:8.5px;color:var(--t3);line-height:1.5;}
 </style>
 </head>
 <body>
@@ -7420,16 +7444,12 @@ body::before {
           <div class="msp-val" id="msp-avg" style="color:var(--r2)">—</div>
           <div class="msp-label">Avg FDRS</div>
         </div>
-        <button class="map-dist-toggle" id="map-dist-toggle" onclick="toggleMapDisturbances()" aria-pressed="false" title="Overlay live disturbances on the map">
-          <span class="dist-toggle-dot"></span>
-          <span class="dist-toggle-label">Live disturbances</span>
-          <span class="dist-toggle-count" id="map-dist-count">—</span>
-        </button>
-        <!-- v38 — standalone Chokepoints toggle removed (again, per owner): chokepoints surface only inside the Live disturbances overlay as clickable teal anchor markers. -->
-        <select class="map-dist-toggle" id="map-commodity-flows" onfocus="populateCommodityFlowSelect()" onchange="toggleCommodityFlowOverlay(this.value)" title="Draw every cited trade corridor for one commodity — solid green = observed, dashed blue = modeled, stroke = tonnage" style="appearance:auto;-webkit-appearance:menulist;max-width:190px;">
-          <option value="">Commodity flows…</option>
-        </select>
       </div>
+
+      <!-- v40 — MAP LAYERS panel: foldable layer control below the stat strip.
+           Live disturbances → its sub-types; Export restrictions; Trade flows + selector.
+           Rendered by renderMapLayers(); replaces the old inline toggle + commodity <select>. -->
+      <div id="map-layers"></div>
 
       <!-- Disturbance overlay legend (shown when toggle is on) -->
       <div id="map-dist-legend"></div>
@@ -23124,6 +23144,7 @@ function updateOverlayStats() {
   const mc = document.getElementById('msp-countries'); if (mc) mc.textContent = n;
   const mv = document.getElementById('msp-vulnerable'); if (mv) mv.textContent = vuln;
   const ma = document.getElementById('msp-avg'); if (ma) ma.textContent = avg;
+  if (typeof renderMapLayers === 'function') renderMapLayers();  // v40 — MAP LAYERS panel
 
   // v21 design audit — editorial standfirst above the map. Live-computed from
   // the same data the overlay pills use. Disturbance count is read from the
@@ -28377,34 +28398,95 @@ function toggleCommodityFlowOverlay(dataKey) {
     }
   } catch(e) { console.warn('[atlas overlay]', e); }
 }
-function toggleMapDisturbances(){
-  const btn = document.getElementById('map-dist-toggle');
-  const leg = document.getElementById('map-dist-legend');
-  if (!btn || !window.Globe) return;
-  if (Globe.disturbancesActive && Globe.disturbancesActive()) {
-    Globe.clearDisturbances();
-    btn.setAttribute('aria-pressed', 'false');
-    if (leg) leg.classList.remove('open');
-  } else {
-    if (typeof disturbanceEvents === 'undefined' || !disturbanceEvents.length) {
-      // Try to load first then show
-      if (typeof loadDisturbanceData === 'function') {
-        loadDisturbanceData().then(()=>{
-          Globe.showDisturbances(disturbanceEvents);
-          btn.setAttribute('aria-pressed', 'true');
-          renderMapDistLegend();
-          if (leg) leg.classList.add('open');
-          updateMapDistCount();
-        });
-        return;
-      }
-    }
-    Globe.showDisturbances(disturbanceEvents);
-    btn.setAttribute('aria-pressed', 'true');
-    renderMapDistLegend();
-    if (leg) leg.classList.add('open');
-  }
+// ── MAP LAYERS panel (v40) ──────────────────────────────────────────────────
+// A single foldable layer control below the stat strip. "Live disturbances" folds
+// down to its sub-types (each independently toggleable); "Export restrictions" and
+// "Trade flows" are their own layers. All layers are real — no fabricated data.
+// Filtering just passes a type-filtered event array to Globe.showDisturbances (no
+// marker-internal changes). Replaces the old inline disturbance toggle + <select>.
+const ML_TYPES = [
+  { t:'famine',      c:'#c44b3c', l:'Hunger alerts' },
+  { t:'drought',     c:'#c47a3c', l:'Drought' },
+  { t:'flood',       c:'#4a7ab3', l:'Flood' },
+  { t:'conflict',    c:'#9b4a9b', l:'Conflict' },
+  { t:'price_spike', c:'#c9a957', l:'Price spike' },
+  { t:'earthquake',  c:'#6b5a8a', l:'Earthquake' },
+  { t:'cyclone',     c:'#4a8a9b', l:'Cyclone' },
+  { t:'chokepoint',  c:'#3a8f8f', l:'Chokepoint' },
+];
+window._mlState = window._mlState || { distOn:false, restrOn:false, flowsOn:false, expanded:false, hidden:new Set() };
+
+function _mlCounts(){
+  const c = {};
+  if (typeof disturbanceEvents !== 'undefined' && Array.isArray(disturbanceEvents))
+    disturbanceEvents.forEach(e => { c[e.type] = (c[e.type] || 0) + 1; });
+  return c;
 }
+function applyMapLayers(){
+  const st = window._mlState;
+  if (!window.Globe) return;
+  const visible = new Set();
+  if (st.distOn) ML_TYPES.forEach(x => { if (!st.hidden.has(x.t)) visible.add(x.t); });
+  if (st.restrOn) visible.add('restriction');
+  if (visible.size === 0) { if (Globe.clearDisturbances) Globe.clearDisturbances(); return; }
+  const draw = () => Globe.showDisturbances(disturbanceEvents.filter(e => visible.has(e.type)));
+  if (typeof disturbanceEvents === 'undefined' || !disturbanceEvents.length) {
+    if (typeof loadDisturbanceData === 'function') {
+      loadDisturbanceData().then(() => { draw(); renderMapLayers(); });
+      return;
+    }
+  }
+  draw();
+}
+function renderMapLayers(){
+  const el = document.getElementById('map-layers');
+  if (!el) return;
+  const st = window._mlState, counts = _mlCounts();
+  const distTotal = ML_TYPES.reduce((s,x) => s + (counts[x.t] || 0), 0);
+  const chk = (on, sm) => `<span class="mlp-check${on ? ' on' : ''}${sm ? ' sm' : ''}">${on ? '✓' : ''}</span>`;
+  const subs = ML_TYPES.map(x => `
+    <div class="mlp-subrow" onclick="mlToggleType(event,'${x.t}')">
+      ${chk(st.distOn && !st.hidden.has(x.t), true)}
+      <span class="mlp-dot" style="background:${x.c}"></span>
+      <span class="mlp-label">${x.l}</span>
+      <span class="mlp-count">${counts[x.t] || 0}</span>
+    </div>`).join('');
+  el.innerHTML = `
+    <div class="mlp-head">Map layers</div>
+    <div class="mlp-row" onclick="mlToggleDist(event)">
+      ${chk(st.distOn)}
+      <span class="mlp-icon" style="color:#c44b3c">◉</span>
+      <span class="mlp-label">Live disturbances</span>
+      <span class="mlp-count">${distTotal || '—'}</span>
+      <span class="mlp-chev${st.expanded ? ' open' : ''}" onclick="mlToggleExpand(event)" title="Show types">▸</span>
+    </div>
+    ${st.expanded ? `<div class="mlp-sub">${subs}</div>` : ''}
+    <div class="mlp-row" onclick="mlToggleRestr(event)">
+      ${chk(st.restrOn)}
+      <span class="mlp-icon" style="color:#c9683c">⛔</span>
+      <span class="mlp-label">Export restrictions</span>
+      <span class="mlp-count">${counts['restriction'] || 0}</span>
+    </div>
+    <div class="mlp-row" onclick="mlToggleFlows(event)">
+      ${chk(st.flowsOn)}
+      <span class="mlp-icon" style="color:#6ba36b">━</span>
+      <span class="mlp-label">Trade flows</span>
+    </div>
+    <select class="mlp-select" id="map-commodity-flows" onfocus="populateCommodityFlowSelect()"
+            onchange="toggleCommodityFlowOverlay(this.value)" style="${st.flowsOn ? '' : 'display:none'}">
+      <option value="">Choose a commodity…</option>
+    </select>
+    <div class="mlp-foot">Disturbances: GDACS · ReliefWeb · WFP · IPC · FEWS. Export restrictions: cited (IFPRI). Trade flows: cited bilateral corridors.</div>`;
+  if (st.flowsOn && typeof populateCommodityFlowSelect === 'function') populateCommodityFlowSelect();
+}
+function mlToggleDist(ev){ ev.stopPropagation(); const st = window._mlState; st.distOn = !st.distOn; if (st.distOn) st.expanded = true; applyMapLayers(); renderMapLayers(); }
+function mlToggleExpand(ev){ ev.stopPropagation(); window._mlState.expanded = !window._mlState.expanded; renderMapLayers(); }
+function mlToggleType(ev, t){ ev.stopPropagation(); const st = window._mlState; if (st.hidden.has(t)) st.hidden.delete(t); else st.hidden.add(t); if (!st.distOn) st.distOn = true; applyMapLayers(); renderMapLayers(); }
+function mlToggleRestr(ev){ ev.stopPropagation(); const st = window._mlState; st.restrOn = !st.restrOn; applyMapLayers(); renderMapLayers(); }
+function mlToggleFlows(ev){ ev.stopPropagation(); const st = window._mlState; st.flowsOn = !st.flowsOn; if (!st.flowsOn && typeof toggleCommodityFlowOverlay === 'function') toggleCommodityFlowOverlay(''); renderMapLayers(); }
+
+// Backward-compatible wrapper — other callers (tour steps, resets) still work.
+function toggleMapDisturbances(){ mlToggleDist({ stopPropagation(){} }); }
 
 function renderMapDistLegend(){
   const leg = document.getElementById('map-dist-legend');
