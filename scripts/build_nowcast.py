@@ -12,6 +12,9 @@ Writes: data/nowcast.json
 Formula (extended May 2026, expanded May 2026 v20.27):
   Nowcast adjustment (range: -10 to +35 points) =
       ipc_pressure       (0-12)  — share of population in IPC Phase 3+
+    + fews_kick          (0-6)   — FEWS NET forward projection: gap-fills the crisis
+                                   level where IPC is absent, plus a deterioration nudge
+                                   when the near-term projection is worse than current
     + wfp_pressure       (0-6)   — FCS prevalence above 30%
     + conflict_kick      (0-5)   — ACLED 30-day intensity
     + global_food_kick   (0-2)   — FAO FFPI MoM > +3%
@@ -52,6 +55,7 @@ def main():
     wfp     = load("wfp_hungermap.json")["data"]
     wfp_c   = load("wfp_country.json")["data"]
     ipc     = load("ipc.json")["data"]
+    fews    = load("fews.json")["data"]   # v42 — FEWS NET forward projection (crisis gap-fill + deterioration)
     acled   = load("acled.json")["data"]
     ffpi    = load("fao_ffpi.json")["data"]
     rw      = load("reliefweb_alerts.json")["data"]
@@ -103,7 +107,7 @@ def main():
         print(f"  [warn] countries.json profile set unavailable ({e}) — falling back to feed union only")
         canonical_iso = set()
 
-    feed_iso = (set(wfp) | set(ipc) | set(acled) | set(om) | set(wfp_c)
+    feed_iso = (set(wfp) | set(ipc) | set(fews) | set(acled) | set(om) | set(wfp_c)
                 | set(estat) | set(faostat) | set(inform) | set(wgi) | set(psd)
                 | set(usgs) | set(feeding))   # v25 — include US-state feeds so US- rows exist
     # Compute over feeds ∪ profiles so profiles with no feed still get a (zero) row;
@@ -133,6 +137,28 @@ def main():
         wfp_pressure  = min(6, max(0, (wfp_fcs - 30) * 0.15))
         conflict_kick = min(5, conflict * 0.05)
         relief_damp   = -2 if relief_n >= 3 else (-1 if relief_n >= 1 else 0)
+
+        # v42 — FEWS NET forward projection. FEWS is the best forward-looking famine
+        # signal and was previously display-only. To avoid double-counting IPC's
+        # CURRENT Phase 3+ reading, FEWS contributes to the nowcast in two honest ways:
+        #   (a) crisis GAP-FILL — only when IPC has no reading for the country, FEWS'
+        #       observed current_phase (>=3) backstops the crisis level; and
+        #   (b) a forward DETERIORATION nudge — when the near-term projected_phase is
+        #       worse than the current_phase, add a small kick regardless of IPC.
+        # Capped at +6 so a projection can't dominate observed current conditions.
+        fw_row      = fews.get(iso) or {}
+        fews_cur    = fw_row.get("current_phase")
+        fews_proj   = fw_row.get("projected_phase")
+        ipc_present = (ipc.get(iso) or {}).get("phase3plus_pct") is not None
+        fews_kick   = 0
+        fews_basis  = None
+        if not ipc_present and isinstance(fews_cur, (int, float)) and fews_cur >= 3:
+            fews_kick  = min(6, (fews_cur - 2) * 2)   # phase 3->2, 4->4, 5->6
+            fews_basis = "current_phase_gapfill"
+        if (isinstance(fews_proj, (int, float)) and isinstance(fews_cur, (int, float))
+                and fews_proj > fews_cur):
+            fews_kick  = min(6, fews_kick + 2)         # near-term deterioration
+            fews_basis = fews_basis or "projected_deterioration"
 
         # FX shock — currency dropped >10% vs USD in 90d
         fx_pct = wc.get("fx_90d_change_pct")
@@ -240,7 +266,7 @@ def main():
         psd_shortfall = min(3, psd_shortfall)
 
         adj = round(
-            ipc_pressure + wfp_pressure + conflict_kick + global_food_kick
+            ipc_pressure + fews_kick + wfp_pressure + conflict_kick + global_food_kick
             + fx_shock + inflation_shock + weather_kick + flood_kick
             + fire_kick + aq_kick + us_water_kick + us_fi_kick
             + inform_amp + governance_drag + psd_shortfall
@@ -260,6 +286,7 @@ def main():
         # made sparse-data countries look calmer and more certain than they are.
         has_ipc = iso in ipc and (ipc.get(iso) or {}).get("phase3plus_pct") is not None
         has_wfp = iso in wfp and (wfp.get(iso) or {}).get("fcs_pct") is not None
+        has_fews = isinstance(fews_cur, (int, float))   # v42 — FEWS is an authoritative crisis feed
         # v25 — US states have their own core feed (Feeding America food insecurity),
         # so a US- row with FA data is high-confidence on its own terms.
         has_us_core = iso.startswith("US-") and isinstance(fa_pct, (int, float))
@@ -269,7 +296,7 @@ def main():
         # monitoring — so a present reading counts toward confidence rather than
         # leaving these countries mislabelled "no live signal".
         has_food_price = isinstance(food_infl, (int, float))
-        core_signals = sum([has_ipc, has_wfp, has_us_core])
+        core_signals = sum([has_ipc, has_wfp, has_us_core, has_fews])
         if core_signals >= 1:
             confidence = "high"
         elif has_food_price:
@@ -285,11 +312,12 @@ def main():
         out[iso] = {
             "adjustment": adj,
             "confidence": confidence,
-            "core_signals_present": {"ipc": has_ipc, "wfp_hungermap": has_wfp},
+            "core_signals_present": {"ipc": has_ipc, "wfp_hungermap": has_wfp, "fews": has_fews},
             "components": {
                 "ipc_pressure":    round(ipc_pressure, 1),
                 "wfp_pressure":    round(wfp_pressure, 1),
                 "conflict_kick":   round(conflict_kick, 1),
+                "fews_kick":       round(fews_kick, 1),
                 "global_food_kick": global_food_kick,
                 "fx_shock":        round(fx_shock, 1),
                 "inflation_shock": round(inflation_shock, 1),
@@ -308,6 +336,9 @@ def main():
                 "ipc_phase3plus_pct":   ipc_p3,
                 "wfp_fcs_pct":          wfp_fcs,
                 "acled_intensity":      conflict,
+                "fews_current_phase":   fews_cur,
+                "fews_projected_phase": fews_proj,
+                "fews_basis":           fews_basis,
                 "ffpi_mom_pct":         (ffpi or {}).get("change_mom_pct"),
                 "active_reports_30d":   relief_n,
                 "fx_90d_change_pct":    fx_pct,
@@ -347,7 +378,8 @@ def main():
                 "Composite: WFP HungerMap + IPC + ACLED + FAO FFPI + ReliefWeb + "
                 "Open-Meteo (weather/flood) + NASA FIRMS + OpenAQ + USGS Water + "
                 "WFP per-country (FX/inflation) + Eurostat food HICP + FAOSTAT food CPI "
-                "+ INFORM risk + WB WGI rule of law + USDA PSD staples shortfall"
+                "+ FEWS NET forward projection + INFORM risk + WB WGI rule of law "
+                "+ USDA PSD staples shortfall"
             ),
             "notes": (
                 "Adjustment range -10 to +35 added to structural FDRS to produce "

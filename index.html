@@ -14456,7 +14456,7 @@ const DATASTATUS_FEEDS = {
   eurostat_food: 'EU 27 monthly food HICP · food-inflation signal for European countries',
   faostat_food:  'Global annual food CPI · fallback inflation signal outside EU + WFP coverage',
   reliefweb_alerts: 'Humanitarian alerts (Food & Nutrition theme) · Disturbances tab',
-  acled:         'Conflict events + fatalities · nowcast conflict amplifier',
+  acled:         'Conflict events + fatalities · feeds the nowcast conflict signal ONLY when the feed is live (is_live); a degraded/lagged feed contributes 0',
   comtrade_staples: 'Bilateral staples trade flows · Trade Flow Atlas + commodity exposure',
   feeding_america_states: 'US state food-insecurity % · live nowcast signal for all 50 US states',
   openmeteo:     'Past-14-day precipitation + temperature anomaly · weather extremes signal',
@@ -23678,6 +23678,7 @@ function openPanel(c, skipDrilldown) {
             ipc_pressure:     'IPC Phase 3+ pressure',
             wfp_pressure:     'WFP food consumption',
             conflict_kick:    'Conflict intensity (ACLED)',
+            fews_kick:        'FEWS NET forward projection',
             global_food_kick: 'Global food prices (FAO FFPI)',
             fx_shock:         'Currency shock (90d FX)',
             inflation_shock:  'Food inflation',
@@ -23686,6 +23687,7 @@ function openPanel(c, skipDrilldown) {
             fire_kick:        'Fire activity',
             aq_kick:          'Air quality (PM2.5)',
             us_water_kick:    'US river flow',
+            us_fi_kick:       'US state food insecurity',
             inform_amp:       'INFORM humanitarian risk',
             governance_drag:  'Governance brittleness (WGI)',
             psd_shortfall:    'Staple production shortfall (USDA PSD)',
@@ -30552,7 +30554,7 @@ function renderMethodologyTab() {
             <div style="font-size:12.5px;font-weight:600;color:var(--t1)">Nowcast FDRS</div>
           </div>
           <div style="font-size:11.5px;color:var(--t3);line-height:1.6;margin-bottom:8px;">
-            Structural FDRS adjusted daily by live signals: IPC phase shifts, ACLED conflict spikes, FAO Food Price Index,
+            Structural FDRS adjusted daily by live signals: IPC phase shifts, FEWS NET forward projections, ACLED conflict spikes (only when the licensed feed is live), FAO Food Price Index,
             ReliefWeb humanitarian alerts and WFP HungerMap consumption flags. Answers <b>"what's moving right now?"</b>
           </div>
           <div style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--accent);">cadence: 6h · 00/06/12/18 UTC</div>
@@ -30563,8 +30565,9 @@ function renderMethodologyTab() {
         <div><span style="color:var(--accent)">Nowcast FDRS</span> = Structural FDRS + Δ<sub>nowcast</sub></div>
         <div style="padding-left:18px;margin-top:6px;font-size:11.5px;">
           Δ<sub>nowcast</sub> = ipc_pressure (0–12)
+          + fews_kick (0–6) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— FEWS NET forward projection: gap-fills where IPC is absent + deterioration nudge</span>
           + wfp_consumption (0–6)
-          + conflict (0–5)
+          + conflict (0–5) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— ACLED, only when the feed is live</span>
           + global_price (0–2)
           <br>+ fx_shock (0–3)
           + inflation_shock (0–3)
@@ -30576,11 +30579,12 @@ function renderMethodologyTab() {
           <br>+ inform_amp (0–3) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— INFORM ≥ 7.5</span>
           + governance_drag (0–2) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— WGI rule of law ≤ −1.0</span>
           + psd_shortfall (0–3) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— USDA PSD staple production gap</span>
-          − humanitarian_response (0–2)
+          − humanitarian_response (0–2) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— active ReliefWeb response reports LOWER the acute score (mitigation present, not extra risk)</span>
         </div>
         <div style="padding-left:18px;color:var(--t3);font-size:11px;font-family:'Geist',sans-serif;margin-top:8px;">
           Bounded to [−10, +35] so live noise never overwhelms the structural baseline.
-          A country panel showing <b style="color:var(--accent)">Δ +N</b> next to FDRS is the nowcast above the structural score.
+          A country panel showing <b style="color:var(--accent)">Δ +N</b> next to FDRS is the nowcast above the structural score — click <b>"show breakdown"</b> there to see every component's exact contribution.
+          <br><b style="color:var(--t2)">Display-only vs scored:</b> only the components in the formula above move a number. GDACS disaster alerts, the ReliefWeb news list on the Disturbances tab, and FEWS map events are shown for situational <em>context</em> and never change the FDRS or nowcast. ReliefWeb's <em>count</em> of active responses is the one exception — it enters as the small negative damper above.
         </div>
       </div>
       <div style="font-size:11.5px;color:var(--t3);line-height:1.7;margin-bottom:14px;">
@@ -30598,6 +30602,7 @@ function renderMethodologyTab() {
         <br><b style="color:var(--t1)">v20.5–v20.25.</b> Per-metric provenance system added (see card below). Pipelines added: FAOSTAT FBS (caloric shares for 177 countries), FAOSTAT TCL (observed net food trade 185 countries), WB WDI bulk (20 structural indicators), WB WGI (6 governance indicators), WB WFSO (food-security outlook), USDA PSD (observed staples production/imports/exports for wheat/rice/corn/soybeans), ND-GAIN climate, WRI Aqueduct water risk, EU JRC INFORM risk. Static-link helpers for FAO GIEWS, FEWS NET, WFP ACR, USDA GAIN. Cron cadence moved from daily 06:00 UTC to every 6h. Source-health pill now shows last-refresh age in human terms.
         <br><b style="color:var(--t1)">v20.26–v25.</b> Climate &amp; governance pipelines now sourced: <b>structural FDRS climate component</b> (c[4]) blends ND-GAIN food vulnerability + WRI Aqueduct drought/flood risk + WB CCKP observed warming at 60%, 40% heritage; <b>conflict/logistics component</b> (c[5]) blends EU JRC INFORM risk + WB WGI rule-of-law + INFORM lack-of-coping-capacity (LPI when available) at 60%, 40% heritage; <b>nowcast Δ</b> extended with INFORM amplifier (+0-3), governance drag (+0-2), USDA PSD shortfall (+0-3); <b>2030 modeled outlook</b> climate kick uses observed CCKP warming + ND-GAIN food vulnerability (capped +5). <b>v25 source fixes (Jun 2026):</b> INFORM rewired to the committed 2026 edition (191 countries); Aqueduct, CCKP and WGI repointed to the WB Data360 mirror after their direct endpoints drifted — CCKP now serves observed temperature/precipitation (not a 2050 projection), WGI all six governance dimensions. A country falls back to its heritage value only where its specific feed is temporarily degraded; live per-source status is on the Data Status page. All overlays preserve heritage values on c._cOriginal / c._fdrsRaw / c._f2030Structural for reference.
         <br><b style="color:var(--t1)">FDRS v2 (Jun 2026).</b> The formula moves to <b>nine components</b> in one clean weighted sum (Σ = 1.00: 23/16/11/9/9/8/6/12/6), retiring the old "92% caloric + 8% SCE / ÷0.92 rescale" blend. Supply-Chain Exposure is now component 6; two new components join: <b>Economic Access</b> (12% — FX depreciation, reserve adequacy, external debt-service, income; the "can they pay for food?" dimension reviewers flagged as missing) and <b>Grain Reserve Buffer</b> (6% — USDA PSD stocks-to-use). One bounded interaction term is added — the <b>import-dependency × economic-access double-bind amplifier</b>, capped at +6 points. Scenario engine gains channels 7–8 with new <b>Debt/FX crisis</b> and <b>Grain reserve depletion</b> shocks (the old <code>fx</code> lever is retired and aliased so saved presets still work); the 2030 overlay gains two durable structural-economic terms inside the existing clamp. Expected movement: FX-fragile / debt-distressed economies rise (Egypt 61→68, Sri Lanka up sharply), sovereign-wealth-insulated importers fall (Saudi ~55) — the intended correction. Weights and the amplifier ceiling remain <b>reasoned judgment, not regressed; there is no back-test.</b> Each sub-input is badged sourced / partial / heritage and degrades honestly (Economic Access runs on income alone where reserve/debt/FX feeds are absent). Migration-safe: countries whose dataset has not yet been rebuilt with c[7]/c[8] still score (missing new components read as 0 = resilient).
+        <br><b style="color:var(--t1)">v42 (Jul 2026) — live-signal honesty pass.</b> <b>FEWS NET</b> now feeds the nowcast (≤+6): it gap-fills the crisis level where IPC has no reading and adds a deterioration nudge when the near-term projection worsens — previously it was display-only. The per-country <b>nowcast breakdown</b> is click-to-expand on every panel (exact contribution of each sub-signal). Feed roles are now labelled honestly: <b>ACLED</b> contributes only when its licensed feed is live (a lagged/degraded tier adds 0, avoiding double-counting the structural conflict component); <b>GDACS</b> and the <b>ReliefWeb news list</b> are situational context, not scoring inputs; the <b>ReliefWeb response count</b> is the one news-derived signal that scores, as a small negative damper. No structural weights changed.
       </div>
     </div>
 
@@ -30777,9 +30782,9 @@ function renderMethodologyTab() {
           {src:'WRI Aqueduct 4.0',yr:'2023 release',used:'Water stress, drought risk, riverine + coastal flood risk — 5 indicators per country',url:'https://www.wri.org/data/aqueduct-40-country-rankings'},
           {src:'EU JRC INFORM Risk Index',yr:'2026',used:'Composite humanitarian risk (0–10) + 3 dimensions: hazard/exposure, vulnerability, lack of coping capacity',url:'https://drmkc.jrc.ec.europa.eu/inform-index/INFORM-Risk'},
           {src:'FAO FFPI + WB Pink Sheet',yr:'monthly',used:'Global food price index + commodity benchmarks (wheat, rice, corn, palm oil, fertilizer)',url:'https://www.fao.org/worldfoodsituation/foodpricesindex'},
-          {src:'ACLED (Armed Conflict Location & Event Data)',yr:'live',used:'Conflict fatality + event counts feeding the nowcast conflict signal',url:'https://acleddata.com'},
+          {src:'ACLED (Armed Conflict Location & Event Data)',yr:'live when licensed',used:'Conflict fatality + event counts. Feeds the nowcast conflict signal ONLY when the feed is live (is_live); on a lagged/degraded tier it is already captured in the structural conflict component and contributes 0 to the live delta (no double-count)',url:'https://acleddata.com'},
           {src:'ReliefWeb',yr:'live',used:'Humanitarian situation reports tagged Food & Nutrition theme',url:'https://reliefweb.int'},
-          {src:'GDACS',yr:'live',used:'Natural-disaster alerts on the Disturbances tab (in-browser fetch)',url:'https://www.gdacs.org'},
+          {src:'GDACS',yr:'live',used:'Natural-disaster alerts on the Disturbances tab (in-browser fetch) — shown for situational context only, NOT a scoring input (does not affect FDRS or the nowcast)',url:'https://www.gdacs.org'},
           {src:'UN Comtrade Plus (public preview)',yr:'2024',used:'Bilateral staples trade flows — observed wheat/rice/corn/soy by importer × exporter',url:'https://comtradeplus.un.org'},
           {src:'Open-Meteo Weather + Flood',yr:'live',used:'Precipitation + temperature anomalies, river discharge in flood-exposed basins',url:'https://open-meteo.com'},
           {src:'USGS Water Services',yr:'live',used:'US river flow anomalies (drought / flood proxies for cropland regions)',url:'https://waterservices.usgs.gov'},
@@ -30789,7 +30794,7 @@ function renderMethodologyTab() {
           {src:'FAOSTAT food CPI',yr:'quarterly',used:'Global annual food consumer-price index',url:'https://www.fao.org/faostat/en/#data/CP'},
           {src:'Feeding America (Map the Meal Gap)',yr:'2025 (data 2023)',used:'US state food-insecurity %',url:'https://map.feedingamerica.org'},
           {src:'FAO GIEWS Country Briefs',yr:'quarterly',used:'Per-country food-security situation briefs (~80 countries) — static link to FAO',url:'https://www.fao.org/giews/countrybrief/'},
-          {src:'FEWS NET FDW (live API)',yr:'quarterly',used:'IPC-style current + 3-month + 8-month projected phase classifications for ~35 priority countries — live FDW API (per-country worst-phase summary)',url:'https://fdw.fews.net/api/'},
+          {src:'FEWS NET FDW (live API)',yr:'quarterly',used:'IPC-style current + 3-month + 8-month projected phase classifications for ~35 priority countries — live FDW API. v42: now feeds the nowcast (≤+6) — gap-fills the crisis level where IPC is absent, plus a deterioration nudge when the near-term projection worsens (no double-count with IPC current phase)',url:'https://fdw.fews.net/api/'},
           {src:'WFP Annual Country Reports',yr:'2025',used:'WFP country-office operational narratives — static link to wfp.org',url:'https://www.wfp.org/annual-country-reports-2025'},
           {src:'USDA GAIN attaché reports',yr:'weekly',used:'Per-country commodity intelligence (~80 FAS posts) — static search link',url:'https://www.fas.usda.gov/data/search'},
           {src:'OECD-FAO Agricultural Outlook',yr:'2025–2034',used:'Reference trajectory informing the curated 2030 structural baseline (not directly ingested)',url:'https://www.oecd.org/en/publications/oecd-fao-agricultural-outlook-2025-2034_601276cd-en.html'},
