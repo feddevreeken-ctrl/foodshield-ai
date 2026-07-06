@@ -365,6 +365,12 @@ def main():
                 "countries_monitored": n_mon,
                 "countries_low_confidence": n_low,
                 "countries_no_live_signal": n_none,
+                # v41 — record secondary feeds that were EMPTY at build time, so a
+                # fire_kick/aq_kick of 0 is auditable as "feed down" rather than
+                # reading as "no fires / clean air" (audit 2026-07-01).
+                "secondary_feeds_empty": [name for name, feed in (
+                    ("nasa_firms", fires), ("openaq", aq), ("usgs_water", usgs),
+                ) if not feed],
             },
             "version": "v25",
         },

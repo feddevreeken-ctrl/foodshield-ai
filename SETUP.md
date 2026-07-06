@@ -1,12 +1,12 @@
-# FoodShield AI — Setup & Daily Data Refresh
+# FoodShield AI — Setup & Automated Data Refresh
 
-> ℹ️ **Feed count updated 2026-06-15.** The pipeline now has **32 `refresh_*.py` feed scripts** (plus the build/rebuild steps in `run_all.py`). The "18 feeds" list below is an early subset kept for setup context — for the live, health-tracked inventory open the source-health pill in the app or read `data/source_manifest.json`. Authoritative status: **HANDOVER_2026-06-15.md**.
+> ℹ️ **Feed count updated 2026-07-01.** The pipeline now has **33 `refresh_*.py` feed scripts** (plus the build/rebuild steps in `run_all.py`). One of the 33, `refresh_net_food_trade.FIXED.py`, is an unused duplicate of `refresh_net_food_trade.py` — `run_all.py` imports the non-`.FIXED` version. The "18 feeds" list below is an early subset kept for setup context — for the live, health-tracked inventory open the source-health pill in the app or read `data/source_manifest.json`. Authoritative status: **HANDOVER_2026-06-15.md**.
 
-This repo includes a GitHub Actions workflow that refreshes `data/` every day at `06:00 UTC`, rebuilds the nowcast, writes a per-source health manifest, and redeploys the frontend.
+This repo includes a GitHub Actions workflow that refreshes `data/` every 6 hours (cron `0 */6 * * *`: 00:00, 06:00, 12:00, 18:00 UTC), rebuilds the nowcast, writes a per-source health manifest, and redeploys the frontend.
 
 ## Current feed inventory
 
-The pipeline currently tracks 32 feed scripts (this section lists an early 18-feed subset; see note above):
+The pipeline currently tracks 33 feed scripts (this section lists an early 18-feed subset; see note above):
 
 - `fao_ffpi.json` — FAO Food Price Index
 - `worldbank_pink_sheet.json` — World Bank commodity benchmarks
@@ -110,17 +110,17 @@ Without it, `comtrade_staples.json` stays in setup-required mode.
 
 ### 4. FAOSTAT note
 
-`refresh_faostat.py` currently relies on an older guest-token flow that can return `403` as FAO migrates services. This feed is intentionally treated as degradable:
+**RESOLVED 2026-06-15.** `refresh_faostat.py` previously relied on an older guest-token flow that returned `403` as FAO migrated services. It was rewritten (v38.4) to read the FAOSTAT CP bulk download instead; `faostat_food.json` is now populated with 162 countries and `source_manifest.json` marks it `ok` (see CHANGELOG, 2026-06-15).
+
+The feed is still intentionally treated as degradable if it ever fails again:
 
 - the workflow keeps running if it fails
 - `source_manifest.json` marks it `degraded`
 - the frontend falls back to fresher WFP / Eurostat / World Bank inflation inputs
 
-If you want FAOSTAT fully live again, treat it as a separate integration task rather than assuming the legacy guest endpoint is stable.
-
 ## Workflow behavior
 
-The daily workflow:
+The refresh workflow (every 6 hours):
 
 1. checks out the repo
 2. installs Python dependencies from `scripts/requirements.txt`

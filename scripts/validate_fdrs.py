@@ -105,7 +105,26 @@ def main():
     fews_phase = {iso: d.get("current_phase") for iso, d in fews.items()
                   if isinstance(d, dict) and isinstance(d.get("current_phase"), (int, float))}
 
-    report = {"n_countries": len(fdrs), "tests": {}}
+    # Honest early bail: with no FDRS scores or no ground truth at all, none of the
+    # metrics below are computable (and the top-N/percentile code would crash on
+    # empty lists). Write an explicit skipped envelope instead of a fake result.
+    if not fdrs or (not ipc_pct and not fews_phase):
+        reason = ("no FDRS scores loaded from countries.json" if not fdrs
+                  else "no IPC/FEWS ground truth loaded (ipc.json / fews.json empty or missing)")
+        report = {"n_countries": len(fdrs), "tests": {},
+                  "status": "insufficient_ground_truth", "reason": reason}
+        write_json(
+            "fdrs_validation.json", report,
+            source="FoodShield FDRS structural validation vs IPC + FEWS NET",
+            notes=f"Validation SKIPPED — insufficient ground truth: {reason}. No metrics computed.",
+            status="insufficient_ground_truth",
+        )
+        print("FDRS STRUCTURAL VALIDATION — SKIPPED")
+        print(f"  insufficient ground truth: {reason}")
+        print("  Wrote data/fdrs_validation.json with _meta.status=insufficient_ground_truth.")
+        return
+
+    report = {"n_countries": len(fdrs), "tests": {}, "status": "ok"}
 
     # 1) rank correlation within IPC-monitored countries
     common = sorted(set(fdrs) & set(ipc_pct))
@@ -145,7 +164,9 @@ def main():
     crisis_isos.sort(key=lambda i: fdrs[i], reverse=True)
     hits = [(i, fdrs[i], round(ipc_pct.get(i, 0), 1), fews_phase.get(i)) for i in crisis_isos]
 
-    # misses: crisis countries FDRS ranks LOW (bottom third of crisis set)
+    # misses: crisis countries whose FDRS ranks LOW globally. lo_cut is the 33rd
+    # percentile of FDRS across ALL countries (not the crisis set) — a crisis
+    # country scoring at/below the global bottom-third cutoff is an honest miss.
     fdrs_sorted = sorted(fdrs.values())
     lo_cut = fdrs_sorted[len(fdrs_sorted) // 3]
     misses = [(i, fdrs[i], round(ipc_pct.get(i, 0), 1), fews_phase.get(i))
@@ -159,18 +180,29 @@ def main():
     report["misses_crisis_low_fdrs"] = misses
     report["structural_watch_high_fdrs_no_current_crisis"] = watch
 
+    def _na(x):
+        return "n/a" if x is None else x
+
     write_json(
         "fdrs_validation.json", report,
         source="FoodShield FDRS structural validation vs IPC + FEWS NET",
-        notes=(f"ROC-AUC {report['tests']['auc_crisis_vs_noncrisis']['auc']} (crisis vs non-crisis); "
-               f"Spearman vs IPC {report['tests']['spearman_fdrs_vs_ipc_pct']['rho']}. "
+        notes=(f"ROC-AUC {_na(report['tests']['auc_crisis_vs_noncrisis']['auc'])} (crisis vs non-crisis); "
+               f"Spearman vs IPC {_na(report['tests']['spearman_fdrs_vs_ipc_pct']['rho'])}. "
                "Independent ground truth (not an FDRS input). Concurrent structural validation, "
                "not an ex-ante backtest — see LIMITATIONS in scripts/validate_fdrs.py."),
+        status="ok",
     )
 
     # ── printout ──────────────────────────────────────────────────────────────
+    # Everything that can compute has computed and the JSON is written by this
+    # point; every metric below may legitimately be None (e.g. no crisis-positive
+    # countries → recall undefined; n<3 → rho undefined), so every format is
+    # guarded — the printout must never be able to crash.
     def pct(x):
         return "—" if x is None else f"{x:+.2f}" if isinstance(x, float) and abs(x) <= 1 else str(x)
+
+    def as_pct(x):
+        return "—" if x is None else f"{x:.0%}"
 
     print("FDRS STRUCTURAL VALIDATION  (independent ground truth: IPC + FEWS NET)")
     print("=" * 74)
@@ -185,7 +217,7 @@ def main():
           f"(0.5=chance, 1.0=perfect; {t['auc_crisis_vs_noncrisis']['n_crisis']} crisis countries)")
     print(f"  crisis def: {t['auc_crisis_vs_noncrisis']['crisis_def']}")
     for N in (10, 20, 30):
-        print(f"  top-{N} FDRS:  precision {t[f'precision_at_{N}']:.0%}  ·  recall {t[f'recall_at_{N}']:.0%}")
+        print(f"  top-{N} FDRS:  precision {as_pct(t[f'precision_at_{N}'])}  ·  recall {as_pct(t[f'recall_at_{N}'])}")
     print(f"\nHITS — highest-FDRS countries that ARE in documented crisis (top 10):")
     for iso, f, ip, fp in hits[:10]:
         print(f"  {iso}  FDRS {f:>3}  ·  IPC phase3+ {ip:>4}%  ·  FEWS {fp if fp else '—'}")

@@ -42,7 +42,12 @@ BANDS = [
     (88, "Vulnerable", (0.90, 0.54, 0.47)),
     (100, "Severe",    (0.88, 0.47, 0.43)),
 ]
-WEIGHTS = [0.23, 0.16, 0.11, 0.09, 0.09, 0.08, 0.06, 0.12, 0.06]
+# Canonical weight vector — single source of truth is the builder (kept inside
+# the audit_formulas.py formula-integrity gate; build_countries_dataset is
+# side-effect-free at import time).
+from build_countries_dataset import FDRS_V2_WEIGHTS
+
+WEIGHTS = FDRS_V2_WEIGHTS
 COMP_LABELS = [
     "Import dependency", "Supplier concentration", "Production trend", "Food inflation",
     "Climate stress", "Conflict", "Supply-chain exposure", "Economic access", "Grain buffer",
@@ -115,9 +120,16 @@ def restrictions_affecting(iso, row, names):
         ex_name = names.get(ex_iso, (ex_iso or "", ""))[0].lower() if ex_iso else ""
         if not commodity:
             continue
-        imports_it = any(commodity in imp or imp in commodity for imp in imports)
+        # v41 — whole-word match, not substring: "rice" must not link "rice flour"
+        # (different HS line), and "soy" must not free-match "soybeans" both ways.
+        _word = re.compile(r"\b" + re.escape(commodity) + r"\b")
+        imports_it = any(_word.search(imp) for imp in imports)
         from_them = bool(ex_iso) and (str(ex_iso).lower() in suppliers or (ex_name and ex_name in suppliers))
-        if imports_it and (from_them or not ex_iso):
+        # v41 — a restriction with no exporter counts against every importer only
+        # when the record explicitly says it is global; otherwise skip (a missing
+        # iso is a data gap, not evidence of universal exposure).
+        is_global = r.get("global") is True or str(r.get("scope") or "").lower() == "global"
+        if imports_it and (from_them or is_global):
             out.append(r)
     return out
 

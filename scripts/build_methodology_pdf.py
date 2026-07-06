@@ -29,17 +29,23 @@ REPO = Path(__file__).resolve().parent.parent
 DATA = REPO / "data"
 OUT = REPO / "docs"
 
-WEIGHTS = [0.23, 0.16, 0.11, 0.09, 0.09, 0.08, 0.06, 0.12, 0.06]
+# Canonical weight vector — single source of truth is the builder (the
+# formula-integrity gate audit_formulas.py cross-checks it against index.html
+# and the fixtures; importing it here keeps this whitepaper inside that gate).
+# build_countries_dataset is side-effect-free at import time (constants + defs).
+from build_countries_dataset import FDRS_V2_WEIGHTS
+
+WEIGHTS = FDRS_V2_WEIGHTS
 COMPONENTS = [
-    ("Staple import dependency", "share of staple calories imported", "0.23"),
-    ("Supplier concentration", "reliance on few source countries (Comtrade)", "0.16"),
-    ("Production trend", "direction of domestic output (USDA PSD)", "0.11"),
-    ("Food inflation", "food CPI momentum (FAOSTAT / Eurostat)", "0.09"),
-    ("Climate volatility", "hazard / water stress (INFORM, Aqueduct, ND-GAIN)", "0.09"),
-    ("Conflict / logistics", "conflict intensity (ACLED) + trade friction", "0.08"),
-    ("Supply-chain exposure", "chokepoint reliance (live at render time)", "0.06"),
-    ("Economic access", "reserves, debt service, income (WDI, HDI)", "0.12"),
-    ("Grain reserve buffer", "ending stocks / consumption (USDA PSD)", "0.06"),
+    ("Staple import dependency", "share of staple calories imported"),
+    ("Supplier concentration", "reliance on few source countries (Comtrade)"),
+    ("Production trend", "direction of domestic output (USDA PSD)"),
+    ("Food inflation", "food CPI momentum (FAOSTAT / Eurostat)"),
+    ("Climate volatility", "hazard / water stress (INFORM, Aqueduct, ND-GAIN)"),
+    ("Conflict / logistics", "conflict intensity (ACLED) + trade friction"),
+    ("Supply-chain exposure", "chokepoint reliance (live at render time)"),
+    ("Economic access", "reserves, debt service, income (WDI, HDI)"),
+    ("Grain reserve buffer", "ending stocks / consumption (USDA PSD)"),
 ]
 
 NAVY = colors.HexColor("#171c29")
@@ -79,7 +85,9 @@ def _worked_example():
         c0 = cv[0] or 0; c7 = cv[7] if len(cv) > 7 and cv[7] is not None else 0
         amp = min(6 * (c0 / 100) * (c7 / 100), 6)
         name = {"MAR": "Morocco", "KEN": "Kenya", "EGY": "Egypt"}.get(iso, iso)
-        return name, cv, base, amp, base + amp, round(base + amp + 0.5 if False else base + amp), stored, int(max(0, min(100, base + amp)) + 0.5)
+        # calc mirrors the builder exactly: int(_clip(base + amp) + 0.5)
+        calc = int(max(0, min(100, base + amp)) + 0.5)
+        return name, cv, base, amp, base + amp, stored, calc
     return None
 
 
@@ -110,11 +118,15 @@ def main():
     F.append(Paragraph(
         "FDRS is a weighted composite of nine structural components, plus an amplifier that captures how "
         "high import dependence and constrained economic access compound each other, clipped to 0&ndash;100:", S["body"]))
-    F.append(Paragraph("FDRS = clip(0..100)[ &Sigma; w<sub>i</sub>&middot;c<sub>i</sub> ]  +  min( 6 &middot; (import_dep/100) &middot; (econ_access/100), 6 )", S["mono"]))
+    # v41 — clip wraps (base + amplifier), THEN half-up rounding: this must state
+    # exactly what the builder computes (int(_clip(base + amp) + 0.5)); the previous
+    # wording clipped the sum only, which would permit scores up to 106.
+    F.append(Paragraph("FDRS = round[ clip(0..100)( &Sigma; w<sub>i</sub>&middot;c<sub>i</sub>  +  min( 6 &middot; (import_dep/100) &middot; (econ_access/100), 6 ) ) ]", S["mono"]))
 
     rows = [[Paragraph("Component", S["cellb"]), Paragraph("What it measures (source)", S["cellb"]), Paragraph("Weight", S["cellb"])]]
-    for name, desc, w in COMPONENTS:
-        rows.append([Paragraph(name, S["cell"]), Paragraph(desc, S["cell"]), Paragraph(w, S["cell"])])
+    # weights come from the imported canonical vector, not hardcoded strings
+    for (name, desc), w in zip(COMPONENTS, WEIGHTS):
+        rows.append([Paragraph(name, S["cell"]), Paragraph(desc, S["cell"]), Paragraph(f"{w:.2f}", S["cell"])])
     t = Table(rows, colWidths=[42 * mm, 98 * mm, 18 * mm])
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef1f5")),
@@ -128,34 +140,61 @@ def main():
 
     we = _worked_example()
     if we:
-        name, cv, base, amp, total, _r, stored, calc = we
+        name, cv, base, amp, total, stored, calc = we
+        # v41 — a citable whitepaper must not assert an equality it never checked.
+        # If the formula/weights/data drift, fail the build instead of publishing
+        # a false "which equals the published score" claim.
+        if calc != stored:
+            raise SystemExit(
+                f"[methodology] REFUSING to build: worked example for {name} computes "
+                f"{calc} but countries.json stores {stored} — formula, weights, or data "
+                f"have drifted. Reconcile before regenerating the whitepaper.")
         F.append(Paragraph("Worked example (reproduce it yourself)", S["h2"]))
         cvs = ", ".join("null" if x is None else (f"{x:.1f}" if isinstance(x, float) else str(x)) for x in cv)
         F.append(Paragraph(
             f"{name}: component vector c = [{cvs}].<br/>"
             f"Weighted base = &Sigma; w<sub>i</sub>&middot;c<sub>i</sub> = <b>{base:.2f}</b>. "
             f"Amplifier = min(6&middot;({cv[0]}/100)&middot;({(cv[7] if cv[7] is not None else 0):.1f}/100), 6) = <b>{amp:.2f}</b>. "
-            f"Total = {total:.2f} &rarr; half-up rounded = <b>{calc}</b>, which equals the published score ({stored}).", S["mono"]))
+            f"Total = {total:.2f} &rarr; clip + half-up round = <b>{calc}</b>, verified equal to the published score ({stored}).", S["mono"]))
 
     F.append(Paragraph("Provenance tiers (honest degradation)", S["h2"]))
     F.append(Paragraph(
-        "Every field is tagged <b>sourced</b> (verified against a public dataset, with source and as-of date), "
-        "<b>modeled</b> (computed from sourced inputs or explicit structural assumptions), or <b>legacy</b> "
-        "(hand-authored heritage value, not yet re-verified &mdash; treated as draft). When a live feed is stale or "
-        "absent the field degrades visibly rather than presenting a confident number; the public source-health page "
-        "reports per-feed freshness. A companion audit (scripts/audit_provenance.py) tracks how much of the score's "
-        "weight still rests on legacy values so re-sourcing is prioritised transparently.", S["body"]))
+        "Every field is tagged <b>sourced</b> (verified against a public dataset with query-level lineage: the "
+        "reconstructed source query URL, or a machine-readable query spec for bulk datasets, plus as-of date, basis "
+        "and coverage), <b>partial</b> (real cited data with incomplete lineage or coverage &mdash; e.g. truncated "
+        "partner extracts or stale input series, flagged as such), <b>modeled</b> (computed from sourced inputs or "
+        "explicit structural assumptions), or <b>legacy</b> (hand-authored heritage value, not yet re-verified "
+        "&mdash; treated as draft). A trade row whose exact source query cannot be reconstructed is downgraded to "
+        "partial rather than kept on a homepage link. When a live feed is stale or absent the field degrades visibly "
+        "rather than presenting a confident number; the public source-health page reports per-feed freshness. A "
+        "companion audit (scripts/audit_provenance.py) tracks how much of the score's weight still rests on legacy "
+        "values so re-sourcing is prioritised transparently.", S["body"]))
 
     # ── validation ────────────────────────────────────────────────────────────
     F.append(HRFlowable(width="100%", thickness=0.6, color=colors.HexColor("#d6d8de"), spaceBefore=6, spaceAfter=8))
     F.append(Paragraph("Does the score correspond to anything real? (validation)", S["h2"]))
     vp = DATA / "fdrs_validation.json"
-    if not vp.exists():
-        F.append(Paragraph("Run scripts/validate_fdrs.py to populate this section.", S["small"]))
-    else:
+    # v41 — a stub/degenerate validation file (skipped run, empty tests, or None
+    # metrics from n<3) must be treated exactly like a missing file: this section
+    # only renders real numbers.
+    vr = tt = None
+    if vp.exists():
         vr = json.loads(vp.read_text())
         vr = vr.get("data", vr) if isinstance(vr, dict) else vr   # unwrap envelope
-        tt = vr["tests"]
+        tt = vr.get("tests") if isinstance(vr, dict) else None
+    _need = ("auc_crisis_vs_noncrisis", "spearman_fdrs_vs_ipc_pct",
+             "spearman_fdrs_vs_fews_phase")
+    degenerate = (
+        not tt
+        or any(k not in tt for k in _need)
+        or (tt["auc_crisis_vs_noncrisis"] or {}).get("auc") is None
+        or (tt["spearman_fdrs_vs_ipc_pct"] or {}).get("rho") is None
+        or (tt["spearman_fdrs_vs_fews_phase"] or {}).get("rho") is None
+        or tt.get("precision_at_20") is None or tt.get("recall_at_20") is None)
+    if degenerate:
+        F.append(Paragraph("Run scripts/validate_fdrs.py to populate this section "
+                           "(no valid validation results are currently on disk).", S["small"]))
+    else:
         auc = tt["auc_crisis_vs_noncrisis"]["auc"]
         rho_i = tt["spearman_fdrs_vs_ipc_pct"]["rho"]
         rho_f = tt["spearman_fdrs_vs_fews_phase"]["rho"]
@@ -176,7 +215,9 @@ def main():
              Paragraph(f"{rho_f:+.2f}", S["cell"]), Paragraph("Positive.", S["cell"])],
             [Paragraph("Precision / recall @ top-20 FDRS", S["cell"]),
              Paragraph(f"{tt['precision_at_20']:.0%} / {tt['recall_at_20']:.0%}", S["cell"]),
-             Paragraph("Half of the top-20 are in active crisis; the rest are structural-watch.", S["cell"])],
+             # v41 — derive the sentence from the actual figure ("half" was a
+             # hardcoded coincidence that would silently go stale).
+             Paragraph(f"{round(tt['precision_at_20'] * 20)} of the top-20 are in active crisis; the rest are structural-watch.", S["cell"])],
         ]
         vt = Table(vrows, colWidths=[70 * mm, 20 * mm, 68 * mm])
         vt.setStyle(TableStyle([

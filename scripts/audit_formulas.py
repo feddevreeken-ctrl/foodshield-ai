@@ -61,17 +61,24 @@ else:
 
 # 2) amplifier expression matches (normalise whitespace)
 print("\n--- 2. Amplifier expression ---")
-def amp_norm(src):
-    m = re.search(r"min\(\s*6\s*\*\s*\(\s*c0\s*/\s*100\s*\)\s*\*\s*\(\s*c7\s*/\s*100\s*\)\s*,\s*6\s*\)", src)
-    return bool(m)
-# build uses c0/c7; html uses comp[0]/comp[7]
-amp_build = amp_norm(build)
-amp_html = bool(re.search(r"Math\.min\(\s*6\s*\*\s*\(\s*comp\[0\]\s*/\s*100\s*\)\s*\*\s*\(\s*comp\[7\]\s*/\s*100\s*\)\s*,\s*6\s*\)", html))
-if amp_build and amp_html:
-    print("  PASS amplifier = min(6*(import_dep/100)*(econ_access/100), 6) in both builder and runtime")
+# v41 — presence-only checking let one divergent copy hide behind a correct one
+# (index.html carries several copies of the amplifier). Find EVERY amplifier-
+# shaped expression — min(K * (x/100) * (y/100), CAP) with any identifiers and
+# any coefficients — and require every copy to carry the canonical K=6, CAP=6.
+# Pattern-based, not count-based: copies may legitimately be added or removed.
+_AMP_LOOSE = r"min\(\s*([\d.]+)\s*\*\s*\(\s*[\w\[\]\.]+\s*/\s*100\s*\)\s*\*\s*\(\s*[\w\[\]\.]+\s*/\s*100\s*\)\s*,\s*([\d.]+)\s*\)"
+amp_html_copies = re.findall(_AMP_LOOSE, html)
+amp_build_copies = re.findall(_AMP_LOOSE, build)
+bad_html = [c for c in amp_html_copies if c != ("6", "6")]
+bad_build = [c for c in amp_build_copies if c != ("6", "6")]
+if amp_build_copies and amp_html_copies and not bad_html and not bad_build:
+    print(f"  PASS amplifier = min(6*(import_dep/100)*(econ_access/100), 6) — "
+          f"all copies consistent ({len(amp_html_copies)} in runtime, {len(amp_build_copies)} in builder)")
 else:
     fails.append("amplifier expression mismatch")
-    print(f"  FAIL builder match={amp_build}, runtime match={amp_html}")
+    print(f"  FAIL builder copies={amp_build_copies or 'NONE'}, runtime copies={amp_html_copies or 'NONE'}"
+          + (f"; divergent runtime={bad_html}" if bad_html else "")
+          + (f"; divergent builder={bad_build}" if bad_build else ""))
 
 # 3) FOOD_WEIGHT covers every scenario _commodity
 print("\n--- 3. FOOD_WEIGHT commodity coverage ---")

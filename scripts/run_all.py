@@ -7,15 +7,17 @@ Failures in any individual feed are caught and logged so the workflow keeps goin
 v20.32 — each STEP now carries an explicit `output` filename. safe_run uses
 that to write a graceful empty payload on failure (instead of a label-based
 stub like `wb_lpi_logistics_FAILED.json` that nothing fetches). After all
-steps run, we audit which expected outputs actually exist on disk and
-report counts. If a critical set is missing, exit non-zero so the workflow
-status reflects reality instead of always being green.
+steps run, we audit which expected outputs actually carry non-trivial data
+on disk and report counts. If too many steps failed (safe_run returns
+False per step) or a critical set of outputs is missing/empty, exit
+non-zero so the workflow status reflects reality instead of always being
+green.
 """
 import sys
 import traceback
 from pathlib import Path
 
-from _common import DATA_DIR, safe_run
+from _common import DATA_DIR, _has_existing_data, safe_run
 
 # Import each refresh module
 import refresh_wfp
@@ -46,6 +48,9 @@ import build_company_overlay
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), "trade_pipeline"))
 import build_fields as _trade_build_fields
+# v41 — re-derive query-level trade lineage (source_url + trade_scope) that the
+# Trade re-verify step clobbers back to homepage URLs. Must run right after it.
+import honesty_remediation as _trade_honesty_remediation
 import refresh_usda_psd
 import refresh_ndgain
 import refresh_aqueduct
@@ -115,6 +120,12 @@ STEPS = [
     # Comtrade pulls, patching countries.json AFTER it's built. Must run after
     # "Countries dataset". build_fields.build() is the entrypoint.
     ("Trade re-verify (v23)",  _trade_build_fields.build,       "reverify_records.json"),
+    # v41 — Trade re-verify above rewrites supplier/import panels with the Comtrade
+    # homepage URL and no trade_scope; this step re-derives the query-level source_url
+    # and trade_scope from each row's own metadata so the displayed lineage stays honest
+    # every cron (not just after a manual --apply). Refuses to write on assertion failure;
+    # the downstream validate_data gate then catches any missing trade_scope.
+    ("Trade lineage honesty (v41)", _trade_honesty_remediation.build, "countries.json"),
     ("Nowcast build",          build_nowcast.main,              "nowcast.json"),
     ("Daily summary",          build_daily_summary.main,        "daily_summary.json"),
     ("Source manifest",        build_source_manifest.main,      "source_manifest.json"),
@@ -124,8 +135,29 @@ STEPS = [
 ]
 
 
+# Strict failure mode kicks in only when a substantial chunk of the pipeline is
+# broken — one or two failures (e.g. an upstream API hiccup; feed isolation
+# preserves last-good data) shouldn't tank the daily commit + Vercel redeploy.
+# More than this means something structural is broken and the workflow status
+# should reflect that.
+FAIL_THRESHOLD = 4
+
+# Feeds that legitimately ship an empty payload — key-gated or upstream-blocked —
+# so the post-flight audit must not count their empty envelope as "missing":
+#   openaq.json             OPENAQ_API_KEY-gated
+#   nasa_firms.json         NASA_FIRMS_MAP_KEY-gated
+#   acled.json              ACLED_EMAIL/ACLED_PASSWORD-gated
+#   ndgain.json             upstream bulk download sits behind a browser-session
+#                           redirect (see the feed's own _meta.notes)
+#   trade_restrictions.json ships-empty-by-design preserve-safe stub (v40 note
+#                           on the step above); entries are owner-curated
+EMPTY_OK = {"openaq.json", "nasa_firms.json", "acled.json", "ndgain.json",
+            "trade_restrictions.json"}
+
+
 def main():
     failures = 0
+    failed_labels = []
     for step in STEPS:
         # Tolerate the legacy 2-tuple form during the rollout, but new code uses 3-tuples.
         if len(step) == 3:
@@ -133,30 +165,41 @@ def main():
         else:
             label, fn = step
             output = None
+        # safe_run catches everything internally and returns True/False; the
+        # except arms are belt-and-braces for anything that escapes it.
         try:
-            safe_run(label, fn, output_name=output)
+            ok = safe_run(label, fn, output_name=output)
         except SystemExit:
-            failures += 1
+            ok = False
         except Exception:
-            failures += 1
+            ok = False
             traceback.print_exc()
+        if not ok:
+            failures += 1
+            failed_labels.append(label)
 
-    # v20.32 — Post-flight audit. Every step is supposed to leave a file at
-    # data/<output>. Report which expected outputs are missing, and exit
-    # non-zero if more than 4 are absent so the workflow status doesn't lie.
+    # v20.32 — Post-flight audit. Every step is supposed to leave a NON-TRIVIAL
+    # payload at data/<output> (safe_run preserves last-good data on failure, so
+    # an empty stub means the feed has never worked). Mere file existence is not
+    # enough — a stub envelope would pass that while the frontend shows nothing.
+    # Feeds in EMPTY_OK legitimately ship empty and are exempt from the
+    # non-trivial requirement (but must still exist).
     expected_files = [s[2] for s in STEPS if len(s) == 3]
-    missing = [f for f in expected_files if not (DATA_DIR / f).exists()]
+    missing = [f for f in expected_files
+               if not (DATA_DIR / f).exists()
+               or (f not in EMPTY_OK and not _has_existing_data(f))]
     present = len(expected_files) - len(missing)
     print(f"\n=== Done — {len(STEPS) - failures}/{len(STEPS)} steps succeeded ===")
-    print(f"=== Output audit — {present}/{len(expected_files)} expected files present ===")
+    if failed_labels:
+        print(f"=== Failed steps: {failed_labels}")
+    print(f"=== Output audit — {present}/{len(expected_files)} expected files present with data ===")
     if missing:
-        print(f"=== Missing files: {missing}")
-    # Strict failure mode kicks in only when a substantial chunk is missing —
-    # one or two missing files (e.g. an upstream API hiccup) shouldn't tank
-    # the daily commit + Vercel redeploy. >4 missing means something structural
-    # is broken and the workflow status should reflect that.
+        print(f"=== Missing/empty files: {missing}")
+    if failures > FAIL_THRESHOLD:
+        print(f"=== {failures} steps failed (> {FAIL_THRESHOLD}); exiting non-zero ===")
+        sys.exit(1)
     if len(missing) > 4:
-        print(f"=== >4 expected outputs missing; exiting non-zero ===")
+        print(f"=== >4 expected outputs missing/empty; exiting non-zero ===")
         sys.exit(1)
     sys.exit(0)
 

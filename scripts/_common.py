@@ -75,8 +75,13 @@ def http_get(url, *, params=None, headers=None, timeout=DEFAULT_TIMEOUT, retries
     raise RuntimeError(f"GET {url} failed after {retries} attempts: {last_exc}")
 
 
-def write_json(filename, payload, *, source=None, notes=None):
-    """Write JSON to data/<filename> with a standard envelope."""
+def write_json(filename, payload, *, source=None, notes=None, status=None):
+    """Write JSON to data/<filename> with a standard envelope.
+
+    status: optional machine-readable _meta.status (e.g. 'ok',
+            'insufficient_ground_truth') so downstream consumers can
+            distinguish an honest skip from a real result without parsing notes.
+    """
     out = {
         "_meta": {
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -86,6 +91,8 @@ def write_json(filename, payload, *, source=None, notes=None):
         },
         "data": payload,
     }
+    if status:
+        out["_meta"]["status"] = status
     path = DATA_DIR / filename
     path.write_text(json.dumps(out, indent=2, ensure_ascii=False))
     print(f"[OK] wrote {path} ({len(json.dumps(payload))} bytes payload)")
@@ -118,6 +125,10 @@ def _has_existing_data(filename):
 def safe_run(label, fn, output_name=None, timeout=DEFAULT_STEP_TIMEOUT):
     """Run a refresh function and never crash the workflow.
 
+    Returns True if fn() completed, False if it failed or timed out — so the
+    orchestrator (run_all.py) can count real failures and exit non-zero past
+    its threshold instead of always reporting green.
+
     Args:
         label: human-readable step name printed in workflow logs
         fn:    the refresh function to run
@@ -125,12 +136,15 @@ def safe_run(label, fn, output_name=None, timeout=DEFAULT_STEP_TIMEOUT):
                  only; no-op elsewhere). On timeout, last-good output is
                  preserved if present (see DEFAULT_STEP_TIMEOUT).
         output_name: canonical data file the script is supposed to produce
-                     (e.g. 'lpi.json'). If the function raises, we still
-                     write an empty envelope to data/<output_name> so the
-                     frontend gets a graceful empty payload instead of a
-                     404. If omitted, falls back to the legacy label-based
-                     stub name — but every step in run_all.py should now
-                     pass an explicit output_name.
+                     (e.g. 'lpi.json'). If the function raises AND the feed has
+                     never produced a non-trivial output, we write an empty
+                     envelope to data/<output_name> so the frontend gets a
+                     graceful empty payload instead of a 404. If a previous
+                     good file exists it is PRESERVED (goes honestly stale via
+                     the freshness SLA) — a failure stub must never clobber
+                     real data. If omitted, falls back to the legacy
+                     label-based stub name — but every step in run_all.py
+                     should now pass an explicit output_name.
 
     Why this matters: prior versions wrote 'wb_lpi_logistics_FAILED.json'
     when refresh_lpi.py crashed, but the frontend fetches 'lpi.json'. Users
@@ -157,6 +171,7 @@ def safe_run(label, fn, output_name=None, timeout=DEFAULT_STEP_TIMEOUT):
 
     try:
         fn()
+        return True
     except _StepTimeout as e:
         print(f"[TIMEOUT] {label}: {e} after {time.time()-started:.0f}s", file=sys.stderr)
         # A timeout is a transient network stall, NOT a data-quality signal.
@@ -169,10 +184,18 @@ def safe_run(label, fn, output_name=None, timeout=DEFAULT_STEP_TIMEOUT):
         elif output_name:
             print(f"[KEEP] {label}: preserved existing {output_name} "
                   f"(will show as stale, not empty)", file=sys.stderr)
+        return False
     except Exception as e:
         print(f"[FAIL] {label}: {e}", file=sys.stderr)
-        if output_name:
+        # Same preserve-last-good rule as the timeout branch: a crash must not
+        # blank a previously good file. Only write the graceful empty stub when
+        # the feed has never produced a non-trivial output (so the frontend
+        # gets an empty payload instead of a 404 on first-ever failure).
+        if output_name and not _has_existing_data(output_name):
             write_json(output_name, {}, source=label, notes=f"Last refresh failed: {e}")
+        elif output_name:
+            print(f"[KEEP] {label}: preserved existing {output_name} "
+                  f"(will show as stale, not empty)", file=sys.stderr)
         else:
             # Legacy fallback — keeps older callers working but logs a warning
             stub_name = label.lower().replace(" ", "_").replace("/", "_") + "_FAILED.json"
@@ -180,6 +203,7 @@ def safe_run(label, fn, output_name=None, timeout=DEFAULT_STEP_TIMEOUT):
                   f"writing legacy stub {stub_name} (frontend will still 404 on "
                   f"the real path)", file=sys.stderr)
             write_json(stub_name, {}, source=label, notes=f"Last refresh failed: {e}")
+        return False
     finally:
         if use_alarm:
             signal.alarm(0)

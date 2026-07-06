@@ -7274,7 +7274,7 @@ body::before {
 #fs-ask-inbar{display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:1px solid var(--b1);}
 #fs-ask-input{flex:1;background:transparent;border:none;outline:none;color:var(--t1);font-size:15px;font-family:inherit;}
 #fs-ask-input::placeholder{color:var(--t3);}
-#fs-ask-esc{cursor:pointer;color:var(--t3);font-size:10px;font-family:'Geist Mono',monospace;border:1px solid var(--b1);border-radius:4px;padding:2px 6px;}
+#fs-ask-esc{cursor:pointer;background:transparent;appearance:none;-webkit-appearance:none;color:var(--t3);font-size:10px;font-family:'Geist Mono',monospace;border:1px solid var(--b1);border-radius:4px;padding:2px 6px;}
 #fs-ask-body{max-height:56vh;overflow-y:auto;padding:6px 16px 16px;}
 .fs-ask-hint{font-size:11.5px;color:var(--t3);line-height:1.7;padding:8px 0;}
 .fs-ask-hint b{color:var(--t2);font-weight:600;}
@@ -7873,7 +7873,7 @@ body::before {
       <div class="editorial-header">
         <div class="editorial-dateline">
           <span class="dot"></span>
-          <span>Open Methodology · Updated June 2026</span>
+          <span id="methodology-dateline">Open Methodology · Updated June 2026</span>
         </div>
         <div class="editorial-headline">Every number on this site is <em>auditable</em>.</div>
         <div class="editorial-standfirst">
@@ -14040,7 +14040,20 @@ const WDI_PANEL_INDICATORS_EXTENDED = [
 // what readers will see in ND-GAIN's own publications.
 function ndgainCardHTML(iso3) {
   const row = LIVE.ndgain?.[iso3];
-  if (!row) return '';
+  // v41 — when the ND-GAIN feed is degraded/empty, say so honestly instead of
+  // silently vanishing (empty card read as "no climate story" before).
+  if (!row) {
+    const deg = !LIVE.ndgain || !Object.keys(LIVE.ndgain).length;
+    if (!deg) return ''; // feed healthy, this country simply isn't covered
+    return `
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1);">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Climate adaptation</div>
+        <span style="font-size:9px;color:#c9a957;background:#c9a95722;border:1px solid #c9a95744;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">ND-GAIN · feed unavailable</span>
+      </div>
+      <div style="font-size:10px;color:var(--t-meta);margin-top:6px;line-height:1.5;">The ND-GAIN download last failed, so climate-adaptation figures are unavailable and the score falls back to its heritage climate value (see Data Status).</div>
+    </div>`;
+  }
   // Color-band the vulnerability score: 0-0.35 green, 0.35-0.5 yellow,
   // 0.5-0.65 orange, >0.65 red.
   const vulnColor = (v) => v == null ? 'var(--t3)' :
@@ -14806,8 +14819,27 @@ async function loadLiveData() {
   // honestly (curatedPartners → null → commodity cards fall back) — the same
   // fetch-or-degrade contract every other feed already uses. window.__BEEF_DATA__
   // stays the in-memory handle so all downstream seed logic below is unchanged.
+  // v41 — fetched INSIDE the main Promise.all below (it used to be awaited
+  // serially here, which put the single largest download ahead of every other
+  // feed). The seed block right after the Promise.all consumes it.
+  const [cfEnv, nc, wfp, ipc, wb, ffpi, rw, ct, fa, wfpc, om, omf, aq, fires, usgs, estat, faostat, pink, manifest] = await Promise.all([
+    _fetchData('commodity_flows'),
+    _fetchData('nowcast'), _fetchData('wfp_hungermap'), _fetchData('ipc'),
+    _fetchData('worldbank_wdi'), _fetchData('fao_ffpi'), _fetchData('reliefweb_alerts'),
+    _fetchData('comtrade_staples'), _fetchData('feeding_america_states'),
+    // v20
+    _fetchData('wfp_country'), _fetchData('openmeteo'), _fetchData('openmeteo_flood'),
+    _fetchData('openaq'), _fetchData('nasa_firms'), _fetchData('usgs_water'),
+    // v20.1
+    _fetchData('eurostat_food'), _fetchData('faostat_food'),
+    // v20.4 trust pass
+    _fetchData('worldbank_pink_sheet'), _fetchData('source_manifest'),
+  ]);
+  // v41 — the trade-atlas fetch has now resolved (success or failure). Mark it so
+  // the copilot can tell "still loading" apart from "loaded, no cited flows" and
+  // never shows an indefinite "try again in a moment".
+  window.__BEEF_LOADED__ = true;
   try {
-    const cfEnv = await _fetchData('commodity_flows');
     if (cfEnv && cfEnv.commodities) window.__BEEF_DATA__ = cfEnv;
   } catch (e) {}
   try {
@@ -14826,18 +14858,6 @@ async function loadLiveData() {
       LIVE.commodity_flow_sources = LIVE.commodity_flow_sources || window.__BEEF_DATA__._sources || {};
     }
   } catch (e) {}
-  const [nc, wfp, ipc, wb, ffpi, rw, ct, fa, wfpc, om, omf, aq, fires, usgs, estat, faostat, pink, manifest] = await Promise.all([
-    _fetchData('nowcast'), _fetchData('wfp_hungermap'), _fetchData('ipc'),
-    _fetchData('worldbank_wdi'), _fetchData('fao_ffpi'), _fetchData('reliefweb_alerts'),
-    _fetchData('comtrade_staples'), _fetchData('feeding_america_states'),
-    // v20
-    _fetchData('wfp_country'), _fetchData('openmeteo'), _fetchData('openmeteo_flood'),
-    _fetchData('openaq'), _fetchData('nasa_firms'), _fetchData('usgs_water'),
-    // v20.1
-    _fetchData('eurostat_food'), _fetchData('faostat_food'),
-    // v20.4 trust pass
-    _fetchData('worldbank_pink_sheet'), _fetchData('source_manifest'),
-  ]);
 
   // v20.9 — pull WFSO (World Bank Food Security Outlook) separately to keep the main
   // Promise.all() readable; it's not on the critical render path so a small delay is fine.
@@ -15050,6 +15070,10 @@ async function loadLiveData() {
   LIVE.pink_sheet = pink?.data || null;
   LIVE.manifest = manifest?.data || null;
   LIVE.meta.loaded_at = (manifest?._meta?.generated_at) || (nc?._meta?.generated_at) || new Date().toISOString();
+  // v41 — keep the methodology dateline honest (real data date, not a hardcoded month).
+  // No viewer-facing staleness banner: freshness is fixed at the source (data refresh),
+  // not surfaced as an alarm on the live site.
+  try { if (typeof updateMethodologyDateline === 'function') updateMethodologyDateline(); } catch(e) {}
   // v34 — live data mutates c.fdrs; drop the featured-preview memo so the card recomputes.
   try { window.__featuredPreviewCache = undefined; } catch(e) {}
 
@@ -15158,7 +15182,13 @@ async function loadLiveData() {
       const ccp = LIVE.cckp?.[c.iso] || {};
       let climateScore = null;
       const climateParts = [];
-      if (ndg.food_vulnerability != null) {
+      // v41 — the sourced climate blend REQUIRES the ND-GAIN food-vulnerability
+      // term (its anchor, weight 0.45). Previously the blend still applied when
+      // ND-GAIN was degraded/empty, silently reweighting the remaining parts —
+      // while the in-app prose promised "falls back to heritage". Make the code
+      // match the prose: no ND-GAIN → skip the blend entirely (heritage c[4]).
+      const hasNdgainTerm = ndg.food_vulnerability != null;
+      if (hasNdgainTerm) {
         climateParts.push({ v: ndg.food_vulnerability * 100, w: 0.45 });
       }
       // v25 — Aqueduct (Data360 mirror) emits {drought_risk:{score 0-5}, flood_risk:{score 0-5}}.
@@ -15175,7 +15205,7 @@ async function loadLiveData() {
       if (ccp.warming_c != null) {
         climateParts.push({ v: Math.max(0, Math.min(100, ccp.warming_c * 50)), w: 0.20 });
       }
-      if (climateParts.length >= 2) {
+      if (hasNdgainTerm && climateParts.length >= 2) {
         const sumW = climateParts.reduce((s, p) => s + p.w, 0);
         climateScore = climateParts.reduce((s, p) => s + p.v * p.w, 0) / sumW;
       }
@@ -15289,15 +15319,19 @@ async function loadLiveData() {
       const ccp2030 = LIVE.cckp?.[c.iso];
       const ndg2030 = LIVE.ndgain?.[c.iso];
       let climateKick = 0;
-      // v25 — CCKP now provides OBSERVED warming (`warming_c`, recent decade vs
-      // 1991-2000 baseline) rather than a 2050 projection. Observed warming runs
-      // ~0.3-1.5°C; we treat it as the trend signal toward 2030. Faster observed
-      // warming → larger upward forecast drift. +0.5°C → ~0.6, +1°C → ~1.5, +1.5°C → ~2.6.
-      if (ccp2030?.warming_c != null) {
-        const dT = ccp2030.warming_c;
-        climateKick += dT < 1 ? dT * 1.2 : 1.2 + (dT - 1) * 2.2;
-      }
+      // v41 — same gate as the structural climate blend above: the sourced 2030
+      // climate kick REQUIRES the ND-GAIN food-vulnerability term. Without it
+      // the kick is skipped entirely (heritage fallback), matching the in-app
+      // prose ("falls back to heritage" when ND-GAIN is degraded/empty).
       if (ndg2030?.food_vulnerability != null) {
+        // v25 — CCKP now provides OBSERVED warming (`warming_c`, recent decade vs
+        // 1991-2000 baseline) rather than a 2050 projection. Observed warming runs
+        // ~0.3-1.5°C; we treat it as the trend signal toward 2030. Faster observed
+        // warming → larger upward forecast drift. +0.5°C → ~0.6, +1°C → ~1.5, +1.5°C → ~2.6.
+        if (ccp2030?.warming_c != null) {
+          const dT = ccp2030.warming_c;
+          climateKick += dT < 1 ? dT * 1.2 : 1.2 + (dT - 1) * 2.2;
+        }
         // >0.5 vuln adds up to +2; below 0.35 subtracts up to -1 (improving systems)
         const fv = ndg2030.food_vulnerability;
         if (fv > 0.5) climateKick += Math.min(2, (fv - 0.5) * 8);
@@ -16261,7 +16295,7 @@ const SCENARIOS = [
     impact: function(c, s=0.25){ return Math.round(this.kick(c, s)); }},
   {id:'ban',     label:'Major supplier export ban',cat:'Geopolitics',baseSev:1.00, sevUnit:'×', channel:1,
     desc:'Top-1 supplier withdraws from the market (e.g. Russia, Ukraine, India for rice).',
-    formula:'Δ = real top-supplier share of the country\'s food imports (live Comtrade supplier mix, sourced for 202 countries) × 18 × shock (heritage supplier-concentration component only as fallback)',
+    formula:'Δ = real top-supplier share of the country\'s food imports (live Comtrade supplier mix, cited for 203 countries: 180 sourced + 23 partial) × 18 × shock (heritage supplier-concentration component only as fallback)',
     _basis:'sourced_flows',
     // v31 — SOURCED-FLOW supplier-ban kick. Was `c.c[1]×0.18` (heritage supplier-
     // concentration COMPONENT, unsourced). Now: take the country's LARGEST cited
@@ -16275,7 +16309,8 @@ const SCENARIOS = [
       // countries at the max 18): per-commodity corridor shares read ~1.0 whenever
       // only one corridor is cited, which is most country×commodity pairs. The
       // honest, well-covered top-supplier signal is the country's SUPPLIER MIX
-      // (c.supPct — live Comtrade 2024, sourced for 202 countries): Egypt 69% RUS,
+      // (c.supPct — live Comtrade 2024, cited for 203 countries, 180 sourced +
+      // 23 partial after the v41 honesty pass): Egypt 69% RUS,
       // Netherlands 35%, Sudan 100%. Kick = top-supplier share × 18 × severity,
       // exactly the scenario semantics ("your #1 supplier withdraws").
       try {
@@ -22531,6 +22566,20 @@ function commoditySuppliers(c, commodity) {
 // invents nothing. The "restriction" is just a query input; the exposure is real.
 // Used by the trade-restriction monitor (data/trade_restrictions.json) to turn a
 // cited restriction flag into "here is who it actually hits, ranked by fragility".
+// v41 — share % for one supplier row. Prefers the cited pct; when the row is a
+// curated atlas flow (pct:null but real kt tonnage) derives the share over the
+// same supplier list using the Methodology page's documented formula
+// shareᵢ = partnerᵢ.kt ÷ Σ kt. Returns null when no share is derivable.
+function _supplierSharePct(sup, hit) {
+  if (!hit) return null;
+  if (hit.pct > 0) return hit.pct;
+  if (typeof hit.kt === 'number' && hit.kt > 0 && Array.isArray(sup)) {
+    const totKt = sup.reduce((s, x) => s + ((x && typeof x.kt === 'number' && x.kt > 0) ? x.kt : 0), 0);
+    if (totKt > 0) return 100 * hit.kt / totKt;
+  }
+  return null;
+}
+
 function restrictionExposure(exporterISO, commodity, n) {
   n = n || 5;
   if (!exporterISO || !commodity || typeof COUNTRIES === 'undefined' || !Array.isArray(COUNTRIES)) return [];
@@ -22543,11 +22592,14 @@ function restrictionExposure(exporterISO, commodity, n) {
     if (!Array.isArray(sup) || !sup.length) continue;
     const hit = sup.find(s =>
       (s.iso && s.iso === exporterISO) || (exName && s.name && s.name === exName));
-    if (!hit || !(hit.pct > 0)) continue;
+    // v41 — curated atlas rows carry pct:null but real kt; derive the share from
+    // kt (shareᵢ = ktᵢ ÷ Σ kt) instead of silently dropping the importer.
+    const share = _supplierSharePct(sup, hit);
+    if (!(share > 0)) continue;
     out.push({
       iso: imp.iso,
       name: imp.name,
-      share_pct: Math.round(hit.pct),
+      share_pct: Math.round(share),
       fdrs: (typeof imp.fdrs === 'number') ? imp.fdrs : null,
     });
   }
@@ -22608,7 +22660,9 @@ function restrictionsAffecting(iso) {
     if (!Array.isArray(sup)) continue;
     const exName = (typeof _nameFromISO === 'function') ? _nameFromISO(r.iso) : '';
     const m = sup.find(s => (s.iso && s.iso === r.iso) || (exName && s.name === exName));
-    if (m && m.pct > 0) hits.push({ r, share_pct: Math.round(m.pct) });
+    // v41 — kt-derived share for curated atlas rows (pct:null, real kt), same as restrictionExposure.
+    const share = _supplierSharePct(sup, m);
+    if (share > 0) hits.push({ r, share_pct: Math.round(share) });
   }
   hits.sort((a, b) => b.share_pct - a.share_pct);
   return hits;
@@ -23737,11 +23791,25 @@ function openPanel(c, skipDrilldown) {
       if (a.flood_flag) {
         liveShocks.push(`<b style="color:#3e8ec4">Flood</b> · ${a.flood_river} +${a.flood_anomaly_pct}% discharge <span style="color:var(--t3)">(Open-Meteo)</span>`);
       }
+      // v41 — degraded feeds must not fail as "calm": when FIRMS/OpenAQ are down
+      // per the manifest, say the signal is unavailable instead of showing nothing
+      // (absence of a fire/PM2.5 line previously read as "no fires / clean air").
+      const signalGaps = [];
       if (a.fire_flag) {
         liveShocks.push(`<b style="color:#c44b3c">Fire spike</b> · ${a.fires_7d} detections last 7d <span style="color:var(--t3)">(NASA FIRMS)</span>`);
+      } else if (a.fires_7d == null) {
+        const fr = LIVE.manifest?.sources?.nasa_firms;
+        if (fr && fr.status && fr.status !== 'ok' && fr.status !== 'manual') {
+          signalGaps.push(`Fire detection <span style="color:var(--t3)">(NASA FIRMS)</span> — feed unavailable, no fire signal either way`);
+        }
       }
       if (a.pm25_flag && a.pm25_latest != null) {
         liveShocks.push(`<b style="color:#c47a3c">${a.pm25_latest} µg/m³</b> PM2.5 (>WHO target) <span style="color:var(--t3)">(OpenAQ)</span>`);
+      } else if (a.pm25_latest == null) {
+        const ar = LIVE.manifest?.sources?.openaq;
+        if (ar && ar.status && ar.status !== 'ok' && ar.status !== 'manual') {
+          signalGaps.push(`PM2.5 air quality <span style="color:var(--t3)">(OpenAQ)</span> — feed unavailable, no air-quality signal either way`);
+        }
       }
       if (a.us_flow_anomaly === 'low') {
         liveShocks.push(`<b style="color:#d27a3e">Low flow</b> · ${a.us_river} <span style="color:var(--t3)">(USGS)</span>`);
@@ -23773,7 +23841,7 @@ function openPanel(c, skipDrilldown) {
       if (aquRow?.drought_risk?.score != null && aquRow.drought_risk.score >= 3) {
         liveShocks.push(`<b style="color:#c44b3c">High</b> drought risk <span style="color:var(--t3)">(WRI Aqueduct ${aquRow.drought_risk.score.toFixed(1)}/5)</span>`);
       }
-      if (items.length === 0 && liveShocks.length === 0) {
+      if (items.length === 0 && liveShocks.length === 0 && signalGaps.length === 0) {
         anchEl.style.display = 'none';
       } else {
         anchEl.style.display = 'block';
@@ -23785,6 +23853,11 @@ function openPanel(c, skipDrilldown) {
         if (liveShocks.length) {
           html += `<div style="font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.14em;margin:${items.length?10:0}px 0 6px;">Active live shocks</div>` +
             liveShocks.map(s => `<div style="font-size:11.5px;color:var(--t1);padding:2px 0;">${s}</div>`).join('');
+        }
+        if (signalGaps.length) {
+          // v41 — muted, non-alarming: an honest gap notice, not a shock.
+          html += `<div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.14em;margin:${(items.length||liveShocks.length)?10:0}px 0 6px;">Signal gaps</div>` +
+            signalGaps.map(s => `<div style="font-size:10.5px;color:var(--t3);padding:2px 0;">${s}</div>`).join('');
         }
         anchEl.innerHTML = html;
       }
@@ -24332,11 +24405,33 @@ function loadJsPDF(){
   return _jspdfPromise;
 }
 function _briefRgb(h){ h = String(h||'').replace('#',''); if (h.length===3) h = h.split('').map(x=>x+x).join(''); const n = parseInt(h,16)||0; return [(n>>16)&255,(n>>8)&255,n&255]; }
+// v41 — minimal toast for surfacing async failures (PDF brief, etc.) that were
+// previously silent. Created lazily on first call; dark theme matching the app
+// palette; screen-reader announced (role=status); auto-dismisses after ~5s.
+let _fsToastTimer = null;
+function showToast(msg){
+  if (!msg) return;
+  let t = document.getElementById('fs-toast');
+  if (!t){
+    t = document.createElement('div');
+    t.id = 'fs-toast';
+    t.setAttribute('role', 'status');
+    t.setAttribute('aria-live', 'polite');
+    t.style.cssText = 'position:fixed;left:50%;bottom:46px;transform:translateX(-50%);z-index:12000;max-width:min(480px,86vw);padding:10px 16px;background:var(--bg1,#14161c);color:var(--t1,#e8eaef);border:1px solid var(--b1,#2a2e38);border-radius:8px;font-size:12px;line-height:1.5;box-shadow:0 8px 28px rgba(0,0,0,.45);opacity:0;transition:opacity .18s;pointer-events:none;';
+    document.body.appendChild(t);
+  }
+  t.textContent = String(msg);
+  requestAnimationFrame(() => { t.style.opacity = '1'; });
+  if (_fsToastTimer) clearTimeout(_fsToastTimer);
+  _fsToastTimer = setTimeout(() => { t.style.opacity = '0'; }, 5000);
+}
 async function downloadCountryBrief(iso, btn){
   const c = (typeof byISO === 'function') ? byISO(iso) : null;
   if (!c) return;
-  if (btn){ btn.disabled = true; btn._lbl = btn.textContent; btn.textContent = 'Generating…'; }
-  const done = (msg) => { if (btn){ btn.disabled = false; btn.textContent = btn._lbl || 'Download brief (PDF)'; } if (msg && typeof showToast === 'function') showToast(msg); };
+  // v41 — save/restore innerHTML (not textContent): the button carries an SVG
+  // icon that a bare textContent write would destroy permanently.
+  if (btn){ btn.disabled = true; if (btn._html == null) btn._html = btn.innerHTML; btn.textContent = 'Generating…'; }
+  const done = (msg) => { if (btn){ btn.disabled = false; if (btn._html != null) btn.innerHTML = btn._html; } if (msg) showToast(msg); };
   let JsPDF;
   try { JsPDF = await loadJsPDF(); } catch (e) { return done('PDF library failed to load — check your connection.'); }
   try {
@@ -24415,14 +24510,30 @@ const FS_ASK_LABELS = ['Staple Import Dep.','Supplier Concentration','Production
 const FS_ASK_WEIGHTS = [0.23, 0.16, 0.11, 0.09, 0.09, 0.08, 0.06, 0.12, 0.06];
 const FS_ASK_COMMODITIES = {wheat:'Wheat', rice:'Rice', maize:'Maize', corn:'Maize', soy:'Soybeans', soybean:'Soybeans', soybeans:'Soybeans', 'palm oil':'Palm oil', palm:'Palm oil', sugar:'Sugar', beef:'beef', coffee:'Coffee', barley:'Barley', sorghum:'Sorghum', poultry:'poultry', pork:'pork', dairy:'dairy'};
 
+let _fsAskPrevFocus = null;
+function _fsAskInertBg(on){
+  // v41 — hide the app from screen readers / tab order while the dialog is open.
+  ['topbar', 'main'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el){ if (on) el.setAttribute('inert', ''); else el.removeAttribute('inert'); }
+  });
+}
 function fsAskOpen(){
   const o = document.getElementById('fs-ask-overlay'); if (!o) return;
+  _fsAskPrevFocus = document.activeElement;
   o.classList.add('open');
+  _fsAskInertBg(true);
   const i = document.getElementById('fs-ask-input'); if (i){ i.value=''; }
   fsAskRun();
   setTimeout(() => { if (i) i.focus(); }, 30);
 }
-function fsAskClose(){ const o = document.getElementById('fs-ask-overlay'); if (o) o.classList.remove('open'); }
+function fsAskClose(){
+  const o = document.getElementById('fs-ask-overlay'); if (o) o.classList.remove('open');
+  _fsAskInertBg(false);
+  // v41 — return focus to wherever the user was (the Ask button or the page).
+  const p = _fsAskPrevFocus; _fsAskPrevFocus = null;
+  if (p && typeof p.focus === 'function' && document.contains(p)) p.focus();
+}
 function fsAskSet(q){ const i = document.getElementById('fs-ask-input'); if (!i) return; i.value = q; i.focus(); fsAskRun(); }
 
 function fsAskFindCountries(q, qRaw){
@@ -24449,7 +24560,7 @@ function fsAskFindCommodity(q){
 function fsAskHint(){
   const ex = ["Why is Egypt's score high?", "What if Russia bans wheat?", "Who's most at risk in Africa?", "Who supplies Egypt wheat?", "Compare Nigeria and Ethiopia"];
   return `<div class="fs-ask-hint"><b>Ask about the data.</b> Every answer is templated from live figures on this page — nothing is generated, so there are no hallucinated numbers. Try:<div style="margin-top:8px">`
-    + ex.map(x => `<span class="fs-ask-chip" onclick="fsAskSet(this.textContent)">${x}</span>`).join('') + `</div></div>`;
+    + ex.map(x => `<span class="fs-ask-chip" role="button" tabindex="0" onclick="fsAskSet(this.textContent)">${x}</span>`).join('') + `</div></div>`;
 }
 function fsAskRun(){
   const input = document.getElementById('fs-ask-input'); const body = document.getElementById('fs-ask-body');
@@ -24484,7 +24595,7 @@ function fsAskExplain(c){
   if (amp != null && amp > 0.05) h += `<p style="font-size:11.5px;color:var(--t3)">Plus a +${amp.toFixed(1)} import×access amplifier — high import dependence and constrained economic access compound each other.</p>`;
   if (sup) h += `<p>Top staple supplier: <b>${_nameFromISO(sup) || sup}</b>${supP ? ` (~${Math.round(supP)}% of tracked staple imports)` : ''}.</p>`;
   if (spark) h += spark;
-  h += `<div class="fs-ask-open" onclick="fsAskClose();openPanel(byISO('${c.iso}'))">Open full ${c.name} profile →</div>`;
+  h += `<div class="fs-ask-open" role="button" tabindex="0" onclick="fsAskClose();openPanel(byISO('${c.iso}'))">Open full ${c.name} profile →</div>`;
   h += `<div class="fs-ask-foot">Every figure above is read live from this page's data — templated, not generated. FDRS is a structural synthesis, not a forecast.</div></div>`;
   return h;
 }
@@ -24496,9 +24607,13 @@ function fsAskSuppliers(c, commodity){
   }
   const lbl = commodity ? commodity.toLowerCase() : 'staple foods';
   let h = `<div class="fs-ask-ans"><h4>Who supplies ${c.name}${commodity ? `'s ${lbl}` : ''}?</h4>`;
-  if (!sup.length){ h += `<p>No cited supplier flows for ${c.name}${commodity ? ` in ${lbl}` : ''} in the current data.</p>`; }
-  else sup.slice(0, 6).forEach(s => { const p = Math.round(s.pct || 0); h += `<div class="fs-ask-row"><span class="fs-ask-lab">${s.name}</span><span class="fs-ask-track"><span class="fs-ask-fill" style="width:${Math.min(p,100)}%;background:${p>=50?'#c44b3c':'#d27a3e'}"></span></span><span class="fs-ask-num">${p ? p + '%' : '—'}</span></div>`; });
-  h += `<div class="fs-ask-open" onclick="fsAskClose();openPanel(byISO('${c.iso}'))">Open full ${c.name} profile →</div>`;
+  if (!sup.length && !window.__BEEF_LOADED__){
+    // v41 — the trade atlas fetch may not have resolved yet; don't render a definitive false negative.
+    h += `<p>Trade atlas still loading — try again in a moment.</p>`;
+  }
+  else if (!sup.length){ h += `<p>No cited supplier flows for ${c.name}${commodity ? ` in ${lbl}` : ''} in the current data.</p>`; }
+  else sup.slice(0, 6).forEach(s => { const p = Math.round(_supplierSharePct(sup, s) || 0); h += `<div class="fs-ask-row"><span class="fs-ask-lab">${s.name}</span><span class="fs-ask-track"><span class="fs-ask-fill" style="width:${Math.min(p,100)}%;background:${p>=50?'#c44b3c':'#d27a3e'}"></span></span><span class="fs-ask-num">${p ? p + '%' : '—'}</span></div>`; });
+  h += `<div class="fs-ask-open" role="button" tabindex="0" onclick="fsAskClose();openPanel(byISO('${c.iso}'))">Open full ${c.name} profile →</div>`;
   h += `<div class="fs-ask-foot">Supplier shares from UN Comtrade / curated trade flows where available.</div></div>`;
   return h;
 }
@@ -24509,11 +24624,21 @@ function fsAskCompare(a, b){
   const verdict = d === 0 ? 'a tie' : (d > 0 ? `${Math.abs(d)} points higher risk for ${a.name}` : `${Math.abs(d)} points higher risk for ${b.name}`);
   let h = `<div class="fs-ask-ans">${head(a)}${head(b)}`;
   h += `<p><b>${a.name}</b> ${a.fdrs} vs <b>${b.name}</b> ${b.fdrs} — ${verdict}. Leading driver: ${a.name} → ${topDriver(a)}; ${b.name} → ${topDriver(b)}.</p>`;
-  h += `<div class="fs-ask-open" onclick="fsAskClose();openPanel(byISO('${a.iso}'))">Open ${a.name} →</div><div class="fs-ask-open" onclick="fsAskClose();openPanel(byISO('${b.iso}'))">Open ${b.name} →</div>`;
+  h += `<div class="fs-ask-open" role="button" tabindex="0" onclick="fsAskClose();openPanel(byISO('${a.iso}'))">Open ${a.name} →</div><div class="fs-ask-open" role="button" tabindex="0" onclick="fsAskClose();openPanel(byISO('${b.iso}'))">Open ${b.name} →</div>`;
   h += `<div class="fs-ask-foot">Structural synthesis from live data; not a forecast.</div></div>`;
   return h;
 }
 const FS_ASK_REGIONS = ['Middle East','North Africa','Sub-Saharan Africa','Latin America','South America','Central America','North America','Africa','Asia','Europe','Americas','Oceania','Caribbean'];
+// v41 — some ask-region labels don't exist as c.region values (actual values:
+// Africa, Latin America, Middle East, Sub-Saharan Africa, Caribbean, …), so they
+// previously matched zero countries. Map those labels to ISO whitelists / real
+// region unions; labels not listed here fall through to the region-substring match.
+const FS_ASK_REGION_MAP = {
+  'North Africa':    { isos: ['DZA','EGY','LBY','MAR','TUN','SDN'] },
+  'South America':   { isos: ['ARG','BOL','BRA','CHL','COL','ECU','GUY','PRY','PER','SUR','URY','VEN'] },
+  'Central America': { isos: ['BLZ','CRI','SLV','GTM','HND','NIC','PAN'] },
+  'Americas':        { regions: ['North America','Latin America','Caribbean'] },
+};
 // "What if <exporter> bans <commodity>?" → most-exposed importers (reuses restrictionExposure).
 function fsAskWhatIf(exporter, commodity){
   let exposed = [];
@@ -24521,7 +24646,8 @@ function fsAskWhatIf(exporter, commodity){
   const lc = commodity.toLowerCase();
   let h = `<div class="fs-ask-ans"><h4>If ${exporter.name} restricted ${lc} exports…</h4>`;
   h += `<p>Structurally most-exposed importers — share of their ${lc} supply from ${exporter.name}, ranked by that share × their own fragility:</p>`;
-  if (!exposed.length) h += `<p>No cited importers currently source ${lc} from ${exporter.name} in the trade data.</p>`;
+  if (!exposed.length && !window.__BEEF_LOADED__) h += `<p>Trade atlas still loading — try again in a moment.</p>`;   // v41 — no definitive false negative before the atlas fetch resolves
+  else if (!exposed.length) h += `<p>No cited importers currently source ${lc} from ${exporter.name} in the trade data.</p>`;
   else exposed.forEach(e => { const p = e.share_pct; h += `<div class="fs-ask-row"><span class="fs-ask-lab">${e.name}</span><span class="fs-ask-track"><span class="fs-ask-fill" style="width:${Math.min(p,100)}%;background:${p>=50?'#c44b3c':'#d27a3e'}"></span></span><span class="fs-ask-num">${p}% · FDRS ${e.fdrs != null ? e.fdrs : '—'}</span></div>`; });
   h += `<div class="fs-ask-foot">Hypothetical exposure from cited trade shares — who relies on ${exporter.name}, not a claim that a ban will happen. Structural, not a forecast.</div></div>`;
   return h;
@@ -24531,19 +24657,49 @@ function fsAskRanking(q){
   let region = null;
   for (const r of FS_ASK_REGIONS){ if (q.includes(r.toLowerCase())){ region = r; break; } }
   let pool = (typeof COUNTRIES !== 'undefined' ? COUNTRIES : []).filter(c => c && c.name && !c.iso.startsWith('US-') && typeof c.fdrs === 'number');
-  if (region) pool = pool.filter(c => (c.region || '').toLowerCase().includes(region.toLowerCase()));
+  if (region) {
+    const map = FS_ASK_REGION_MAP[region];
+    if (map && map.isos) { const set = new Set(map.isos); pool = pool.filter(c => set.has(c.iso)); }
+    else if (map && map.regions) { const rs = map.regions.map(r => r.toLowerCase()); pool = pool.filter(c => rs.some(r => (c.region || '').toLowerCase().includes(r))); }
+    else pool = pool.filter(c => (c.region || '').toLowerCase().includes(region.toLowerCase()));
+  }
   pool.sort((a, b) => b.fdrs - a.fdrs);
   const top = pool.slice(0, 7);
   let h = `<div class="fs-ask-ans"><h4>Most at risk${region ? ` · ${region}` : ''}</h4>`;
   if (!top.length) h += `<p>No countries matched${region ? ` in ${region}` : ''}.</p>`;
   else top.forEach((c, i) => { const col = riskColor(c.fdrs); h += `<div class="fs-ask-row"><span class="fs-ask-lab">${i+1}. ${c.name}</span><span class="fs-ask-track"><span class="fs-ask-fill" style="width:${Math.min(c.fdrs,100)}%;background:${col}"></span></span><span class="fs-ask-num" style="color:${col}">${c.fdrs} · ${riskLabel(c.fdrs)}</span></div>`; });
-  if (top[0]) h += `<div class="fs-ask-open" onclick="fsAskClose();openPanel(byISO('${top[0].iso}'))">Open ${top[0].name} →</div>`;
+  if (top[0]) h += `<div class="fs-ask-open" role="button" tabindex="0" onclick="fsAskClose();openPanel(byISO('${top[0].iso}'))">Open ${top[0].name} →</div>`;
   h += `<div class="fs-ask-foot">Ranked by current FDRS from live page data.</div></div>`;
   return h;
 }
 document.addEventListener('keydown', e => {
   const o = document.getElementById('fs-ask-overlay'); if (!o) return;
-  if (e.key === 'Escape' && o.classList.contains('open')) { fsAskClose(); return; }
+  if (e.key === 'Escape' && o.classList.contains('open')) {
+    // v41 — this dialog swallows its own Escape; without this the document-level
+    // handlers registered later (side panel, scenario drawer) also fire and close too.
+    e.stopImmediatePropagation();
+    fsAskClose(); return;
+  }
+  if (e.key === 'Tab' && o.classList.contains('open')){
+    // v41 — focus trap: Tab cycles within the dialog instead of escaping into
+    // the visually-blocked page behind it.
+    const m = document.getElementById('fs-ask-modal'); if (!m) return;
+    const f = Array.from(m.querySelectorAll('input, button, [tabindex="0"], a[href]'))
+      .filter(el => !el.disabled && el.offsetParent !== null);
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && (document.activeElement === first || !m.contains(document.activeElement))){ e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && (document.activeElement === last || !m.contains(document.activeElement))){ e.preventDefault(); first.focus(); }
+    return;
+  }
+  if ((e.key === 'Enter' || e.key === ' ') && o.classList.contains('open')){
+    // v41 — activate the generated chip / open-profile controls from the keyboard.
+    const t = e.target;
+    if (t && t.getAttribute && t.getAttribute('role') === 'button' && (t.classList.contains('fs-ask-chip') || t.classList.contains('fs-ask-open'))){
+      e.preventDefault(); t.click();
+    }
+    return;
+  }
   if (e.key === '/' && !o.classList.contains('open')){
     const t = e.target, tag = ((t && t.tagName) || '').toLowerCase();
     if (tag !== 'input' && tag !== 'textarea' && tag !== 'select' && !(t && t.isContentEditable)){ e.preventDefault(); fsAskOpen(); }
@@ -25767,7 +25923,16 @@ function renderForecastTab() {
   const improving = allC.filter(x => x.f2030 < x.fdrs - 5).length;
   const newlyVuln = allC.filter(x => x.fdrs < 76 && x.f2030 >= 76).length;
 
+  // v41 — the degraded-feed warning this tab always promised (comment below)
+  // but never rendered. _fcClimateDegraded() returns {degraded, list, status};
+  // build the .fc-degraded-bar from it so the 2030 outlook is honest about
+  // which climate inputs are currently missing.
+  const _fcDeg = _fcClimateDegraded();
+  const _fcDegBar = _fcDeg.degraded
+    ? `<div class="fc-degraded-bar">Climate inputs degraded: ${_fcDeg.list.map(d => `<b>${d.label}</b> (${d.status})`).join(' · ')} — affected countries use heritage climate values; the 2030 outlook leans on the remaining sourced inputs. See <a href="#" onclick="showTab('datastatus');return false;">Data Status</a>.</div>`
+    : '';
   document.getElementById('forecast-body').innerHTML = `
+    ${_fcDegBar}
     <!-- v22.12 — Today vs 2030 vs Δ table leads the tab -->
     <div class="fc-mover-card">
       <div class="fc-mover-head">
@@ -29914,10 +30079,12 @@ function fsValidationHTML(){
   if (typeof auc !== 'number') return '';
   const rhoI = (t.spearman_fdrs_vs_ipc_pct || {}).rho, rhoF = (t.spearman_fdrs_vs_fews_phase || {}).rho;
   const sgn = x => (typeof x === 'number' ? (x >= 0 ? '+' : '') + x.toFixed(2) : '—');
+  // v41 — render country names, not raw ISO codes, on the credibility panel.
+  const _valName = iso => (typeof _nameFromISO === 'function' && _nameFromISO(iso)) || iso;
   const hits = (v.hits_top_crisis || []).slice(0, 6)
-    .map(h => `<span class="fs-val-chip"><b>${h[0]}</b> FDRS ${h[1]} · IPC ${Math.round(h[2])}%</span>`).join('');
+    .map(h => `<span class="fs-val-chip"><b>${_valName(h[0])}</b> FDRS ${h[1]} · IPC ${Math.round(h[2])}%</span>`).join('');
   const miss = (v.misses_crisis_low_fdrs || [])
-    .map(m => `<b>${m[0]}</b> (FDRS ${m[1]}, yet ${Math.round(m[2])}% in crisis)`).join(', ');
+    .map(m => `<b>${_valName(m[0])}</b> (FDRS ${m[1]}, yet ${Math.round(m[2])}% in crisis)`).join(', ');
   return `<div class="fs-val">
     <div class="fs-val-head">
       <div class="fs-val-eyebrow">VALIDATION · DOES THE SCORE CORRESPOND TO REALITY?</div>
@@ -30526,7 +30693,8 @@ function renderMethodologyTab() {
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;">
           ${[
-            {flag:'sourced',col:'#6ba36b',desc:'Verified against a public dataset with source_url + as_of populated. The most credible class — applies to FBS caloric shares, FAOSTAT TCL net trade, WDI bulk, WGI, ND-GAIN, Aqueduct, INFORM, USDA PSD, live HungerMap inflation, Eurostat HICP.'},
+            {flag:'sourced',col:'#6ba36b',desc:'Verified against a public dataset with direct lineage: a query-level source URL (or, for bulk datasets with no stable per-query link, a machine-readable source_query_spec naming the exact filter + extraction script) plus as_of, basis and coverage. The most credible class — applies to FBS caloric shares, FAOSTAT TCL net trade, WDI bulk, WGI, ND-GAIN, Aqueduct, INFORM, USDA PSD, live HungerMap inflation, Eurostat HICP. Since v41, trade rows whose exact source query cannot be reconstructed are downgraded out of this class rather than kept on a homepage link.'},
+            {flag:'partial',col:'#c9a957',desc:'Real cited data with incomplete lineage or coverage — truncated partner extracts (coverage: top_partner_only, e.g. a mirror query that surfaced one supplier), rows whose exact source query could not be reconstructed from their own metadata, or buffers blending stale input series (flagged stale_inputs). Rendered with reduced visual confidence; never dressed up as fully sourced.'},
             {flag:'manual',col:'#7c9fcf',desc:'Hand-maintained snapshot from an annual / static public release. Today this is Feeding America Map the Meal Gap (US state food-insecurity %), refreshed each May.'},
             {flag:'modeled',col:'#c9a957',desc:'Computed at render time from sourced inputs or explicit structural assumptions. Includes the Supply-Chain Exposure component, 2018–2025 modeled backcast, the 2030 modeled-outlook persistent-shock overlay.'},
             {flag:'legacy_curated',col:'#d27a3e',desc:'Hand-authored heritage value from the May 2026 embedded dataset, not yet re-verified. Being re-sourced progressively: the field-level legacy ratio is now 17.6%, down from 83.7% at the original reviewer feedback. Trade snapshots, caloric shares and the food-inflation fallback have been re-sourced or correctly reclassified; what remains is a residual set of micro-territories and non-reporting countries genuinely outside FBS/trade-reporter coverage.'},
@@ -30914,6 +31082,17 @@ Object.defineProperty(window, 'disturbanceEvents', {
   get() { return disturbanceEvents; },
   configurable: true,
 });
+
+// v41 — replace the hardcoded "Updated June 2026" dateline with the real data date
+// derived from the loaded manifest, so it can never silently rot.
+function updateMethodologyDateline() {
+  const el = document.getElementById('methodology-dateline');
+  if (!el) return;
+  const t = LIVE.meta && LIVE.meta.loaded_at;
+  const when = (t && typeof formatSnapshotTime === 'function') ? formatSnapshotTime(t)
+             : (t ? String(t).slice(0, 10) : 'recent');
+  el.textContent = `Open Methodology · Data as of ${when}`;
+}
 
 // v20.29 — daily summary banner. Built from LIVE.daily_summary (output of
 // scripts/build_daily_summary.py). Deterministic text — no LLM. If the
@@ -34720,11 +34899,11 @@ function showCommodityDetail(key) {
      #topbar (which is position:relative;z-index:1000 → its own stacking context that would
      trap this fixed overlay behind page content). -->
 <div id="fs-ask-overlay" onclick="if(event.target===this)fsAskClose()">
-  <div id="fs-ask-modal" role="dialog" aria-label="Ask FoodShield">
+  <div id="fs-ask-modal" role="dialog" aria-modal="true" aria-label="Ask FoodShield">
     <div id="fs-ask-inbar">
       <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="var(--t3)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-      <input id="fs-ask-input" placeholder="Ask about a country… e.g. why is Egypt's score high?" oninput="fsAskRun()" autocomplete="off" spellcheck="false">
-      <span id="fs-ask-esc" onclick="fsAskClose()">esc</span>
+      <input id="fs-ask-input" placeholder="Ask about a country… e.g. why is Egypt's score high?" aria-label="Ask about a country" oninput="fsAskRun()" autocomplete="off" spellcheck="false">
+      <button type="button" id="fs-ask-esc" onclick="fsAskClose()" aria-label="Close Ask FoodShield">esc</button>
     </div>
     <div id="fs-ask-body"></div>
   </div>

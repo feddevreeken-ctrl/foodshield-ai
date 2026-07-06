@@ -21,7 +21,12 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 DATA = REPO / "data"
 
-WEIGHTS = [0.23, 0.16, 0.11, 0.09, 0.09, 0.08, 0.06, 0.12, 0.06]
+# Canonical weight vector — single source of truth is the builder (kept inside
+# the audit_formulas.py formula-integrity gate; build_countries_dataset is
+# side-effect-free at import time).
+from build_countries_dataset import FDRS_V2_WEIGHTS
+
+WEIGHTS = FDRS_V2_WEIGHTS
 
 # component index -> (name, current status, candidate feed file, what the feed provides)
 # STATUS reflects the DISPLAYED score (structural baseline + runtime re-sourcing), not just
@@ -106,9 +111,13 @@ def main():
     upgrade_wt = sum(r[4] for r in upgrade)   # r[4] = weight
     print("-" * 72)
     print("PROVENANCE OF THE DISPLAYED SCORE (structural baseline + runtime re-sourcing):")
-    print(f"  Fully sourced now: econ_access (0.12) + grain_buffer (0.06) in the builder;")
-    print(f"    climate (0.09) + conflict (0.08) re-sourced 60/40 at runtime; SCE (0.06) live.")
-    print(f"  → ~{0.12 + 0.06 + 0.6*(0.09+0.08) + 0.06:.2f} of the 1.00 weight is sourced/live in what users see.")
+    # derive the headline from COMPONENTS/LEGACY_FRAC (r[3]=status, r[4]=weight)
+    # so table edits automatically update the number — no hardcoded arithmetic.
+    _sourced = [(r[2], r[3], r[4]) for r in rows if r[3] in ("sourced", "runtime", "live")]
+    print("  Sourced/live now: " + "; ".join(
+        f"{n} ({w:.2f}{', 60/40 runtime' if s == 'runtime' else ''})" for n, s, w in _sourced) + ".")
+    sourced_wt = sum(r[4] * (1.0 - LEGACY_FRAC[r[3]]) for r in rows)
+    print(f"  → ~{sourced_wt:.2f} of the 1.00 weight is sourced/live in what users see.")
     print(f"  Still heritage: {', '.join(f'{r[2]}({r[4]:.2f})' for r in upgrade)} "
           f"= {upgrade_wt:.2f} weight — plus the 40% heritage remainder inside climate+conflict.")
     print("\nSuggested re-source order (heritage components, feed already present):")

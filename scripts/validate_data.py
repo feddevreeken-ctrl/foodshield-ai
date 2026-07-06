@@ -414,6 +414,21 @@ def validate_countries_trade_surface():
             f"(quality={item.get('quality_flag')}, source={item.get('source')})"
         )
 
+    # v41 — trade_scope is REQUIRED on populated sourced/partial supplier panels
+    # (audit 2026-07-01: 176 scope-less panels let one-commodity routes render as
+    # whole-country supplier surfaces). Remediated by
+    # trade_pipeline/honesty_remediation.py; this guard keeps regressions loud.
+    for iso3, c in countries.items():
+        if not isinstance(c, dict):
+            continue
+        for field in ("suppliers", "supPct"):
+            row = c.get(field)
+            if (isinstance(row, dict) and row.get("quality_flag") in ("sourced", "partial")
+                    and row.get("value") and not row.get("trade_scope")):
+                failures.append(
+                    f"{iso3}.{field}: missing trade_scope on populated "
+                    f"{row.get('quality_flag')} supplier panel")
+
     print()
     print("=== Country trade schema checks ===")
     summary = summarize_trade_surface(countries)
