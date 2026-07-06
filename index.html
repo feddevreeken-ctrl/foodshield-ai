@@ -4695,6 +4695,8 @@ abbr.ac:hover, .ac:hover {
   -webkit-mask-image: radial-gradient(circle at 78% 18%, #000, transparent 60%);
 }
 .scn-crisis-card > * { position: relative; z-index: 1; }
+/* v42 — mobile: the two-column hero overflowed/crushed on phones (no prior media rule). */
+@media(max-width:760px){ .scn-crisis-card{ grid-template-columns:1fr; padding:20px 18px; gap:20px; } }
 .scn-crisis-card::before {
   content: '';
   position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
@@ -14477,7 +14479,7 @@ const DATASTATUS_FEEDS = {
   usda_psd:      'USDA PSD observed production/imports/exports for staples · commodity panel',
   faostat_fbs:   'FAOSTAT Food Balance Sheets · caloric shares of wheat/rice/maize per country',
   fao_giews:     'FAO GIEWS quarterly country briefs · country-panel deep-link (static)',
-  fews:          'FEWS NET IPC-style classifications · live FDW API (current + 3-month + 8-month projection)',
+  fews:          'FEWS NET IPC-style classifications · live FDW API (current + 3/8-month projection) · ~29 of 35 priority countries, public/unauthenticated tier · feeds the nowcast (≤+6)',
   fewsnet:       'FEWS NET country reports · per-country deep-link helper (curated)',
   wfp_acr:       'WFP Annual Country Reports · country-panel deep-link (static)',
   usda_gain:     'USDA GAIN attaché reports · commodity-panel deep-link (static)',
@@ -23668,9 +23670,10 @@ function openPanel(c, skipDrilldown) {
         // v21 — clickable to reveal full nowcast component breakdown (traceability fix).
         const nowcastEntry = (typeof LIVE !== 'undefined' && LIVE.nowcast) ? LIVE.nowcast[c.iso] : null;
         const components = nowcastEntry && nowcastEntry.components;
+        const liveDot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle;animation:livePulse 1.5s infinite;" title="live-adjusted — a real signal moved this score off its structural baseline"></span>`;
         metaEl.innerHTML =
-          `Structural ${struct} <span style="color:${adjCol}">${sign}${adj} nowcast</span>` +
-          (components ? ` <span id="sp-nowcast-toggle" style="color:var(--accent);cursor:pointer;font-size:9.5px;margin-left:4px;text-decoration:underline;">show breakdown</span><div id="sp-nowcast-breakdown" style="display:none;margin-top:6px;padding:8px 10px;background:var(--bg2);border:1px solid var(--b1);border-radius:6px;font-size:10.5px;line-height:1.7;color:var(--t2);"></div>` : '');
+          liveDot + `Structural ${struct} <span style="color:${adjCol}">${sign}${adj} nowcast</span>` +
+          (components ? ` <span id="sp-nowcast-toggle" role="button" tabindex="0" style="color:var(--accent);cursor:pointer;font-size:11px;font-weight:600;margin-left:6px;padding:1px 8px;border:1px solid var(--accent)55;border-radius:10px;white-space:nowrap;">▸ why ${sign}${adj}?</span><div id="sp-nowcast-breakdown" style="display:none;margin-top:6px;padding:8px 10px;background:var(--bg2);border:1px solid var(--b1);border-radius:6px;font-size:10.5px;line-height:1.7;color:var(--t2);"></div>` : '');
         metaEl.title = 'Structural FDRS from baseline data; nowcast adjustment from live WFP/IPC/ACLED/FFPI signals.';
         if (components) {
           // Human labels for each component key in build_nowcast.py
@@ -23716,13 +23719,21 @@ function openPanel(c, skipDrilldown) {
               tog.onclick = () => {
                 const open = bd.style.display !== 'none';
                 bd.style.display = open ? 'none' : 'block';
-                tog.textContent = open ? 'show breakdown' : 'hide breakdown';
+                tog.textContent = open ? `▸ why ${sign}${adj}?` : `▾ hide breakdown`;
               };
             }
           }, 0);
         }
       } else if (struct != null) {
-        metaEl.innerHTML = `Structural · no live signal change`;
+        // v42 — distinguish "no live feed at all" from "live-monitored but calm".
+        // A high/monitored country reading ~0 is genuinely calm; a 'none' country
+        // has no live feed, so ~0 is absence-of-data, not confirmed calm.
+        const cf = c._nowcastConfidence;
+        const calm = (cf && cf !== 'none');
+        const dot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${calm ? '#6ba36b' : 'var(--t3)'};margin-right:6px;vertical-align:middle;" title="${calm ? 'live-monitored — currently no net pressure' : 'no live feed for this country — structural score only'}"></span>`;
+        metaEl.innerHTML = dot + (calm
+          ? `Structural · live-monitored, no net pressure`
+          : `Structural · no live feed for this country`);
       } else {
         metaEl.innerHTML = '';
       }
@@ -26249,6 +26260,9 @@ function renderScenarioTab() {
         <div class="scn-crisis-subtitle" style="font-size:11.5px;color:var(--t3);margin:6px 0 10px;line-height:1.45;">
           Uses supplier concentration exposure; not a Russia-specific bilateral simulation unless Russia-specific dependency data is available.
         </div>
+        <div style="font-size:10.5px;color:var(--t2);margin:0 0 10px;padding:5px 10px;background:var(--bg2);border-left:2px solid var(--accent);border-radius:0 4px 4px 0;line-height:1.5;">
+          ⚠ Heuristic stress test — a reasoned "what-if", <b>not a forecast</b> and not backtested. <span onclick="if(typeof scrollToMethodBadge==='function')scrollToMethodBadge()" style="color:var(--accent);cursor:pointer;text-decoration:underline;">how the math works</span>
+        </div>
         <div class="scn-crisis-body">
           The top supplier of wheat tends to concentrate 25–45% of imports for many countries. In the model, a wheat-price spike stacked with a top-supplier export ban pushes
           <b>${_featuredPreview ? _featuredPreview.crossingVuln : '—'} countries</b>
@@ -26309,7 +26323,7 @@ function renderScenarioTab() {
         <span class="scn-method-cta">how the math works <span class="scn-method-chev">↓</span></span>
       </summary>
       <div class="scn-method-body">
-        <p style="margin:0 0 12px;">Each shock applies a heuristic kick to one or more FDRS components. Shocks on <em>different</em> components add; same-component shocks combine with <span style="font-family:'Geist Mono',monospace;color:var(--t2)">√(Σ&nbsp;kick²)</span> so channels don't double-count. Severity sliders scale linearly. Population, supplier mix and elasticities are held constant. Sourced wheat / rice / maize exposures respond at full strength; legacy baselines are dampened <b style="color:var(--t1)">×0.6</b>. For 2030 trajectory, use the Modeled Outlook tab.</p>
+        <p style="margin:0 0 12px;">Each shock applies a heuristic kick to one or more FDRS components. Shocks on <em>different</em> components add; same-component shocks combine with <span style="font-family:'Geist Mono',monospace;color:var(--t2)">√(Σ&nbsp;kick²)</span> so channels don't double-count. Severity sliders scale linearly. Population, supplier mix and elasticities are held constant. Sourced wheat / rice / maize exposures respond at full strength; legacy baselines are dampened <b style="color:var(--t1)">×0.6</b>. For 2030 trajectory, use the Modeled Outlook tab. The import-dependency × economic-access double-bind amplifier is held at its structural value during a scenario — the shown delta is a bounded perturbation on the composite score, not a full re-run of the weighted component sum.</p>
         <p style="margin:0 0 12px;font-size:11px;color:var(--t2);line-height:1.6;">Each shock is tagged by how its magnitude was derived: <span style="color:#6ba36b;font-weight:600;">● cited trade flows</span> · <span style="color:#6b8db8;font-weight:600;">◐ sourced indicator</span> · <span style="color:#c9a957;font-weight:600;">○ modeled component</span>. Modeled shocks are directional — magnitudes are not calibrated.</p>
         <div class="scn-method-formulas">
           <div><b>Wheat / rice / maize price spike</b> &nbsp;Δ = import_dependency × concentration_premium × 24 × shock × provenance_factor → c[0]<br><span style="color:var(--t3);font-size:9.5px;">import_dependency = sourced % of supply imported; concentration_premium (1.0–1.4) from the real cited supplier mix — single-source importers more exposed. Net exporters discounted by the trade-direction factor.</span></div>
@@ -30794,7 +30808,7 @@ function renderMethodologyTab() {
           {src:'FAOSTAT food CPI',yr:'quarterly',used:'Global annual food consumer-price index',url:'https://www.fao.org/faostat/en/#data/CP'},
           {src:'Feeding America (Map the Meal Gap)',yr:'2025 (data 2023)',used:'US state food-insecurity %',url:'https://map.feedingamerica.org'},
           {src:'FAO GIEWS Country Briefs',yr:'quarterly',used:'Per-country food-security situation briefs (~80 countries) — static link to FAO',url:'https://www.fao.org/giews/countrybrief/'},
-          {src:'FEWS NET FDW (live API)',yr:'quarterly',used:'IPC-style current + 3-month + 8-month projected phase classifications for ~35 priority countries — live FDW API. v42: now feeds the nowcast (≤+6) — gap-fills the crisis level where IPC is absent, plus a deterioration nudge when the near-term projection worsens (no double-count with IPC current phase)',url:'https://fdw.fews.net/api/'},
+          {src:'FEWS NET FDW (live API)',yr:'live · quarterly phases',used:'IPC-style current + 3-month + 8-month projected phase classifications — live FDW API, ~29 of 35 priority countries covered on the public/unauthenticated tier (6 uncovered are silently absent). v42: now feeds the nowcast (≤+6) — gap-fills the crisis level where IPC is absent, plus a deterioration/sustained-crisis nudge from the projection (no double-count with IPC current phase)',url:'https://fdw.fews.net/api/'},
           {src:'WFP Annual Country Reports',yr:'2025',used:'WFP country-office operational narratives — static link to wfp.org',url:'https://www.wfp.org/annual-country-reports-2025'},
           {src:'USDA GAIN attaché reports',yr:'weekly',used:'Per-country commodity intelligence (~80 FAS posts) — static search link',url:'https://www.fas.usda.gov/data/search'},
           {src:'OECD-FAO Agricultural Outlook',yr:'2025–2034',used:'Reference trajectory informing the curated 2030 structural baseline (not directly ingested)',url:'https://www.oecd.org/en/publications/oecd-fao-agricultural-outlook-2025-2034_601276cd-en.html'},

@@ -155,10 +155,17 @@ def main():
         if not ipc_present and isinstance(fews_cur, (int, float)) and fews_cur >= 3:
             fews_kick  = min(6, (fews_cur - 2) * 2)   # phase 3->2, 4->4, 5->6
             fews_basis = "current_phase_gapfill"
-        if (isinstance(fews_proj, (int, float)) and isinstance(fews_cur, (int, float))
-                and fews_proj > fews_cur):
-            fews_kick  = min(6, fews_kick + 2)         # near-term deterioration
-            fews_basis = fews_basis or "projected_deterioration"
+        if isinstance(fews_proj, (int, float)) and isinstance(fews_cur, (int, float)):
+            if fews_proj > fews_cur:
+                fews_kick  = min(6, fews_kick + 2)     # near-term deterioration
+                fews_basis = fews_basis or "projected_deterioration"
+            elif fews_proj >= 3 and ipc_present:
+                # v42 — sustained crisis the forward projection still flags at Phase 3+,
+                # even where IPC already covers the CURRENT state. Half-credit (+1) so
+                # FEWS isn't inert on the ~26 countries IPC also tracks, without
+                # double-counting IPC's current-phase reading.
+                fews_kick  = min(6, fews_kick + 1)
+                fews_basis = fews_basis or "sustained_projection"
 
         # FX shock — currency dropped >10% vs USD in 90d
         fx_pct = wc.get("fx_90d_change_pct")
@@ -403,8 +410,16 @@ def main():
                 "secondary_feeds_empty": [name for name, feed in (
                     ("nasa_firms", fires), ("openaq", aq), ("usgs_water", usgs),
                 ) if not feed],
+                # v42 — ACLED is licence-gated: on a lagged/unlicensed tier its
+                # conflict_kick is 0 for every country. Surface the live-contribution
+                # count explicitly so a blanket 0 reads as "conflict feed not live",
+                # not "no conflict anywhere on Earth".
+                "acled_conflict_live_countries": sum(
+                    1 for v in out.values() if v["components"].get("conflict_kick", 0) > 0),
+                "fews_scored_countries": sum(
+                    1 for v in out.values() if v["components"].get("fews_kick", 0) > 0),
             },
-            "version": "v25",
+            "version": "v42",
         },
         "data": out,
     }
