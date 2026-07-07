@@ -15355,6 +15355,11 @@ async function loadLiveData() {
   }
   // v20.4: refresh the status-pill from the manifest now that LIVE.manifest is loaded
   if (typeof updateLiveStatusUI === 'function') updateLiveStatusUI();
+  // v43 — the Most-at-risk / Most-resilient rails were rendered once at init with
+  // STRUCTURAL scores and never refreshed, so they disagreed with every other surface
+  // (which shows the nowcast-adjusted score) and the live delta badge never appeared.
+  // Re-render now that the nowcast is applied.
+  if (typeof updateRail === 'function') updateRail();
   // v21.x: if the Data Status tab is currently visible, re-render it now that the manifest is loaded
   if (typeof renderDataStatusTab === 'function' && document.getElementById('tab-datastatus')?.classList.contains('active')) {
     try { renderDataStatusTab(); } catch (e) { console.warn('[FoodShield] renderDataStatusTab failed:', e); }
@@ -23734,11 +23739,22 @@ function openPanel(c, skipDrilldown) {
             .filter(r => r.v !== 0)
             .sort((a, b) => Math.abs(b.v) - Math.abs(a.v));
           const zeroCount = Object.values(components).filter(v => !v).length;
+          // v43 — proportional mini-bar per component (dataviz: direct-labeled bars,
+          // tabular figures, shape+colour not colour-alone). Bar width ∝ |contribution|.
+          const maxAbs = Math.max(1, ...rows.map(r => Math.abs(r.v)));
           const html = rows.length
             ? rows.map(r => {
-                const s = r.v > 0 ? '+' : '';
-                const col = r.v > 0 ? '#c44b3c' : '#6ba36b';
-                return `<div style="display:flex;justify-content:space-between;gap:8px;"><span>${r.label}</span><span style="font-family:'Geist Mono',monospace;color:${col};font-weight:600;">${s}${r.v}</span></div>`;
+                const up = r.v > 0;
+                const s = up ? '+' : '−';
+                const col = up ? '#c44b3c' : '#6ba36b';
+                const w = Math.max(4, Math.abs(r.v) / maxAbs * 100);
+                return `<div style="display:grid;grid-template-columns:1fr 44px;gap:8px;align-items:center;margin-bottom:4px;">
+                  <div style="min-width:0;">
+                    <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${up ? '▲' : '▼'} ${r.label}</div>
+                    <div style="height:4px;border-radius:2px;background:var(--b1);margin-top:2px;overflow:hidden;"><div style="height:100%;width:${w}%;background:${col};border-radius:2px;"></div></div>
+                  </div>
+                  <div style="font-family:'Geist Mono',monospace;color:${col};font-weight:600;text-align:right;font-variant-numeric:tabular-nums;">${s}${Math.abs(r.v)}</div>
+                </div>`;
               }).join('') + (zeroCount ? `<div style="color:var(--t3);font-size:9.5px;margin-top:4px;">+ ${zeroCount} signals at 0 (no firing)</div>` : '') +
                 `<div style="color:var(--t3);font-size:9.5px;margin-top:6px;border-top:1px dashed var(--b1);padding-top:5px;">Sum: ${sign}${adj} (capped −10 to +35). See <a href="#" onclick="showTab('methodology');return false;" style="color:var(--accent);">methodology</a> for formula.</div>`
             : `<div style="color:var(--t3);">No firing components — adjustment is the residual from rounding.</div>`;
@@ -24334,6 +24350,7 @@ function updateRail() {
       <div class="rank-num">${i+1}</div>
       <div class="rank-name">${c.name}</div>
       ${fsTrendMini(c.iso)}
+      ${(c._fdrsAdj && Math.abs(c._fdrsAdj) >= 1) ? `<div title="live nowcast shift vs the structural baseline" style="font-family:'Geist Mono',monospace;font-size:9px;font-weight:600;font-variant-numeric:tabular-nums;color:${c._fdrsAdj>0?'#c44b3c':'#6ba36b'};white-space:nowrap;">${c._fdrsAdj>0?'▲+':'▼−'}${Math.abs(Math.round(c._fdrsAdj))}</div>` : ''}
       <div class="rank-score" style="background:${riskColor(c.fdrs)}1a;color:${riskColor(c.fdrs)}">${c.fdrs}</div>
     </div>`).join('');
 
@@ -24344,6 +24361,7 @@ function updateRail() {
       <div class="rank-num">${i+1}</div>
       <div class="rank-name">${c.name}</div>
       ${fsTrendMini(c.iso)}
+      ${(c._fdrsAdj && Math.abs(c._fdrsAdj) >= 1) ? `<div title="live nowcast shift vs the structural baseline" style="font-family:'Geist Mono',monospace;font-size:9px;font-weight:600;font-variant-numeric:tabular-nums;color:${c._fdrsAdj>0?'#c44b3c':'#6ba36b'};white-space:nowrap;">${c._fdrsAdj>0?'▲+':'▼−'}${Math.abs(Math.round(c._fdrsAdj))}</div>` : ''}
       <div class="rank-score" style="background:${riskColor(c.fdrs)}1a;color:${riskColor(c.fdrs)}">${c.fdrs}</div>
     </div>`).join('');
 
@@ -26485,6 +26503,9 @@ function renderScenarioTab() {
                 <input type="range" min="${s.sevUnit==='×' ? 0.1 : 0.05}" max="${s.sevUnit==='×' ? 2 : 1}" step="${s.sevUnit==='×' ? 0.05 : 0.05}"
                        value="${s.baseSev}" oninput="updateSeverity('${s.id}',this.value)" onclick="event.stopPropagation()">
                 <span class="scn-severity-val" id="sev-${s.id}">${formatSev(s.baseSev,s.sevUnit)}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:8.5px;color:var(--t3);font-family:'Geist Mono',monospace;letter-spacing:.03em;margin-top:1px;padding:0 2px;" title="These are plausibility anchors, not calibrated thresholds — the scenario is a reasoned stress test, not a forecast.">
+                <span>mild</span><span>historical</span><span>extreme · uncalibrated</span>
               </div>
             </div>`).join('')}
         </div>
