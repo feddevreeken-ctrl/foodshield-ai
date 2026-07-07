@@ -170,7 +170,14 @@ def safe_run(label, fn, output_name=None, timeout=DEFAULT_STEP_TIMEOUT):
         signal.alarm(int(timeout))
 
     try:
-        fn()
+        rv = fn()
+        # v43 — a step that RETURNS a non-zero int (e.g. honesty_remediation's
+        # "ASSERTION FAILED — refusing to write" → 1) is a FAILURE even though it
+        # never raised. Treat a truthy int return as failure so the run summary and
+        # the failure-threshold logic don't read a refused write as success.
+        if isinstance(rv, int) and rv != 0:
+            print(f"  [FAIL] {label} returned exit code {rv} (non-zero return, not an exception)")
+            return False
         return True
     except _StepTimeout as e:
         print(f"[TIMEOUT] {label}: {e} after {time.time()-started:.0f}s", file=sys.stderr)

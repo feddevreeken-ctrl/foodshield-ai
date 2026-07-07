@@ -60,6 +60,7 @@ import refresh_lpi
 import refresh_hdi
 import refresh_cckp
 import refresh_fews
+import refresh_hapi_idps   # v43 — HDX HAPI internal displacement (new nowcast signal)
 import refresh_trade_restrictions
 import build_countries_dataset
 import snapshot_fdrs
@@ -101,6 +102,7 @@ STEPS = [
     ("UNDP HDI",               refresh_hdi.main,                "hdi.json"),
     ("WB CCKP climate",        refresh_cckp.main,               "cckp.json"),
     ("FEWS NET IPC outlook",   refresh_fews.main,               "fews.json"),
+    ("HDX HAPI displacement",  refresh_hapi_idps.main,          "hapi_idps.json"),
     ("WB WDI bulk",            refresh_worldbank_bulk.main,     "worldbank_bulk.json"),
     ("WB WFSO",                refresh_wb_wfso.main,            "wb_wfso.json"),
     ("FX rates (v23)",         refresh_fx.main,                 "fx_rates.json"),

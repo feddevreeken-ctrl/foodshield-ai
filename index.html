@@ -14480,6 +14480,7 @@ const DATASTATUS_FEEDS = {
   faostat_fbs:   'FAOSTAT Food Balance Sheets · caloric shares of wheat/rice/maize per country',
   fao_giews:     'FAO GIEWS quarterly country briefs · country-panel deep-link (static)',
   fews:          'FEWS NET IPC-style classifications · live FDW API (current + 3/8-month projection) · ~29 of 35 priority countries, public/unauthenticated tier · feeds the nowcast (≤+6)',
+  hapi_idps:     'Internal displacement (IDPs) · HDX HAPI · national totals for ~54 countries · feeds the nowcast displacement signal (≤+4)',
   fewsnet:       'FEWS NET country reports · per-country deep-link helper (curated)',
   wfp_acr:       'WFP Annual Country Reports · country-panel deep-link (static)',
   usda_gain:     'USDA GAIN attaché reports · commodity-panel deep-link (static)',
@@ -20258,8 +20259,31 @@ function _simulateScenario(c, selected, severityById) {
     }
     totalDelta += channelTotals[k];
   });
+  // v43 — recompute the double-bind amplifier on the SHOCKED components instead of
+  // freezing it. Map each channel's composite-point total back into its component
+  // (component_delta ≈ channel_total / weight_i), build a shocked component vector,
+  // and add the CHANGE in the import-dep × economic-access amplifier. So a combined
+  // Debt/FX + import shock triggers the double-bind it structurally implies — and a
+  // shock to a resilient economy (low c[7]) still barely moves it (amp ~ c7/100).
+  let ampDelta = 0;
+  try {
+    const W = (typeof window !== 'undefined' && window.FDRS_V2_W) || null;
+    const cv = Array.isArray(c.c) ? c.c : null;
+    if (W && cv) {
+      const shocked = cv.slice();
+      Object.keys(channelTotals).forEach(k => {
+        const ci = Number(k);                       // structural channels use component index
+        if (!Number.isInteger(ci) || ci < 0 || ci > 8 || !W[ci]) return;
+        const cd = channelTotals[k] / W[ci];        // composite-point → component-point space
+        shocked[ci] = Math.max(0, Math.min(100, (shocked[ci] || 0) + cd));
+      });
+      const amp = (v0, v7) => Math.min(6 * (v0 / 100) * (v7 / 100), 6);
+      ampDelta = amp(shocked[0] || 0, shocked[7] || 0) - amp(cv[0] || 0, cv[7] || 0);
+    }
+  } catch (e) {}
   return {
-    delta: Math.round(totalDelta),
+    delta: Math.round(totalDelta + ampDelta),
+    ampDelta: Math.round(ampDelta * 10) / 10,
     breakdown: breakdown,
     channelTotals: channelTotals,
   };
@@ -23632,8 +23656,14 @@ function openPanel(c, skipDrilldown) {
     }
     confEl.setAttribute('data-tier', tier);
     confEl.textContent = label + liveNote;
+    // v43 — name the actual backing feed(s) instead of always claiming "IPC / WFP",
+    // since FEWS NET and major displacement (HDX) now also confer 'high' confidence.
+    const _ncRow = (typeof LIVE !== 'undefined' && LIVE.nowcast) ? LIVE.nowcast[c.iso] : null;
+    const _csp = (_ncRow && _ncRow.core_signals_present) || {};
+    const _backing = [_csp.ipc && 'IPC', _csp.wfp_hungermap && 'WFP HungerMap',
+                      _csp.fews && 'FEWS NET', _csp.idp && '100k+ displaced (HDX)'].filter(Boolean).join(', ');
     const liveDesc =
-      ncConf === 'high'      ? `Live nowcast: backed by a core crisis feed (IPC / WFP HungerMap). ` :
+      ncConf === 'high'      ? `Live nowcast: backed by a core crisis feed${_backing ? ' (' + _backing + ')' : ''}. ` :
       ncConf === 'monitored' ? `Live nowcast: backed by current food-price monitoring (Eurostat / FAOSTAT). No humanitarian crisis feed applies to this country. ` :
       ncConf === 'low'       ? `Live nowcast: only secondary signals present — no crisis or price feed for this country right now, so the live adjustment is provisional. ` :
                                `Live nowcast: no live signal for this country right now — the headline reflects the structural baseline, not confirmed current calm. `;
@@ -23682,6 +23712,7 @@ function openPanel(c, skipDrilldown) {
             wfp_pressure:     'WFP food consumption',
             conflict_kick:    'Conflict intensity (ACLED)',
             fews_kick:        'FEWS NET forward projection',
+            displacement_kick:'Internal displacement (IDPs · HDX)',
             global_food_kick: 'Global food prices (FAO FFPI)',
             fx_shock:         'Currency shock (90d FX)',
             inflation_shock:  'Food inflation',
@@ -23695,6 +23726,7 @@ function openPanel(c, skipDrilldown) {
             governance_drag:  'Governance brittleness (WGI)',
             psd_shortfall:    'Staple production shortfall (USDA PSD)',
             relief_damp:      'Humanitarian response (damps)',
+            crisis_cluster_cap: 'Crisis-cluster cap (anti-double-count)',
           };
           // Build list sorted by magnitude (largest contribution first)
           const rows = Object.entries(components)
@@ -26323,7 +26355,7 @@ function renderScenarioTab() {
         <span class="scn-method-cta">how the math works <span class="scn-method-chev">↓</span></span>
       </summary>
       <div class="scn-method-body">
-        <p style="margin:0 0 12px;">Each shock applies a heuristic kick to one or more FDRS components. Shocks on <em>different</em> components add; same-component shocks combine with <span style="font-family:'Geist Mono',monospace;color:var(--t2)">√(Σ&nbsp;kick²)</span> so channels don't double-count. Severity sliders scale linearly. Population, supplier mix and elasticities are held constant. Sourced wheat / rice / maize exposures respond at full strength; legacy baselines are dampened <b style="color:var(--t1)">×0.6</b>. For 2030 trajectory, use the Modeled Outlook tab. The import-dependency × economic-access double-bind amplifier is held at its structural value during a scenario — the shown delta is a bounded perturbation on the composite score, not a full re-run of the weighted component sum.</p>
+        <p style="margin:0 0 12px;">Each shock applies a heuristic kick to one or more FDRS components. Shocks on <em>different</em> components add; same-component shocks combine with <span style="font-family:'Geist Mono',monospace;color:var(--t2)">√(Σ&nbsp;kick²)</span> so channels don't double-count. Severity sliders scale linearly. Population, supplier mix and elasticities are held constant. Sourced wheat / rice / maize exposures respond at full strength; legacy baselines are dampened <b style="color:var(--t1)">×0.6</b>. For 2030 trajectory, use the Modeled Outlook tab. <b>v43:</b> the import-dependency × economic-access double-bind amplifier is now <b>recomputed</b> during a scenario — shocks are mapped back into their FDRS components and the amplifier is re-evaluated, so a combined Debt/FX + import shock triggers the double-bind it structurally implies (a shock to a resilient economy barely moves it). Other component weights are held constant.</p>
         <p style="margin:0 0 12px;font-size:11px;color:var(--t2);line-height:1.6;">Each shock is tagged by how its magnitude was derived: <span style="color:#6ba36b;font-weight:600;">● cited trade flows</span> · <span style="color:#6b8db8;font-weight:600;">◐ sourced indicator</span> · <span style="color:#c9a957;font-weight:600;">○ modeled component</span>. Modeled shocks are directional — magnitudes are not calibrated.</p>
         <div class="scn-method-formulas">
           <div><b>Wheat / rice / maize price spike</b> &nbsp;Δ = import_dependency × concentration_premium × 24 × shock × provenance_factor → c[0]<br><span style="color:var(--t3);font-size:9.5px;">import_dependency = sourced % of supply imported; concentration_premium (1.0–1.4) from the real cited supplier mix — single-source importers more exposed. Net exporters discounted by the trade-direction factor.</span></div>
@@ -30568,7 +30600,7 @@ function renderMethodologyTab() {
             <div style="font-size:12.5px;font-weight:600;color:var(--t1)">Nowcast FDRS</div>
           </div>
           <div style="font-size:11.5px;color:var(--t3);line-height:1.6;margin-bottom:8px;">
-            Structural FDRS adjusted daily by live signals: IPC phase shifts, FEWS NET forward projections, ACLED conflict spikes (only when the licensed feed is live), FAO Food Price Index,
+            Structural FDRS adjusted daily by live signals: IPC phase shifts, FEWS NET forward projections, HDX internal-displacement totals, ACLED conflict spikes (only when the licensed feed is live), FAO Food Price Index,
             ReliefWeb humanitarian alerts and WFP HungerMap consumption flags. Answers <b>"what's moving right now?"</b>
           </div>
           <div style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--accent);">cadence: 6h · 00/06/12/18 UTC</div>
@@ -30580,6 +30612,7 @@ function renderMethodologyTab() {
         <div style="padding-left:18px;margin-top:6px;font-size:11.5px;">
           Δ<sub>nowcast</sub> = ipc_pressure (0–12)
           + fews_kick (0–6) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— FEWS NET forward projection: gap-fills where IPC is absent + deterioration nudge</span>
+          + displacement (0–4) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— HDX HAPI internal-displacement magnitude (new v43)</span>
           + wfp_consumption (0–6)
           + conflict (0–5) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— ACLED, only when the feed is live</span>
           + global_price (0–2)
@@ -30590,7 +30623,7 @@ function renderMethodologyTab() {
           + fire (0–2)
           + air_quality (0–1)
           + us_water (0–2)
-          <br>+ inform_amp (0–3) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— INFORM ≥ 7.5</span>
+          <br>+ inform_amp (0–3) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— INFORM &gt; 7.0</span>
           + governance_drag (0–2) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— WGI rule of law ≤ −1.0</span>
           + psd_shortfall (0–3) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— USDA PSD staple production gap</span>
           − humanitarian_response (0–2) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— active ReliefWeb response reports LOWER the acute score (mitigation present, not extra risk)</span>
@@ -30606,6 +30639,32 @@ function renderMethodologyTab() {
         A country can be structurally resilient but acutely stressed (e.g., a flood in Pakistan), or structurally fragile but
         temporarily stable (e.g., a quiet quarter in Yemen). Showing both keeps the picture honest.
       </div>
+      <div style="margin:6px 0 18px;">
+        <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:11px;font-family:'Geist Mono',monospace;">What changed — the four major revisions · V20 → V23</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">
+          <div style="background:var(--bg0);border:1px solid var(--b1);border-top:2px solid var(--accent);border-radius:8px;padding:13px 15px;">
+            <div style="font-family:'Geist Mono',monospace;font-size:9.5px;color:var(--accent);margin-bottom:5px;">V20 · LIVE LAYER</div>
+            <div style="font-size:12.5px;font-weight:600;color:var(--t1);margin-bottom:6px;">Live nowcast overlay</div>
+            <div style="font-size:10.5px;color:var(--t3);line-height:1.55;">The slow structural score gained a daily live overlay. Nowcast sub-signals expanded <b style="color:var(--t2)">5 → 11</b>, and a per-metric provenance system began badging every input sourced / modeled / heritage.</div>
+          </div>
+          <div style="background:var(--bg0);border:1px solid var(--b1);border-top:2px solid var(--accent);border-radius:8px;padding:13px 15px;">
+            <div style="font-family:'Geist Mono',monospace;font-size:9.5px;color:var(--accent);margin-bottom:5px;">V20.2 · TRADE</div>
+            <div style="font-size:12.5px;font-weight:600;color:var(--t1);margin-bottom:6px;">Supply-Chain Exposure</div>
+            <div style="font-size:10.5px;color:var(--t3);line-height:1.55;">Trade import-dependency split from caloric reliance — fixing the "Netherlands shows <b style="color:var(--t2)">0%</b> rice dependency despite importing $481M of rice" paradox. Panels now show both.</div>
+          </div>
+          <div style="background:var(--bg0);border:1px solid var(--b1);border-top:2px solid var(--accent);border-radius:8px;padding:13px 15px;">
+            <div style="font-family:'Geist Mono',monospace;font-size:9.5px;color:var(--accent);margin-bottom:5px;">FDRS v2 · CORE</div>
+            <div style="font-size:12.5px;font-weight:600;color:var(--t1);margin-bottom:6px;">Nine components + double-bind</div>
+            <div style="font-size:10.5px;color:var(--t3);line-height:1.55;">One clean weighted sum (<b style="color:var(--t2)">Σ = 1.00</b>) replaced the caloric-blend rescale. Added <b style="color:var(--t2)">Economic Access</b> + <b style="color:var(--t2)">Grain Reserve Buffer</b> and the import-dep × economic-access amplifier.</div>
+          </div>
+          <div style="background:var(--bg0);border:1px solid var(--b1);border-top:2px solid var(--accent);border-radius:8px;padding:13px 15px;">
+            <div style="font-family:'Geist Mono',monospace;font-size:9.5px;color:var(--accent);margin-bottom:5px;">V23 · SOURCED</div>
+            <div style="font-size:12.5px;font-weight:600;color:var(--t1);margin-bottom:6px;">Sourced trade + scenarios</div>
+            <div style="font-size:10.5px;color:var(--t3);line-height:1.55;">UN Comtrade <b style="color:var(--t2)">query-level</b> trade lineage, the commodity-flow atlas, and the scenario engine's new Debt/FX-crisis and grain-reserve-depletion channels.</div>
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--t3);margin-top:9px;font-style:italic;line-height:1.5;">Since V23: <b style="color:var(--t2)">v42</b> wired FEWS NET into the nowcast + a live-signal honesty pass; <b style="color:var(--t2)">v43</b> added HDX internal-displacement, a crisis-cluster cap, and a live double-bind recompute in scenarios.</div>
+      </div>
       <div style="background:var(--bg0);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:12px 16px;font-size:11.5px;color:var(--t2);line-height:1.7;">
         <b style="color:var(--t1)">Scoring change · May 2026.</b> The nowcast adjustment was extended from 5 to 11 sub-signals
         (added: FX shock, food inflation, weather extremes, river flood, fire activity, air quality, US river flow).
@@ -30617,6 +30676,7 @@ function renderMethodologyTab() {
         <br><b style="color:var(--t1)">v20.26–v25.</b> Climate &amp; governance pipelines now sourced: <b>structural FDRS climate component</b> (c[4]) blends ND-GAIN food vulnerability + WRI Aqueduct drought/flood risk + WB CCKP observed warming at 60%, 40% heritage; <b>conflict/logistics component</b> (c[5]) blends EU JRC INFORM risk + WB WGI rule-of-law + INFORM lack-of-coping-capacity (LPI when available) at 60%, 40% heritage; <b>nowcast Δ</b> extended with INFORM amplifier (+0-3), governance drag (+0-2), USDA PSD shortfall (+0-3); <b>2030 modeled outlook</b> climate kick uses observed CCKP warming + ND-GAIN food vulnerability (capped +5). <b>v25 source fixes (Jun 2026):</b> INFORM rewired to the committed 2026 edition (191 countries); Aqueduct, CCKP and WGI repointed to the WB Data360 mirror after their direct endpoints drifted — CCKP now serves observed temperature/precipitation (not a 2050 projection), WGI all six governance dimensions. A country falls back to its heritage value only where its specific feed is temporarily degraded; live per-source status is on the Data Status page. All overlays preserve heritage values on c._cOriginal / c._fdrsRaw / c._f2030Structural for reference.
         <br><b style="color:var(--t1)">FDRS v2 (Jun 2026).</b> The formula moves to <b>nine components</b> in one clean weighted sum (Σ = 1.00: 23/16/11/9/9/8/6/12/6), retiring the old "92% caloric + 8% SCE / ÷0.92 rescale" blend. Supply-Chain Exposure is now component 6; two new components join: <b>Economic Access</b> (12% — FX depreciation, reserve adequacy, external debt-service, income; the "can they pay for food?" dimension reviewers flagged as missing) and <b>Grain Reserve Buffer</b> (6% — USDA PSD stocks-to-use). One bounded interaction term is added — the <b>import-dependency × economic-access double-bind amplifier</b>, capped at +6 points. Scenario engine gains channels 7–8 with new <b>Debt/FX crisis</b> and <b>Grain reserve depletion</b> shocks (the old <code>fx</code> lever is retired and aliased so saved presets still work); the 2030 overlay gains two durable structural-economic terms inside the existing clamp. Expected movement: FX-fragile / debt-distressed economies rise (Egypt 61→68, Sri Lanka up sharply), sovereign-wealth-insulated importers fall (Saudi ~55) — the intended correction. Weights and the amplifier ceiling remain <b>reasoned judgment, not regressed; there is no back-test.</b> Each sub-input is badged sourced / partial / heritage and degrades honestly (Economic Access runs on income alone where reserve/debt/FX feeds are absent). Migration-safe: countries whose dataset has not yet been rebuilt with c[7]/c[8] still score (missing new components read as 0 = resilient).
         <br><b style="color:var(--t1)">v42 (Jul 2026) — live-signal honesty pass.</b> <b>FEWS NET</b> now feeds the nowcast (≤+6): it gap-fills the crisis level where IPC has no reading and adds a deterioration nudge when the near-term projection worsens — previously it was display-only. The per-country <b>nowcast breakdown</b> is click-to-expand on every panel (exact contribution of each sub-signal). Feed roles are now labelled honestly: <b>ACLED</b> contributes only when its licensed feed is live (a lagged/degraded tier adds 0, avoiding double-counting the structural conflict component); <b>GDACS</b> and the <b>ReliefWeb news list</b> are situational context, not scoring inputs; the <b>ReliefWeb response count</b> is the one news-derived signal that scores, as a small negative damper. No structural weights changed.
+        <br><b style="color:var(--t1)">v43 (Jul 2026) — new signal + formula hardening.</b> Added a genuinely new live input: <b>internal displacement</b> from the OCHA HDX HAPI (national IDP totals, ~54 countries, e.g. Sudan 9.1M / Syria 6.0M / Ukraine 3.4M) feeds the nowcast displacement band (≤+4, absolute-magnitude, not per-capita). A <b>crisis-cluster cap</b> bounds the combined IPC + FEWS + displacement + INFORM + conflict contribution at +18 so one underlying crisis can't be double-counted across correlated signals. In the <b>scenario engine</b>, the double-bind amplifier is now recomputed on the shocked components (a Debt/FX + import shock triggers the amplifier it implies) instead of being frozen. Confidence attribution now names the actual backing feed (IPC / WFP / FEWS / displacement), and FEWS coverage (~29/35, public tier) is disclosed.
       </div>
     </div>
 
@@ -30808,6 +30868,7 @@ function renderMethodologyTab() {
           {src:'FAOSTAT food CPI',yr:'quarterly',used:'Global annual food consumer-price index',url:'https://www.fao.org/faostat/en/#data/CP'},
           {src:'Feeding America (Map the Meal Gap)',yr:'2025 (data 2023)',used:'US state food-insecurity %',url:'https://map.feedingamerica.org'},
           {src:'FAO GIEWS Country Briefs',yr:'quarterly',used:'Per-country food-security situation briefs (~80 countries) — static link to FAO',url:'https://www.fao.org/giews/countrybrief/'},
+          {src:'HDX HAPI — Internal displacement (IDPs)',yr:'live · latest reporting round',used:'National internal-displacement (IDP) totals for ~54 countries (OCHA Humanitarian API, sourced from IOM DTM / UNHCR). v43: feeds the nowcast displacement signal (≤+4, banded on absolute magnitude — not per-capita, since no population field is stored). Self-serve HDX app identifier, no approved key required',url:'https://hapi.humdata.org'},
           {src:'FEWS NET FDW (live API)',yr:'live · quarterly phases',used:'IPC-style current + 3-month + 8-month projected phase classifications — live FDW API, ~29 of 35 priority countries covered on the public/unauthenticated tier (6 uncovered are silently absent). v42: now feeds the nowcast (≤+6) — gap-fills the crisis level where IPC is absent, plus a deterioration/sustained-crisis nudge from the projection (no double-count with IPC current phase)',url:'https://fdw.fews.net/api/'},
           {src:'WFP Annual Country Reports',yr:'2025',used:'WFP country-office operational narratives — static link to wfp.org',url:'https://www.wfp.org/annual-country-reports-2025'},
           {src:'USDA GAIN attaché reports',yr:'weekly',used:'Per-country commodity intelligence (~80 FAS posts) — static search link',url:'https://www.fas.usda.gov/data/search'},

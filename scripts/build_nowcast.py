@@ -16,6 +16,7 @@ Formula (extended May 2026, expanded May 2026 v20.27):
                                    level where IPC is absent, plus a deterioration nudge
                                    when the near-term projection is worse than current
     + wfp_pressure       (0-6)   — FCS prevalence above 30%
+    + displacement_kick  (0-4)   — HDX HAPI internal-displacement magnitude band (new v43)
     + conflict_kick      (0-5)   — ACLED 30-day intensity
     + global_food_kick   (0-2)   — FAO FFPI MoM > +3%
     + fx_shock           (0-3)   — local currency fell >10% in 90d vs USD
@@ -25,6 +26,7 @@ Formula (extended May 2026, expanded May 2026 v20.27):
     + fire_kick          (0-2)   — fire activity >2x baseline
     + aq_kick            (0-1)   — PM2.5 > WHO target-2 (35 µg/m³)
     + us_water_kick      (0-2)   — only for US-XX state codes
+    + us_fi_kick          (0-3)   — US-state food insecurity (Feeding America)
     + inform_amp         (0-3)   — INFORM risk >7.0 → composite humanitarian crisis amplifier
     + governance_drag    (0-2)   — WGI rule_of_law < -1.0 → governance brittleness amplifier
     + psd_shortfall      (0-3)   — USDA PSD production-vs-consumption gap proxy for the latest
@@ -56,6 +58,7 @@ def main():
     wfp_c   = load("wfp_country.json")["data"]
     ipc     = load("ipc.json")["data"]
     fews    = load("fews.json")["data"]   # v42 — FEWS NET forward projection (crisis gap-fill + deterioration)
+    idps    = load("hapi_idps.json")["data"]   # v43 — HDX HAPI internal displacement (new source)
     acled   = load("acled.json")["data"]
     ffpi    = load("fao_ffpi.json")["data"]
     rw      = load("reliefweb_alerts.json")["data"]
@@ -107,7 +110,7 @@ def main():
         print(f"  [warn] countries.json profile set unavailable ({e}) — falling back to feed union only")
         canonical_iso = set()
 
-    feed_iso = (set(wfp) | set(ipc) | set(fews) | set(acled) | set(om) | set(wfp_c)
+    feed_iso = (set(wfp) | set(ipc) | set(fews) | set(idps) | set(acled) | set(om) | set(wfp_c)
                 | set(estat) | set(faostat) | set(inform) | set(wgi) | set(psd)
                 | set(usgs) | set(feeding))   # v25 — include US-state feeds so US- rows exist
     # Compute over feeds ∪ profiles so profiles with no feed still get a (zero) row;
@@ -166,6 +169,14 @@ def main():
                 # double-counting IPC's current-phase reading.
                 fews_kick  = min(6, fews_kick + 1)
                 fews_basis = fews_basis or "sustained_projection"
+
+        # v43 — internal displacement (HDX HAPI). Magnitude-banded on ABSOLUTE IDP
+        # count (countries.json has no population, so this is not per-capita — a
+        # disclosed simplification). Acute livelihood/market disruption; capped +4 so
+        # it complements IPC/WFP rather than dominating.
+        idp_n = (idps.get(iso) or {}).get("idps") or 0
+        displacement_kick = (4 if idp_n >= 2_000_000 else 3 if idp_n >= 1_000_000
+                             else 2 if idp_n >= 500_000 else 1 if idp_n >= 100_000 else 0)
 
         # FX shock — currency dropped >10% vs USD in 90d
         fx_pct = wc.get("fx_90d_change_pct")
@@ -272,12 +283,21 @@ def main():
                     psd_shortfall = max(psd_shortfall, 3)
         psd_shortfall = min(3, psd_shortfall)
 
+        # v43 — crisis-cluster cap. ipc_pressure, fews_kick, displacement_kick,
+        # inform_amp and conflict_kick all load onto the SAME underlying acute-crisis
+        # reality — a famine/conflict/displacement country trips all of them, and summed
+        # unbounded they double-count one crisis. Cap their COMBINED contribution at +18
+        # so the cluster can't dominate, while independent signals (weather, FX, price,
+        # governance) still add on top. Disclosed in the methodology.
+        crisis_cluster  = ipc_pressure + fews_kick + displacement_kick + inform_amp + conflict_kick
+        cluster_overage = max(0, crisis_cluster - 18)
+
         adj = round(
-            ipc_pressure + fews_kick + wfp_pressure + conflict_kick + global_food_kick
+            ipc_pressure + fews_kick + wfp_pressure + displacement_kick + conflict_kick + global_food_kick
             + fx_shock + inflation_shock + weather_kick + flood_kick
             + fire_kick + aq_kick + us_water_kick + us_fi_kick
             + inform_amp + governance_drag + psd_shortfall
-            + relief_damp,
+            + relief_damp - cluster_overage,
             1
         )
         adj = max(-10, min(35, adj))
@@ -294,6 +314,7 @@ def main():
         has_ipc = iso in ipc and (ipc.get(iso) or {}).get("phase3plus_pct") is not None
         has_wfp = iso in wfp and (wfp.get(iso) or {}).get("fcs_pct") is not None
         has_fews = isinstance(fews_cur, (int, float))   # v42 — FEWS is an authoritative crisis feed
+        has_idp = idp_n >= 100_000   # v43 — significant displacement is an authoritative crisis signal
         # v25 — US states have their own core feed (Feeding America food insecurity),
         # so a US- row with FA data is high-confidence on its own terms.
         has_us_core = iso.startswith("US-") and isinstance(fa_pct, (int, float))
@@ -303,7 +324,7 @@ def main():
         # monitoring — so a present reading counts toward confidence rather than
         # leaving these countries mislabelled "no live signal".
         has_food_price = isinstance(food_infl, (int, float))
-        core_signals = sum([has_ipc, has_wfp, has_us_core, has_fews])
+        core_signals = sum([has_ipc, has_wfp, has_us_core, has_fews, has_idp])
         if core_signals >= 1:
             confidence = "high"
         elif has_food_price:
@@ -319,12 +340,14 @@ def main():
         out[iso] = {
             "adjustment": adj,
             "confidence": confidence,
-            "core_signals_present": {"ipc": has_ipc, "wfp_hungermap": has_wfp, "fews": has_fews},
+            "core_signals_present": {"ipc": has_ipc, "wfp_hungermap": has_wfp,
+                                     "fews": has_fews, "idp": has_idp},
             "components": {
                 "ipc_pressure":    round(ipc_pressure, 1),
                 "wfp_pressure":    round(wfp_pressure, 1),
                 "conflict_kick":   round(conflict_kick, 1),
                 "fews_kick":       round(fews_kick, 1),
+                "displacement_kick": displacement_kick,
                 "global_food_kick": global_food_kick,
                 "fx_shock":        round(fx_shock, 1),
                 "inflation_shock": round(inflation_shock, 1),
@@ -338,6 +361,7 @@ def main():
                 "governance_drag": round(governance_drag, 1),
                 "psd_shortfall":   psd_shortfall,
                 "relief_damp":     relief_damp,
+                "crisis_cluster_cap": -round(cluster_overage, 1),
             },
             "signals": {
                 "ipc_phase3plus_pct":   ipc_p3,
@@ -346,6 +370,8 @@ def main():
                 "fews_current_phase":   fews_cur,
                 "fews_projected_phase": fews_proj,
                 "fews_basis":           fews_basis,
+                "idps_total":           idp_n or None,
+                "idps_as_of":           (idps.get(iso) or {}).get("as_of"),
                 "ffpi_mom_pct":         (ffpi or {}).get("change_mom_pct"),
                 "active_reports_30d":   relief_n,
                 "fx_90d_change_pct":    fx_pct,
@@ -385,14 +411,16 @@ def main():
                 "Composite: WFP HungerMap + IPC + ACLED + FAO FFPI + ReliefWeb + "
                 "Open-Meteo (weather/flood) + NASA FIRMS + OpenAQ + USGS Water + "
                 "WFP per-country (FX/inflation) + Eurostat food HICP + FAOSTAT food CPI "
-                "+ FEWS NET forward projection + INFORM risk + WB WGI rule of law "
+                "+ FEWS NET forward projection + HDX HAPI internal displacement "
+                "+ INFORM risk + WB WGI rule of law "
                 "+ USDA PSD staples shortfall"
             ),
             "notes": (
                 "Adjustment range -10 to +35 added to structural FDRS to produce "
                 "nowcast score. See methodology page for component formula. v25: each "
-                "country carries a 'confidence' flag (high/low/none). 'high' = a core "
-                "crisis feed (IPC or WFP HungerMap) backs the adjustment; 'low' = only "
+                "country carries a 'confidence' flag (high/monitored/low/none). 'high' = a "
+                "core crisis feed (IPC, WFP HungerMap, FEWS NET, or >=100k internally "
+                "displaced) backs the adjustment; 'low' = only "
                 "secondary signals present; 'none' = no live signal, so the ~0 adjustment "
                 "reflects absence of data, NOT confirmed calm."
             ),
@@ -418,6 +446,8 @@ def main():
                     1 for v in out.values() if v["components"].get("conflict_kick", 0) > 0),
                 "fews_scored_countries": sum(
                     1 for v in out.values() if v["components"].get("fews_kick", 0) > 0),
+                "displacement_scored_countries": sum(
+                    1 for v in out.values() if v["components"].get("displacement_kick", 0) > 0),
             },
             "version": "v42",
         },
