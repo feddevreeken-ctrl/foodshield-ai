@@ -21859,8 +21859,11 @@ function showTab(tab, btn) {
   // which sets aria-pressed="true". If that's not on, no pulse markers
   // should be visible anywhere.
   try {
-    const distToggle = document.getElementById('map-dist-toggle');
-    const overlayOn = distToggle && distToggle.getAttribute('aria-pressed') === 'true';
+    // v44 — #map-dist-toggle was removed in v40 (replaced by the Map layers
+    // panel); the old aria-pressed lookup always returned false, wiping the
+    // markers on every tab switch even with the layer ON. Read _mlState instead.
+    const st = window._mlState;
+    const overlayOn = !!(st && (st.distOn || st.restrOn));
     if (!overlayOn && typeof clearPulseMarkers === 'function') {
       clearPulseMarkers();
     }
@@ -28212,28 +28215,27 @@ const TOUR_STEPS = [
     before: () => { try { showTab('global'); } catch(e){} closePanelIfOpen(); return 200; },
   },
   {
-    // v22 — Live disturbances toggle. Properly activate it so the user sees
-    // the overlay dots appear on the map (not just a static highlight).
-    selector: '#map-dist-toggle',
-    title: 'Live disturbances · toggle on the map',
-    body: 'This button overlays live shocks on the map — droughts, conflicts, floods, currency crises. We just turned it ON: red dots appear over the affected countries. Click it again to return to the clean choropleth.',
+    // v22 — Live disturbances. v44 rewired: the old #map-dist-toggle button was
+    // replaced in v40 by the Map layers panel (#map-layers / _mlState), which
+    // left this step dead (target missing → silently auto-skipped). Spotlight
+    // the panel and flip the layer through _mlState so the checkbox, overlay
+    // and cleanup all agree.
+    selector: '#map-layers',
+    title: 'Live disturbances · Map layers',
+    body: 'The <em>Map layers</em> panel overlays live shocks on the map — droughts, conflicts, floods, price spikes. We just switched <em>Live disturbances</em> ON: markers appear over the affected countries, and the type list breaks them down. Untick it to return to the clean choropleth.',
     before: () => {
       try { showTab('global'); } catch(e){}
       closePanelIfOpen();
       const tryActivate = (attempt = 0) => {
-        const btn = document.getElementById('map-dist-toggle');
+        const st = window._mlState;
         const globeReady = window.Globe && typeof window.Globe.showDisturbances === 'function';
         const eventsLoaded = typeof window.disturbanceEvents !== 'undefined' && window.disturbanceEvents.length > 0;
-        if (!btn) return;
-        if (btn.getAttribute('aria-pressed') === 'true') return;
+        if (!st || st.distOn) return;
         if (globeReady && eventsLoaded) {
-          if (typeof toggleMapDisturbances === 'function') {
-            toggleMapDisturbances();
+          try {
+            toggleMapDisturbances();   // v40 wrapper → mlToggleDist (also expands the type list)
             _tourActivatedDisturbances = true;
-          } else {
-            btn.click();
-            _tourActivatedDisturbances = true;
-          }
+          } catch(e) { console.warn('[tour] disturbance activate failed', e); }
         } else if (attempt < 6) {
           if (typeof window.loadDisturbanceData === 'function' && !eventsLoaded) {
             try { window.loadDisturbanceData(); } catch(e) {}
@@ -28247,11 +28249,7 @@ const TOUR_STEPS = [
     // v22 — clean up the disturbance overlay when user advances past this step
     after: () => {
       try {
-        const btn = document.getElementById('map-dist-toggle');
-        if (btn && btn.getAttribute('aria-pressed') === 'true') {
-          if (typeof toggleMapDisturbances === 'function') toggleMapDisturbances();
-          else btn.click();
-        }
+        if (window._mlState && window._mlState.distOn) toggleMapDisturbances();
       } catch(e) {}
       _tourActivatedDisturbances = false;
     },
@@ -28320,12 +28318,22 @@ const TOUR_STEPS = [
     // Wheat and push every cited corridor to the globe via the map's
     // "Commodity flows…" overlay (solid green = observed, dashed blue = modeled,
     // stroke weight = tonnage). Cleaned up in `after`.
-    selector: '#map-commodity-flows',
+    selector: '#map-layers',
     title: 'Live commodity flows · the whole world at once',
-    body: 'We just pushed <em>Wheat</em> to the globe — every cited trade corridor on Earth, at once. <strong>Solid green</strong> = observed (real customs/FAOSTAT data), <strong>dashed blue</strong> = modeled, and line thickness = tonnage. Switch the commodity in this dropdown to trace rice, maize, soy, fertiliser and more across the whole map.',
+    body: 'We just pushed <em>Wheat</em> to the globe — every cited trade corridor on Earth, at once. <strong>Solid green</strong> = observed (real customs/FAOSTAT data), <strong>dashed blue</strong> = modeled, and line thickness = tonnage. Tick <em>Trade flows</em> in the Map layers panel and pick a commodity to trace rice, maize, soy, fertiliser and more across the whole map.',
     before: () => {
       try { showTab('global'); } catch(e){}
       closePanelIfOpen();
+      // v44 — the commodity <select> lives inside the v40 Map layers panel and is
+      // display:none until the Trade flows row is ticked. Flip _mlState.flowsOn
+      // and re-render first, so the select is visible and the checkbox matches
+      // what the tour is doing.
+      try {
+        if (window._mlState && !window._mlState.flowsOn) {
+          window._mlState.flowsOn = true;
+          if (typeof renderMapLayers === 'function') renderMapLayers();
+        }
+      } catch(e) {}
       const sel = document.getElementById('map-commodity-flows');
       if (sel) sel.scrollIntoView({ behavior: 'smooth', block: 'center' });
       // v39.1 — the arcs are placed via getCoord(), which needs the map's country
@@ -28360,6 +28368,11 @@ const TOUR_STEPS = [
         const sel = document.getElementById('map-commodity-flows');
         if (sel) sel.value = '';
         if (typeof toggleCommodityFlowOverlay === 'function') toggleCommodityFlowOverlay('');
+        // v44 — also untick the Trade flows row we turned on in before()
+        if (window._mlState && window._mlState.flowsOn) {
+          window._mlState.flowsOn = false;
+          if (typeof renderMapLayers === 'function') renderMapLayers();
+        }
       } catch(e) {}
       _tourActivatedFlows = false;
     },
@@ -28604,10 +28617,9 @@ function endTour() {
   // disturbances were still ON, but _tourActivatedDisturbances tracked Back's
   // path). Just always reset.
   try {
-    const btn = document.getElementById('map-dist-toggle');
-    if (btn && btn.getAttribute('aria-pressed') === 'true') {
-      if (typeof toggleMapDisturbances === 'function') toggleMapDisturbances();
-      else btn.click();
+    // v44 — read the v40 Map layers state, not the removed #map-dist-toggle button
+    if (window._mlState && window._mlState.distOn && typeof toggleMapDisturbances === 'function') {
+      toggleMapDisturbances();
     }
   } catch(e) {}
   try { if (typeof hideTFAFlows === 'function') hideTFAFlows(); } catch(e) {}
@@ -28622,6 +28634,11 @@ function endTour() {
     const sel = document.getElementById('map-commodity-flows');
     if (sel) sel.value = '';
     if (typeof toggleCommodityFlowOverlay === 'function') toggleCommodityFlowOverlay('');
+    // v44 — untick the Trade flows row + re-render the Map layers panel
+    if (window._mlState && window._mlState.flowsOn) {
+      window._mlState.flowsOn = false;
+      if (typeof renderMapLayers === 'function') renderMapLayers();
+    }
   } catch(e) {}
   _tourActivatedDisturbances = false;
   _tourActivatedTFA = false;
