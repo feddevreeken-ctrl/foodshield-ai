@@ -61,7 +61,7 @@ import csv
 import io
 import zipfile
 
-from _common import http_get, write_json
+from _common import _has_existing_data, http_get, write_json
 
 # Two ZIPs — grains+pulses (wheat/rice/corn) + oilseeds (soybeans).
 # Same column schema in both so we can parse them with shared code.
@@ -429,6 +429,14 @@ def main():
             print(f"  [INFO] scanned {rows_seen} rows, kept {rows_kept}")
 
     if not by_country:
+        # v44 — preserve last-good data on a total upstream outage. Writing {} here
+        # blanked usda_psd.json when apps.fas.usda.gov timed out (2026-07-10), which
+        # tripped qa_checks' coverage floor and failed the whole workflow. Last-good
+        # data goes honestly stale instead (same rule as safe_run's timeout branch).
+        if _has_existing_data("usda_psd.json"):
+            print("[KEEP] usda_psd: both downloads failed — preserving existing "
+                  "usda_psd.json (goes honestly stale)")
+            return
         write_json(
             "usda_psd.json", {},
             source="USDA PSD",
