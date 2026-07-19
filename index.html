@@ -1299,6 +1299,55 @@ body {
   filter: brightness(.92) saturate(.95); border-bottom: none;
 }
 
+/* v48 — the synthesised visual, for headlines whose publisher ships no photo.
+   Built only from fields already on the card (commodity, chokepoint, corridor,
+   tonnage), so it informs rather than decorates. Two tint stops per subject
+   keep it recognisable at a glance without inventing a taxonomy colour system:
+   the tint is a label, not a scale. */
+.news-synth {
+  position: relative; overflow: hidden; border-radius: 6px;
+  background: linear-gradient(145deg,
+    color-mix(in srgb, var(--c1) 22%, var(--bg3)) 0%,
+    color-mix(in srgb, var(--c2) 32%, var(--bg1, #0f0f12)) 100%);
+  border: 1px solid color-mix(in srgb, var(--c1) 22%, var(--b2));
+  padding: 13px 15px 12px; margin-bottom: 10px;
+}
+/* A ruled-paper texture — pure CSS, no asset. Keeps a flat panel from reading
+   as an empty div. */
+.news-synth .nsv-grain {
+  position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background-image: repeating-linear-gradient(
+    -38deg, transparent 0 7px, color-mix(in srgb, var(--c1) 7%, transparent) 7px 8px);
+}
+.news-synth .nsv-kicker {
+  position: relative; font-size: 8.5px; letter-spacing: .13em;
+  text-transform: uppercase; color: color-mix(in srgb, var(--c1) 72%, var(--t2));
+  margin-bottom: 3px;
+}
+.news-synth .nsv-subject {
+  position: relative;
+  font-family: ui-serif, Iowan Old Style, Charter, Georgia, serif;
+  font-size: 21px; line-height: 1.1; font-weight: 600; letter-spacing: -.015em;
+  color: var(--t1);
+}
+.news-synth .nsv-route {
+  position: relative; margin-top: 7px; display: flex; flex-wrap: wrap;
+  align-items: baseline; gap: 4px;
+  font: 600 10.5px/1 ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.news-synth .nsv-iso { color: var(--t2); margin-right: 6px; letter-spacing: .04em; }
+.news-synth .nsv-kt  { color: #e58a78; }
+.news-synth .nsv-route > * + * { margin-left: 0; }
+.news-synth .nsv-dot { color: var(--t3); margin: 0 3px; }
+/* Lead gets the full-bleed treatment the photo would have had. */
+.news-item.tier-lead .news-synth { min-height: 168px; padding: 20px 22px; margin-bottom: 12px; }
+.news-item.tier-lead .news-synth .nsv-subject { font-size: 34px; }
+.news-item.tier-lead .news-synth .nsv-kicker { font-size: 9.5px; margin-bottom: 5px; }
+/* Mid rows: a compact strip, matching where the photo is suppressed. */
+.news-item.tier-mid .news-synth { display: none; }
+.news-item.tier-tail .news-synth { display: none; }
+
 /* Tier 3 — the tail. Rows, not cards: no fill, no radius, tighter rhythm. */
 .news-item.tier-tail .news-body-wrap { padding: 7px 0 7px 16px; }
 .news-item.tier-tail .news-headline { font-size: 12.5px; line-height: 1.35; font-weight: 500; }
@@ -25691,6 +25740,74 @@ function _newsAgeLabel(it) {
   return d === 1 ? 'yesterday' : d + ' days ago';
 }
 
+// v48 — a visual for the 36 of 91 headlines whose publisher ships no image.
+//
+// The obvious fix — fetch each article and scrape its og:image — is not taken.
+// refresh_commodity_news.py:298 states the pipeline's position: headline, link,
+// publisher, timestamp and nothing else; the link is never resolved to extract
+// content. Scraping og:image resolves it, and hot-links 36 publishers' photos
+// into this page. That is a decision for the site's owner, not a rendering
+// convenience.
+//
+// So the slot is filled from data we already hold and already show elsewhere on
+// the card: the commodity, the corridor, the chokepoint, the disruption. This
+// is what the financial press does for markets copy that has no photograph —
+// the visual carries information rather than standing in for it. Nothing here
+// is invented: every string comes from the payload.
+const _NEWS_SYNTH_TINT = {
+  wheat:      ['#c9a957', '#7a6220'], maize:   ['#d1a03c', '#7c5c14'],
+  rice:       ['#cfc7b4', '#6d6656'], soybeans:['#9db36b', '#4e5c2c'],
+  palm_oil:   ['#d98a4a', '#7a4519'], fertilizer:['#8aa6c4', '#3d5570'],
+  beef:       ['#c4707a', '#6d3239'], dairy:   ['#cfd4dc', '#666d78'],
+  sugar:      ['#d8cfc0', '#6f675a'], poultry: ['#d7b98f', '#75603c'],
+  pork:       ['#d69ba0', '#75454a'], fish:    ['#7fb3b8', '#33595c'],
+  salmon:     ['#e08a6f', '#7d4229'], vegetables:['#8fb87c', '#41603a'],
+  _default:   ['#9a988f', '#4a4842']
+};
+function _newsSynthVisual(it) {
+  const matched = Array.isArray(it.matched) ? it.matched : [];
+  const choke = (it.chokepoints || [])[0];
+  const disrupt = (it.disruption || [])[0];
+  const exposed = it.exposed || [];
+
+  // Subject, in the order a desk would pick it: the chokepoint if the story is
+  // about one, else the commodity, else the disruption.
+  let kicker, subject, tint;
+  if (choke) {
+    kicker = 'Chokepoint';
+    subject = choke.replace(/\b\w/g, c => c.toUpperCase());
+    tint = ['#c98a5a', '#6d4423'];
+  } else if (matched.length) {
+    kicker = matched.length > 1 ? matched.length + ' commodities' : 'Commodity';
+    // Title case: the taxonomy stores lowercase keys, and "wheat" set at 34px
+    // in a serif display face reads as a bug rather than a masthead.
+    subject = String(_newsCommodityLabel(matched[0])).replace(/\b\w/g, c => c.toUpperCase());
+    tint = _NEWS_SYNTH_TINT[matched[0]] || _NEWS_SYNTH_TINT._default;
+  } else if (disrupt) {
+    kicker = 'Disruption';
+    subject = String(disrupt).replace(/\b\w/g, c => c.toUpperCase());
+    tint = ['#c4707a', '#6d3239'];
+  } else {
+    kicker = 'Food system';
+    subject = it.source || 'Trade press';
+    tint = _NEWS_SYNTH_TINT._default;
+  }
+
+  // The route line, when there is one. Sourced tonnage, same as the card body.
+  const route = exposed.length
+    ? exposed.slice(0, 3).map(e =>
+        `<span class="nsv-iso">${_escFeed(e.iso)}</span><span class="nsv-kt">${_newsFmtKt(e.kt)}</span>`
+      ).join('<span class="nsv-dot">·</span>')
+    : '';
+
+  return `<div class="news-synth" style="--c1:${tint[0]};--c2:${tint[1]}" aria-hidden="true">
+    <div class="nsv-grain"></div>
+    <div class="nsv-kicker">${_escFeed(kicker)}</div>
+    <div class="nsv-subject">${_escFeed(subject)}</div>
+    ${route ? `<div class="nsv-route">${route}</div>` : ''}
+  </div>`;
+}
+
 // Shared by the click and keydown paths so the two can never drift.
 function _newsToggleRow(body) {
   const dets = body.querySelectorAll('details.news-interp');
@@ -25998,7 +26115,7 @@ function renderNewsTab() {
     const imgSrc = _safeCssUrl(it.image);
     const imgBand = imgSrc
       ? `<div class="news-card-img" style="background-image:url('${_escFeed(imgSrc)}')"></div>`
-      : '';
+      : _newsSynthVisual(it);
 
     const prod = _newsProductionLine(it);
     // v47 — the commodity match is MODELED (our keyword hit on the headline),
