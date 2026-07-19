@@ -1533,6 +1533,41 @@ body {
 /* FT's only radius token is 0.125rem. Nothing on this page should be rounder. */
 .news-item.tier-lead .news-card-img { border-radius: 2px; }
 
+/* v50 — the row thumbnail. FT's list rows carry a 75x75 square; the rule that
+   keeps mixed media coherent is that every row has the same slot, so a
+   generated tile and a publisher photo occupy identical geometry. */
+.news-thumb {
+  background-size: cover; background-position: center;
+  border-radius: 2px; flex-shrink: 0;
+}
+.news-thumb-gen { background-size: cover; }
+/* Mid rows: text left, thumb right, aligned to the top of the block. */
+.news-item.tier-mid .news-card-body {
+  display: grid; grid-template-columns: minmax(0, 1fr) 132px;
+  column-gap: 20px; align-items: start;
+}
+.news-item.tier-mid .news-card-body > * { grid-column: 1; min-width: 0; }
+.news-item.tier-mid .news-thumb {
+  grid-column: 2; grid-row: 1 / span 8; align-self: start;
+  width: 132px; aspect-ratio: 16 / 9; margin-top: 3px;
+}
+/* Tail rows: FT's 75x75 square, scaled to this page's density. */
+.news-item.tier-tail .news-card-body {
+  display: grid; grid-template-columns: minmax(0, 1fr) 62px;
+  column-gap: 16px; align-items: start;
+}
+.news-item.tier-tail .news-card-body > * { grid-column: 1; min-width: 0; }
+.news-item.tier-tail .news-thumb {
+  grid-column: 2; grid-row: 1 / span 4; align-self: start;
+  width: 62px; height: 62px; margin-top: 2px;
+}
+/* The lead already carries a 16:9; it must not also grow a thumb. */
+.news-item.tier-lead .news-thumb { display: none; }
+@media (max-width: 700px) {
+  .news-item.tier-mid .news-card-body { grid-template-columns: minmax(0, 1fr) 96px; }
+  .news-item.tier-mid .news-thumb { width: 96px; }
+}
+
 /* Tier 3 — the tail. Two lines of text, no furniture: the kicker carries the
    timestamp, the rail carries the tonnage, and the standfirst is DELETED (not
    shrunk) because its absence is what marks the tier. */
@@ -26060,6 +26095,58 @@ function _newsAgeCompact(it) {
   return Math.round(h / 24) + 'd';
 }
 
+// v50 — every row gets a picture slot.
+//
+// FT does use images in list rows (75x75 squares; 16:9 above list level). The
+// rule that keeps mixed media from looking spliced is that every row carries
+// the SAME slot shape — not that images are all-or-nothing. So: the publisher's
+// photo where one exists (55 of 91), and a generated commodity tile at the
+// identical dimensions where none does (36 of 91). Same silhouette either way,
+// so the rhythm holds.
+//
+// The tile is drawn, not fetched: an inline SVG data-URI built from the
+// commodity's tint plus a repeating field mark. No network request, no
+// licensing exposure, and nothing invented — the only content is the commodity
+// key we already matched, rendered as a monogram. It is deliberately quiet so
+// it never competes with a real photograph beside it.
+function _newsTileSvg(key, c1, c2) {
+  const letter = String(key || '?').charAt(0).toUpperCase();
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">` +
+      `<defs>` +
+        `<linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
+          `<stop offset="0" stop-color="${c1}" stop-opacity=".30"/>` +
+          `<stop offset="1" stop-color="${c2}" stop-opacity=".55"/>` +
+        `</linearGradient>` +
+        `<pattern id="p" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(-38)">` +
+          `<line x1="0" y1="0" x2="0" y2="9" stroke="${c1}" stroke-opacity=".16" stroke-width="1.4"/>` +
+        `</pattern>` +
+      `</defs>` +
+      `<rect width="100" height="100" fill="#16161c"/>` +
+      `<rect width="100" height="100" fill="url(#g)"/>` +
+      `<rect width="100" height="100" fill="url(#p)"/>` +
+      `<text x="50" y="50" text-anchor="middle" dominant-baseline="central" ` +
+        `font-family="Iowan Old Style,Palatino,Georgia,serif" font-size="46" ` +
+        `fill="${c1}" fill-opacity=".85">${letter}</text>` +
+    `</svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+
+function _newsThumb(it) {
+  const src = _safeCssUrl(it.image);
+  if (src) {
+    return `<div class="news-thumb" style="background-image:url('${_escFeed(src)}')"></div>`;
+  }
+  const key = (it.matched || [])[0]
+    || ((it.chokepoints || []).length ? 'chokepoint' : '')
+    || 'trade';
+  const tint = _NEWS_SYNTH_TINT[key] || _NEWS_SYNTH_TINT._default;
+  // aria-hidden and title-free: it is a generated mark standing in for a
+  // photograph, and must never read as evidence about the story.
+  return `<div class="news-thumb news-thumb-gen" aria-hidden="true"` +
+         ` style="background-image:url(&quot;${_newsTileSvg(key, tint[0], tint[1])}&quot;)"></div>`;
+}
+
 function _newsInterpretationDetails(it) {
   // _cnInterpretationBlock lives in a later <script> block. It is hoisted and
   // defined long before any render runs, but guard anyway — the codebase
@@ -26474,7 +26561,7 @@ function renderNewsTab() {
               ? `<a class="news-headline" href="${_escFeed(href)}" target="_blank" rel="noopener noreferrer nofollow">${t}</a>`
               : `<span class="news-headline">${t}</span>`; })()}
         ${_tier !== 'tier-tail' ? expLine : ''}
-        ${_tier === 'tier-lead' ? imgBand : ''}
+        ${_tier === 'tier-lead' ? imgBand : _newsThumb(it)}
         ${_tier !== 'tier-tail' && prod ? `<div class="news-prod">${prod}</div>` : ''}
         ${_interpHtml}
         <div class="news-meta">
