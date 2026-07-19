@@ -1136,19 +1136,103 @@ body {
    band on top, body below, hairline divider before the sub-line) but tighter:
    36px image instead of 44, denser type, and an auto-fill grid so it reflows
    from 3 columns to 1 rather than locking to 4. */
+/* ── v47 — the ledger ──────────────────────────────────────────────────────
+   Was repeat(auto-fill, minmax(232px,1fr)): 91 cards of identical weight in a
+   uniform grid. Rounded dark cards in an auto-fill grid IS the generic look,
+   and ranking without visual tiering is not ranking at all.
+
+   This is a ledger, not a magazine: one column, ordered by how much trade the
+   headline touches, with the tonnage in a fixed left rail so the day's
+   magnitude can be read by scanning one column of figures against a straight
+   edge. Three tiers — the type scale IS the data.
+
+   Card boxes are gone below the lead. At --b1 #1f1f27 on --bg2 #14141a a border
+   is 1.2:1: invisible as a boundary, but 91 of them add real noise. Separation
+   is a hairline rule and vertical rhythm instead. */
 .news-stream {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
-  gap: 8px; min-width: 0; align-content: start;
+  display: grid;
+  grid-template-columns: 76px 1px minmax(0, 1fr);
+  gap: 0; min-width: 0; align-content: start;
+  background:
+    radial-gradient(120% 60% at 8% -8%, rgba(138,166,196,.04) 0%, transparent 58%);
+}
+/* The rail rule: one hairline the length of the ledger, fading at both ends so
+   it reads as a ruled page rather than a container border. */
+.news-stream::before {
+  content: ''; grid-column: 2; grid-row: 1 / -1;
+  background: linear-gradient(180deg,
+    transparent 0, var(--b2) 48px, var(--b2) calc(100% - 96px), transparent 100%);
+}
+/* Rows participate in the parent grid so every tonnage figure stays aligned. */
+.news-item { display: contents; }
+.news-kt {
+  grid-column: 1; justify-self: end; align-self: start;
+  padding: 12px 12px 0 0; position: relative;
+  font: 700 12px/1.1 ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums; color: #e58a78; white-space: nowrap;
+}
+.news-kt.is-empty { color: var(--t3); font-weight: 400; }
+/* Magnitude bleed — a hairline whose width is this row's share of the largest
+   corridor in view. Turns the rail into a distribution you read at a glance. */
+.news-kt::after {
+  content: ''; position: absolute; right: 12px; bottom: -3px; height: 2px;
+  width: calc(var(--share, 0) * 46px);
+  background: linear-gradient(90deg, rgba(229,138,120,.12), rgba(229,138,120,.55));
+}
+.news-kt.is-empty::after { display: none; }
+.news-body-wrap {
+  grid-column: 3; padding: 10px 0 12px 16px;
+  border-bottom: 1px solid var(--b1); min-width: 0;
+}
+.news-item:last-child .news-body-wrap { border-bottom: none; }
+/* The whole body is a click target for the interpretation, so say so — but only
+   on cards that actually have one, or the cursor lies about affordance. */
+.news-body-wrap:has(details.news-interp) { cursor: pointer; }
+.news-body-wrap:has(details.news-interp):hover { background: rgba(235,233,226,.018); }
+.news-item.tier-lead .news-body-wrap:has(details.news-interp):hover { background: var(--bg3); }
+.news-body-wrap a, .news-body-wrap summary { cursor: pointer; }
+
+/* Tier 1 — the lead. The one card box on the page, so it earns its border. */
+.news-item.tier-lead .news-body-wrap {
+  background: var(--bg3); border: 1px solid var(--b2); border-radius: 8px;
+  padding: 16px 18px 14px; margin-bottom: 10px;
+  box-shadow: inset 0 1px 0 rgba(235,233,226,.045), 0 14px 34px -26px rgba(0,0,0,.9);
+}
+.news-item.tier-lead .news-headline {
+  font-size: clamp(19px, 2.4vw, 25px); font-weight: 650; line-height: 1.16;
+  letter-spacing: -.012em; text-wrap: balance;
+}
+.news-item.tier-lead .news-exposure { font-size: 14px; margin-bottom: 9px; }
+.news-item.tier-lead .news-exposure .news-exp-kt { font-size: 13.5px; }
+.news-item.tier-lead .news-kt { font-size: 15px; padding-top: 18px; }
+
+/* Tier 2 — above-median exposure. */
+.news-item.tier-mid .news-headline { font-size: 14px; line-height: 1.3; font-weight: 600; }
+
+/* Tier 3 — the tail. Rows, not cards: no fill, no radius, tighter rhythm. */
+.news-item.tier-tail .news-body-wrap { padding: 7px 0 7px 16px; }
+.news-item.tier-tail .news-headline { font-size: 12.5px; line-height: 1.35; font-weight: 500; }
+.news-item.tier-tail .news-exposure { font-size: 11px; margin-bottom: 3px; }
+.news-item.tier-tail .news-card-img { display: none; }
+.news-item.tier-tail .news-prod { display: none; }
+.news-item.tier-tail .news-kt { padding-top: 8px; font-size: 11px; }
+
+/* Section break between tiers — one rule, not a header per day. */
+.news-tierbreak {
+  grid-column: 1 / -1; margin: 16px 0 4px; padding-top: 10px;
+  border-top: 1px solid var(--b2);
+  font-size: 9px; letter-spacing: .09em; text-transform: uppercase; color: var(--t3);
 }
 
-.news-item {
-  border-radius: 7px; overflow: hidden;
-  background: linear-gradient(160deg, var(--bg2) 0%, var(--bg1, var(--bg2)) 100%);
-  border: 1px solid var(--b1);
-  display: flex; flex-direction: column;
-  transition: border-color .15s ease, transform .15s ease;
+/* One orchestrated motion moment: rows post like a tape printing, capped so the
+   fold settles in ~300ms and row 91 does not animate two seconds later. */
+@keyframes newsPost { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+.news-body-wrap { animation: newsPost .3s cubic-bezier(.22,.61,.36,1) both; animation-delay: calc(var(--i, 0) * 20ms); }
+@media (prefers-reduced-motion: reduce) { .news-body-wrap { animation: none; } }
+@media (max-width: 640px) {
+  .news-stream { grid-template-columns: 54px 1px minmax(0, 1fr); }
+  .news-body-wrap { padding-left: 11px; }
 }
-.news-item:hover { border-color: var(--b3); transform: translateY(-1px); }
 
 .news-card-img {
   height: 36px; background-size: cover; background-position: center;
@@ -25648,8 +25732,33 @@ function renderNewsTab() {
       + `<b>${joined}</b> touch a trade corridor reaching <b>${reach.size}</b> tracked ${reach.size === 1 ? 'country' : 'countries'}.`
     : `<b>${shown.length}</b> headlines. None currently name a country on a corridor we map.`;
 
-  // ── Stream: compact cards, image band on top ──
-  stream.innerHTML = shown.map(it => {
+  // ── Stream: the ledger ──
+  //
+  // v47 — ordered by how much trade the headline touches, not by clock. An
+  // analyst does not want an editor's pick, they want the largest exposure
+  // first; recency is a tiebreak within that, not the organising principle.
+  // Items with no mapped corridor sort last but are NOT hidden — a commodity
+  // match with no corridor is still a real headline, it just has no tonnage.
+  // Sort key is magnitude, full stop. An earlier pass multiplied it by a
+  // recency decay, which put a 74.6 Mt corridor at position 8 under a 6.5 Mt
+  // one: the rail column stopped descending, and a loud column of figures that
+  // does not match its own order reads as a sorting bug — the same flaw the
+  // leaderboard has. Recency is what the Today strip above is for; this is the
+  // ledger, and a ledger is ordered by size. Recency breaks ties only.
+  const _peakKt = it => (it.exposed || []).reduce((m, e) => Math.max(m, e.kt || 0), 0);
+  const ranked = shown.slice().sort((a, b) => {
+    const d = _peakKt(b) - _peakKt(a);
+    if (d) return d;
+    return (Date.parse(b.published_at || 0) || 0) - (Date.parse(a.published_at || 0) || 0);
+  });
+  // Max across ALL rows, not ranked[0] — with any other sort key those differ,
+  // and --share would exceed 1 and overflow the magnitude bar.
+  const _maxKt = ranked.reduce((m, it) => Math.max(m, _peakKt(it)), 0) || 1;
+  // Tier boundaries: 1 lead, the next 11 at mid weight, the rest as tail rows.
+  const _tierOf = i => i === 0 ? 'tier-lead' : i < 12 ? 'tier-mid' : 'tier-tail';
+  let _brokeTier = false;
+
+  stream.innerHTML = ranked.map((it, _idx) => {
     const exposed = it.exposed || [];
     // v47 — role is marked PER ENTRY, never once for the line.
     //
@@ -25703,7 +25812,24 @@ function renderNewsTab() {
     const tags = (it.matched || []).slice(0, 2)
       .map(c => `<span class="news-tag" title="Commodity match is modeled — our keyword match on the headline, not a publisher classification"><span class="news-modeled">~</span>${_escFeed(_newsCommodityLabel(c))}</span>`).join('');
 
-    return `<div class="news-item">
+    // The rail figure: the largest single corridor this headline touches. Not a
+    // sum — adding a wheat corridor to a palm-oil one gives a number that means
+    // nothing, which is the same reason the leaderboard shows a max.
+    const _peak = _peakKt(it);
+    const _tier = _tierOf(_idx);
+    const _rail = _peak > 0
+      ? `<div class="news-kt" style="--share:${(_peak / _maxKt).toFixed(3)}" title="Largest single corridor this headline touches — sourced from the bilateral trade atlas">${_newsFmtKt(_peak)}</div>`
+      : `<div class="news-kt is-empty" title="No mapped trade corridor for this headline">—</div>`;
+    // One section break, where the tail begins.
+    let _break = '';
+    if (_tier === 'tier-tail' && !_brokeTier) {
+      _brokeTier = true;
+      _break = `<div class="news-tierbreak">Lower exposure · ${ranked.length - 12} more</div>`;
+    }
+
+    return `${_break}<div class="news-item ${_tier}">
+      ${_rail}
+      <div class="news-body-wrap" style="--i:${Math.min(_idx, 12)}">
       ${imgBand}
       <div class="news-card-body">
         ${expLine}
@@ -25721,8 +25847,27 @@ function renderNewsTab() {
         </div>
         ${tags ? `<div class="news-tagrow">${tags}</div>` : ''}
       </div>
+      </div>
     </div>`;
   }).join('');
+
+  // v47 — clicking the article opens its interpretation.
+  //
+  // The <details> summary was the only way in, which meant the AI context was
+  // reachable only by hitting a small target most readers never noticed. The
+  // whole card body now toggles it. The headline anchor is deliberately
+  // excluded: that still goes to the publisher, which is what a link on a
+  // headline must do. Delegated from the container so re-renders cannot leave
+  // stale listeners behind.
+  stream.onclick = (ev) => {
+    if (ev.target.closest('a')) return;                    // publisher link wins
+    if (ev.target.closest('summary')) return;              // native toggle wins
+    const body = ev.target.closest('.news-body-wrap');
+    if (!body) return;
+    const det = body.querySelector('details.news-interp');
+    if (!det) return;
+    det.open = !det.open;
+  };
 
   // ── Exposure leaderboard ──
   if (board) {
