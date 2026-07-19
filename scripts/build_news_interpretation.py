@@ -1019,18 +1019,26 @@ ABSOLUTE RULE: never write a number, percentage, date, month, year or quantity
 that is not already in FACTS. Do not compute, derive, round differently, average
 or infer any figure.
 
-What the note must do, in ONE sentence of at most 34 words:
-- Say what is at stake for the food system, using the SPECIFIC facts given.
-- Start from whichever fact is most consequential for THIS item. Do not use the
-  same opening every time. Available angles, in rough order of interest:
-    a chokepoint      -> lead with the chokepoint and what routes through it
-    an event_type     -> lead with the kind of event (a tariff, a ban, a
-                         shortage, an outbreak) and which commodity it lands on
-    a large corridor  -> lead with the corridor: country, tonnage, and the hub
-                         it is reached via if it is downstream
-    a price move      -> lead with the benchmark and its direction
-- Then add ONE further fact from a different angle, if one is present. Two
-  facts, one sentence. Never list three corridors as the whole note.
+CRITICAL — DO NOT REPEAT THE CARD. The page already shows, immediately above
+your sentence, the full corridor list: every country, its tonnage, and the hub
+it is reached via. A note that lists corridors again is worthless; it is the
+same sentence in different units. NEVER open with "Touches". NEVER enumerate
+corridors. The corridor figures are yours to REFER to, not to relist.
+
+What the note must do, in ONE sentence of at most 34 words: say what the reader
+cannot already see. Pick the angle that is actually present for THIS item:
+
+  chokepoint present -> name it and say what the exposure runs through
+  event_type present -> name the kind of event (a tariff, a ban, a shortage, an
+                        outbreak) and which commodity it lands on
+  price present      -> give the benchmark level and its direction, and tie it
+                        to the commodity at issue
+  only corridors     -> do NOT relist them. Say how concentrated the exposure
+                        is instead: whether it is one dominant destination or
+                        spread across several, and name only the largest one.
+
+Prefer the angle highest in that list that has data. If two are present, use
+both in the one sentence.
 Rules:
 - The headline is a CLAIM by its publisher. If you refer to it, attribute it
   ("the report that...", "the publisher reports"). Never assert it as fact.
@@ -1147,25 +1155,35 @@ def build_article_notes(provider, api_key, news, generated_at, commodity_out=Non
             # Deterministic fallback, no model involved. Built from whichever
             # facts this item actually has — an item may now qualify on an event
             # type or a price move with no corridor at all.
+            # Same rule the model is held to: DO NOT relist the corridors. The
+            # card prints the full corridor line directly above this sentence,
+            # so "Touches CHN 74,647 kt, THA 3,377 kt via BRA" was the line
+            # above restated in different units — visible redundancy, and the
+            # reason the notes read as generic even when their numbers differed.
             bits = []
-            if facts["corridors"]:
-                c = facts["corridors"][0]
-                via = (f" via {c['reached_via']}"
-                       if c.get("reached_via") and c.get("role") != "direct" else "")
-                n = facts["corridor_count"]
-                bits.append(f"Touches {n} mapped corridor{'s' if n != 1 else ''}; the "
-                            f"largest reaches {c['country']} at "
-                            f"{int(c['tonnage_kt']):,} kt{via}")
             if facts.get("chokepoint"):
-                bits.append(f"routes through the {facts['chokepoint']}")
-            elif facts.get("event_type"):
-                bits.append(f"flagged as a {facts['event_type']} item")
+                bits.append(f"Exposure runs through the {facts['chokepoint']}")
+            if facts.get("event_type"):
+                ev = facts["event_type"]
+                com = (facts.get("commodities_matched") or [None])[0]
+                bits.append((f"A {ev} story" if not bits else f"a {ev} story")
+                            + (f" on {com.replace('_', ' ')}" if com else ""))
             pr = facts.get("price")
             if pr and pr.get("price_change_mom_pct") is not None:
                 d = "up" if pr["price_change_mom_pct"] >= 0 else "down"
-                bits.append(f"the {pr['commodity']} benchmark is {d} "
+                lead = "The" if not bits else "the"
+                bits.append(f"{lead} {pr['commodity']} benchmark is {d} "
                             f"{abs(pr['price_change_mom_pct'])}% month on month")
-            text = "; ".join(bits[:2]) + "." if bits else ""
+            # Corridors are the LAST resort, and then only as concentration —
+            # how spread the exposure is, which the corridor line does not say.
+            if not bits and facts["corridors"]:
+                n = facts["corridor_count"]
+                c = facts["corridors"][0]
+                bits.append(
+                    f"Exposure is concentrated on {c['country']}"
+                    if n == 1 else
+                    f"Exposure spreads across {n} mapped corridors, led by {c['country']}")
+            text = ("; ".join(bits[:2]) + ".") if bits else ""
         out[key] = {
             "note": text,
             "facts": facts,
