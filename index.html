@@ -1159,20 +1159,38 @@ body {
 
 /* The corridor line stays the loudest element — it is the thing a feed
    reader cannot give you. Small, but coloured and first. */
+/* v47 — the exposure line is the anchor of this page: it is the only thing here
+   a plain feed reader could not produce. It was set at 9px uppercase with wide
+   tracking, which is a LABEL treatment — it tells the eye "chrome, skip me" —
+   while the AI affordance beside it was 11px in a bordered amber box. The
+   provenance hierarchy was exactly inverted: model prose outweighed sourced
+   tonnage. "This headline reaches DEU 340 kt via NLD" is a sentence, and
+   setting it as one is what makes it read as the point of the card. */
 .news-exposure {
-  font-size: 9px; font-weight: 700; letter-spacing: .06em;
-  text-transform: uppercase; color: var(--t3);
-  margin-bottom: 4px; line-height: 1.45;
+  font-size: 12px; font-weight: 500; letter-spacing: 0;
+  text-transform: none; color: var(--t2);
+  margin-bottom: 6px; line-height: 1.4;
+  font-variant-numeric: tabular-nums;
 }
-.news-exposure .news-exp-iso { color: var(--t1); font-weight: 700; }
-.news-exposure .news-exp-kt { color: #e58a78; font-variant-numeric: tabular-nums; font-weight: 700; }
-.news-exposure .news-exp-sep { color: var(--b3); margin: 0 3px; }
+.news-exposure .news-exp-verb { color: var(--t3); }
+.news-exposure .news-exp-iso { color: var(--t1); font-weight: 600; }
+.news-exposure .news-exp-kt {
+  color: #e58a78; font-variant-numeric: tabular-nums; font-weight: 700;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px;
+}
+/* The hop that makes a downstream corridor legible. Deliberately quiet: it is
+   context for the ISO beside it, not a third competing figure. */
+.news-exposure .news-exp-via {
+  color: var(--t3); font-size: 10.5px; font-weight: 400;
+}
+.news-exposure .news-exp-sep { color: var(--b3); margin: 0 5px; }
+/* Directness is a property of ONE corridor entry, never of the line. */
+.news-exposure .news-exp-iso.direct { color: #c9a957; }
 /* The tilde marks the country match as MODELED. The tonnage beside it is
    sourced; the claim that this headline is ABOUT that country is not. One
    glyph rather than a badge, because 50 badges is the uniform-weight problem
    this page was built to avoid. */
 .news-exposure .news-modeled { color: var(--t3); font-weight: 400; cursor: help; }
-.news-exposure.direct .news-exp-iso { color: #c9a957; }
 
 .news-headline {
   font-size: 11.5px; font-weight: 600; line-height: 1.32; color: var(--t1);
@@ -1204,33 +1222,63 @@ body {
    with the same amber the interpretation block uses elsewhere, so the reader
    can tell at a glance which cards carry model-written context. */
 .news-interp { margin-top: 7px; }
+/* v47 — DEMOTED, deliberately, after being over-promoted.
+   The previous pass made this a bordered amber box because the interpretation
+   was hard to find. That fixed discoverability and broke something worse: on 38
+   of 91 cards the loudest object became the model-written block, while the
+   sourced exposure line sat at 9px grey. A skeptical analyst reading that card
+   concludes the product is about the LLM. Discoverability now comes from
+   coverage (38 cards, first one at the top) and from the amber convention —
+   not from outshouting sourced data. Borderless text affordance; the tinted
+   panel survives on the EXPANDED content only, where it belongs. */
 .news-interp > summary {
   cursor: pointer; font-size: 11px; font-weight: 500; color: #c47a3c;
-  letter-spacing: .01em; padding: 5px 8px; list-style: none;
+  letter-spacing: .01em; padding: 6px 0; list-style: none;
   display: flex; flex-wrap: wrap; align-items: center; gap: 7px;
-  background: rgba(196,122,60,.07);
-  border: 1px solid rgba(196,122,60,.28);
-  border-radius: 3px;
-  transition: background .12s ease, border-color .12s ease;
+  background: none; border: none;
+  transition: color .12s ease;
 }
 .news-interp > summary::-webkit-details-marker { display: none; }
 .news-interp > summary::before { content: '▸'; font-size: 9px; opacity: .8; }
 .news-interp[open] > summary::before { content: '▾'; }
-.news-interp > summary:hover {
-  background: rgba(196,122,60,.13); border-color: rgba(196,122,60,.5);
-}
-.news-interp[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.news-interp > summary:hover { color: #d4894a; }
+/* Contrast: was #c47a3c at opacity .85 over a tint => 3.99:1, failing AA — on
+   the provenance label itself, which is the last string that should be hard to
+   read. #d4894a at full opacity is ~5.2:1. */
 .news-interp-counter {
-  font-size: 8px; letter-spacing: .04em; text-transform: uppercase;
-  color: #c47a3c; border: 1px solid rgba(196,122,60,.35);
+  font-size: 9px; letter-spacing: .04em; text-transform: uppercase;
+  color: #d4894a; border: 1px solid rgba(196,122,60,.35);
   border-radius: 2px; padding: 0 4px; white-space: nowrap;
-  margin-left: auto; opacity: .85;
+  font-variant-numeric: tabular-nums;
 }
+/* v47 — focus-visible. The news surface had none, against an established
+   convention elsewhere in this file (.ctr-more > summary:focus-visible at 1009,
+   .ctr-link at 1048, .viewswitch-btn at 571). The <summary> has its native
+   marker removed, so without this a keyboard user gets no disclosure affordance
+   at all. #8aa6c4 on --bg2 is 7.4:1, well past the 3:1 indicator floor. */
+.news-headline:focus-visible,
+.news-today-hl:focus-visible,
+.news-interp > summary:focus-visible,
+.news-chip:focus-visible {
+  outline: 2px solid #8aa6c4; outline-offset: 3px; border-radius: 3px;
+}
+.news-meta { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) {
+  .news-item:hover { transform: none; }
+  .news-interp > summary { transition: none; }
+}
+/* v47 — lifted out of .news-meta into its own row, and marked modeled.
+   These are OUR keyword match, not a publisher classification, and for the 65
+   of 91 items with no corridor they are the only attribution on the card.
+   Colour raised from --t3 (4.14:1 at 8.5px — fails AA, and small light-on-dark
+   text blooms) to --t2 at 10px. */
+.news-tagrow { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
 .news-tag {
-  padding: 0 4px; border-radius: 2px; font-size: 8.5px;
-  letter-spacing: .04em; text-transform: uppercase;
-  background: var(--bg3); border: 1px solid var(--b2); color: var(--t3);
+  padding: 1px 5px; border-radius: 2px; font-size: 10px;
+  letter-spacing: .03em; text-transform: uppercase; cursor: help;
+  background: var(--bg3); border: 1px solid var(--b2); color: var(--t2);
 }
+.news-tag .news-modeled { color: var(--t3); margin-right: 2px; font-weight: 400; }
 .news-no-corridor {
   font-size: 9px; font-style: italic; color: var(--t3);
   margin-bottom: 4px; line-height: 1.45;
@@ -25435,6 +25483,30 @@ function _newsCommodityLabel(key) {
 //    pork or poultry gets nothing — never a fallback to an unrelated
 //    commodity's prose. Today that is 7 of 56 items: the news taxonomy tracks
 //    19 commodities, the interpretation covers 6.
+// v47 — recompute the age label in the browser.
+//
+// published_label is baked into the JSON when the pipeline runs. While the cron
+// is healthy the baked string and reality agree. When it stalls — Actions down,
+// a failed run — the page keeps re-fetching the same file every 5 minutes and
+// every card goes on claiming "4h ago" indefinitely, while the Today strip
+// (which measures against a live clock) correctly empties. The reader is told
+// in text that a four-day-old headline is four hours old.
+//
+// published_at is an ISO timestamp in the same payload, so the honest label is
+// a client-side computation. Falls back to the baked string only if the
+// timestamp is missing or unparseable.
+function _newsAgeLabel(it) {
+  const raw = it && it.published_at;
+  const t = raw ? Date.parse(raw) : NaN;
+  if (!isFinite(t)) return (it && it.published_label) || 'date unknown';
+  const h = (Date.now() - t) / 36e5;
+  if (h < 0) return 'just now';           // publisher clock ahead of ours
+  if (h < 1) return Math.max(1, Math.round(h * 60)) + ' min ago';
+  if (h < 24) return Math.round(h) + 'h ago';
+  const d = Math.round(h / 24);
+  return d === 1 ? 'yesterday' : d + ' days ago';
+}
+
 function _newsInterpretationDetails(it) {
   // _cnInterpretationBlock lives in a later <script> block. It is hoisted and
   // defined long before any render runs, but guard anyway — the codebase
@@ -25486,10 +25558,16 @@ function renderNewsTab() {
         ? `${bad.length} of ${Object.keys(st).length} sources failed or were throttled this run`
         : 'no headlines cleared the relevance filter this run';
     }
-    lede.textContent = '';
+    if (lede) lede.textContent = '';
     stream.innerHTML = `<div class="news-empty">No signals right now — ${failed}.</div>`;
     if (board) board.innerHTML = '';
     if (chips) chips.innerHTML = '';
+    // v47 — the Today strip was the one element this branch forgot. A refresh
+    // returning zero items left the PREVIOUS run's strip on screen, directly
+    // above "No signals right now" — stale headlines presented as current, next
+    // to a message saying there are none.
+    const _todayEl0 = document.getElementById('news-today');
+    if (_todayEl0) _todayEl0.innerHTML = '';
     return;
   }
 
@@ -25531,10 +25609,18 @@ function renderNewsTab() {
             ${dis ? `<div class="news-today-flag">${_escFeed(dis)}</div>` : ''}
             ${href ? `<a class="news-today-hl" href="${_escFeed(href)}" target="_blank" rel="noopener noreferrer nofollow">${t}</a>`
                    : `<span class="news-today-hl">${t}</span>`}
-            <div class="news-today-meta">${_escFeed(it.source || '')} · ${_escFeed(it.published_label || '')}</div>
+            <div class="news-today-meta">${_escFeed(it.source || '')} · ${_escFeed(_newsAgeLabel(it))}</div>
           </div>`;
         }).join('')}
-      </div>` : '';
+      </div>`
+    // v47 — never blank. An empty string here is byte-identical to a thrown
+    // exception, a missing #news-today node, or a build that shipped without
+    // the feature. On a Sunday, with the ag trade press silent since Friday,
+    // this is the DEFAULT state — and the branch above goes to real effort to
+    // name a cause, so silence here is the inconsistency. Say why it is quiet.
+    : `<div class="news-empty">Nothing published in the last 48 hours. The
+         agriculture trade press publishes on weekdays, so this is normal at a
+         weekend — the stream below covers the last 14 days.</div>`;
   }
 
   // ── Filter chips, counted from the data rather than hardcoded ──
@@ -25565,18 +25651,36 @@ function renderNewsTab() {
   // ── Stream: compact cards, image band on top ──
   stream.innerHTML = shown.map(it => {
     const exposed = it.exposed || [];
-    const isDirect = exposed.length && exposed[0].role === 'direct';
+    // v47 — role is marked PER ENTRY, never once for the line.
+    //
+    // This used to read `exposed[0].role === 'direct'` and label the whole line
+    // "Directly involved". 7 of 26 exposure lines were mislabelled by it: an
+    // item whose first entry is direct and whose next two are downstream
+    // rendered as "Directly involved CHN 1,012 kt · KOR 101 kt · USA 66 kt",
+    // asserting first-order involvement for two countries that are second-order.
+    // That is the same modeled/sourced blur _meta.notes forbids, one level up.
+    //
+    // The line verb is now always "Reaches" — true of every entry regardless of
+    // role — and directness is carried by the individual ISO, alongside the
+    // `via` hop that says HOW a downstream country is reached. `via` is present
+    // on 79 of 95 entries and was being dropped entirely, which turned a
+    // two-step corridor into an unexplained one-step one.
     const expLine = exposed.length
-      ? `<div class="news-exposure ${isDirect ? 'direct' : ''}" title="${
+      ? `<div class="news-exposure" title="${
             it.attribution === 'modeled'
               ? 'Which countries a headline names is our keyword match (modeled). The corridor tonnage is sourced from the bilateral trade atlas.'
               : 'Corridor tonnage sourced from the bilateral trade atlas.'}">`
-        + (it.attribution === 'modeled' ? '<span class="news-modeled">~</span> ' : '')
-        + (isDirect ? 'Directly involved ' : 'Reaches ')
-        + exposed.slice(0, 3).map(e =>
-            `<span class="news-exp-iso">${_escFeed(e.iso)}</span> `
-            + `<span class="news-exp-kt">${_newsFmtKt(e.kt)}</span>`
-          ).join('<span class="news-exp-sep">·</span>')
+        + `<span class="news-exp-verb">Reaches</span> `
+        + exposed.slice(0, 3).map(e => {
+            const direct = e.role === 'direct';
+            return `<span class="news-exp-iso${direct ? ' direct' : ''}"${
+                     direct ? ' title="Directly involved in this corridor"' : ''
+                   }>${_escFeed(e.iso)}</span> `
+              + `<span class="news-exp-kt">${_newsFmtKt(e.kt)}</span>`
+              + (!direct && e.via
+                  ? ` <span class="news-exp-via">via ${_escFeed(e.via)}</span>`
+                  : '');
+          }).join('<span class="news-exp-sep">·</span>')
         + (exposed.length > 3 ? `<span class="news-exp-sep">·</span>+${exposed.length - 3}` : '')
         + `</div>`
       : `<div class="news-no-corridor">No mapped corridor — commodity match only</div>`;
@@ -25590,8 +25694,14 @@ function renderNewsTab() {
       : '';
 
     const prod = _newsProductionLine(it);
+    // v47 — the commodity match is MODELED (our keyword hit on the headline),
+    // but these tags used to render as neutral chips inside .news-meta, right
+    // beside the publisher and date, which are sourced. For the 65 of 91 items
+    // with no corridor this tag is the ONLY attribution on the card, and it was
+    // the least-marked thing on it. Same '~' marker the exposure line uses, and
+    // lifted out of the meta row so it is not read as publisher metadata.
     const tags = (it.matched || []).slice(0, 2)
-      .map(c => `<span class="news-tag">${_newsCommodityLabel(c)}</span>`).join('');
+      .map(c => `<span class="news-tag" title="Commodity match is modeled — our keyword match on the headline, not a publisher classification"><span class="news-modeled">~</span>${_escFeed(_newsCommodityLabel(c))}</span>`).join('');
 
     return `<div class="news-item">
       ${imgBand}
@@ -25607,9 +25717,9 @@ function renderNewsTab() {
         ${_newsInterpretationDetails(it)}
         <div class="news-meta">
           <span class="news-src">${_escFeed(it.source || '')}</span>
-          <span>·</span><span>${_escFeed(it.published_label || '')}</span>
-          ${tags}
+          <span>·</span><span>${_escFeed(_newsAgeLabel(it) || '')}</span>
         </div>
+        ${tags ? `<div class="news-tagrow">${tags}</div>` : ''}
       </div>
     </div>`;
   }).join('');
