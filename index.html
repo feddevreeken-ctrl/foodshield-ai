@@ -26381,6 +26381,11 @@ function countryNewsBlockHTML(iso, name, limit) {
               : `<span class="cnb-hl">${t}</span>`}
             <div class="cnb-meta">${_escFeed(it.source || '')} · ${_escFeed(_newsAgeLabel(it))}</div>
             <div class="cnb-reach">reaches ${_newsFmtKt(e.kt)}${via}</div>
+            ${/* v55 — the per-article note belongs here too. It was rendering
+                  on the news tab only, so the country page showed a headline
+                  and a tonnage with no read on what it means. Same component,
+                  same AI/CALC provenance mark. */''}
+            ${(typeof _newsArticleNote === 'function') ? _newsArticleNote(it) : ''}
           </div>
         </div>`;
   };
@@ -27908,71 +27913,12 @@ function _ctrMountCharts(c) {
   // drawn. Falls back to the heritage flat list, and says so in its own title,
   // only when the country has no cited flows.
   try {
-    destroyChart('supplier-pie');
-    const _realMix = (() => {
-      if (typeof rankedDependencies !== 'function') return null;
-      const deps = rankedDependencies(c);
-      if (!deps.length) return null;
-      const bySupplier = new Map();
-      deps.slice(0, 12).forEach(d => (d.rows || []).forEach(r => {
-        if (!r.name || !(r.kt > 0)) return;
-        bySupplier.set(r.name, (bySupplier.get(r.name) || 0) + r.kt);
-      }));
-      if (!bySupplier.size) return null;
-      const ranked = [...bySupplier.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
-      const total = ranked.reduce((a, [, kt]) => a + kt, 0);
-      if (total <= 0) return null;
-      return { labels: ranked.map(([n]) => n), data: ranked.map(([, kt]) => Math.round(kt / total * 100)) };
-    })();
-    const _heritage = commoditySuppliers(c, null).slice().sort((a, b) => (b.pct || 0) - (a.pct || 0));
-    const _pieLabels = _realMix ? _realMix.labels : _heritage.map(s => s.name);
-    const _pieData   = _realMix ? _realMix.data   : _heritage.map(s => s.pct);
-    const _pieReal   = !!_realMix;
-    // v52 — NEVER draw a fabricated split.
-    //
-    // This fell back to [20, 20, 20, 20, 20] when a country had neither cited
-    // flows nor a heritage vector: five equal slices, drawn in the same
-    // treatment as real data, with nothing marking them invented. On a page
-    // whose whole discipline is that no figure may be unsourced, it rendered a
-    // supplier mix that does not exist. Countries with no cited corridors
-    // (TUV, KIR, NRU and others) hit this path.
-    //
-    // An absence is stated instead. The canvas is left undrawn and the caption
-    // says why — the same treatment every table on this page already uses.
-    const _pieHas = (_pieData && _pieData.length) || (c.supPct && c.supPct.length);
-    const _pieHost = document.getElementById('supplier-pie');
-    if (!_pieHas) {
-      if (_pieHost && _pieHost.parentNode) {
-        _pieHost.parentNode.innerHTML =
-          '<div class="ctr-absence">No supplier mix is available for this country —'
-          + ' neither cited bilateral corridors nor a heritage ranking. Nothing is'
-          + ' drawn here rather than showing an even split that was never measured.</div>';
-      }
-      return;
-    }
-    chartInstances['supplier-pie'] = _safeChart(_pieHost, {
-      type: 'doughnut',
-      data: {
-        labels: _pieLabels.length ? _pieLabels : (c.suppliers || []),
-        datasets: [{
-          data: _pieData.length ? _pieData : c.supPct,
-          backgroundColor: ['#d49a4a', '#8aa8c9', '#5b9b8a', '#c9a957', '#9c7fc2', '#b87a8a'],
-          borderWidth: 2, borderColor: '#14141a', hoverOffset: 6,
-        }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: true, cutout: '62%',
-        plugins: {
-          title: {
-            display: true,
-            text: _pieReal ? 'Real supplier mix · cited import flows' : 'Heritage ranking · not from cited flows',
-            color: _pieReal ? '#6ba36b' : '#c47a3c', font: { size: 10, family: 'Geist', weight: '500' }, padding: { bottom: 6 }
-          },
-          legend: { position: 'right', labels: { color: '#ebe9e2', font: { size: 11, family: 'Geist' }, padding: 10, boxWidth: 10, boxHeight: 10 } },
-          tooltip: { callbacks: { label: ctx => `${ctx.label}: ${ctx.raw}%${_pieReal ? ' · cited' : ' · heritage'}` } }
-        }
-      }
-    });
+    // v55 — the supplier doughnut and its mount are gone. It was the THIRD
+    // drawing of one aggregation (SVG bars, a table, and this), and its own
+    // caption said so: "The same aggregation as the supplier table above."
+    // Removing the canvas without removing this mount left Chart.js throwing
+    // "can't acquire context from the given item" three times per render —
+    // caught in the console, not in the DOM assertions.
   } catch (e) {}
 }
 
@@ -28559,21 +28505,16 @@ function renderCountryTab() {
       ? 'Aggregated from this country’s <b>cited bilateral import flows</b> — each supplier’s tonnage summed across its top imported commodities.'
       : 'Heritage supplier ranking — <b>not</b> derived from cited bilateral flows.'} ${structuralCaption(c, 'suppliers', 'Structural supplier ranking')}</div>
     ${ctrSupplierChart(supplierRows, c.name)}
-    ${supplierRows.rows.length ? `
-    <div class="ctr-tbl-wrap">
-      <table class="ctr-tbl">
-        <thead><tr><th style="width:34px">#</th><th>Supplier</th><th style="width:130px">Share</th><th class="num">of tracked imports</th><th class="num">Basis</th></tr></thead>
-        <tbody>
-          ${supplierRows.rows.map((s,i) => `<tr>
-            <td class="num" style="text-align:left;color:var(--t3)">${String(i+1).padStart(2,'0')}</td>
-            <td class="nm">${_escFeed(s.name)}</td>
-            <td>${_ctrMeter(s.pct, s.pct>=50?'#c44b3c':s.pct>=30?'#d27a3e':'var(--accent)')}</td>
-            <td class="num">${s.pct ? s.pct + '%' : '—'}</td>
-            <td class="num" style="color:${supplierRows.real ? '#6ba36b' : '#c47a3c'};font-size:9.5px;" title="${supplierRows.real ? 'Cited bilateral flow' : 'Heritage ranking, not cited'}">${supplierRows.real ? '● cited' : '◐ heritage'}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>` : '<div class="ctr-note">No sourced supplier breakdown is available for this country yet.</div>'}
+    ${/* v55 — the supplier TABLE is gone. This one aggregation was drawn three
+          times on a single page: as SVG bars directly above, as this table, and
+          as a doughnut inside the structural-basket fold — whose own caption
+          read "The same aggregation as the supplier table above". The code
+          already knew it was duplicating itself.
+          Bars survive: a ranked share reads faster as length than as a column
+          of percentages, and one basis badge on the caption replaces the same
+          badge repeated on every row. */''}
+    ${supplierRows.rows.length ? '' :
+      '<div class="ctr-note">No sourced supplier breakdown is available for this country yet.</div>'}
 
     ${deps.length ? `
     <div class="ctr-h">Import dependencies, ranked by risk</div>
@@ -28630,9 +28571,12 @@ function renderCountryTab() {
             </tbody>
           </table>
         </div>` : '<div class="ctr-note">No food-specific import items are verified in the current structural snapshot.</div>'}
-        <div class="ctr-h">Supplier mix, drawn</div>
-        <div class="ctr-note">The same aggregation as the supplier table above.</div>
-        <div style="max-width:420px;"><canvas id="supplier-pie" style="max-height:220px;"></canvas></div>
+        ${/* v55 — the doughnut is gone, on the evidence of its own caption:
+              "The same aggregation as the supplier table above." Third drawing
+              of one dataset, and the least readable of the three — angle is
+              harder to compare than length, and it needed a legend to say what
+              the bars label inline. Its fabricated [20,20,20,20,20] fallback
+              goes with it. */''}
       </div>
     </details>
 
@@ -28658,7 +28602,13 @@ function renderCountryTab() {
           rendered output byte-identical to the banner at :28266 in the same
           continuous report. One build-health notice per page; repeating it
           does not make it more true, it makes readers skip both. */''}
-    ${restrictionsPanelHTML(c.iso)}
+    ${/* v55 — the GLOBAL restrictions panel is gone from the country report.
+          countryRestrictionFlagHTML(c.iso) at :28316 already shows the
+          restrictions that actually hit this country, up in the head where a
+          time-sensitive fact belongs. This second panel listed every export
+          restriction on record worldwide, unfiltered, on every country page —
+          the same block for Egypt as for Tuvalu. A country report should not
+          carry the world's list; that lives on the global tab. */''}
 
     ${(function(){
       const ch = ctrCorridorChart(deps, c.name);
