@@ -478,7 +478,12 @@ def _extract_legacy_rows():
     rows = {}
     names = {}
     for block in blocks:
-        head = re.split(r"\n\s*ai:", block, maxsplit=1)[0]
+        # v48 — was `ai:`. The field holds hand-written country research citing
+        # IPC, FAO GIEWS and WFP, and the UI labels it "Analysis · deterministic,
+        # no LLM". The old key name told any maintainer grepping the file the
+        # opposite. Renamed in index.html; this split must track it, or head
+        # becomes the entire block and iso/name extraction reads narrative prose.
+        head = re.split(r"\n\s*narrative:", block, maxsplit=1)[0]
         iso = _match_string(head, "iso")
         if not iso:
             continue
