@@ -1711,6 +1711,60 @@ body {
    with the same amber the interpretation block uses elsewhere, so the reader
    can tell at a glance which cards carry model-written context. */
 .news-interp { margin-top: 7px; }
+/* ── v51 — the per-country headline block ─────────────────────────────────
+   Same vocabulary as the news tab so a reader moving between them is not
+   learning a second visual language: serif headline, claret commodity kicker,
+   sourced tonnage in #e58a78, thumbnail at the row's left. */
+.cnb {
+  border: 1px solid var(--b2); border-radius: 3px; padding: 15px 16px 13px;
+  background: linear-gradient(180deg, rgba(235,233,226,.022) 0%, transparent 60%);
+}
+.cnb-head {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .11em;
+  text-transform: uppercase; color: var(--t1);
+  display: flex; align-items: center; gap: 8px;
+}
+.cnb-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: #e58a78; flex-shrink: 0;
+}
+.cnb-sub { font-size: 11.5px; color: var(--t3); margin: 4px 0 14px; line-height: 1.5; }
+.cnb-row { display: flex; gap: 13px; padding: 0 0 14px; align-items: flex-start; }
+.cnb-row + .cnb-row {
+  border-top: 1px solid rgba(235,233,226,.08); padding-top: 14px;
+}
+.cnb-row .news-thumb { width: 72px; height: 72px; flex-shrink: 0; }
+.cnb-body { min-width: 0; }
+.cnb-kick { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-bottom: 5px; }
+.cnb-commodity {
+  font-size: 10px; font-weight: 600; letter-spacing: .09em;
+  text-transform: uppercase; color: #cc1452;
+}
+.cnb-event {
+  font-size: 8.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+  color: #d4894a; border: 1px solid rgba(196,122,60,.4); border-radius: 2px; padding: 1px 5px;
+}
+.cnb-hl {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', ui-serif, Georgia, serif;
+  font-size: 16px; line-height: 1.22; font-weight: 400; color: var(--t1);
+  text-decoration: none; display: block;
+}
+.cnb-hl:hover { color: #8aa6c4; }
+.cnb-hl:focus-visible { outline: 2px solid #8aa6c4; outline-offset: 3px; }
+.cnb-meta {
+  font-size: 10.5px; color: var(--t3); margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.cnb-reach {
+  margin-top: 5px; font: 600 11.5px/1 ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums; color: #e58a78;
+}
+.cnb-reach .cnb-via { color: var(--t3); font-weight: 400; }
+.cnb-foot {
+  margin-top: 4px; padding-top: 10px; border-top: 1px solid rgba(235,233,226,.08);
+  font-size: 9.5px; line-height: 1.55; color: var(--t3);
+}
+.cnb-foot b { color: var(--t2); font-weight: 600; }
+
 /* v50 — the per-article note. One sentence, inline, with a two-letter
    provenance mark rather than a badge: at one per row a badge is noise, but the
    reader still has to be able to tell model-written from build-computed at a
@@ -26218,6 +26272,83 @@ function _newsArticleNote(it) {
   </div>`;
 }
 
+// v51 — the per-country headline block for the country report.
+//
+// The existing rail news section is organised by COMMODITY: it picks the
+// country's top commodities, then lists headlines for each. On a country page
+// that is the wrong axis — the reader is asking "what is hitting THIS country",
+// and the payload already answers it directly, because every item carries the
+// corridors it touches with an ISO on each. 49 countries have at least one.
+//
+// Not a stub. The mock this follows carried the line "Live once the country
+// feed is wired"; the feed is wired — commodity_news.items[].exposed[].iso is
+// exactly the join, and the tonnage beside it is the sourced corridor volume.
+function countryNewsBlockHTML(iso, name, limit) {
+  const env = (typeof LIVE !== 'undefined') ? LIVE.commodity_news : undefined;
+  if (env === undefined) {
+    return `<div class="cnb"><div class="cnb-head"><span class="cnb-dot"></span>Biggest food headlines</div>
+      <div class="cnb-sub">loading…</div></div>`;
+  }
+  if (!env || !env.data) {
+    return `<div class="cnb"><div class="cnb-head"><span class="cnb-dot"></span>Biggest food headlines</div>
+      <div class="cnb-sub">The headline feed did not load in this session — this is a delivery
+      failure on our side, not an absence of news.</div></div>`;
+  }
+  const items = Array.isArray(env.data.items) ? env.data.items : [];
+  // Each row keeps the corridor that reaches THIS country, so the tonnage shown
+  // is the one relevant to the reader rather than the item's global maximum.
+  const rows = [];
+  items.forEach(it => {
+    let best = null;
+    (it.exposed || []).forEach(e => {
+      if (e && e.iso === iso && (!best || (e.kt || 0) > (best.kt || 0))) best = e;
+    });
+    if (best) rows.push({ it, e: best });
+  });
+  rows.sort((a, b) => (b.e.kt || 0) - (a.e.kt || 0));
+  const shown = rows.slice(0, limit || 3);
+
+  const body = shown.length
+    ? shown.map(({ it, e }) => {
+        const href = _safeUrl(it.url);
+        const t = _escFeed(it.title || '');
+        const kick = (it.matched || [])[0];
+        const ev = (it.disruption || [])[0];
+        const via = e.role !== 'direct' && e.via
+          ? ` <span class="cnb-via">via ${_escFeed(e.via)}</span>` : '';
+        return `<div class="cnb-row">
+          ${_newsThumb(it)}
+          <div class="cnb-body">
+            <div class="cnb-kick">
+              ${kick ? `<span class="cnb-commodity">${_escFeed(_newsCommodityLabel(kick))}</span>` : ''}
+              ${ev ? `<span class="cnb-event">${_escFeed(ev)}</span>` : ''}
+            </div>
+            ${href
+              ? `<a class="cnb-hl" href="${_escFeed(href)}" target="_blank" rel="noopener noreferrer nofollow">${t}</a>`
+              : `<span class="cnb-hl">${t}</span>`}
+            <div class="cnb-meta">${_escFeed(it.source || '')} · ${_escFeed(_newsAgeLabel(it))}</div>
+            <div class="cnb-reach">reaches ${_newsFmtKt(e.kt)}${via}</div>
+          </div>
+        </div>`;
+      }).join('')
+    // An absence is stated, never left blank — the same discipline the news tab
+    // uses. "No headline touched a corridor into here" is a real result and is
+    // different from a broken feed.
+    : `<div class="cnb-sub">No headline in the current pull touches a mapped
+       corridor into ${_escFeed(name)}. The collector ran; the match set is empty.</div>`;
+
+  return `<div class="cnb">
+    <div class="cnb-head"><span class="cnb-dot"></span>Biggest food headlines</div>
+    <div class="cnb-sub">out of ${_escFeed(name)}</div>
+    ${body}
+    <div class="cnb-foot">Trade-press reports touching ${_escFeed(name)}. Which
+      country a headline names is <b>modeled</b> — our keyword match on the
+      headline. The corridor tonnage beside it is <b>sourced</b> from the
+      bilateral trade atlas. A headline touching a corridor is not a claim that
+      it moves prices.</div>
+  </div>`;
+}
+
 function _newsInterpretationDetails(it) {
   // _cnInterpretationBlock lives in a later <script> block. It is hoisted and
   // defined long before any render runs, but guard anyway — the codebase
@@ -28559,7 +28690,14 @@ function renderCountryTab() {
        </div>
      </div>
 
-     ${(typeof ctrNewsSectionHTML === 'function') ? `<div class="ctr-rail-sec">${ctrNewsSectionHTML(c, { rail: true })}</div>` : ''}
+     ${/* v51 — country-axis headlines replace the commodity-axis section here.
+           The old block picked the country's top commodities and listed
+           headlines per commodity; on a country page the reader is asking what
+           is hitting THIS country, and items[].exposed[].iso answers that
+           directly. ctrNewsSectionHTML is retained for the commodity drilldown,
+           where the commodity axis is the right one. */''}
+     ${(typeof countryNewsBlockHTML === 'function')
+        ? `<div class="ctr-rail-sec">${countryNewsBlockHTML(c.iso, c.name, 3)}</div>` : ''}
 
      ${(() => {
        // Rank by VOLUME, not by the leader's share. Ranking on share alone floats
