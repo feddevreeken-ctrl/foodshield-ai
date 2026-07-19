@@ -28203,10 +28203,25 @@ function renderCountryTab() {
           </div>
         </div>
         <div class="ctr-head-board">
+          ${/* v53 — the score now states what it was built from.
+                fdrsV2 defaults absent components to 0, and 0 on this scale
+                means RESILIENT (see the formula note at :16657: "c[7]/c[8]
+                fall back to 0 (= resilient)"). So a country missing economic
+                access and grain-reserve data scores BETTER than one measured
+                to be fragile, and the header printed that number with exactly
+                the confidence of a fully-sourced one. The no-data warning
+                existed, but only inside a closed fold three sections down.
+                Absence of evidence was reading as evidence of resilience. */''}
           <div class="ctr-head-cell">
             <span class="ctr-head-lbl">Score</span>
             <span class="ctr-head-val" style="color:${col}">${c.fdrs}</span>
-            <span class="ctr-head-meta">FDRS · 0–100</span>
+            <span class="ctr-head-meta">${(() => {
+              const vec = Array.isArray(c.c) ? c.c : [];
+              const have = vec.filter((v, i) => i < 9 && v != null).length;
+              if (have >= 9) return 'FDRS · all 9 components sourced';
+              const miss = 9 - have;
+              return `<span style="color:#c9a957" title="Missing components are scored 0, which on this scale reads as resilient. A partial score is therefore optimistic, not neutral.">FDRS · ${have}/9 components · ${miss} not sourced</span>`;
+            })()}</span>
           </div>
           <div class="ctr-head-cell">
             <span class="ctr-head-lbl">Band</span>
@@ -28742,28 +28757,35 @@ function renderCountryTab() {
         while the main column carries what they READ THROUGH. -->
    <aside class="ctr-rail">
 
-     <div class="ctr-rail-sec">
-       <div class="ctr-rail-h">Risk</div>
-       <div class="ctr-rail-score">
-         <span class="n" style="color:${col}">${c.fdrs}</span>
-         <span class="b" style="color:${col}">${(typeof riskLabel === 'function') ? riskLabel(c.fdrs) : ''}<i>FDRS · 0–100</i></span>
-       </div>
-       <div class="ctr-note" style="margin-top:9px;">2030 modeled outlook ${c.f2030} —
-         ${delta === 0 ? 'unchanged' : `<span style="color:${trendCol}">${Math.abs(delta)} point${Math.abs(delta)===1?'':'s'} ${trendUp ? 'worse' : 'better'}</span>`}.
-         A curated baseline plus a modeled overlay, <b>not a back-tested forecast</b>.</div>
-     </div>
-
+     ${/* v53 — the rail's Risk block is gone. It reprinted the score, the band
+           and the 2030 outlook that the head board shows at the top of the same
+           screen, plus a second copy of the "not a back-tested forecast"
+           caveat. A rail earns its column by showing what the main text does
+           not; repeating the headline number is not a glance aid, it is the
+           same number twice. The 2030 outlook was printed FOUR times on this
+           page — head board, driver paragraph, folded analysis card, and here.
+           Kept: the two figures below that appear nowhere else. */''}
      <div class="ctr-rail-sec">
        <div class="ctr-rail-h">Key figures</div>
        <div class="ctr-kf">
-         <div class="ctr-kf-row">
-           <span class="ctr-kf-lbl">${railSupplierLabel}</span>
-           <span class="ctr-kf-val">${topSup && topSup.name ? `${topSup.pct != null ? topSup.pct + '%' : '—'}<span class="sub">${topSup.name} · ${railSupplierShareMeta}</span>` : '—<span class="sub">not sourced</span>'}</span>
-         </div>
-         <div class="ctr-kf-row">
-           <span class="ctr-kf-lbl">Concentration score</span>
-           <span class="ctr-kf-val" style="color:${riskCol(concentration)}">${concentration != null ? concentration : '—'}<span class="sub">top-5 import sources · 0–100</span></span>
-         </div>
+         ${/* v53 — three rows removed from this rail, and the whole Risk block
+               above it.
+
+               Risk block: reprinted the score, the band and the 2030 outlook
+               that the head board shows at the top of the same screen, plus a
+               second copy of the "not a back-tested forecast" caveat. The 2030
+               figure was on this page FOUR times — head board, driver
+               paragraph, folded analysis card, and here. A rail earns its
+               column by showing what the main text does not.
+
+               Largest supplier + concentration: both already in the head board.
+               The supplier row was the worse copy — it used a DIFFERENT
+               denominator from the head board's, which is why the page carried
+               a `denominatorNote` whose only job was stopping readers
+               conflating the two. Delete the duplicate, delete the note that
+               existed to explain it.
+
+               What remains below appears nowhere else on the page. */''}
          <div class="ctr-kf-row">
            <span class="ctr-kf-lbl">Staple import dependence</span>
            <span class="ctr-kf-val" style="color:${riskCol(ctComp9[0])}">${(Array.isArray(c.c) && c.c[0] != null) ? c.c[0] : '—'}<span class="sub">component · 0–100</span></span>
