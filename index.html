@@ -17931,6 +17931,56 @@ function lookupFeature(f) {
 // fully-import-dependent, concentrated country at default severity (0.20) lands a
 // realistic ~+4–5 structural kick before the diminishing-returns curve. Net
 // exporters get the trade-direction discount in _simulateScenario as before.
+// ── v60 — REAL import dependence, from USDA PSD ────────────────────────────
+//
+// _stapleSpikeKick read c.w / c.r / c.m and its comment called that "% of
+// consumption that is imported". That is true for 36 countries and FALSE for
+// 228. Measured against countries.json: 228 of 264 carry the FAOSTAT caloric
+// share instead — the field's own method string reads "kcal/capita/day
+// (element 664), item-share of Grand Total (item 2901)". Only 36 still hold
+// the legacy import-dependency percentage.
+//
+// The two are different quantities and they diverge in both directions:
+//   Afghanistan wheat  formula used 59.2   real import dependence 48.7%
+//   Angola wheat       formula used  6.4   Angola imports essentially all of it
+// So a country that imports 100% of a staple it does not eat much of was
+// modelled as barely exposed, and the error is systematic across 86% of the
+// map. That is the single largest correctness problem in the scenario engine.
+//
+// USDA PSD already ships the right quantity — imports_kt and consumption_kt
+// per country per commodity, quality_flag "sourced" — with 451 of 463 pairs
+// populated. Use it, and say so in the output rather than silently swapping
+// one number for another.
+const _PSD_FOR_FIELD = { w: 'wheat', r: 'rice', m: 'corn' };
+
+function _psdImportDependence(c, scalarField) {
+  const com = _PSD_FOR_FIELD[scalarField];
+  const iso = c && c.iso;
+  const row = (com && iso && typeof LIVE !== 'undefined' && LIVE.psd)
+    ? ((LIVE.psd[iso] || {})[com] || null) : null;
+  const imp = row && row.imports_kt, con = row && row.consumption_kt;
+  if (imp != null && con > 0) {
+    return {
+      dep: Math.max(0, Math.min(1, imp / con)),
+      basis: 'sourced',
+      detail: `USDA PSD ${row.year || ''}: ${Math.round(imp).toLocaleString()} kt imported `
+            + `of ${Math.round(con).toLocaleString()} kt consumed`,
+    };
+  }
+  // Fall back ONLY where the legacy field genuinely holds import dependency.
+  // Using a caloric share here is what produced the bug; a caloric share is not
+  // a worse estimate of import dependence, it is a different measurement.
+  const prov = (c && c._provenance && c._provenance[scalarField]) || {};
+  const isLegacyDependency = /legacy/i.test(String(prov.method || ''));
+  const raw = (c && typeof c[scalarField] === 'number') ? c[scalarField] : null;
+  if (isLegacyDependency && raw != null) {
+    return { dep: Math.max(0, Math.min(1, raw / 100)), basis: 'legacy',
+             detail: 'legacy embedded import-dependency percentage' };
+  }
+  return { dep: null, basis: 'unavailable',
+           detail: 'no USDA PSD supply balance for this country and commodity' };
+}
+
 function _stapleSpikeKick(c, label, scalarField, s){
   // v30.12 — a price spike hurts a country in proportion to how much it DEPENDS on
   // imports of that staple (not merely whether it shows up in the flow table —
@@ -17939,9 +17989,14 @@ function _stapleSpikeKick(c, label, scalarField, s){
   // (0..100, % of consumption that is imported). The real bilateral flows then add
   // a CONCENTRATION premium: a country that depends on imports AND sources them
   // from one origin is more exposed than one with diversified suppliers.
-  const sharePct = (c && typeof c[scalarField] === 'number') ? c[scalarField] : 0;
-  let dependence = Math.max(0, Math.min(1, sharePct/100));   // % of supply imported
-  let sourced = false;
+  // v60 — dependence is now the real thing: PSD imports / consumption.
+  const _dep = _psdImportDependence(c, scalarField);
+  // No supply balance and no legacy dependency figure means we do not know how
+  // exposed this country is. Returning 0 would render "no impact", which is a
+  // confident claim we cannot make; the caller surfaces the unavailable basis.
+  if (_dep.dep == null) { _stapleSpikeKick._lastBasis = _dep; return null; }
+  let dependence = _dep.dep;
+  let sourced = _dep.basis === 'sourced';
   const prov = (c?._provenance?.[scalarField]?.quality_flag) || (c?._provenance?.[scalarField]) || 'legacy_curated';
   let concPremium = 1.0;
   try {
@@ -17958,8 +18013,19 @@ function _stapleSpikeKick(c, label, scalarField, s){
   } catch(e){}
   if (!sourced) sourced = (prov === 'sourced');
   const damp = sourced ? 1.0 : 0.6;   // legacy/curated reliance is dampened
-  return dependence * concPremium * 24 * s * damp;
+
+  // SCENARIO_POINT_SCALE — the one number here that is a judgement, not data.
+  // It converts a dimensionless exposure fraction into FDRS points. Named and
+  // stated rather than left inline as a bare 24, because it is the single
+  // assumption a reader is entitled to challenge: at this value, a country that
+  // imports 100% of a staple from one supplier and faces a doubling of its
+  // price moves 33.6 points (1.0 × 1.4 × 24 × 1.0). That ceiling is a reasoned
+  // choice about how much of a 0-100 risk score one commodity shock may claim.
+  // It is NOT regressed against outcomes, and nothing here should imply it was.
+  _stapleSpikeKick._lastBasis = _dep;
+  return dependence * concPremium * SCENARIO_POINT_SCALE * s * damp;
 }
+const SCENARIO_POINT_SCALE = 24;
 const SCENARIOS = [
   {id:'wheat20', label:'Wheat price spike',        cat:'Commodity', baseSev:0.20, sevUnit:'%', channel:0,
     desc:'Global wheat futures shock — Black Sea disruption or Northern Hemisphere harvest failure.',
@@ -17967,21 +18033,21 @@ const SCENARIOS = [
     _basis:'sourced_flows',
     _commodity:'wheat',
     kick: (c, s=0.20) => _stapleSpikeKick(c, 'Wheat', 'w', s),
-    impact: function(c, s=0.20){ return Math.round(this.kick(c, s)); }},
+    impact: function(c, s=0.20){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   {id:'rice20',  label:'Rice price spike',         cat:'Commodity', baseSev:0.20, sevUnit:'%', channel:0,
     desc:'Major rice exporter (India, Vietnam, Thailand) imposes restrictions.',
     formula:'Δ = import-reliance(rice) × (1 + 0.4×top-supplier share, from cited flows) × 24 × shock × provenance_factor',
     _basis:'sourced_flows',
     _commodity:'rice',
     kick: (c, s=0.20) => _stapleSpikeKick(c, 'Rice', 'r', s),
-    impact: function(c, s=0.20){ return Math.round(this.kick(c, s)); }},
+    impact: function(c, s=0.20){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   {id:'maize20', label:'Maize price spike',        cat:'Commodity', baseSev:0.20, sevUnit:'%', channel:0,
     desc:'Feed-grain shock from US/Brazilian drought — hits livestock-dependent food systems.',
     formula:'Δ = import-reliance(maize) × (1 + 0.4×top-supplier share, from cited flows) × 24 × shock × provenance_factor',
     _basis:'sourced_flows',
     _commodity:'maize',
     kick: (c, s=0.20) => _stapleSpikeKick(c, 'Maize (feed)', 'm', s),
-    impact: function(c, s=0.20){ return Math.round(this.kick(c, s)); }},
+    impact: function(c, s=0.20){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   {id:'fert30',  label:'Fertilizer price surge',   cat:'Input',     baseSev:0.30, sevUnit:'%', channel:2,
     desc:'Phosphate / potash / urea supply shock — hits yield 1–2 seasons later.',
     formula:'Δ = fertilizer-import-conc × 8% × (shock / 0.30)   |   exporters: 1–2 pts',
@@ -18011,7 +18077,7 @@ const SCENARIOS = [
       // Mid-dependency / unknown: small modeled kick (2–3 pts)
       return 2.5 * (s/0.30);
     },
-    impact: function(c, s=0.30){ return Math.round(this.kick(c, s)); }},
+    impact: function(c, s=0.30){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   {id:'drought', label:'Domestic drought',         cat:'Climate',   baseSev:0.15, sevUnit:'% yield', channel:4,
     desc:'15% shortfall in domestic food production for current season.',
     formula:'Δ = production-trend fragility × 12% × (shock / 0.15)  [modeled — flags input-missing]',
@@ -18022,14 +18088,14 @@ const SCENARIOS = [
     // fragile ones — exactly backwards for a food-security score (the US absorbs a 15%
     // shortfall via reserves/trade; Sudan cannot). Drought now scales WITH fragility.
     kick: (c, s=0.15) => (c.c?.[2]||50) * 0.12 * (s/0.15),
-    impact: function(c, s=0.15){ return Math.round(this.kick(c, s)); }},
+    impact: function(c, s=0.15){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   {id:'oil25',   label:'Fuel + logistics cost',    cat:'Logistics', baseSev:0.25, sevUnit:'%', channel:5,
     desc:'Higher fuel costs cascade through fertilizer, transport, cold-chain — food inflation follow-on.',
     formula:'Δ = conflict/logistics × 8% + 2  [modeled — flags input-missing]',
     _basis:'modeled_component',
     _inputComponent:5,
     kick: (c, s=0.25) => (c.c?.[5]||0) * 0.08 * (s/0.25) + 2,
-    impact: function(c, s=0.25){ return Math.round(this.kick(c, s)); }},
+    impact: function(c, s=0.25){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   {id:'ban',     label:'Major supplier export ban',cat:'Geopolitics',baseSev:1.00, sevUnit:'×', channel:1,
     desc:'Top-1 supplier withdraws from the market (e.g. Russia, Ukraine, India for rice).',
     formula:'Δ = real top-supplier share of the country\'s food imports (live Comtrade supplier mix, cited for 203 countries: 180 sourced + 23 partial) × 18 × shock (heritage supplier-concentration component only as fallback)',
@@ -18062,7 +18128,7 @@ const SCENARIOS = [
       // fallback: heritage supplier-concentration component (flagged modeled)
       return (c.c?.[1]||0) * 0.18 * s;
     },
-    impact: function(c, s=1.00){ return Math.round(this.kick(c, s)); }},
+    impact: function(c, s=1.00){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   // v2 — Debt/FX crisis now hits Economic Access (channel 7), not food inflation.
   // The old `fx` lever mis-targeted c[3] as a proxy because there was no economic
   // component; in v2 it targets c[7]. Retired & aliased: `fx` → `fxcrisis` (see
@@ -18076,7 +18142,7 @@ const SCENARIOS = [
       const damp = (prov === 'sourced') ? 1.0 : 0.6;
       return (c.c?.[7] || 0) * 0.16 * (s/0.30) * damp;
     },
-    impact: function(c, s=0.30){ return Math.round(this.kick(c, s)); }},
+    impact: function(c, s=0.30){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   // v2 — Grain reserve depletion hits the new Grain Reserve Buffer (channel 8).
   {id:'reservedraw', label:'Grain reserve depletion', cat:'Supply',  baseSev:0.40, sevUnit:'% stocks', channel:8, _inputComponent: 8,
     desc:'Stocks-to-use falls sharply (drawdown / failed replenishment) — thinner cushion against the next shock.',
@@ -18087,17 +18153,17 @@ const SCENARIOS = [
       const damp = (prov === 'sourced') ? 1.0 : 0.6;
       return (c.c?.[8] || 0) * 0.12 * (s/0.40) * damp;
     },
-    impact: function(c, s=0.40){ return Math.round(this.kick(c, s)); }},
+    impact: function(c, s=0.40){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   {id:'ship',    label:'Shipping disruption',      cat:'Logistics', baseSev:0.50, sevUnit:'%', channel:5, _basis:'modeled_component',
     desc:'Suez / Panama / Red Sea bottleneck — global food freight 50% more expensive.',
     formula:'Δ = conflict/logistics × 6% + 1',
     kick: (c, s=0.50) => (c.c?.[5]||0) * 0.06 * (s/0.50) + 1,
-    impact: function(c, s=0.50){ return Math.round(this.kick(c, s)); }},
+    impact: function(c, s=0.50){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   {id:'conflict',label:'Trade-route conflict',     cat:'Geopolitics',baseSev:1.00, sevUnit:'×', channel:5, _basis:'modeled_component',
     desc:'Regional conflict severs primary food trade corridor for the country.',
     formula:'Δ = conflict/logistics × 15%',
     kick: (c, s=1.00) => (c.c?.[5]||0) * 0.15 * s,
-    impact: function(c, s=1.00){ return Math.round(this.kick(c, s)); }},
+    impact: function(c, s=1.00){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   // ── Wheat sector shocks (cited) ──
   {id:'wheat_black_sea_disruption', label:'Black Sea export disruption', cat:'Wheat sector', baseSev:0.35, sevUnit:'×', channel:0,
     desc:'Russia (~44 Mt) and Ukraine (~16 Mt) together supply ~30% of world wheat trade. A renewed corridor breakdown, port strike or escalation could cut Black Sea exportable supply ~30-40%, hitting Egypt, Turkey, Bangladesh and sub-Saharan importers hardest (USDA/IGC).',
