@@ -701,9 +701,14 @@ body {
   font-family: 'Geist Mono', monospace; font-size: 9.5px; letter-spacing: 0.11em;
   text-transform: uppercase; color: var(--t3); margin-bottom: 10px;
 }
+/* v54 — the country name is the masthead of this report, and it should be set
+   like the one on the news tab: the same serif, the same weight-400 discipline
+   (a display serif wants size and thinness, not bold), the same negative
+   tracking. A 30px semibold sans read as a section header on an admin screen. */
 .ctr-title {
-  font-size: 30px; font-weight: 600; line-height: 1.1; letter-spacing: -0.022em;
-  color: var(--t1); margin: 0 0 12px;
+  font-family: 'Iowan Old Style', 'Palatino Linotype', ui-serif, Georgia, serif;
+  font-size: 40px; font-weight: 400; line-height: 1.05; letter-spacing: -0.022em;
+  color: var(--t1); margin: 0 0 14px;
 }
 .ctr-read { font-size: 14px; line-height: 1.6; color: var(--t2); max-width: 60ch; margin: 0 0 10px; }
 .ctr-read b { color: var(--t1); font-weight: 600; }
@@ -881,54 +886,82 @@ body {
   border-color: var(--accent);
   color: var(--t1);
 }
+/* ── v54 — the head board, rebuilt ────────────────────────────────────────
+   Three faults, all visible in one screenshot:
+
+   1. "Dependent" rendered as "Dependen / t". `overflow-wrap: anywhere` breaks
+      a word at any character, and six columns across this container leaves
+      ~120px per cell — narrower than the words being put in them. The property
+      was defending against overflow by mangling text; the real problem was
+      the column count.
+   2. Every label and every figure was set in monospace at 9-10px. Mono is for
+      FIGURES — it aligns digits. On prose labels it reads as a debug dump,
+      which is exactly what the board looked like.
+   3. Six cells, one of which (Band) restates the cell beside it: a score and
+      its band are the same fact twice, one as a number and one as a word.
+
+   Four cells now, each ~180px so words fit. Band folds into the score cell as
+   its label, which is what it always was. */
 #tab-country .ctr-head-board {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  border-top: 1px solid var(--b1);
-  border-bottom: 1px solid var(--b1);
-  margin: 16px 0 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid rgba(235,233,226,.14);
+  border-bottom: 1px solid rgba(235,233,226,.14);
+  margin: 18px 0 14px;
 }
 #tab-country .ctr-head-cell {
   min-width: 0;
-  padding: 12px 16px;
-  border-right: 1px solid var(--b1);
+  padding: 14px 18px;
+  border-right: 1px solid rgba(235,233,226,.08);
 }
+#tab-country .ctr-head-cell:first-child { padding-left: 0; }
 #tab-country .ctr-head-cell:last-child {
   border-right: 0;
   padding-right: 0;
 }
 #tab-country .ctr-head-lbl {
   display: block;
-  margin-bottom: 8px;
-  font-size: 10px;
-  color: var(--t-meta);
-  letter-spacing: 0.04em;
+  margin-bottom: 9px;
+  font-size: 9.5px;
+  color: var(--t3);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
+/* Figures stay mono and tabular — that is what mono is for. */
 #tab-country .ctr-head-val {
   display: block;
   text-align: left;
-  font-family: 'Geist Mono', monospace;
-  font-size: 24px;
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 27px;
   line-height: 1.05;
   font-weight: 600;
   color: var(--t1);
-  letter-spacing: -0.03em;
-  white-space: normal; overflow-wrap: anywhere;
+  letter-spacing: -0.02em;
+  white-space: nowrap; overflow-wrap: normal;
 }
+/* A word is not a figure: serif, and never broken mid-word. */
 #tab-country .ctr-head-val.is-word {
-  font-family: 'Geist', sans-serif;
-  font-size: 17px;
+  font-family: 'Iowan Old Style', 'Palatino Linotype', ui-serif, Georgia, serif;
+  font-size: 21px;
+  font-weight: 400;
   letter-spacing: -0.01em;
+  white-space: normal;
+  overflow-wrap: normal;
+  hyphens: none;
 }
 #tab-country .ctr-head-meta {
   display: block;
-  margin-top: 6px;
-  font-family: 'Geist Mono', monospace;
-  font-size: 9px;
+  margin-top: 7px;
+  font-size: 10px;
   line-height: 1.5;
-  letter-spacing: 0.04em;
-  color: var(--t-meta);
+  letter-spacing: 0.01em;
+  color: var(--t3);
   text-align: left;
+}
+@media (max-width: 860px) {
+  #tab-country .ctr-head-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #tab-country .ctr-head-cell:nth-child(odd) { padding-left: 0; }
 }
 #tab-country .ctr-head-note {
   margin: 0 0 12px;
@@ -28213,7 +28246,7 @@ function renderCountryTab() {
                 existed, but only inside a closed fold three sections down.
                 Absence of evidence was reading as evidence of resilience. */''}
           <div class="ctr-head-cell">
-            <span class="ctr-head-lbl">Score</span>
+            <span class="ctr-head-lbl">${(typeof riskLabel === 'function') ? riskLabel(c.fdrs) : 'Risk'} · FDRS</span>
             <span class="ctr-head-val" style="color:${col}">${c.fdrs}</span>
             <span class="ctr-head-meta">${(() => {
               const vec = Array.isArray(c.c) ? c.c : [];
@@ -28223,11 +28256,13 @@ function renderCountryTab() {
               return `<span style="color:#c9a957" title="Missing components are scored 0, which on this scale reads as resilient. A partial score is therefore optimistic, not neutral.">FDRS · ${have}/9 components · ${miss} not sourced</span>`;
             })()}</span>
           </div>
-          <div class="ctr-head-cell">
-            <span class="ctr-head-lbl">Band</span>
-            <span class="ctr-head-val is-word" style="color:${col}">${(typeof riskLabel === 'function') ? riskLabel(c.fdrs) : 'Tracked'}</span>
-            <span class="ctr-head-meta">current risk band</span>
-          </div>
+          ${/* v54 — the Band cell is gone. A score and its band are the same
+                fact stated twice, once as a number and once as a word; giving
+                each its own column made the board six wide, which left ~120px
+                per cell and is why "Dependent" was rendering as "Dependen / t".
+                The band is now the score's label, which is what it always was.
+                The 2030 cell is gone for the same reason it left the rail: that
+                figure was on this page four times. */''}
           <div class="ctr-head-cell">
             <span class="ctr-head-lbl">${topDepLabel}</span>
             <span class="ctr-head-val" style="color:${topDepColor}">${topDepValue}</span>
@@ -28243,13 +28278,12 @@ function renderCountryTab() {
             <span class="ctr-head-val" style="color:${netCol}" title="${provenanceTooltip(c, 'net')}">${netTradeValue}</span>
             <span class="ctr-head-meta">${netTradeMeta}</span>
           </div>
-          <div class="ctr-head-cell">
-            <span class="ctr-head-lbl">2030 outlook</span>
-            <span class="ctr-head-val" style="color:${riskColor(c.f2030)}">${c.f2030}</span>
-            <span class="ctr-head-meta">${trendMeta} · modeled</span>
-          </div>
         </div>
-        ${denominatorNote}
+        ${/* v54 — denominatorNote removed. Its entire job was warning the
+              reader that the head board's supplier percentage and the rail's
+              used DIFFERENT denominators. The rail copy is gone, so there is
+              nothing left to confuse and nothing left to explain. A caveat that
+              exists to defend a duplicate dies with the duplicate. */''}
         ${c.risk
           ? `<p class="ctr-read">${(() => {
               // v49 — the curated risk line is hand-written prose and 77 of the 264
