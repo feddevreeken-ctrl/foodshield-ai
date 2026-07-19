@@ -1759,6 +1759,18 @@ body {
   font-variant-numeric: tabular-nums; color: #e58a78;
 }
 .cnb-reach .cnb-via { color: var(--t3); font-weight: 400; }
+.cnb-more { margin: 0 0 12px; }
+.cnb-more > summary {
+  list-style: none; cursor: pointer; font-size: 10.5px; color: var(--t3);
+  padding: 8px 0; border-top: 1px solid rgba(235,233,226,.08);
+  display: flex; align-items: center; gap: 7px;
+}
+.cnb-more > summary::-webkit-details-marker { display: none; }
+.cnb-more > summary::before { content: '▸'; font-size: 8px; opacity: .75; }
+.cnb-more[open] > summary::before { content: '▾'; }
+.cnb-more > summary:hover { color: var(--t2); }
+.cnb-more > summary:focus-visible { outline: 2px solid #8aa6c4; outline-offset: 2px; }
+.cnb-more-body { padding-top: 12px; }
 .cnb-foot {
   margin-top: 4px; padding-top: 10px; border-top: 1px solid rgba(235,233,226,.08);
   font-size: 9.5px; line-height: 1.55; color: var(--t3);
@@ -26306,10 +26318,18 @@ function countryNewsBlockHTML(iso, name, limit) {
     if (best) rows.push({ it, e: best });
   });
   rows.sort((a, b) => (b.e.kt || 0) - (a.e.kt || 0));
-  const shown = rows.slice(0, limit || 3);
+  // v51.1 — show every headline that actually reaches this country, not a fixed
+  // three. Relevance here is not a ranking cut: a row is present because a
+  // corridor into this country was joined to it, and that is either true or it
+  // is not. Egypt has one, China has eleven; a fixed cap either truncated the
+  // second or padded nothing into the first. Beyond the inline count the rest
+  // fold, so a country with many is not a wall and a country with one is not
+  // padded.
+  const INLINE = limit || 4;
+  const shown = rows.slice(0, INLINE);
+  const rest = rows.slice(INLINE);
 
-  const body = shown.length
-    ? shown.map(({ it, e }) => {
+  const rowHtml = ({ it, e }) => {
         const href = _safeUrl(it.url);
         const t = _escFeed(it.title || '');
         const kick = (it.matched || [])[0];
@@ -26330,7 +26350,15 @@ function countryNewsBlockHTML(iso, name, limit) {
             <div class="cnb-reach">reaches ${_newsFmtKt(e.kt)}${via}</div>
           </div>
         </div>`;
-      }).join('')
+  };
+
+  const body = rows.length
+    ? shown.map(rowHtml).join('')
+      + (rest.length
+          ? `<details class="cnb-more"><summary>${rest.length} further
+               headline${rest.length === 1 ? '' : 's'} reaching ${_escFeed(name)}</summary>
+             <div class="cnb-more-body">${rest.map(rowHtml).join('')}</div></details>`
+          : '')
     // An absence is stated, never left blank — the same discipline the news tab
     // uses. "No headline touched a corridor into here" is a real result and is
     // different from a broken feed.
@@ -28697,7 +28725,7 @@ function renderCountryTab() {
            directly. ctrNewsSectionHTML is retained for the commodity drilldown,
            where the commodity axis is the right one. */''}
      ${(typeof countryNewsBlockHTML === 'function')
-        ? `<div class="ctr-rail-sec">${countryNewsBlockHTML(c.iso, c.name, 3)}</div>` : ''}
+        ? `<div class="ctr-rail-sec">${countryNewsBlockHTML(c.iso, c.name)}</div>` : ''}
 
      ${(() => {
        // Rank by VOLUME, not by the leader's share. Ranking on share alone floats
