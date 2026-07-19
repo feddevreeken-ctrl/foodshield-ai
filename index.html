@@ -1115,6 +1115,55 @@ body {
 .news-today-hl:hover { color: #8aa6c4; }
 .news-today-meta { font-size: 9px; color: var(--t-meta, var(--t3)); margin-top: 5px; }
 
+/* ── v48 — the masthead ───────────────────────────────────────────────────
+   A rule, a name, a date, a live dot. The serif is a system stack — Iowan Old
+   Style / Charter / Georgia are all present on the target platforms and all
+   read as newsprint; no webfont is loaded. */
+.news-masthead { margin-bottom: 16px; }
+.news-masthead-bar {
+  display: flex; align-items: center; gap: 12px;
+  padding-bottom: 7px; border-bottom: 2px solid var(--t1);
+}
+.news-masthead-name {
+  font-family: ui-serif, "Iowan Old Style", Charter, Georgia, serif;
+  font-size: 22px; font-weight: 700; letter-spacing: -.02em; color: var(--t1);
+  line-height: 1;
+}
+.news-masthead-rule { flex: 1; }
+.news-masthead-date,
+.news-masthead-live {
+  font-size: 9.5px; letter-spacing: .11em; text-transform: uppercase; color: var(--t3);
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.news-standfirst {
+  margin: 9px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--t2);
+  max-width: 68ch;
+}
+.news-standfirst b { color: var(--t1); font-weight: 600; }
+/* Standing disclosure, collapsed. Present on every load, never a wall. */
+.news-prov { margin-top: 9px; }
+.news-prov > summary {
+  list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
+  font-size: 10.5px; color: var(--t3); padding: 3px 0;
+}
+.news-prov > summary::-webkit-details-marker { display: none; }
+.news-prov > summary::after { content: '▸'; font-size: 8px; opacity: .7; }
+.news-prov[open] > summary::after { content: '▾'; }
+.news-prov > summary:hover { color: var(--t2); }
+.news-prov > summary:focus-visible { outline: 2px solid #8aa6c4; outline-offset: 2px; }
+.news-prov-body {
+  margin-top: 7px; padding: 10px 13px; border-left: 2px solid var(--b2);
+  font-size: 11.5px; line-height: 1.55; color: var(--t2); max-width: 76ch;
+}
+/* The two claim types get two treatments, tied to the card vocabulary: the
+   dotted underline matches the '~' modeled marker, the colour matches the
+   sourced tonnage. Rendering both in plain italic was the one paragraph on the
+   page whose job is to tell them apart. */
+.news-prov-body .prov-modeled {
+  font-style: normal; color: var(--t3); border-bottom: 1px dotted var(--b3);
+}
+.news-prov-body .prov-sourced { font-style: normal; color: #e58a78; font-weight: 600; }
+
 /* ── v47 — the control bar ────────────────────────────────────────────────
    Was 26 chips in one flex row: a wall, and 26 tab stops between the header
    and the content. Now a masthead rule with four controls in the order an
@@ -8979,19 +9028,36 @@ body::before {
   ════════════════════════════════════════════════════════════════════════ -->
   <div id="tab-news" class="tab-page">
     <div class="content-page">
-      <div class="page-header">
-        <div class="page-eyebrow" style="display:flex;align-items:center;gap:8px;">Live · News<span id="news-refresh-dot" class="news-refresh-dot" title="Auto-refreshes every 5 minutes"></span></div>
-        <h1 class="page-title">What moved, and who it reaches</h1>
-        <p class="page-sub" id="news-lede">Loading headlines…</p>
-      </div>
+      <!-- v48 — the masthead.
+           Replaces a 34px page title, a two-line lede and a boxed provenance
+           banner that together pushed the first headline more than a screen
+           down. A newspaper does not explain itself above the fold; it prints
+           its name, the date, and the news.
 
-      <div id="news-provenance" class="news-provenance">
-        <span class="news-prov-dot"></span>
-        <span><b>Third-party claims, not measured data.</b> Every headline below is an
-        assertion by its publisher; we link, we do not verify. Commodity and country
-        attribution are <em>modeled</em> — our keyword match on the headline. Corridor
-        tonnages are <em>sourced</em> from the bilateral trade atlas. A headline
-        <em>touching</em> a corridor is not a claim that it moves prices.</span>
+           The provenance text is COMPRESSED, not deleted. It is the page's
+           core disclosure — modeled attribution versus sourced tonnage — and
+           removing it would quietly weaken the one claim this project is most
+           careful about. It now sits as a one-line standing note with the full
+           text one click away, so it is always present and never a wall. -->
+      <div class="news-masthead">
+        <div class="news-masthead-bar">
+          <span class="news-masthead-name">Commodity Wire</span>
+          <span class="news-masthead-rule"></span>
+          <span class="news-masthead-date" id="news-masthead-date"></span>
+          <span class="news-masthead-live">
+            <span id="news-refresh-dot" class="news-refresh-dot" title="Auto-refreshes every 5 minutes"></span>Live
+          </span>
+        </div>
+        <p class="news-standfirst" id="news-lede">Loading headlines…</p>
+        <details id="news-provenance" class="news-prov">
+          <summary><span class="news-prov-dot"></span>Third-party claims, not measured data — how to read this page</summary>
+          <div class="news-prov-body">Every headline below is an assertion by its
+          publisher; we link, we do not verify. Commodity and country attribution are
+          <em class="prov-modeled">modeled</em> — our keyword match on the headline.
+          Corridor tonnages are <em class="prov-sourced">sourced</em> from the bilateral
+          trade atlas. A headline <em>touching</em> a corridor is not a claim that it
+          moves prices.</div>
+        </details>
       </div>
 
       <div id="news-today" class="news-today"></div>
@@ -25887,10 +25953,16 @@ function renderNewsTab() {
   // a human editor would make and the one a reverse-chronological feed
   // cannot. Falls back to 48h so the strip is not empty on a slow news day —
   // and says which window it used rather than implying everything is fresh.
+  // v48 — MOVED below the filters and fed the FILTERED set. It was built from
+  // `all` while the ledger below it was filtered, so filtering to fish showed
+  // "2 headlines" in the lede and "8 of 41" in the strip, listing stories the
+  // filter had excluded. A strip that ignores the active filter is not a
+  // summary of what you are looking at.
+  const _renderNewsToday = (pool) => {
   const todayEl = document.getElementById('news-today');
   if (todayEl) {
     const now = Date.now();
-    const within = (hrs) => all.filter(it => {
+    const within = (hrs) => pool.filter(it => {
       const ts = it.published_at ? Date.parse(it.published_at) : NaN;
       return isFinite(ts) && (now - ts) <= hrs * 3600 * 1000;
     });
@@ -25932,6 +26004,7 @@ function renderNewsTab() {
          agriculture trade press publishes on weekdays, so this is normal at a
          weekend — the stream below covers the last 14 days.</div>`;
   }
+  };
 
   // ── v47 — the newsroom control bar ────────────────────────────────────────
   //
@@ -26013,6 +26086,20 @@ function renderNewsTab() {
     return true;
   });
 
+  // Masthead date — the pull's own build time, not the reader's clock, so the
+  // dateline names when this edition was actually assembled.
+  const _mh = document.getElementById('news-masthead-date');
+  if (_mh) {
+    const _ne = (typeof LIVE !== 'undefined') ? LIVE.commodity_news : null;
+    const g = _ne && _ne._meta && _ne._meta.generated_at ? Date.parse(_ne._meta.generated_at) : NaN;
+    const d = isFinite(g) ? new Date(g) : new Date();
+    _mh.textContent = d.toLocaleDateString(undefined,
+      { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+      + ' · built ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+
+  _renderNewsToday(shown);
+
   // ── Lede: lead with the join, not the count ──
   const joined = shown.filter(it => (it.exposed || []).length).length;
   const reach  = new Set();
@@ -26067,6 +26154,8 @@ function renderNewsTab() {
       ${bits.length ? _escFeed(bits.join(' · ')) : 'the current filters'}.
       <button class="news-clear-filters" onclick="clearNewsFilters()">Clear filters</button></div>`;
     if (lede) lede.innerHTML = `<b>0</b> of ${all.length} headlines match the current filters.`;
+    // The strip must reflect the same empty result, not the previous filter's.
+    _renderNewsToday([]);
     return;
   }
   // Tier boundaries: 1 lead, the next 11 at mid weight, the rest as tail rows.
