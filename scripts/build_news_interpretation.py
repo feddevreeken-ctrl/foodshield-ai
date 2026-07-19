@@ -841,6 +841,51 @@ def _post(url, *, headers, payload, attempts=3):
     raise RuntimeError(f"POST {url.split('?')[0]} failed: {last}")
 
 
+# v53 — Groq daily quota is per ORGANISATION, not per key:
+#   "Rate limit reached for model `llama-3.3-70b-versatile` in organization
+#    `org_...` service tier `on_demand` on tokens per day (TPD)"
+# A second key on the same account shares that bucket and buys nothing. Keys on
+# SEPARATE accounts have separate buckets, so rotating on a 429 genuinely
+# doubles the ceiling. GROQ_API_KEY_2 is therefore only useful if it belongs to
+# a different account — that is the entire precondition, and it is why this is
+# rotation-on-exhaustion rather than round-robin: we want the first key fully
+# spent before touching the second, so a failure is a real failure.
+def _groq_keys():
+    keys = [os.environ.get("GROQ_API_KEY"), os.environ.get("GROQ_API_KEY_2")]
+    return [k for k in keys if k]
+
+
+def _is_quota_error(exc):
+    m = str(exc)
+    return "429" in m or "rate limit" in m.lower() or "tokens per day" in m.lower()
+
+
+def call_llm_rotating(provider, api_key, system_prompt, user_prompt):
+    """call_llm, but walks a key list when a key is exhausted.
+
+    Only groq has a second key today; every other provider passes straight
+    through. Raises the LAST error if every key is spent, so the caller's
+    existing degradation path (deterministic template) still fires.
+    """
+    if provider != "groq":
+        return call_llm(provider, api_key, system_prompt, user_prompt)
+    keys = _groq_keys() or [api_key]
+    last = None
+    for idx, k in enumerate(keys):
+        try:
+            out = call_llm(provider, k, system_prompt, user_prompt)
+            if idx:
+                print(f"    [KEY] rotated to GROQ_API_KEY_{idx + 1}")
+            return out
+        except Exception as e:
+            last = e
+            if not _is_quota_error(e) or idx == len(keys) - 1:
+                raise
+            print(f"    [KEY] GROQ_API_KEY{'' if idx == 0 else '_' + str(idx + 1)} "
+                  f"exhausted — trying the next account's key")
+    raise last
+
+
 def call_llm(provider, api_key, system_prompt, user_prompt):
     """THE single provider seam. Returns plain text. Raises on failure.
 
@@ -907,7 +952,7 @@ def call_llm(provider, api_key, system_prompt, user_prompt):
     raise RuntimeError(f"unknown provider {provider!r}")
 
 
-def interpret(provider, api_key, facts, caller=call_llm):
+def interpret(provider, api_key, facts, caller=call_llm_rotating):
     """Returns (text, validation_dict). Never raises.
 
     `caller` is injected so the provider seam can be stubbed in tests.
@@ -1138,7 +1183,7 @@ def build_article_notes(provider, api_key, news, generated_at, commodity_out=Non
             prompt = (f"HEADLINE: {title}\n\nFACTS:\n"
                       + json.dumps(facts, ensure_ascii=False, indent=1))
             try:
-                raw = (call_llm(provider, api_key, ARTICLE_PROMPT, prompt) or "").strip()
+                raw = (call_llm_rotating(provider, api_key, ARTICLE_PROMPT, prompt) or "").strip()
             except Exception as e:
                 raw = ""
                 validation["reason"] = f"{type(e).__name__}: {e}"
