@@ -966,8 +966,13 @@ def validate_commodity_interpretation():
                 f"{key}: validation.rejected is true yet the row is still published as "
                 f"AI-generated prose. Rejected text must be REPLACED in the output, "
                 f"not merely flagged")
+        # v47 — 'field_names' added. build_news_interpretation.find_field_names
+        # catches a raw FACTS identifier pasted into prose ("as the
+        # price_prev_month_value was 216.2"): the figure is correctly licensed,
+        # so every numeric check passes and the leak reaches readers unflagged.
+        # Omitting it here would leave the new validator unenforced in CI.
         problems = [k for k in ('unsupported_numbers', 'sign_inversions',
-                                'word_quantities') if v.get(k)]
+                                'word_quantities', 'field_names') if v.get(k)]
         if problems and is_ai:
             failures.append(
                 f"{key}: published as AI prose while validation recorded "

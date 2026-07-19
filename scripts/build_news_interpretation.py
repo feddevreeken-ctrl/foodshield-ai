@@ -681,7 +681,17 @@ def find_field_names(text, facts):
     innocent prose.
     """
     low = text.lower()
-    return sorted({k for k in facts if "_" in k and k.lower() in low})
+    hits = set()
+    for k in facts:
+        if "_" not in k:
+            continue
+        # Identifier boundaries, not bare substring. Without \b, 'price_month'
+        # fires inside a legitimate 'price_monthly' and a leak written with
+        # spaces or hyphens ('price prev month value') slips past entirely.
+        pattern = r"\b" + r"[\s_\-]+".join(re.escape(p) for p in k.lower().split("_")) + r"\b"
+        if re.search(pattern, low):
+            hits.add(k)
+    return sorted(hits)
 
 
 def validate_text(text, facts):

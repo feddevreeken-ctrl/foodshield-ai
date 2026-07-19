@@ -81,7 +81,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
 
-from _common import _has_existing_data, http_get, write_json
+from _common import DATA_DIR, _has_existing_data, http_get, write_json
 
 from _news_corridors import annotate, exposure_leaderboard, load_flows
 
@@ -792,10 +792,8 @@ def main():
     #   no feed failed              -> 'ok'      "the match set is genuinely empty"
     #   under half the feeds failed -> 'partial' "completeness unverified"
     #   half or more failed         -> 'failed'  the hard failure banner
-    _ratio = (feed_failed / len(ALL_FEEDS)) if ALL_FEEDS else 0.0
-    _commodity_state = "ok" if feed_failed == 0 else ("failed" if _ratio >= 0.5 else "partial")
-    for _c in COMMODITIES:
-        commodity_status[_c] = _commodity_state
+    # NOTE: computed below, AFTER every collector has run. Deriving it here
+    # would freeze the verdict before the EC RSS pull had a chance to fail.
 
     # --- TIER 3: GDELT, opportunistic only ---------------------------------
     # Demoted in v46.1. Its limiter is per-IP and stateful, so under CI egress
@@ -840,6 +838,39 @@ def main():
     except Exception as e:
         commodity_status["_ec_rss"] = "failed"
         print(f"  [ec-rss] FAILED — {type(e).__name__}: {e}")
+
+    # v47 — REAL per-commodity collection status. Computed HERE, after every
+    # collector has run, because an earlier position would freeze the verdict
+    # before EC RSS could fail and would report 'ok' on a partially-failed pull.
+    #
+    # Background: commodity_status was doing two unrelated jobs under one
+    # namespace — feed health under '_feed:<label>', and GDELT's per-commodity
+    # outcome under the BARE commodity key. The UI reads only the bare key
+    # (index.html:26357) and treats it as the status of ALL sourcing for that
+    # commodity, so a supplementary source that contributes nothing was speaking
+    # for the whole pipeline: wheat and maize claimed "treat the count as a
+    # floor" while 41 of 41 publisher feeds had returned, and the other four
+    # claimed an unknowable status the collector could plainly have reported.
+    #
+    # The publisher feeds are general agriculture press, not per-commodity
+    # sources — a commodity is matched by keyword AFTER the pull. So the honest
+    # per-commodity statement is about the health of that pull, and it is the
+    # same for every commodity. Mapped onto the three values the UI understands:
+    #   nothing failed              -> 'ok'      "the match set is genuinely empty"
+    #   under half the feeds failed -> 'partial' "completeness unverified"
+    #   half or more failed         -> 'failed'  the hard failure banner
+    # EC RSS is one collector among many, so its failure degrades to 'partial'
+    # rather than claiming the whole pull is sound.
+    _ec_failed = commodity_status.get("_ec_rss") == "failed"
+    _ratio = (feed_failed / len(ALL_FEEDS)) if ALL_FEEDS else 0.0
+    if _ratio >= 0.5:
+        _commodity_state = "failed"
+    elif feed_failed or _ec_failed:
+        _commodity_state = "partial"
+    else:
+        _commodity_state = "ok"
+    for _c in COMMODITIES:
+        commodity_status[_c] = _commodity_state
 
     # --- Score, filter, shape ----------------------------------------------
     scored = []
@@ -960,9 +991,39 @@ def main():
 
     # --- Last-good preservation (v44 pattern, refresh_usda_psd.py) ---------
     if not capped and _has_existing_data(OUTFILE):
-        print(f"[KEEP] commodity_news: every source returned zero usable items — "
-              f"preserving existing {OUTFILE} (goes honestly stale rather than blank). "
-              f"Status: {commodity_status}")
+        # v47 — preserve the ITEMS, never the STATUS.
+        #
+        # This used to return without writing anything, which kept the previous
+        # run's commodity_status alive too. A pull that collapsed to zero items
+        # would therefore keep serving yesterday's 'ok' — the site would assert
+        # a healthy collection for a run in which every source failed. That is
+        # the same false-healthy claim the bare-key bug produced, arriving by a
+        # different route.
+        #
+        # Going honestly stale means stale ITEMS with a status that says so.
+        try:
+            _existing = json.loads((DATA_DIR / OUTFILE).read_text())
+            _payload = _existing.get("data") or {}
+            _payload["commodity_status"] = commodity_status
+            write_json(
+                OUTFILE, _payload,
+                source=f"{len(ALL_FEEDS)} publisher RSS feeds + GDELT DOC 2.0 (supplementary)",
+                status="degraded_feeds",
+                notes=("STALE: every source returned zero usable items on this "
+                       "refresh, so the headlines below are preserved from an "
+                       "earlier successful pull and nothing published since is "
+                       "represented. Per-commodity status reflects THIS run, not "
+                       "the run that produced the items."),
+            )
+            print(f"[KEEP] commodity_news: every source returned zero usable items — "
+                  f"preserved existing items, rewrote status as degraded. "
+                  f"Status: {commodity_status}")
+        except Exception as e:
+            # Preserving a stale-but-honest file beats blanking it; if the
+            # rewrite fails, leave the old file untouched and say so loudly.
+            print(f"[KEEP] commodity_news: zero usable items and the status "
+                  f"rewrite FAILED ({type(e).__name__}: {e}) — existing file left "
+                  f"as-is, its status is from an EARLIER run and is not trustworthy.")
         return
 
     # --- Corridor attribution (v46.1) --------------------------------------
