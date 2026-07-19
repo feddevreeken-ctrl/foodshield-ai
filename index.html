@@ -785,6 +785,21 @@ body {
 
 /* A quiet sub-heading inside a section. No bullet, no box. */
 .ctr-h { font-size: 12px; font-weight: 600; color: var(--t1); margin: 26px 0 3px; }
+/* v59 — the single provenance line. Sentence case, not uppercase mono: this is
+   a statement about where a number came from, not a system label. The kind word
+   carries the colour so the modeled/sourced split is legible at a glance
+   without reading the sentence, and the same two colours are used for it
+   everywhere on the site — #e58a78 already means "sourced tonnage" on the news
+   ledger, #c9a957 already means modeled/warning. */
+.prov-line {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px;
+  font-size: 10px; line-height: 1.5; color: var(--t3);
+  margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--b1);
+}
+.prov-kind { font-weight: 600; letter-spacing: .04em; }
+.prov-dash { opacity: .5; }
+.prov-body { min-width: 0; }
+
 .ctr-note { font-size: 11px; color: var(--t3); line-height: 1.6; margin: 0 0 12px; max-width: 74ch; }
 .ctr-note b { color: var(--t2); font-weight: 500; }
 
@@ -15040,10 +15055,48 @@ function tradeTrustGridHTML(c) {
 // cards. Caller passes a source label; refreshedTime is optional and (when present)
 // renders the human-readable age via formatAge(). Kept deliberately tiny so it
 // reads as metadata, not chrome.
-function chartSourceFooter(sourceLabel, refreshedTime) {
+// ── v59 — ONE provenance line, and it always starts with its own kind ──────
+//
+// The country report carried four different provenance mechanisms —
+// chartSourceFooter (9 uses), provenanceBadge (17), structuralCaption (4),
+// provenanceTooltip (5) — plus 14 inline caveat notes. ~50 strings saying
+// versions of the same thing in different shapes, which is how a reader learns
+// to skip all of them.
+//
+// The pattern here is Our World in Data's, which is the closest match to this
+// project's constraint and costs ONE line of small type per figure:
+//   "Food and Agriculture Organization (2025) — with major processing by Our
+//    World in Data", always visible under the chart, with the detail behind a
+//    "Learn more about this data" disclosure.
+//
+// The load-bearing part for us is the FIRST WORD. "Source" versus "Modeled" is
+// the modeled/sourced distinction this whole project rests on, carried in one
+// word, always visible, never a hover. Hover-only provenance is invisible on
+// touch, invisible in print, invisible to a screen reader by default — it
+// makes the boundary an interaction rather than a fact.
+//
+// It is also now a MANDATORY field rather than a prose convention: a caller
+// that passes no kind gets one inferred from its own label, and a label that
+// says "modeled"/"curated"/"composite"/"estimate" can never render as
+// "Source". A convention can erode; a required field cannot.
+function _provKind(label, explicit) {
+  if (explicit) return explicit;
+  return /model|curated|composite|estimat|derived|heritage|overlay/i.test(String(label || ''))
+    ? 'modeled' : 'sourced';
+}
+
+function chartSourceFooter(sourceLabel, refreshedTime, kind) {
   if (!sourceLabel) return '';
   const ago = (typeof formatAge === 'function' && refreshedTime) ? formatAge(refreshedTime) : '';
-  return `<div style="font-family:'Geist Mono',monospace;font-size:9.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-top:8px;padding-top:6px;border-top:1px dashed var(--b1);">${ago ? 'Updated ' + ago + ' · ' : ''}${sourceLabel}</div>`;
+  const k = _provKind(sourceLabel, kind);
+  const isModeled = k === 'modeled';
+  const word = isModeled ? 'Modeled' : 'Source';
+  const wcol = isModeled ? '#c9a957' : '#e58a78';
+  return `<div class="prov-line">`
+    + `<span class="prov-kind" style="color:${wcol}">${word}</span>`
+    + `<span class="prov-dash">—</span>`
+    + `<span class="prov-body">${sourceLabel}${ago ? ` · updated ${ago}` : ''}</span>`
+    + `</div>`;
 }
 // Convenience — look up a manifest entry's last-success/loaded time for the footer.
 function chartSourceTime(manifestKey) {
