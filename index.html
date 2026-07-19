@@ -1222,19 +1222,24 @@ body {
    Card boxes are gone below the lead. At --b1 #1f1f27 on --bg2 #14141a a border
    is 1.2:1: invisible as a boundary, but 91 of them add real noise. Separation
    is a hairline rule and vertical rhythm instead. */
+/* The rail rule is painted on the CONTAINER, not a grid child.
+   It was a ::before at `grid-column: 2; grid-row: 1 / -1`, which looks right and
+   is not: .news-stream declares no grid-template-rows, so every row is implicit
+   and the explicit row grid has a single line — line 1 and line -1 are the same
+   line, and the span collapsed to one row. Measured 256px of rail against an
+   11,702px ledger, i.e. a ~112px stub at the top and nothing after it. A
+   background-image on the container has no such dependency on track counts. */
 .news-stream {
   display: grid;
   grid-template-columns: 76px 1px minmax(0, 1fr);
   gap: 0; min-width: 0; align-content: start;
-  background:
+  background-image:
+    linear-gradient(180deg,
+      transparent 0, var(--b2) 48px, var(--b2) calc(100% - 96px), transparent 100%),
     radial-gradient(120% 60% at 8% -8%, rgba(138,166,196,.04) 0%, transparent 58%);
-}
-/* The rail rule: one hairline the length of the ledger, fading at both ends so
-   it reads as a ruled page rather than a container border. */
-.news-stream::before {
-  content: ''; grid-column: 2; grid-row: 1 / -1;
-  background: linear-gradient(180deg,
-    transparent 0, var(--b2) 48px, var(--b2) calc(100% - 96px), transparent 100%);
+  background-size: 1px 100%, 100% 100%;
+  background-position: 76px 0, 0 0;
+  background-repeat: no-repeat, no-repeat;
 }
 /* Rows participate in the parent grid so every tonnage figure stays aligned. */
 .news-item { display: contents; }
@@ -1249,7 +1254,9 @@ body {
    corridor in view. Turns the rail into a distribution you read at a glance. */
 .news-kt::after {
   content: ''; position: absolute; right: 12px; bottom: -3px; height: 2px;
-  width: calc(var(--share, 0) * 46px);
+  /* 3px floor: below that a bar is not a bar, it is a speck that reads as a
+     rendering artefact. --share is already square-rooted in the template. */
+  width: max(3px, calc(var(--share, 0) * 46px));
   background: linear-gradient(90deg, rgba(229,138,120,.12), rgba(229,138,120,.55));
 }
 .news-kt.is-empty::after { display: none; }
@@ -1301,8 +1308,11 @@ body {
 .news-item.tier-tail .news-kt { padding-top: 8px; font-size: 11px; }
 
 /* Section break between tiers — one rule, not a header per day. */
+/* Starts at the body column, not column 1: spanning all three tracks drew its
+   border straight through the rail hairline. That was invisible while the rail
+   itself was broken; it is not any more. */
 .news-tierbreak {
-  grid-column: 1 / -1; margin: 16px 0 4px; padding-top: 10px;
+  grid-column: 3; margin: 16px 0 4px; padding-top: 10px; padding-left: 16px;
   border-top: 1px solid var(--b2);
   font-size: 9px; letter-spacing: .09em; text-transform: uppercase; color: var(--t3);
 }
@@ -25681,6 +25691,15 @@ function _newsAgeLabel(it) {
   return d === 1 ? 'yesterday' : d + ' days ago';
 }
 
+// Shared by the click and keydown paths so the two can never drift.
+function _newsToggleRow(body) {
+  const dets = body.querySelectorAll('details.news-interp');
+  if (!dets.length) return;
+  const opening = !Array.from(dets).every(d => d.open);
+  dets.forEach(d => { d.open = opening; });
+  body.setAttribute('aria-expanded', opening ? 'true' : 'false');
+}
+
 function _newsInterpretationDetails(it) {
   // _cnInterpretationBlock lives in a later <script> block. It is hoisted and
   // defined long before any render runs, but guard anyway — the codebase
@@ -25900,7 +25919,10 @@ function renderNewsTab() {
   // leaderboard has. Recency is what the Today strip above is for; this is the
   // ledger, and a ledger is ordered by size. Recency breaks ties only.
   const _peakKt = it => (it.exposed || []).reduce((m, e) => Math.max(m, e.kt || 0), 0);
-  const _t = it => Date.parse(it.published_at || 0) || 0;
+  // Not `Date.parse(x || 0)`: Date.parse(0) coerces to Date.parse("0"), which
+  // V8 reads as 1999-12-31 rather than NaN, so the fallback never fired and a
+  // missing timestamp silently became 1999.
+  const _t = it => { const v = Date.parse(it.published_at); return isFinite(v) ? v : 0; };
   const ranked = shown.slice().sort((a, b) => {
     if (_newsSort === 'newest') {
       const dt = _t(b) - _t(a);
@@ -25993,8 +26015,17 @@ function renderNewsTab() {
     // nothing, which is the same reason the leaderboard shows a max.
     const _peak = _peakKt(it);
     const _tier = _tierOf(_idx);
+    // Computed once: it decides both what renders and whether the row is
+    // keyboard-focusable. A row with no interpretation must not advertise an
+    // affordance it does not have.
+    const _interpHtml = _newsInterpretationDetails(it);
     const _rail = _peak > 0
-      ? `<div class="news-kt" style="--share:${(_peak / _maxKt).toFixed(3)}" title="Largest single corridor this headline touches — sourced from the bilateral trade atlas">${_newsFmtKt(_peak)}</div>`
+      // sqrt, not linear. The corridor distribution has one extreme outlier —
+      // the lead is ~11x the second place — so a linear share put the median
+      // row at 0.015, i.e. 0.7px: one full-width bar and twenty invisible
+      // smudges. sqrt plus a 3px floor in CSS gives the other rows a readable
+      // length while keeping the ordering honest.
+      ? `<div class="news-kt" style="--share:${Math.sqrt(_peak / _maxKt).toFixed(3)}" title="Largest single corridor this headline touches — sourced from the bilateral trade atlas. Bar length is relative to the largest corridor currently in view (square-root scale).">${_newsFmtKt(_peak)}</div>`
       : `<div class="news-kt is-empty" title="No mapped trade corridor for this headline">—</div>`;
     // One section break, where the tail begins.
     let _break = '';
@@ -26005,7 +26036,9 @@ function renderNewsTab() {
 
     return `${_break}<div class="news-item ${_tier}">
       ${_rail}
-      <div class="news-body-wrap" style="--i:${Math.min(_idx, 12)}">
+      <div class="news-body-wrap" style="--i:${Math.min(_idx, 12)}"${
+        _interpHtml ? ' tabindex="0" role="button" aria-expanded="false"'
+                    + ' aria-label="Show the commodity interpretation for this headline"' : ''}>
       ${imgBand}
       <div class="news-card-body">
         ${expLine}
@@ -26016,7 +26049,7 @@ function renderNewsTab() {
               ? `<a class="news-headline" href="${_escFeed(href)}" target="_blank" rel="noopener noreferrer nofollow">${t}</a>`
               : `<span class="news-headline">${t}</span>`; })()}
         ${prod ? `<div class="news-card-divider"></div><div class="news-prod">${prod}</div>` : ''}
-        ${_newsInterpretationDetails(it)}
+        ${_interpHtml}
         <div class="news-meta">
           <span class="news-src">${_escFeed(it.source || '')}</span>
           <span>·</span><span>${_escFeed(_newsAgeLabel(it) || '')}</span>
@@ -26037,12 +26070,32 @@ function renderNewsTab() {
   // stale listeners behind.
   stream.onclick = (ev) => {
     if (ev.target.closest('a')) return;                    // publisher link wins
-    if (ev.target.closest('summary')) return;              // native toggle wins
+    // Anything INSIDE an interpretation panel is off-limits — including the
+    // panel's own prose and provenance footer. Without this, a reader selecting
+    // a sentence to copy has the panel slam shut under the cursor on mouseup,
+    // on the exact content the feature exists to surface. The <summary> guard
+    // is subsumed by this: summary is a child of details.
+    if (ev.target.closest('details.news-interp')) return;
     const body = ev.target.closest('.news-body-wrap');
     if (!body) return;
-    const det = body.querySelector('details.news-interp');
-    if (!det) return;
-    det.open = !det.open;
+    // A row can carry more than one panel (an item matching two interpretable
+    // commodities — 2 rows today). querySelector took the first unconditionally,
+    // so a body click could open a panel the reader was not pointing at while
+    // leaving the one they had open untouched. Toggle them together: the
+    // affordance is "show me the context for this row", and the row's context
+    // is all of its commodities.
+    _newsToggleRow(body);
+  };
+  // Keyboard parity. The card body carries role="button" and tabindex="0" only
+  // when it actually has an interpretation, so Enter/Space must drive the same
+  // toggle — otherwise the affordance is mouse-only and cursor:pointer is
+  // advertising something half the input methods cannot reach.
+  stream.onkeydown = (ev) => {
+    if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
+    const body = ev.target.closest && ev.target.closest('.news-body-wrap');
+    if (!body || body !== ev.target) return;      // only the row itself
+    ev.preventDefault();                           // Space must not scroll
+    _newsToggleRow(body);
   };
 
   // ── Exposure leaderboard ──
@@ -37601,7 +37654,11 @@ function _cnInterpretationBlock(entry) {
   if (entry.generated_at) prov.push('generated: ' + String(entry.generated_at).slice(0, 16).replace('T', ' ') + ' UTC');
   const v = entry.validation || {};
   const vNotes = [];
-  if (v.rejected) vNotes.push('The model’s text FAILED number validation and was replaced by the deterministic template' + (v.reason ? ' — ' + v.reason : '') + '.');
+  // _escFeed on v.reason: this branch is the ONE path here that renders a
+  // string produced when a language model's output failed validation, and it
+  // was the one path not escaping. Unreachable today (all 9 entries have
+  // rejected:false) — which is exactly why it would have gone unnoticed.
+  if (v.rejected) vNotes.push('The model’s text FAILED number validation and was replaced by the deterministic template' + (v.reason ? ' — ' + _escFeed(v.reason) : '') + '.');
   else if (v.model_used === false && v.reason) vNotes.push(_escFeed(v.reason) + '.');
   if (Array.isArray(v.unsupported_numbers) && v.unsupported_numbers.length) vNotes.push('Unsupported numbers flagged: ' + v.unsupported_numbers.length + '.');
   if (Array.isArray(v.sign_inversions) && v.sign_inversions.length) vNotes.push('Sign inversions flagged: ' + v.sign_inversions.length + '.');
