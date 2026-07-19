@@ -730,6 +730,31 @@ def main():
             print(f"  [{tier[:5]}] {label}: FAILED — {type(e).__name__}: {e}")
     print(f"[INFO] feeds: {feed_ok} ok, {feed_failed} failed of {len(ALL_FEEDS)}")
 
+    # v47 — REAL per-commodity collection status.
+    #
+    # commodity_status was doing two unrelated jobs under one namespace: feed
+    # health under '_feed:<label>', and GDELT's per-commodity outcome under the
+    # BARE commodity key. The UI reads only the bare key (index.html:26357) and
+    # treats it as the status of ALL sourcing for that commodity. Because GDELT
+    # is throttled on every run and is only ever attempted for the first two
+    # commodities, that produced two different lies at once: wheat and maize
+    # claimed "treat the count as a floor, not a total" while 41 of 41 publisher
+    # feeds had in fact returned, and the other four claimed "we cannot tell you
+    # whether this is a real empty result or a silent collection failure" when
+    # the collector had plainly succeeded.
+    #
+    # The publisher feeds are general agriculture press, not per-commodity
+    # sources — a commodity is matched by keyword AFTER the pull. So the honest
+    # per-commodity statement is about the health of that pull, and it is the
+    # same for every commodity. Mapped onto the three values the UI understands:
+    #   no feed failed              -> 'ok'      "the match set is genuinely empty"
+    #   under half the feeds failed -> 'partial' "completeness unverified"
+    #   half or more failed         -> 'failed'  the hard failure banner
+    _ratio = (feed_failed / len(ALL_FEEDS)) if ALL_FEEDS else 0.0
+    _commodity_state = "ok" if feed_failed == 0 else ("failed" if _ratio >= 0.5 else "partial")
+    for _c in COMMODITIES:
+        commodity_status[_c] = _commodity_state
+
     # --- TIER 3: GDELT, opportunistic only ---------------------------------
     # Demoted in v46.1. Its limiter is per-IP and stateful, so under CI egress
     # it returns 429 no matter how politely we space calls. Two commodities
@@ -741,13 +766,16 @@ def main():
             time.sleep(GDELT_SLEEP_S)
         try:
             articles = fetch_gdelt(commodity)
-            commodity_status[commodity] = "ok"
+            # v47 — namespaced. Writing the bare key here overwrote the real
+            # per-commodity status computed above with the outcome of one
+            # supplementary source that contributes no items in practice.
+            commodity_status[f"_gdelt:{commodity}"] = "ok"
             print(f"  [gdelt] {commodity}: {len(articles)} raw articles")
             raw.extend((a, commodity, "gdelt") for a in articles)
         except ThrottledError as e:
             # Expected under load. Distinct from a real failure so the manifest
             # and the logs don't cry wolf.
-            commodity_status[commodity] = "throttled"
+            commodity_status[f"_gdelt:{commodity}"] = "throttled"
             print(f"  [gdelt] {commodity}: THROTTLED — {e}")
         except Exception as e:
             # One bad commodity must never abort the run.
@@ -757,7 +785,7 @@ def main():
             # limit doesn't read as a broken pipeline.
             msg = str(e)
             throttled = "429" in msg or "Too Many Requests" in msg
-            commodity_status[commodity] = "throttled" if throttled else "failed"
+            commodity_status[f"_gdelt:{commodity}"] = "throttled" if throttled else "failed"
             label = "THROTTLED" if throttled else "FAILED"
             print(f"  [gdelt] {commodity}: {label} — {type(e).__name__}: {e}")
 
