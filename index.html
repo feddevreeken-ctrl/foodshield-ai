@@ -1382,12 +1382,50 @@ body {
    image-less row is structurally identical to an imaged one. */
 .news-item.tier-lead .news-body-wrap {
   background: none; border: none; border-radius: 0; box-shadow: none;
-  padding: 4px 0 20px 16px; margin-bottom: 0;
+  padding: 4px 0 26px 16px; margin-bottom: 0;
+  /* No closing rule here. The "More from the corridors" section rule lands
+     immediately below, and two 3px lines separated by a gap read as a
+     rendering fault rather than a division. The section rule is the divider. */
+  border-bottom: none;
 }
-.news-item.tier-lead .news-exposure { font-size: 15px; margin: 10px 0 0; }
+/* ── v49.1 — the hero as a two-column composition ────────────────────────
+   The image was stacked BELOW the headline and standfirst, which breaks the
+   read: you finish the sentence, then meet a picture, then resume with the
+   production line. And a 21ch measure across a full-width column left a dead
+   right-hand third. Papers do not do either — the hero is a composition, text
+   against image, both starting at the same top edge.
+
+   Text left, image right at roughly 55/45. The headline measure is now set by
+   the column rather than by a ch-cap, so it fills its half properly. */
+.news-item.tier-lead .news-card-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.06fr) minmax(0, .94fr);
+  column-gap: 30px;
+  align-items: start;
+}
+.news-item.tier-lead .news-card-body > * { grid-column: 1; min-width: 0; }
+.news-item.tier-lead .news-card-img,
+.news-item.tier-lead .news-synth {
+  grid-column: 2; grid-row: 1 / span 8; align-self: start;
+  margin: 4px 0 0; height: auto; aspect-ratio: 16 / 9;   /* FT's only large ratio */
+}
+.news-item.tier-lead .news-headline {
+  max-width: none;                        /* the column is the measure now */
+  margin: 0 0 10px;
+}
+.news-item.tier-lead .news-exposure { font-size: 15px; margin: 0 0 12px; }
 .news-item.tier-lead .news-exposure .news-exp-kt { font-size: 14px; }
 .news-item.tier-lead .news-kt { font-size: 19px; padding-top: 6px; }
 .news-item.tier-mid .news-kt { font-size: 14px; padding-top: 4px; }
+/* The hero footer was four stacked fragments — production line, interpretation
+   toggle, publisher, tag. Tightened into one quiet band under the text column. */
+.news-item.tier-lead .news-prod { margin: 0 0 10px; font-size: 12px; }
+.news-item.tier-lead .news-meta { margin-top: 12px; }
+@media (max-width: 900px) {
+  .news-item.tier-lead .news-card-body { grid-template-columns: minmax(0, 1fr); }
+  .news-item.tier-lead .news-card-img,
+  .news-item.tier-lead .news-synth { grid-column: 1; grid-row: auto; margin: 12px 0 14px; }
+}
 /* Publisher images on the LEAD only. At band height on a secondary row a
    hot-linked photo is a colour smear carrying no information, it makes every
    mid row compete with the lead, and it costs a network request and a
@@ -1536,6 +1574,7 @@ body {
 .news-exposure .news-exp-via {
   color: var(--t3); font-size: 10.5px; font-weight: 400;
 }
+.news-exposure .news-exp-entry { white-space: nowrap; }
 .news-exposure .news-exp-sep { color: var(--b3); margin: 0 5px; }
 /* Directness is a property of ONE corridor entry, never of the line. */
 .news-exposure .news-exp-iso.direct { color: #c9a957; }
@@ -26279,14 +26318,22 @@ function renderNewsTab() {
         + `<span class="news-exp-verb">Reaches</span> `
         + exposed.slice(0, 3).map(e => {
             const direct = e.role === 'direct';
-            return `<span class="news-exp-iso${direct ? ' direct' : ''}"${
+            // One corridor is one unit — wrapping between "via" and the ISO
+            // ("THA 3.4 Mt via / BRA") splits a single fact across two lines
+            // and reads as two separate claims.
+            return `<span class="news-exp-entry">`
+              + `<span class="news-exp-iso${direct ? ' direct' : ''}"${
                      direct ? ' title="Directly involved in this corridor"' : ''
                    }>${_escFeed(e.iso)}</span> `
               + `<span class="news-exp-kt">${_newsFmtKt(e.kt)}</span>`
               + (!direct && e.via
                   ? ` <span class="news-exp-via">via ${_escFeed(e.via)}</span>`
-                  : '');
-          }).join('<span class="news-exp-sep">·</span>')
+                  : '')
+              + `</span>`;
+          // Real whitespace around the separator, not just margin: a margin
+          // gives no line-break opportunity, so nowrap entries ran past the
+          // column and under the hero image instead of wrapping between them.
+          }).join(' <span class="news-exp-sep">·</span> ')
         + (exposed.length > 3 ? `<span class="news-exp-sep">·</span>+${exposed.length - 3}` : '')
         + `</div>`
       : `<div class="news-no-corridor">No mapped corridor — commodity match only</div>`;
