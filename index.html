@@ -1309,10 +1309,14 @@ body {
   background: linear-gradient(90deg, rgba(229,138,120,.12), rgba(229,138,120,.55));
 }
 .news-kt.is-empty::after { display: none; }
+/* v49 — the rule belongs to the ITEM, not the gap (FT's _small theme), and it
+   spans rail + content because this is a ranked ledger. Derived from the warm
+   foreground rather than a cool border token, so warmth lives in the ink. */
 .news-body-wrap {
   grid-column: 3; padding: 10px 0 12px 16px;
-  border-bottom: 1px solid var(--b1); min-width: 0;
+  border-bottom: 1px solid rgba(235,233,226,.10); min-width: 0;
 }
+.news-item.tier-mid .news-body-wrap { border-bottom-color: rgba(235,233,226,.13); }
 .news-item:last-child .news-body-wrap { border-bottom: none; }
 /* The whole body is a click target for the interpretation, so say so — but only
    on cards that actually have one, or the cursor lies about affordance. */
@@ -1321,22 +1325,69 @@ body {
 .news-item.tier-lead .news-body-wrap:has(details.news-interp):hover { background: var(--bg3); }
 .news-body-wrap a, .news-body-wrap summary { cursor: pointer; }
 
-/* Tier 1 — the lead. The one card box on the page, so it earns its border. */
-.news-item.tier-lead .news-body-wrap {
-  background: var(--bg3); border: 1px solid var(--b2); border-radius: 8px;
-  padding: 16px 18px 14px; margin-bottom: 10px;
-  box-shadow: inset 0 1px 0 rgba(235,233,226,.045), 0 14px 34px -26px rgba(0,0,0,.9);
+/* ── v49 — newspaper typography ────────────────────────────────────────────
+   From FT's own published packages (o-typography, o-teaser, o-grid). Two
+   findings drive everything below:
+
+   1. SERIF = the thing being said. SANS = everything the paper says about it.
+      Every FT headline at every tier is Financier Display, a serif, at weight
+      300 — never bold. Kicker, standfirst, byline and timestamp are all Metric,
+      a sans. Our headlines being sans is why this read as a dashboard.
+   2. The tail DROPS the standfirst. FT's _small theme display:none's it rather
+      than shrinking it — standfirst presence IS the tier signal.
+
+   Sizes are FT's ramp scaled by 0.9, which is FT's own documented fallback
+   factor for system serifs (they render fallbacks at 87-90% because system
+   faces carry a larger apparent x-height). Taking their 40/32/20 literally
+   with Iowan would read oversized. Mid is pulled further, 29 -> 24, because
+   FT's 32px assumes a ~300px column in a 3-up rail; across our single full
+   width column a 29px serif out-shouts the lead. */
+.news-headline, .news-item .news-headline {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', 'URW Palladio L', P052, ui-serif, Georgia, serif;
+  font-weight: 400;
 }
 .news-item.tier-lead .news-headline {
-  font-size: clamp(19px, 2.4vw, 25px); font-weight: 650; line-height: 1.16;
-  letter-spacing: -.012em; text-wrap: balance;
+  font-size: clamp(26px, 3.4vw, 36px); line-height: 1.0;
+  letter-spacing: -.008em; text-wrap: balance;
+  /* Restricted measure is how FT promotes a lead — its hero pads the heading
+     0 15% to 0 30%. A 36px serif running the full column is a banner, not a
+     lead. */
+  max-width: 21ch;
 }
-.news-item.tier-lead .news-exposure { font-size: 14px; margin-bottom: 9px; }
-.news-item.tier-lead .news-exposure .news-exp-kt { font-size: 13.5px; }
-.news-item.tier-lead .news-kt { font-size: 15px; padding-top: 18px; }
+.news-item.tier-mid .news-headline {
+  font-size: 24px; line-height: 26px; letter-spacing: -.005em;
+}
+.news-item.tier-tail .news-headline {
+  font-size: 18px; line-height: 22px; letter-spacing: 0; font-weight: 400;
+}
 
-/* Tier 2 — above-median exposure. */
-.news-item.tier-mid .news-headline { font-size: 14px; line-height: 1.3; font-weight: 600; }
+/* The kicker — above the headline, uppercase sans, the only coloured element
+   in a row. Timestamp fused on the same line (FT's __tag-suffix) so a tail row
+   is two lines of text and no furniture. Demotes by COLOUR on the tail. */
+.news-kicker {
+  font-size: 10px; font-weight: 600; letter-spacing: .09em;
+  text-transform: uppercase; margin-bottom: 6px;
+  display: flex; align-items: baseline; gap: 6px;
+}
+.news-kicker .news-kick-word { color: #cc1452; }        /* FT claret-80, lifted for dark */
+.news-kicker .news-kick-sep  { color: var(--t3); opacity: .6; }
+.news-kicker .news-kick-time { color: var(--t3); font-weight: 400; letter-spacing: .05em; }
+.news-item.tier-lead .news-kicker { font-size: 11px; margin-bottom: 8px; }
+/* 79 accent kickers would strobe. */
+.news-item.tier-tail .news-kicker .news-kick-word { color: var(--t3); }
+
+/* Rules, not cards. One hairline per row, spanning rail AND content, because
+   the tonnage rail makes this a ranked ledger and the rule should read across
+   it. This is also what makes the 36 image-less stories cost nothing: an
+   image-less row is structurally identical to an imaged one. */
+.news-item.tier-lead .news-body-wrap {
+  background: none; border: none; border-radius: 0; box-shadow: none;
+  padding: 4px 0 20px 16px; margin-bottom: 0;
+}
+.news-item.tier-lead .news-exposure { font-size: 15px; margin: 10px 0 0; }
+.news-item.tier-lead .news-exposure .news-exp-kt { font-size: 14px; }
+.news-item.tier-lead .news-kt { font-size: 19px; padding-top: 6px; }
+.news-item.tier-mid .news-kt { font-size: 14px; padding-top: 4px; }
 /* Publisher images on the LEAD only. At band height on a secondary row a
    hot-linked photo is a colour smear carrying no information, it makes every
    mid row compete with the lead, and it costs a network request and a
@@ -1389,30 +1440,57 @@ body {
 .news-synth .nsv-kt  { color: #e58a78; }
 .news-synth .nsv-route > * + * { margin-left: 0; }
 .news-synth .nsv-dot { color: var(--t3); margin: 0 3px; }
-/* Lead gets the full-bleed treatment the photo would have had. */
-.news-item.tier-lead .news-synth { min-height: 168px; padding: 20px 22px; margin-bottom: 12px; }
-.news-item.tier-lead .news-synth .nsv-subject { font-size: 34px; }
+/* v49 — DEMOTED TO LEAD-ONLY, on the evidence.
+   FT does not build a card for a story with no photograph: the teaser drops
+   the image container and the headline claims the full width. Because rows are
+   delimited by a hairline rather than a card boundary, an image-less row is
+   structurally identical to an imaged one — no hole, no second visual class.
+   36 synthesised cards interleaved with 55 photos created exactly the
+   competing rhythm that warns against: two feeds spliced together, with cards
+   pulling rank they had not earned (several were tail rows ranked 60th).
+   The lead is the one place it is justified — there a tonnage/route card IS
+   the story's content rather than decoration, and it matches FT's own
+   tinted-ground treatment for promoted no-photo items. */
+.news-item.tier-lead .news-synth {
+  min-height: 150px; padding: 20px 22px; margin: 12px 0 0; border-radius: 2px;
+}
+.news-item.tier-lead .news-synth .nsv-subject {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', ui-serif, Georgia, serif;
+  font-size: 32px; font-weight: 400;
+}
 .news-item.tier-lead .news-synth .nsv-kicker { font-size: 9.5px; margin-bottom: 5px; }
-/* Mid rows: a compact strip, matching where the photo is suppressed. */
-.news-item.tier-mid .news-synth { display: none; }
+.news-item.tier-mid .news-synth,
 .news-item.tier-tail .news-synth { display: none; }
+/* FT's only radius token is 0.125rem. Nothing on this page should be rounder. */
+.news-item.tier-lead .news-card-img { border-radius: 2px; }
 
-/* Tier 3 — the tail. Rows, not cards: no fill, no radius, tighter rhythm. */
-.news-item.tier-tail .news-body-wrap { padding: 7px 0 7px 16px; }
-.news-item.tier-tail .news-headline { font-size: 12.5px; line-height: 1.35; font-weight: 500; }
-.news-item.tier-tail .news-exposure { font-size: 11px; margin-bottom: 3px; }
-.news-item.tier-tail .news-card-img { display: none; }
-.news-item.tier-tail .news-prod { display: none; }
-.news-item.tier-tail .news-kt { padding-top: 8px; font-size: 11px; }
+/* Tier 3 — the tail. Two lines of text, no furniture: the kicker carries the
+   timestamp, the rail carries the tonnage, and the standfirst is DELETED (not
+   shrunk) because its absence is what marks the tier. */
+.news-item.tier-tail .news-body-wrap { padding: 9px 0 10px 16px; }
+.news-item.tier-tail .news-card-img,
+.news-item.tier-tail .news-prod,
+.news-item.tier-tail .news-exposure,
+.news-item.tier-tail .news-meta { display: none; }
+.news-item.tier-tail .news-kt { padding-top: 10px; font-size: 12px; }
+.news-item.tier-tail .news-kicker { margin-bottom: 4px; }
 
 /* Section break between tiers — one rule, not a header per day. */
 /* Starts at the body column, not column 1: spanning all three tracks drew its
    border straight through the rail hairline. That was invisible while the rail
    itself was broken; it is not any more. */
+/* v49 — the section rule. FT's standard section-front device and the highest
+   value structural borrow available: a heavy rule, a tight gap, an uppercase
+   label. On dark, a 3px near-white rule is the correct inversion of FT's black
+   — structural, never an accent colour. Full-bleed across rail AND content,
+   because the ledger reads across both. Used exactly twice on this page (above
+   the mid block, above the tail); everything else is a hairline. The restraint
+   is what separates a section front from a settings page. */
 .news-tierbreak {
-  grid-column: 3; margin: 16px 0 4px; padding-top: 10px; padding-left: 16px;
-  border-top: 1px solid var(--b2);
-  font-size: 9px; letter-spacing: .09em; text-transform: uppercase; color: var(--t3);
+  grid-column: 1 / -1; margin: 34px 0 14px; padding-top: 10px;
+  border-top: 3px solid var(--t1);
+  font-size: 11px; font-weight: 600; letter-spacing: .10em;
+  text-transform: uppercase; color: var(--t1);
 }
 
 /* One orchestrated motion moment: rows post like a tape printing, capped so the
@@ -25883,6 +25961,20 @@ function _newsToggleRow(body) {
   body.setAttribute('aria-expanded', opening ? 'true' : 'false');
 }
 
+// v49 — compact form for the kicker line. "SOYBEANS · 4 DAYS AGO" set in
+// uppercase is clunky; papers write "· 4h". Same source timestamp and the same
+// client-side computation as _newsAgeLabel, just abbreviated — the meta row
+// below still carries the long form on lead and mid.
+function _newsAgeCompact(it) {
+  const t = it && it.published_at ? Date.parse(it.published_at) : NaN;
+  if (!isFinite(t)) return '—';
+  const h = (Date.now() - t) / 36e5;
+  if (h < 0) return 'now';
+  if (h < 1) return Math.max(1, Math.round(h * 60)) + 'm';
+  if (h < 24) return Math.round(h) + 'h';
+  return Math.round(h / 24) + 'd';
+}
+
 function _newsInterpretationDetails(it) {
   // _cnInterpretationBlock lives in a later <script> block. It is hoisted and
   // defined long before any render runs, but guard anyway — the codebase
@@ -26161,6 +26253,7 @@ function renderNewsTab() {
   // Tier boundaries: 1 lead, the next 11 at mid weight, the rest as tail rows.
   const _tierOf = i => i === 0 ? 'tier-lead' : i < 12 ? 'tier-mid' : 'tier-tail';
   let _brokeTier = false;
+  let _brokeMid = false;
 
   stream.innerHTML = ranked.map((it, _idx) => {
     const exposed = it.exposed || [];
@@ -26225,6 +26318,16 @@ function renderNewsTab() {
     // keyboard-focusable. A row with no interpretation must not advertise an
     // affordance it does not have.
     const _interpHtml = _newsInterpretationDetails(it);
+    // v49 — the kicker. FT's o-teaser puts a small tag ABOVE the headline and
+    // fuses the timestamp to it as __tag-suffix, so a list row needs no separate
+    // meta line. It is the only coloured element in a row, and it demotes by
+    // COLOUR on the tail rather than by size — 79 accent kickers would strobe.
+    const _kickWord = (it.matched || [])[0]
+      || ((it.chokepoints || [])[0] ? 'Chokepoint' : '')
+      || ((it.disruption || [])[0] || 'Trade press');
+    const _kicker = `<span class="news-kick-word">${_escFeed(String(_kickWord).replace(/_/g, ' '))}</span>`
+      + `<span class="news-kick-sep">·</span>`
+      + `<span class="news-kick-time">${_escFeed(_newsAgeCompact(it))}</span>`;
     const _rail = _peak > 0
       // sqrt, not linear. The corridor distribution has one extreme outlier —
       // the lead is ~11x the second place — so a linear share put the median
@@ -26234,8 +26337,15 @@ function renderNewsTab() {
       ? `<div class="news-kt" style="--share:${Math.sqrt(_peak / _maxKt).toFixed(3)}" title="Largest single corridor this headline touches — sourced from the bilateral trade atlas. Bar length is relative to the largest corridor currently in view (square-root scale).">${_newsFmtKt(_peak)}</div>`
       : `<div class="news-kt is-empty" title="No mapped trade corridor for this headline">—</div>`;
     // One section break, where the tail begins.
+    // v49 — two section rules, matching FT's section-front device: one where
+    // the peers begin, one where the file begins. Not one per day, not one per
+    // item — three heavy rules total on the page including the masthead, and
+    // hairlines everywhere else.
     let _break = '';
-    if (_tier === 'tier-tail' && !_brokeTier) {
+    if (_tier === 'tier-mid' && !_brokeMid) {
+      _brokeMid = true;
+      _break = `<div class="news-tierbreak">More from the corridors</div>`;
+    } else if (_tier === 'tier-tail' && !_brokeTier) {
       _brokeTier = true;
       _break = `<div class="news-tierbreak">Lower exposure · ${ranked.length - 12} more</div>`;
     }
@@ -26245,22 +26355,22 @@ function renderNewsTab() {
       <div class="news-body-wrap" style="--i:${Math.min(_idx, 12)}"${
         _interpHtml ? ' tabindex="0" role="button" aria-expanded="false"'
                     + ' aria-label="Show the commodity interpretation for this headline"' : ''}>
-      ${imgBand}
       <div class="news-card-body">
-        ${expLine}
+        <div class="news-kicker">${_kicker}</div>
         ${(() => { const href = _safeUrl(it.url); const t = _escFeed(it.title);
             // No usable URL: render the headline as plain text rather than a
             // dead or dangerous link. Losing a link beats shipping one.
             return href
               ? `<a class="news-headline" href="${_escFeed(href)}" target="_blank" rel="noopener noreferrer nofollow">${t}</a>`
               : `<span class="news-headline">${t}</span>`; })()}
-        ${prod ? `<div class="news-card-divider"></div><div class="news-prod">${prod}</div>` : ''}
+        ${_tier !== 'tier-tail' ? expLine : ''}
+        ${_tier === 'tier-lead' ? imgBand : ''}
+        ${_tier !== 'tier-tail' && prod ? `<div class="news-prod">${prod}</div>` : ''}
         ${_interpHtml}
         <div class="news-meta">
           <span class="news-src">${_escFeed(it.source || '')}</span>
-          <span>·</span><span>${_escFeed(_newsAgeLabel(it) || '')}</span>
+          ${tags ? `<span class="news-meta-sep">·</span>${tags}` : ''}
         </div>
-        ${tags ? `<div class="news-tagrow">${tags}</div>` : ''}
       </div>
       </div>
     </div>`;
