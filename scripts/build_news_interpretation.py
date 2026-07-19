@@ -1019,10 +1019,18 @@ ABSOLUTE RULE: never write a number, percentage, date, month, year or quantity
 that is not already in FACTS. Do not compute, derive, round differently, average
 or infer any figure.
 
-What the note must do, in ONE sentence of at most 32 words:
-- State which trade corridors this headline touches, using only FACTS figures.
-- Name the country and the tonnage. If a corridor is downstream, say it is
-  reached via the named hub.
+What the note must do, in ONE sentence of at most 34 words:
+- Say what is at stake for the food system, using the SPECIFIC facts given.
+- Start from whichever fact is most consequential for THIS item. Do not use the
+  same opening every time. Available angles, in rough order of interest:
+    a chokepoint      -> lead with the chokepoint and what routes through it
+    an event_type     -> lead with the kind of event (a tariff, a ban, a
+                         shortage, an outbreak) and which commodity it lands on
+    a large corridor  -> lead with the corridor: country, tonnage, and the hub
+                         it is reached via if it is downstream
+    a price move      -> lead with the benchmark and its direction
+- Then add ONE further fact from a different angle, if one is present. Two
+  facts, one sentence. Never list three corridors as the whole note.
 Rules:
 - The headline is a CLAIM by its publisher. If you refer to it, attribute it
   ("the report that...", "the publisher reports"). Never assert it as fact.
@@ -1042,17 +1050,51 @@ Rules:
 - No preamble, no heading. The sentence only."""
 
 
-def _article_facts(it):
-    """Locked facts for ONE news item. Every value is copied from the payload,
-    never derived here, and only corridor data the trade atlas actually
-    sourced."""
+def _article_facts(it, commodity_out=None):
+    """Locked facts for ONE news item.
+
+    v50.1 — the first version passed corridor tonnages and nothing else, so
+    every note came back the same shape ("Touches X kt, Y kt via Z"): distinct
+    numbers, identical sentence, which reads as generic even though it is not
+    duplicated. A note can only be as case-specific as its facts. So the block
+    now also carries what KIND of event the headline is (disruption type),
+    where it sits (chokepoint), which countries it names, and how that
+    commodity's price has actually moved — the last pulled from the commodity
+    interpretation built moments earlier in the same run.
+
+    Every value is copied from a payload; nothing is computed here.
+    """
     exposed = [e for e in (it.get("exposed") or []) if isinstance(e, dict)]
-    if not exposed:
+    matched = list(it.get("matched") or [])
+    disruption = list(it.get("disruption") or [])
+    chokepoints = list(it.get("chokepoints") or [])
+
+    # Price context for the first matched commodity that has an entry.
+    price = None
+    for m in matched:
+        entry = (commodity_out or {}).get(m)
+        f = (entry or {}).get("facts") or {}
+        if f.get("price_usd_per_unit") is not None:
+            price = {
+                "commodity": f.get("commodity"),
+                "benchmark_price": f.get("price_usd_per_unit"),
+                "price_unit": f.get("price_unit"),
+                "price_month": f.get("price_month"),
+                "price_change_mom_pct": f.get("price_change_mom_pct"),
+            }
+            break
+
+    # A note needs SOMETHING of its own to say. Corridors, an event type, a
+    # chokepoint or a price move all qualify; a bare commodity keyword does not.
+    if not (exposed or disruption or chokepoints or price):
         return None
+
     top = sorted(exposed, key=lambda e: e.get("kt") or 0, reverse=True)[:3]
     return {
-        "publisher": it.get("source") or None,
-        "commodities_matched": list(it.get("matched") or []),
+        "commodities_matched": matched,
+        "event_type": disruption[0] if disruption else None,
+        "chokepoint": chokepoints[0] if chokepoints else None,
+        "countries_named_in_headline": list(it.get("countries_mentioned") or [])[:4],
         "corridor_count": len(exposed),
         "corridors": [
             {"country": e.get("iso"),
@@ -1061,16 +1103,18 @@ def _article_facts(it):
              "reached_via": e.get("via")}
             for e in top
         ],
-        "largest_corridor_kt": _r(max((e.get("kt") or 0) for e in exposed), 0),
+        "largest_corridor_kt": (_r(max((e.get("kt") or 0) for e in exposed), 0)
+                                if exposed else None),
+        "price": price,
     }
 
 
-def build_article_notes(provider, api_key, news, generated_at):
+def build_article_notes(provider, api_key, news, generated_at, commodity_out=None):
     """One note per item that has corridor facts of its own."""
     items = (news or {}).get("items") or []
     out, made, skipped, rejected = {}, 0, 0, 0
     for it in items:
-        facts = _article_facts(it)
+        facts = _article_facts(it, commodity_out)
         key = it.get("dedup_key") or it.get("url")
         if not facts or not key:
             skipped += 1
@@ -1100,13 +1144,28 @@ def build_article_notes(provider, api_key, news, generated_at):
                     validation["rejected"] = True
                     validation["reason"] = "numeric/field validation failed"
         if not text:
-            # Deterministic fallback in the same shape, no model involved.
-            c = facts["corridors"][0]
-            via = (f" via {c['reached_via']}"
-                   if c.get("reached_via") and c.get("role") != "direct" else "")
-            n = facts["corridor_count"]
-            text = (f"Touches {n} mapped corridor{'s' if n != 1 else ''}; the largest "
-                    f"reaches {c['country']} at {int(c['tonnage_kt']):,} kt{via}.")
+            # Deterministic fallback, no model involved. Built from whichever
+            # facts this item actually has — an item may now qualify on an event
+            # type or a price move with no corridor at all.
+            bits = []
+            if facts["corridors"]:
+                c = facts["corridors"][0]
+                via = (f" via {c['reached_via']}"
+                       if c.get("reached_via") and c.get("role") != "direct" else "")
+                n = facts["corridor_count"]
+                bits.append(f"Touches {n} mapped corridor{'s' if n != 1 else ''}; the "
+                            f"largest reaches {c['country']} at "
+                            f"{int(c['tonnage_kt']):,} kt{via}")
+            if facts.get("chokepoint"):
+                bits.append(f"routes through the {facts['chokepoint']}")
+            elif facts.get("event_type"):
+                bits.append(f"flagged as a {facts['event_type']} item")
+            pr = facts.get("price")
+            if pr and pr.get("price_change_mom_pct") is not None:
+                d = "up" if pr["price_change_mom_pct"] >= 0 else "down"
+                bits.append(f"the {pr['commodity']} benchmark is {d} "
+                            f"{abs(pr['price_change_mom_pct'])}% month on month")
+            text = "; ".join(bits[:2]) + "." if bits else ""
         out[key] = {
             "note": text,
             "facts": facts,
@@ -1227,7 +1286,7 @@ def main():
     # v50 — per-article notes, written to their own file so the commodity
     # envelope keeps its exact shape and validate_data's honesty checks over it
     # are unaffected.
-    notes = build_article_notes(provider, api_key, news, generated_at)
+    notes = build_article_notes(provider, api_key, news, generated_at, out)
     write_json(
         ARTICLE_OUTPUT,
         notes,

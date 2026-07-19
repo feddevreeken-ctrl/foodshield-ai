@@ -38278,9 +38278,20 @@ function _cnInterpretationBlock(entry) {
   const isAI = entry.is_ai_generated_interpretation === true && entry.content_type === 'ai_interpretation';
   const eyebrow = isAI ? 'AI interpretation' : 'Computed summary';
   const badge = isAI ? 'ai-generated · not a forecast' : 'template · not ai-generated · not a forecast';
-  const lede = isAI
-    ? `Written by a language model from the measured figures above. This is <b style="color:var(--t2);">interpretation, not fact</b>, and <b style="color:var(--t2);">not a forecast</b>. Every number is computed in the build and locked before the model sees it; returned text is checked so no figure can originate from the model.`
-    : `Assembled by a fixed template from the measured figures above — <b style="color:var(--t2);">no language model produced this text</b>. It restates measured values; it is <b style="color:var(--t2);">not a forecast</b>.`;
+  // v50.2 — the four-line lede is gone. It restated what the eyebrow and badge
+  // directly above it already say ("AI interpretation" / "ai-generated · not a
+  // forecast"), in two lines of 10.5px grey, on every panel. Saying a thing
+  // three times in one box is not extra honesty; it is the clutter that makes
+  // readers stop reading disclosures at all.
+  //
+  // The one claim it carried that the badge does NOT — that figures are locked
+  // before the model sees them and validated after — survives in the provenance
+  // footer below, as a single short line. Visible, not hovered: hover-only
+  // provenance is invisible on touch, in print, and to screen readers, which
+  // would make the modeled/sourced boundary an interaction instead of a fact.
+  const guarantee = isAI
+    ? 'figures locked before generation, text validated after — no number originates with the model'
+    : 'no language model produced this text';
   const prov = [];
   if (entry.model) prov.push('model: ' + entry.model);
   if (entry.provider) prov.push('provider: ' + entry.provider);
@@ -38296,13 +38307,13 @@ function _cnInterpretationBlock(entry) {
   if (Array.isArray(v.unsupported_numbers) && v.unsupported_numbers.length) vNotes.push('Unsupported numbers flagged: ' + v.unsupported_numbers.length + '.');
   if (Array.isArray(v.sign_inversions) && v.sign_inversions.length) vNotes.push('Sign inversions flagged: ' + v.sign_inversions.length + '.');
   if (Array.isArray(v.word_quantities) && v.word_quantities.length) vNotes.push('Word-quantity flags: ' + v.word_quantities.length + '.');
-  return `<div style="padding:12px 16px;background:transparent;border:1px dashed var(--b2);border-radius:10px;">
+  const provLine = [guarantee].concat(prov.length ? [_escFeed(prov.join(' · '))] : []).join(' · ');
+  return `<div style="padding:12px 16px;background:transparent;border:1px dashed var(--b2);border-radius:2px;">
     ${_cnEyebrow(eyebrow, '#c47a3c', badge)}
-    <div style="font-size:10.5px;color:var(--t3);line-height:1.6;margin-bottom:9px;">${lede}</div>
-    <div style="font-size:12px;color:var(--t3);line-height:1.7;">${_escFeed(entry.interpretation)}</div>
-    ${prov.length || vNotes.length ? `<div style="font-size:9.5px;color:var(--t-meta,var(--t3));line-height:1.55;margin-top:10px;padding-top:8px;border-top:1px dashed var(--b2);">
-      ${prov.length ? _escFeed(prov.join(' · ')) + (vNotes.length ? '<br>' : '') : ''}${vNotes.join('<br>')}
-    </div>` : ''}
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.65;margin-top:8px;">${_escFeed(entry.interpretation)}</div>
+    <div style="font-size:9.5px;color:var(--t-meta,var(--t3));line-height:1.55;margin-top:10px;padding-top:8px;border-top:1px dashed var(--b2);">
+      ${provLine}${vNotes.length ? '<br>' + vNotes.join('<br>') : ''}
+    </div>
   </div>`;
 }
 
