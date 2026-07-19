@@ -28053,15 +28053,42 @@ function ctrScoreComponentsChart(c, comp9, labels, weights, weightsNum) {
 // being asserted in a sentence: a marker at 30% of tracked imports, the point at
 // which we start colouring a single supplier as a concentration risk.
 function ctrSupplierChart(supplierRows, cname) {
-  const rows = (supplierRows.rows || []).filter(s => s && s.name && s.pct).slice(0, 6).map(s => ({
+  // v58 — 4 named suppliers plus a grey "Other", not 6 named.
+  //
+  // Every published categorical limit sits under six: Adobe Spectrum —
+  // "categorical colors become more difficult to comprehend starting at 6
+  // colors"; Datadog rotates a six-colour palette and repeats past it; Grafana
+  // rotates 6 hues; Cloudscape caps pie/donut at 5. The Economist's own
+  // stacked-bar guidance is to use grey for "other".
+  //
+  // The remainder is not dropped — dropping it would make the bars sum to less
+  // than the country's imports with no indication why. It is aggregated into
+  // one grey row so the reader can see how much sits outside the named four,
+  // which is itself the concentration signal.
+  const _all = (supplierRows.rows || []).filter(s => s && s.name && s.pct);
+  const _named = _all.slice(0, 4);
+  const _rest = _all.slice(4);
+  const _restPct = _rest.reduce((a, s) => a + (s.pct || 0), 0);
+  const _restKt = _rest.reduce((a, s) => a + (s.kt || 0), 0);
+  const _shown = _restPct >= 1
+    ? _named.concat([{ name: `Other (${_rest.length})`, pct: Math.round(_restPct),
+                       kt: _restKt || null, _other: true }])
+    : _named;
+  const rows = _shown.map(s => ({
     label: s.name,
     pct: s.pct,
     value: s.pct + '%',
     meta: s.kt ? _ctrKt(s.kt) : '',
-    color: s.pct >= 50 ? '#c44b3c' : s.pct >= 30 ? '#d27a3e' : 'var(--accent)',
-    title: s.name + ' supplies ' + s.pct + '% of ' + cname + '’s tracked food imports'
-      + (s.kt ? ' (' + _ctrKt(s.kt) + ')' : '') + '. '
-      + (supplierRows.real ? 'Aggregated from cited bilateral flows.' : 'Heritage ranking — not from cited flows.')
+    // "Other" is deliberately grey: it is a bucket, not a supplier, and must
+    // never read as a risk colour on the same scale as a named country.
+    color: s._other ? 'var(--t4)'
+         : s.pct >= 50 ? '#c44b3c' : s.pct >= 30 ? '#d27a3e' : 'var(--accent)',
+    title: s._other
+      ? `The remaining ${s.pct}% of ${cname}’s tracked food imports, spread across `
+        + `suppliers outside the top four.`
+      : s.name + ' supplies ' + s.pct + '% of ' + cname + '’s tracked food imports'
+        + (s.kt ? ' (' + _ctrKt(s.kt) + ')' : '') + '. '
+        + (supplierRows.real ? 'Aggregated from cited bilateral flows.' : 'Heritage ranking — not from cited flows.')
   }));
   if (!rows.length) return '';
   return ctrBarChart(rows, {

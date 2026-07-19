@@ -256,6 +256,23 @@ def main():
 
     # v45 — implied unit price vs USDA PSD tonnage. Catches the row-duplication
     # class of bug that a shape check cannot see (see validate_comtrade_unit_prices).
+    #
+    # v58 — IF YOU ARE HERE BECAUSE THIS IS FAILING WITH ~17 OVER-COUNTED PAIRS,
+    # DO NOT WIDEN THE BANDS. Measured 2026-07-19, same validator, same PSD file,
+    # only the comtrade input swapped:
+    #     produced by main's refresh_comtrade.py   ->  17 over-counted
+    #     produced by this branch's version        ->   2 over-counted
+    # The difference is the v45 dedup in refresh_comtrade.py. Comtrade returns
+    # per-mode and partner2 breakout rows that already sum to the motCode=0
+    # total, so summing every returned row counts the same trade several times.
+    # Main's script lacks that dedup; this branch's has it — grep for
+    # "motCode=0 AND partner2Code=0".
+    #
+    # A large over-counted number therefore means the DATA came from an
+    # un-deduped run, not that this check is too strict. run_all.py regenerates
+    # comtrade_staples.json BEFORE this validator runs (refresh-data.yml:73 then
+    # :87), so CI self-clears on the first run after the fixed script lands. It
+    # persists only locally, where regenerating needs COMTRADE_API_KEY.
     unit_price_failures = validate_comtrade_unit_prices()
     if unit_price_failures:
         # Severity split. An implied price ABOVE the band means the USD side is
