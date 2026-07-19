@@ -133,6 +133,13 @@ SOURCE_MAP = {
     "soybeans":   {"pink": "soybeans",  "psd": "soybeans", "ffpi": "oils",    "label": "Soybeans"},
     "palm_oil":   {"pink": "palm_oil",  "psd": None,       "ffpi": "oils",    "label": "Palm oil"},
     "fertilizer": {"pink": "urea",      "psd": None,       "ffpi": None,      "label": "Fertilizer (urea benchmark)"},
+    # v47 — added once the Pink Sheet parser stopped dropping beef and sugar.
+    # No USDA PSD series for any of the three, so their facts carry price and
+    # FFPI only; _psd_facts emits nulls and the prose says the input is
+    # unavailable rather than inventing a production figure.
+    "beef":       {"pink": "beef",      "psd": None,       "ffpi": "meat",    "label": "Beef"},
+    "dairy":      {"pink": None,        "psd": None,       "ffpi": "dairy",   "label": "Dairy"},
+    "sugar":      {"pink": "sugar",     "psd": None,       "ffpi": "sugar",   "label": "Sugar"},
 }
 
 _missing = set(NEWS_COMMODITIES) - set(SOURCE_MAP)
@@ -174,6 +181,11 @@ Formatting rules (these change how a figure is WRITTEN, never its value):
 - Field NAMES are not prose. Never write a field name, and never write the words
   "per unit". Quote a price as the value followed by price_unit verbatim — e.g.
   197.1 ($/mt). If price_unit is null, give the bare number with no unit words.
+  Say it in English instead. The three most often got wrong:
+    ffpi_index      -> "the FAO <ffpi_component> price index"
+    news_available  -> do not mention it at all; it is a build flag, not a fact
+    headline_count  -> "cited headlines" or just describe them
+  A sentence containing an underscore is always wrong. Rewrite it.
 - A field whose name contains "_pct" is a percentage. Attach a % sign to it:
   write 33.3%, never a bare 33.3.
 - A field whose name ends in "_kt" is thousand tonnes. Write it with comma

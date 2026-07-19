@@ -26,8 +26,23 @@ import re
 # ─────────────────────────────────────────────────────────────────────────────
 # Commodities
 # ─────────────────────────────────────────────────────────────────────────────
-# Exactly these six. Adding a seventh means adding it to every dict below.
-COMMODITIES = ("wheat", "maize", "rice", "soybeans", "palm_oil", "fertilizer")
+# The commodities that get a build-time interpretation. Adding one means adding
+# it to build_news_interpretation.SOURCE_MAP too — a guard there raises if the
+# two drift apart.
+#
+# v47 — beef, dairy and sugar added. They were absent because the Pink Sheet
+# parser silently dropped beef and sugar (a comma in the workbook's label row
+# missed the alias), so there was no price series to anchor prose to. With that
+# fixed all three have a real benchmark: beef and sugar from the Pink Sheet,
+# dairy from the FAO FFPI dairy component. They are also three of the largest
+# commodity groups in the news pull, which is why the news tab was showing an
+# interpretation on roughly a fifth of its cards.
+#
+# Deliberately still absent: pork, poultry and vegetables. They are large in the
+# headline mix but have no price or stock series in any shipped source, and an
+# interpretation over a null facts block is prose about nothing.
+COMMODITIES = ("wheat", "maize", "rice", "soybeans", "palm_oil", "fertilizer",
+               "beef", "dairy", "sugar")
 
 # Surface forms per commodity. Order matters only for readability.
 # These drive BOTH the upstream query and the local relevance match, so a term
