@@ -171,19 +171,40 @@
    FoodShield AI — Editorial dark dashboard
    ════════════════════════════════════════════ */
 :root {
-  /* Backgrounds — warm near-black, low chroma */
-  --bg0: #0b0b0d;
-  --bg1: #0f0f12;
-  --bg2: #14141a;
-  --bg3: #1b1b22;
-  --bg4: #23232c;
-  --bg5: #2d2d38;
-  --glass: rgba(20,20,26,0.82);
+  /* ── Backgrounds — warm near-black, low chroma ──────────────────────────
+     v57 — the surface ramp was too flat to separate anything, which is the
+     measured cause of "the page looks flat / panels don't read as panels":
 
-  /* Rule lines & borders */
-  --b1: #1f1f27;
-  --b2: #2a2a34;
-  --b3: #3a3a47;
+         --bg2 was 1.04:1 against --bg1.  --bg3 was 1.12:1.
+
+     A 1.04 step is invisible. Every shipped design system steps harder, and
+     the one built for DENSE DATA steps hardest of all — IBM Carbon's g100
+     layers go 1.20 / 1.31 / 1.48, with the rule stated plainly in their docs:
+     "in the dark themes, layers become one step lighter with each added
+     layer". Radix (1.07/1.11/1.11) and Primer (1.09) sit at the quiet end;
+     for a page carrying seven tables we want Carbon's end, not Radix's.
+
+     Carbon defines exactly four layers and stops. So do we. --bg5 is retired
+     rather than left as a fifth step nobody can distinguish from the fourth. */
+  --bg0: #0b0b0d;
+  --bg1: #0f0f12;   /* page                                    */
+  --bg2: #1a1a21;   /* 1.13:1 — section bands                  */
+  --bg3: #26262f;   /* 1.28:1 — panels, table fills            */
+  --bg4: #33333e;   /* 1.45:1 — the one raised/signature layer */
+  --bg5: #33333e;   /* retired alias of --bg4; see note above  */
+  --glass: rgba(26,26,33,0.82);
+
+  /* ── Rule lines & borders ───────────────────────────────────────────────
+     v57 — these were quieter than anything shipped. The published band is
+     tight and convergent: Radix step 6 = 1.66:1, step 7 = 2.06:1; Primer
+     borderColor-default = 1.92:1; Carbon border-subtle-00 = 1.57:1; Grafana
+     weak = 1.49:1; Geist gray-400 = 1.55:1. Expressed as alpha — the more
+     portable form — that is 7-23% white, clustering at 15-17%. Ours sat at
+     1.28:1, below all of them, which is why hairline-separated rows read as
+     one undifferentiated mass. */
+  --b1: #2d2d38;   /* 1.41:1 — table row rules      */
+  --b2: #3d3d4a;   /* 1.79:1 — section dividers     */
+  --b3: #4a4a5a;   /* 2.15:1 — top-of-section rules */
 
   /* Editorial UI accent — cool slate (data accents below stay warm) */
   --accent:     #8aa6c4;
@@ -200,7 +221,11 @@
   /* Text — warm */
   --t1: #ebe9e2;
   --t2: #9a988f;
-  --t3: #7f7d73;   /* a11y: was #6a685e (3.5:1, fail). Now ~4.5:1 on --bg0 for AA body/caption. */
+  --t3: #8b8980;   /* v57 — was #7f7d73 (4.63:1). Every shipped secondary sits
+                      higher: Carbon 10.59:1, Radix step 11 8.48:1, Primer
+                      6.50:1. Ours was the only value below the band, and it
+                      carries most of the provenance and caption text on this
+                      site — the text a sceptical reader most needs to read. */
   --t4: #44423b;   /* hairlines/dividers ONLY — never text (1.96:1). Use --t-meta for meta text. */
   --t-meta: #8a887e; /* a11y: readable provenance/meta text (~4.6:1 on --bg0) */
 
@@ -28497,7 +28522,15 @@ function renderCountryTab() {
       }
       const sev = concentration > 60 ? 'severe' : 'moderate';
       const ccol = sev === 'severe' ? '#c44b3c' : '#d27a3e';
-      return `<div class="ctr-absence" style="border-left-color:${ccol};border-left-width:3px;">
+      // v57 — a TINTED surface, not a bordered div. The research names this as
+      // the pattern that separates a designed dark data page from a debug view:
+      // Geist ships tinted near-blacks (red-100 #330a11, amber-100 #2a1700) at
+      // the same ~1.2:1 elevation delta as its neutral surfaces, carrying the
+      // accent at full strength only in the text. This callout is the single
+      // most decision-relevant claim on the page — it earns the one raised,
+      // coloured surface here, and nothing else on this page gets one.
+      const ctint = sev === 'severe' ? 'rgba(196,75,60,.10)' : 'rgba(210,122,62,.09)';
+      return `<div class="ctr-absence" style="border-left-color:${ccol};border-left-width:3px;background:${ctint};padding:14px 16px;border-radius:2px;">
         <span class="tag" style="color:${ccol}">${sev === 'severe' ? 'severe chokepoint risk' : 'moderate concentration risk'}</span>
         <span style="color:var(--t2);font-size:12.5px;line-height:1.7;">
           <b>${c.name}</b> sources <b style="color:${ccol}">${topPct}%</b> of its tracked food imports from <b>${topName}</b>, with ${_escFeed(String(topImport).toLowerCase())} first in its structural import basket.
