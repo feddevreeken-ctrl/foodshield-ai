@@ -356,11 +356,53 @@ TRADE_PRESS_FEEDS = [
     ("Food Dive",           "https://www.fooddive.com/feeds/news/"),
     ("AgFunderNews",        "https://agfundernews.com/feed"),
     ("Mongabay",            "https://news.mongabay.com/feed/"),
+
+    # v47 — coverage adds. Every one of these was fetched through the production
+    # reader before being listed here: HTTP 200, valid XML, recent items, and a
+    # date every item parses. Candidates that failed any of those are recorded
+    # in the rejection note below rather than added hopefully.
+    #
+    # Three gaps these close, in priority order:
+    #   WEEKEND. 12 of the 18 original trade-press feeds publish nothing at the
+    #   weekend, so the panel went 40-70h stale every Sunday. Agriland, Farmers
+    #   Weekly SA, Food For Mzansi and the two Indian desks all carry
+    #   weekend-dated items.
+    #   FERTILISER. There was no dedicated inputs feed at all. Fertilizer Daily
+    #   returned the highest relevance density of anything measured (~17%).
+    #   FREIGHT / CHOKEPOINTS. CHOKEPOINT_TERMS is a first-class relevance route
+    #   in the taxonomy with no feed feeding it.
+    ("Agriland",            "https://www.agriland.ie/feed/"),
+    ("Hindu BusinessLine Agri",
+     "https://www.thehindubusinessline.com/economy/agri-business/feeder/default.rss"),
+    ("Economic Times Agri",
+     "https://economictimes.indiatimes.com/news/economy/agriculture/rssfeeds/1373380680.cms"),
+    ("The Hindu Agriculture",
+     "https://www.thehindu.com/sci-tech/agriculture/feeder/default.rss"),
+    ("Farmers Weekly SA",   "https://www.farmersweekly.co.za/feed/"),
+    ("Food For Mzansi",     "https://www.foodformzansi.co.za/feed/"),
+    ("Fertilizer Daily",    "https://fertilizerdaily.com/feed/"),
+    ("Maritime Executive",  "https://maritime-executive.com/articles.rss"),
+    ("gCaptain",            "https://gcaptain.com/feed/"),
+    ("Hellenic Shipping News", "https://www.hellenicshippingnews.com/feed/"),
 ]
 
 # Tier 2 — general wires. Low relevance density (5-30%) but high authority and
 # volume; classify() does the filtering, which is exactly what it is for.
 WIRE_FEEDS = [
+    # v47 — two adds, both verified live. Africanews and Anadolu cover regions
+    # the wire tier had no reach into (sub-Saharan Africa; the Turkish straits
+    # and Black Sea grain corridor) and both publish at the weekend.
+    #
+    # REJECTED, recorded so nobody re-derives it: Nikkei Asia returns 200 and
+    # valid XML but carries no date element this reader can find — the same
+    # failure class as DW Business and CBC Business, whose items are currently
+    # unrankable for exactly that reason. ~25 further live feeds (Ukrinform,
+    # Antara, VnExpress, Straits Times, Bangkok Post, UN News, AllAfrica and
+    # others) were measured at ZERO kept items against ~600 raw: general news
+    # that never names a commodity is cost without benefit, which is already
+    # this tier's problem — 20 wire feeds returned 700 raw for 6 kept.
+    ("Africanews Business", "https://www.africanews.com/feed/rss"),
+    ("Anadolu Economy",     "https://www.aa.com.tr/en/rss/default?cat=economy"),
     ("FT Commodities",      "https://www.ft.com/commodities?format=rss"),
     ("FT Companies",        "https://www.ft.com/companies?format=rss"),
     ("FT World",            "https://www.ft.com/world?format=rss"),

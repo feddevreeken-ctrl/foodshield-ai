@@ -1194,6 +1194,25 @@ body {
   font-size: 9px; color: var(--t-meta, var(--t3)); margin-top: 5px;
 }
 .news-meta .news-src { color: var(--t2); font-weight: 500; }
+/* v47 — model-written prose on a news card. Deliberately set apart from the
+   card's sourced fields (exposure tonnages) and its modeled ones (matched
+   commodities): a third provenance class needs a third visual treatment, and
+   the counter-label stays legible while collapsed. */
+.news-interp { margin-top: 6px; }
+.news-interp > summary {
+  cursor: pointer; font-size: 9.5px; color: var(--t2);
+  letter-spacing: .02em; padding: 3px 0; list-style: none;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+}
+.news-interp > summary::-webkit-details-marker { display: none; }
+.news-interp > summary::before { content: '▸'; color: var(--t3); font-size: 8px; }
+.news-interp[open] > summary::before { content: '▾'; }
+.news-interp > summary:hover { color: var(--t1); }
+.news-interp-counter {
+  font-size: 8px; letter-spacing: .04em; text-transform: uppercase;
+  color: #c47a3c; border: 1px solid rgba(196,122,60,.35);
+  border-radius: 2px; padding: 0 4px; white-space: nowrap;
+}
 .news-tag {
   padding: 0 4px; border-radius: 2px; font-size: 8.5px;
   letter-spacing: .04em; text-transform: uppercase;
@@ -25386,6 +25405,49 @@ function _newsCommodityLabel(key) {
   return String(key || '').replace(/_/g, ' ');
 }
 
+// v47 — the commodity interpretation, surfaced on the news card itself.
+//
+// Three constraints shape this, and none of them are cosmetic:
+//
+// 1. The interpretation is COMMODITY-level and article-independent. Its facts
+//    block describes prices, stocks and the whole pull window — it was not
+//    written about the clicked headline. So the summary says "the wheat
+//    picture", never "about this article". Implying the latter would be a
+//    fabricated attribution.
+// 2. The AI label must be visible while COLLAPSED. A summary reading only
+//    "Interpretation" hides provenance until expanded, which is exactly the
+//    blur this project forbids. Same counter-label pattern as the country
+//    drilldown at :26446.
+// 3. Only commodities that actually have an entry are shown. An item matching
+//    pork or poultry gets nothing — never a fallback to an unrelated
+//    commodity's prose. Today that is 7 of 56 items: the news taxonomy tracks
+//    19 commodities, the interpretation covers 6.
+function _newsInterpretationDetails(it) {
+  // _cnInterpretationBlock lives in a later <script> block. It is hoisted and
+  // defined long before any render runs, but guard anyway — the codebase
+  // already carries the same defensive check at :26314 for this exact reason.
+  if (typeof _cnInterpretationBlock !== 'function') return '';
+  const ienv = (typeof LIVE !== 'undefined') ? LIVE.commodity_interpretation : undefined;
+  if (!ienv || !ienv.data) return '';
+  const matched = Array.isArray(it.matched) ? it.matched : [];
+
+  const blocks = matched.map(m => {
+    const entry = ienv.data[m] || null;
+    if (!entry || !entry.interpretation) return '';
+    const isAI = entry.is_ai_generated_interpretation === true
+              && entry.content_type === 'ai_interpretation';
+    const counter = isAI ? 'ai-written · not a forecast'
+                         : 'computed template · not ai-written · not a forecast';
+    const label = (typeof _newsCommodityLabel === 'function') ? _newsCommodityLabel(m) : m;
+    return `<details class="news-interp">
+      <summary>The ${_escFeed(label)} picture, in words<span class="news-interp-counter">${counter}</span></summary>
+      ${_cnInterpretationBlock(entry)}
+    </details>`;
+  }).filter(Boolean);
+
+  return blocks.join('');
+}
+
 function renderNewsTab() {
   const stream = document.getElementById('news-stream');
   const lede   = document.getElementById('news-lede');
@@ -25534,6 +25596,7 @@ function renderNewsTab() {
           <span>·</span><span>${_escFeed(it.published_label || '')}</span>
           ${tags}
         </div>
+        ${_newsInterpretationDetails(it)}
       </div>
     </div>`;
   }).join('');
