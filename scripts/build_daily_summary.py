@@ -106,7 +106,9 @@ def main():
     # FAO FFPI MoM movement
     if isinstance(ffpi, dict):
         mom = ffpi.get("change_mom_pct")
-        latest = ffpi.get("latest", {}).get("value") if isinstance(ffpi.get("latest"), dict) else None
+        # The index level lives under `fpi`; there has never been a `value` key,
+        # so this bullet silently dropped its level before v45.
+        latest = ffpi.get("latest", {}).get("fpi") if isinstance(ffpi.get("latest"), dict) else None
         if mom is not None and abs(mom) >= 1.5:
             direction = "up" if mom > 0 else "down"
             bullets.append({

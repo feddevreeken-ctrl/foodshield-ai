@@ -62,6 +62,7 @@ import refresh_cckp
 import refresh_fews
 import refresh_hapi_idps   # v43 — HDX HAPI internal displacement (new nowcast signal)
 import refresh_trade_restrictions
+import refresh_commodity_news   # v46 — GDELT + EC RSS commodity headlines (claims, not data)
 import build_countries_dataset
 import snapshot_fdrs
 import validate_fdrs
@@ -69,6 +70,11 @@ import build_nowcast
 import build_source_manifest
 import build_daily_summary
 import build_companies
+# Build-time AI interpretation per commodity. Consumes commodity_news.json, so it
+# MUST stay after the commodity-news ingest step. Provider-agnostic: NEWS_LLM_PROVIDER
+# + GROQ_API_KEY / GEMINI_API_KEY / ANTHROPIC_API_KEY. With no key at all it still
+# writes a complete deterministic (zero-cost) output and exits 0.
+import build_news_interpretation
 
 
 # v20.32 — (label, fn, expected_output_file). The third field is what the
@@ -110,6 +116,11 @@ STEPS = [
     # clobbers owner-curated cited entries. restrictionExposure() in the app computes
     # who's exposed live from the atlas; restrictions must be sourced, never fabricated.
     ("Trade restrictions",     refresh_trade_restrictions.main, "trade_restrictions.json"),
+    # v46 — commodity news headlines. Third-party CLAIMS with links, never data:
+    # nothing from this feed drives the nowcast or any score. Ships empty when
+    # GDELT throttles (routine under CI egress), so it's in EMPTY_OK; the script
+    # preserves last-good items rather than blanking them on a zero-item run.
+    ("Commodity news",         refresh_commodity_news.main,     "commodity_news.json"),
     ("Countries dataset",      build_countries_dataset.main,    "countries.json"),
     # v40 — daily point-in-time snapshot of the structural FDRS (idempotent/preserve-safe);
     # builds the immutable history the hindcast/validation needs. Reads the fresh countries.json.
@@ -134,6 +145,13 @@ STEPS = [
     ("Companies aggregate",    build_companies.main,            "companies.json"),
     # v23 — modeled origin overlay (USDA PSD × disclosed footprint). After companies.
     ("Company overlay (v23)",  build_company_overlay.main,      "company_overlay.json"),
+    # Build-time commodity interpretation. MUST run AFTER the commodity-news ingest
+    # step (it reads data/commodity_news.json) and after the price/balance feeds it
+    # summarises. No client-side key: the provider key lives in Actions secrets and
+    # only the finished text is committed. Every number in the output is computed in
+    # Python and the model's prose is regex-validated against it, so a cheap free-tier
+    # model cannot introduce a figure.
+    ("Commodity interpretation", build_news_interpretation.main, "commodity_interpretation.json"),
 ]
 
 
@@ -153,8 +171,15 @@ FAIL_THRESHOLD = 4
 #                           redirect (see the feed's own _meta.notes)
 #   trade_restrictions.json ships-empty-by-design preserve-safe stub (v40 note
 #                           on the step above); entries are owner-curated
+#   commodity_news.json     GDELT throttles per-IP under CI egress; a fully
+#                           throttled run legitimately yields zero items (v46)
 EMPTY_OK = {"openaq.json", "nasa_firms.json", "acled.json", "ndgain.json",
-            "trade_restrictions.json"}
+            "trade_restrictions.json", "commodity_news.json"}
+
+# Outputs that legitimately do not exist at all when their key is absent. The
+# interpretation step skips cleanly (and preserves any existing file) without
+# ANTHROPIC_API_KEY, so its absence must not count as a missing output.
+OPTIONAL_OUTPUTS = {"commodity_interpretation.json"}
 
 
 def main():
@@ -186,7 +211,8 @@ def main():
     # enough — a stub envelope would pass that while the frontend shows nothing.
     # Feeds in EMPTY_OK legitimately ship empty and are exempt from the
     # non-trivial requirement (but must still exist).
-    expected_files = [s[2] for s in STEPS if len(s) == 3]
+    expected_files = [s[2] for s in STEPS
+                      if len(s) == 3 and s[2] not in OPTIONAL_OUTPUTS]
     missing = [f for f in expected_files
                if not (DATA_DIR / f).exists()
                or (f not in EMPTY_OK and not _has_existing_data(f))]

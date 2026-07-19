@@ -37,8 +37,10 @@ Commodity HS codes:
   3102  Nitrogenous fertilizers (covers urea)
   0201  Bovine meat, fresh/chilled
 """
+import json
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
+from pathlib import Path
 
 import requests
 from _common import env, write_json, UA
@@ -147,6 +149,103 @@ PRIORITY_IMPORTERS = {
 }
 
 
+# A 429 is a temporary "come back later", not an answer. Re-queue it instead of
+# dropping the call (see the requeue loop in main()).
+MAX_RETRIES_PER_CALL = 3
+BACKOFF_SECONDS = 30
+
+OUTPUT_PATH = Path(__file__).resolve().parent.parent / "data" / "comtrade_staples.json"
+
+
+def _coverage(payload):
+    """(importers, importer×commodity pairs) in a comtrade_staples data dict."""
+    if not isinstance(payload, dict):
+        return 0, 0
+    pairs = sum(len(v) for v in payload.values() if isinstance(v, dict))
+    return len(payload), pairs
+
+
+# A KEEP protects good data from our own rate-limiting. But it must never be
+# able to hold a stale snapshot forever: if the source genuinely shrinks, every
+# subsequent run would also shrink, and (because 429s are routine here — 65-69
+# skipped calls is typical) every run would KEEP. Past this age we publish
+# whatever we have, loudly, rather than serving a file that can never refresh.
+MAX_KEEP_AGE_DAYS = 7
+
+
+def _existing_age_days():
+    """Age of the file on disk in days, or None if absent/unreadable/undated."""
+    if not OUTPUT_PATH.exists():
+        return None
+    try:
+        from datetime import datetime, timezone
+        meta = json.loads(OUTPUT_PATH.read_text()).get("_meta") or {}
+        stamp = meta.get("generated_at")
+        if not stamp:
+            return None
+        then = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+        if then.tzinfo is None:
+            then = then.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - then).total_seconds() / 86400.0
+    except Exception as e:
+        print(f"  [warn] could not read age of {OUTPUT_PATH.name} ({e})")
+        return None
+
+
+def _existing_coverage():
+    """Coverage of the file already on disk, or (0, 0) if there is none."""
+    if not OUTPUT_PATH.exists():
+        return 0, 0
+    try:
+        return _coverage(json.loads(OUTPUT_PATH.read_text()).get("data") or {})
+    except Exception as e:
+        print(f"  [warn] could not read existing {OUTPUT_PATH.name} ({e}); "
+              f"treating existing coverage as zero")
+        return 0, 0
+
+
+def _is_aggregate(row, key):
+    """True when `key` marks this row as the un-broken-out aggregate.
+
+    Absent/null/empty counts as aggregate: the endpoint omits the field entirely
+    when it returns no breakdown. An unparseable value counts as a breakout and
+    is dropped — double-counting is a silent correctness bug, while dropping one
+    odd row shows up plainly in the totals.
+    """
+    v = row.get(key)
+    if v in (None, "", 0, "0"):
+        return True
+    try:
+        return int(v) == 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _clean_rows(rows):
+    """Drop Comtrade breakout rows so the same trade is not counted twice.
+
+    The public preview endpoint returns the same trade three ways: once as an
+    aggregate (motCode=0, partner2Code=0), again split per transport mode
+    (motCode=1,2,...), and again per second partner (partner2Code=899). The
+    per-mode rows sum exactly to the motCode=0 total, so summing every returned
+    row multiplies the real figure.
+
+    Measured inflation before this filter (2024 wheat imports, saved vs clean):
+    GBR 3,548,448,325 vs 887,112,081 (4.00x); ESP 10,021,151,433 vs 942,444,829
+    (~11x); DEU 3.05x — while EGY/ITA/NLD were already 1.00x. The saved file
+    therefore mixed correct and inflated importers, which is worse than being
+    uniformly wrong: no single scale factor corrects it.
+
+    Cross-check: UKR wheat exports 2024 clean = 20.66 Mt / $3.74bn = $181/t,
+    consistent with reality (~16-20 Mt at ~$200/t). The naive sum gave $7.47bn,
+    exactly 2x.
+    """
+    return [
+        row for row in rows
+        if _is_aggregate(row, "motCode") and _is_aggregate(row, "partner2Code")
+    ]
+
+
 def main():
     # v20.8: public preview endpoint requires no auth. We still read COMTRADE_API_KEY
     # for backward compat — if you later upgrade to a paid subscription, the key can
@@ -159,6 +258,7 @@ def main():
     year = 2024  # most recent full year for free tier as of May 2026
     skipped = 0
     succeeded = 0
+    dropped_rows = 0   # v45: breakout rows filtered by _clean_rows()
 
     session = requests.Session()
     session.headers.update({"User-Agent": UA, "Accept": "application/json"})
@@ -167,64 +267,112 @@ def main():
     # Note: omit partnerCode parameter entirely — leaving it blank returns 0 rows on the
     # public endpoint; omitting it returns the full supplier breakdown.
 
-    for reporter_code, importer_iso in PRIORITY_IMPORTERS.items():
-        for cmd_code, cmd_name in COMMODITIES.items():
-            # Throttle to stay polite to the public endpoint (~1 req/sec).
-            time.sleep(THROTTLE_SECONDS)
-            params = {
-                "cmdCode": cmd_code,
-                "flowCode": "M",
-                "reporterCode": reporter_code,
-                "period": year,
-                "max": 500,
-            }
-            try:
-                r = session.get(URL, params=params, timeout=45)
-            except Exception as e:
-                print(f"    {importer_iso}/{cmd_name}: skipped (network: {e})")
-                skipped += 1
-                continue
-            if r.status_code == 429:
-                # Too many requests — back off 30s and continue to next call.
-                # Don't retry; we'll catch the rest tomorrow.
-                print(f"    {importer_iso}/{cmd_name}: 429 rate-limited, backing off 30s")
-                skipped += 1
-                time.sleep(30)
-                continue
-            if r.status_code != 200:
-                print(f"    {importer_iso}/{cmd_name}: HTTP {r.status_code}")
-                skipped += 1
-                continue
-            payload = r.json()
-            rows = payload.get("data", []) or []
-            succeeded += 1
-            for row in rows:
-                # Public preview endpoint returns partnerISO as null; only partnerCode
-                # (numeric M49) is populated. Resolve to ISO3 via the reverse lookup.
-                # netWgt is also null on the public endpoint — primaryValue is the only
-                # value signal. We store it as raw USD in total_value_usd/value_usd and
-                # keep the legacy total_usd_m/usd_m aliases for backward compatibility.
-                # Skip the kt conversion that the paid endpoint supported.
-                p_code = row.get("partnerCode")
-                if not p_code or p_code == 0:
-                    continue
-                sup = M49_TO_ISO3.get(int(p_code))
-                if not sup:
-                    continue
-                value_usd = row.get("primaryValue") or 0
-                if value_usd <= 0:
-                    continue
-                # Public preview values in current saved files are stored as raw USD.
-                # Example: Egypt 2024 wheat total is ~4.44e9 in data/comtrade_staples.json.
-                entry = out[importer_iso][cmd_name]
-                entry["total_value_usd"] += value_usd
-                # netWgt is null on public preview — we cannot compute kt. Set to 0
-                # so downstream code knows volumes aren't available; UI must label as
-                # "obs · aggregate (USD only)" rather than implying kt accuracy.
-                s = entry["by_supplier"][sup]
-                s["value_usd"] += value_usd
+    # Work queue rather than a nested for-loop, so a rate-limited call can go to
+    # the BACK of the queue instead of being abandoned. Previously a 429 hit
+    # `skipped += 1; continue` and that importer/commodity pair simply vanished
+    # from the run. Because which calls get throttled is effectively arbitrary,
+    # consecutive runs lost and gained different pairs (a verified rerun churned
+    # 24 pairs each way), so the published coverage wandered at random.
+    queue = deque(
+        (reporter_code, importer_iso, cmd_code, cmd_name, 0)
+        for reporter_code, importer_iso in PRIORITY_IMPORTERS.items()
+        for cmd_code, cmd_name in COMMODITIES.items()
+    )
+    total_calls = len(queue)
+    requeued = 0
+    exhausted = []
 
-    print(f"  Fetched {succeeded} commodity-importer combos; skipped {skipped}")
+    while queue:
+        reporter_code, importer_iso, cmd_code, cmd_name, attempt = queue.popleft()
+        # Throttle to stay polite to the public endpoint (~1 req/sec).
+        time.sleep(THROTTLE_SECONDS)
+        params = {
+            "cmdCode": cmd_code,
+            "flowCode": "M",
+            "reporterCode": reporter_code,
+            "period": year,
+            "max": 500,
+        }
+
+        def _retry(reason):
+            """Send this call to the back of the queue, or give up on it."""
+            nonlocal requeued, skipped
+            if attempt + 1 < MAX_RETRIES_PER_CALL:
+                requeued += 1
+                queue.append((reporter_code, importer_iso, cmd_code, cmd_name,
+                              attempt + 1))
+                print(f"    {importer_iso}/{cmd_name}: {reason} — re-queued "
+                      f"(attempt {attempt + 2}/{MAX_RETRIES_PER_CALL})")
+            else:
+                skipped += 1
+                exhausted.append(f"{importer_iso}/{cmd_name}")
+                print(f"    {importer_iso}/{cmd_name}: {reason} — giving up after "
+                      f"{MAX_RETRIES_PER_CALL} attempts")
+
+        try:
+            r = session.get(URL, params=params, timeout=45)
+        except Exception as e:
+            _retry(f"network: {e}")
+            continue
+        if r.status_code == 429:
+            # Temporary, not an answer. Back off, then retry this exact call
+            # later in the run rather than dropping it from coverage.
+            time.sleep(BACKOFF_SECONDS)
+            _retry("429 rate-limited")
+            continue
+        if r.status_code in (500, 502, 503, 504):
+            time.sleep(BACKOFF_SECONDS)
+            _retry(f"HTTP {r.status_code}")
+            continue
+        if r.status_code != 200:
+            # 4xx other than 429 is a real answer ("no such series"): not retryable.
+            print(f"    {importer_iso}/{cmd_name}: HTTP {r.status_code}")
+            skipped += 1
+            continue
+        try:
+            payload = r.json()
+        except Exception as e:
+            _retry(f"unparseable body: {e}")
+            continue
+        raw_rows = payload.get("data", []) or []
+        # v45: filter transport-mode / second-partner breakouts before any
+        # accumulation. Without this the same trade is summed several times.
+        rows = _clean_rows(raw_rows)
+        dropped_rows += len(raw_rows) - len(rows)
+        succeeded += 1
+        for row in rows:
+            # Public preview endpoint returns partnerISO as null; only partnerCode
+            # (numeric M49) is populated. Resolve to ISO3 via the reverse lookup.
+            # netWgt is also null on the public endpoint — primaryValue is the only
+            # value signal. We store it as raw USD in total_value_usd/value_usd and
+            # keep the legacy total_usd_m/usd_m aliases for backward compatibility.
+            # Skip the kt conversion that the paid endpoint supported.
+            p_code = row.get("partnerCode")
+            if not p_code or p_code == 0:
+                continue
+            sup = M49_TO_ISO3.get(int(p_code))
+            if not sup:
+                continue
+            value_usd = row.get("primaryValue") or 0
+            if value_usd <= 0:
+                continue
+            # Public preview values in current saved files are stored as raw USD.
+            # Example: Egypt 2024 wheat total is ~4.44e9 in data/comtrade_staples.json.
+            entry = out[importer_iso][cmd_name]
+            entry["total_value_usd"] += value_usd
+            # netWgt is null on public preview — we cannot compute kt. Set to 0
+            # so downstream code knows volumes aren't available; UI must label as
+            # "obs · aggregate (USD only)" rather than implying kt accuracy.
+            s = entry["by_supplier"][sup]
+            s["value_usd"] += value_usd
+
+    print(f"  Fetched {succeeded}/{total_calls} commodity-importer combos; "
+          f"re-queued {requeued}; skipped {skipped}; "
+          f"dropped {dropped_rows} breakout rows (mot/partner2 duplicates)")
+    if exhausted:
+        print(f"  Calls exhausted after {MAX_RETRIES_PER_CALL} attempts "
+              f"({len(exhausted)}): {', '.join(exhausted[:20])}"
+              + (" ..." if len(exhausted) > 20 else ""))
 
     # v20.8: public preview endpoint does not return netWgt — share_pct is USD-based.
     # Top-5 suppliers per (importer, commodity), ranked by USD value.
@@ -245,30 +393,85 @@ def main():
                 "total_value_usd": round(total_usd, 2),
                 "total_usd_m": round(total_usd, 2),
                 "top_suppliers": suppliers[:5],
-                "value_basis": "USD (raw primaryValue from Comtrade public preview)",
+                "value_basis": ("USD (primaryValue, aggregate rows only: "
+                                "motCode=0 AND partner2Code=0; v45 dedup)"),
             }
 
-    # Safety: if we got very little data this run (e.g. heavy rate-limiting),
-    # don't overwrite an existing file that has real data.
-    if len(final) < 5:
-        from pathlib import Path
-        import json
-        existing = Path(__file__).resolve().parent.parent / "data" / "comtrade_staples.json"
-        if existing.exists():
-            try:
-                prev = json.loads(existing.read_text())
-                if len(prev.get("data", {})) > len(final):
-                    print(f"  Only got {len(final)} importers this run; existing file has {len(prev.get('data',{}))}. Keeping existing.")
-                    return
-            except Exception:
-                pass
+    # ── Coverage-regression guard ────────────────────────────────────────────
+    # The old guard only refused to overwrite when this run produced FEWER THAN
+    # FIVE importers. That number has no relationship to what is already on disk,
+    # so a run returning 19 of 29 importers with 69 calls lost to rate-limiting
+    # sailed straight through and replaced a more complete file. Because
+    # throttling hits arbitrary calls, reruns churned coverage in both directions
+    # (a verified rerun lost 24 pairs and gained 24 others).
+    #
+    # The comparison is now against the EXISTING FILE, at importer×commodity pair
+    # granularity — the level at which the churn actually happened; importer count
+    # alone stays flat while pairs rotate underneath it.
+    #
+    # A genuine upstream shrink still gets through: when nothing was lost to
+    # retryable failures (skipped == 0), a smaller result is real news about the
+    # source rather than an artefact of our own rate-limiting, and is published.
+    new_importers, new_pairs = _coverage(final)
+    old_importers, old_pairs = _existing_coverage()
+    print(f"  Coverage: {new_importers} importers / {new_pairs} pairs this run "
+          f"vs {old_importers} / {old_pairs} on disk")
+
+    shrank = new_pairs < old_pairs or new_importers < old_importers
+    lost_pairs = max(0, old_pairs - new_pairs)
+    age_days = _existing_age_days()
+
+    # Each failed call can account for AT MOST one importer-commodity pair. If we
+    # lost more pairs than we lost calls, our own rate-limiting cannot explain the
+    # shrink and it is real news about the source.
+    explained_by_our_failures = lost_pairs <= skipped
+
+    # Backstop against permanent freeze. The previous guard only published a
+    # shrink when skipped == 0, but 429s are routine here (65-69 skipped calls is
+    # typical), so that branch was effectively unreachable: a genuine upstream
+    # shrink would have been rejected on every future run, forever, while the
+    # stale file kept being served.
+    too_old_to_keep = age_days is not None and age_days > MAX_KEEP_AGE_DAYS
+
+    if shrank and skipped and explained_by_our_failures and not too_old_to_keep:
+        age_note = f"{age_days:.1f}d old" if age_days is not None else "age unknown"
+        print(f"  [KEEP] coverage regressed ({old_pairs} -> {new_pairs} pairs, "
+              f"{old_importers} -> {new_importers} importers) while {skipped} call(s) "
+              f"failed after retries, so our rate-limiting explains it "
+              f"({lost_pairs} pairs lost <= {skipped} calls failed). Keeping the "
+              f"existing file ({age_note}) rather than churning coverage.")
+        return
+
+    if shrank:
+        if not skipped:
+            why = "zero failed calls"
+        elif not explained_by_our_failures:
+            why = (f"{lost_pairs} pairs lost exceeds {skipped} failed call(s), so "
+                   f"rate-limiting cannot explain it")
+        else:
+            why = (f"the file on disk is {age_days:.1f}d old (limit "
+                   f"{MAX_KEEP_AGE_DAYS}d) and must not freeze indefinitely")
+        print(f"  [WARN] coverage shrank ({old_pairs} -> {new_pairs} pairs, "
+              f"{old_importers} -> {new_importers} importers) — publishing anyway: "
+              f"{why}.")
 
     write_json(
         "comtrade_staples.json",
         final,
         source=f"UN Comtrade Plus (comtradeapi.un.org) — HS6, year {year}",
         notes=(f"Top 5 suppliers per importer-commodity. ~25 priority importers (free-tier quota). "
-               f"Succeeded: {succeeded}, skipped: {skipped}."),
+               f"Succeeded: {succeeded}/{total_calls}, re-queued: {requeued}, skipped: {skipped}. "
+               f"Coverage this run: {new_importers} importers / {new_pairs} importer-commodity "
+               f"pairs (previous file: {old_importers} / {old_pairs}). "
+               f"Rate-limited (429) calls are re-queued up to {MAX_RETRIES_PER_CALL} times rather "
+               f"than dropped, and a coverage regression caused by failed calls keeps the previous "
+               f"file instead of overwriting it. "
+               f"v45: values count Comtrade aggregate rows only (motCode=0 AND partner2Code=0). "
+               f"The public-preview endpoint also returns per-transport-mode and per-second-partner "
+               f"copies of the same trade; summing all rows overstated USD totals for a subset of "
+               f"importers by ~3-11x (GBR 4.00x, DEU 3.05x, ESP ~11x; EGY/ITA/NLD were unaffected). "
+               f"Dropped {dropped_rows} breakout rows this run. Values are raw USD despite the "
+               f"legacy usd_m / total_usd_m field names."),
     )
 
 

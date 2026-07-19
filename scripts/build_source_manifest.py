@@ -260,6 +260,17 @@ SOURCES = [
         "cadence": "manual / rolling upstream",
         "mode": "static_helper",
     },
+    # v46 — commodity headlines from GDELT DOC 2.0 + the European Commission
+    # agriculture RSS. Both keyless. mode='live' because it refreshes every cron,
+    # but note the payload is third-party CLAIMS with links, not measured data —
+    # the count below is HEADLINES, not countries or commodities.
+    {
+        "key": "commodity_news",
+        "file": "commodity_news.json",
+        "label": "Commodity news (GDELT DOC 2.0 + EC agriculture RSS)",
+        "cadence": "6h fetch / continuous upstream",
+        "mode": "live",
+    },
 ]
 
 
@@ -280,6 +291,12 @@ def payload_count(key, payload):
         return len((payload.get("series") or {}).keys())
     if key == "reliefweb_alerts":
         return len(payload.get("events") or [])
+    # v46 — mirrors the reliefweb_alerts case: the payload is an object holding a
+    # list plus per-commodity status, so the generic key count would report "3"
+    # (items/commodity_status/sources) instead of the number of HEADLINES. The
+    # Data Status page counts stories here, not commodities.
+    if key == "commodity_news":
+        return len(payload.get("items") or [])
     # Ignore internal underscore-prefixed keys (e.g. fx_rates' _ccy_history rolling
     # store) so they don't inflate the per-source country count on the Data Status page.
     return len([k for k in payload if not str(k).startswith("_")])
@@ -329,6 +346,25 @@ def infer_status(spec, envelope, count, period):
 
     if envelope is None:
         return "failed", "missing file"
+
+    # v43 — an EXPLICIT _meta.status from the refresh script wins over the
+    # note-sniffing below. Inferring state by string-matching prose is how
+    # three feeds sat at a generic "empty payload" for months while the real
+    # causes were entirely different: a rejected API key, a schema misread,
+    # and a stale download URL. A script that knows why it failed should say
+    # so in a field, and that field should be believed.
+    explicit = str(meta.get("status") or "").lower()
+    if explicit == "auth_failed":
+        return "setup_required", "API key rejected by upstream — re-provision the secret"
+    if explicit == "degraded_fallback":
+        return "degraded", "serving a fallback tier, not the primary source"
+    if explicit == "degraded_feeds":
+        # A multi-source feed where a large share of sources failed. The item
+        # count stays healthy because the survivors fill the page, which is
+        # exactly why the count cannot be trusted as a health signal here.
+        return "degraded", "a significant share of upstream sources failed this run"
+    if explicit == "degraded_partial":
+        return "degraded", "pagination truncated — the result set is incomplete"
     # Only treat as setup_required when the meta explicitly signals missing
     # credentials / pending approval. The earlier "appname" token matched
     # ReliefWeb's healthy source string (which embeds "appname=foodshield"

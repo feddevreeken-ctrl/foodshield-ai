@@ -9,12 +9,34 @@ WHY ND-GAIN:
   Most-cited climate-adaptation index in academic + policy work. Free
   download, CC-licensed, covers ~192 countries from 1995 to ~2023 (2-year lag).
 
-ARCHITECTURE NOTE (May 2026):
+ARCHITECTURE NOTE (v43, 18 Jul 2026) — CORRECTS THE PREVIOUS NOTE:
+  The old note (kept at the bottom) claimed ND-GAIN served the ZIP behind a
+  "session-scoped download". That was WRONG, and the wrong diagnosis cost this
+  feed months of empty payloads. Verified 18 Jul 2026 — two separate faults:
+
+    1. STALE URL. `resources.zip` is no longer the release path. The current
+       release is `/assets/<id>/ndgain_countryindex_<year>.zip`, linked from
+       the public download page. The asset id is release-scoped and WILL
+       change at the next annual release, so we scrape the link instead of
+       hardcoding it.
+
+    2. USER-AGENT BLOCKING. gain.nd.edu returns 403 to our project UA and to
+       default python-requests; a browser UA returns 200 application/zip.
+       Confirmed stateless — no cookies, no referer, no session. We send a
+       browser UA to this host only, and document it here rather than hiding
+       it. The data is CC-licensed and published for public download, so this
+       is a bot filter rather than an access control.
+
+  FALLBACK CHAIN. Each tier records itself in _meta.tier and _meta.vintage so
+  a silent downgrade can never masquerade as a healthy fetch:
+    tier1_release  scraped release ZIP   1995-2024, 192 countries, has food
+    tier2_imf      IMF ArcGIS mirror     2015-2021, has vs_Food, IMF-adapted
+    empty          honest empty payload  reason on _meta.notes
+
+SUPERSEDED NOTE (May 2026, factually wrong — kept so the mistake stays visible):
   ND-GAIN publishes a ZIP of CSVs at https://gain-new.crc.nd.edu/about/download.
   The direct ZIP URL is not exposed as a single canonical link — the page
-  generates a session-scoped download. We hit a small set of known mirror
-  filenames; if they fail we fall back to writing an empty payload with a
-  clear `_meta.notes` rather than crashing the workflow.
+  generates a session-scoped download.
 
 DATA WE EXTRACT (per country, latest year):
   - ND-GAIN composite index    0-100, higher = better adapted
@@ -51,55 +73,203 @@ Wired into:
 """
 import csv
 import io
+import re
 import zipfile
+from pathlib import Path
 
-from _common import http_get, write_json
+from _common import DATA_DIR, http_get, write_json
 
-# ND-GAIN download URLs to try in order.
-# v21 (May 2026) — old `gain.nd.edu/sites/default/files/resources.zip` returns
-# 404. ND-GAIN migrated data hosting to `gain-new.crc.nd.edu`. The new
-# download page (https://gain-new.crc.nd.edu/about/download) serves the ZIP
-# via a JS button rather than a stable href, so we try the most likely
-# filenames in sequence and fall back to the IMF mirror (ArcGIS Hub, exposes
-# CSV/GeoJSON) when all direct attempts 404.
-URLS = [
-    "https://gain-new.crc.nd.edu/sites/default/files/resources.zip",
-    "https://gain-new.crc.nd.edu/sites/default/files/nd_gain_countryindex.zip",
-    "https://gain-new.crc.nd.edu/sites/default/files/resources-v2.zip",
-    "https://gain-new.crc.nd.edu/api/v1/resources/zip",
-    "https://gain-new.crc.nd.edu/download/resources.zip",
-    # IMF Climate Data mirror — ArcGIS Hub CSV export (stable, no auth)
-    "https://services3.arcgis.com/Jdnp1TjADvSDxMAX/arcgis/rest/services/ND_GAIN_Country_Index/FeatureServer/0/query?where=1%3D1&outFields=*&f=csv",
-    # Legacy host kept as last fallback
-    "https://gain.nd.edu/sites/default/files/resources.zip",
-]
+# Public download page. We scrape the release asset link off this rather than
+# hardcoding it, because the asset id changes with every annual release.
+DOWNLOAD_PAGE = "https://gain.nd.edu/our-work/country-index/download-data/"
+ASSET_RE = re.compile(r"/assets/\d+/[A-Za-z0-9_.\-]+\.zip")
+
+# Known-good release URL as of 18 Jul 2026. Only used if scraping the page
+# turns up nothing — the scrape is the primary path.
+KNOWN_RELEASE = "https://gain.nd.edu/assets/647440/ndgain_countryindex_2026.zip"
+
+# gain.nd.edu 403s our project UA. See the ARCHITECTURE NOTE above.
+BROWSER_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+)
+ZIP_HEADERS = {"User-Agent": BROWSER_UA, "Accept": "application/zip,*/*"}
+
+# IMF Climate Change Indicators mirror. Carries vs_Food, but the series stops
+# at 2021 and the scores are "IMF-adapted" rather than raw ND-GAIN — so this
+# tier is a real downgrade and must be labelled as one on the payload.
+IMF_QUERY = (
+    "https://services9.arcgis.com/weJ1QsnbMYJlCHdG/arcgis/rest/services/"
+    "ND_GAIN_with_country_boundaries/FeatureServer/0/query"
+    "?where=1%3D1&outFields=*&returnGeometry=false&f=json&resultRecordCount=5000"
+)
+
+# Local manual-drop escape hatch, kept from the previous design.
+LOCAL_ZIP = Path(DATA_DIR) / "ndgain_resources.zip"
+
+
+def _discover_release_url():
+    """Scrape the download page for the current release asset link."""
+    try:
+        r = http_get(DOWNLOAD_PAGE, timeout=60,
+                     headers={"User-Agent": BROWSER_UA, "Accept": "text/html"},
+                     retries=2)
+    except Exception as e:
+        print(f"  [warn] download page unreachable: {e}")
+        return None
+    hits = sorted(set(ASSET_RE.findall(r.text or "")))
+    if not hits:
+        print("  [warn] no /assets/<id>/*.zip link found on the download page")
+        return None
+    if len(hits) > 1:
+        print(f"  [warn] {len(hits)} asset links found, taking the first: {hits}")
+    url = "https://gain.nd.edu" + hits[0]
+    print(f"  [INFO] discovered release asset: {url}")
+    return url
+
+
+def _fetch_release_zip():
+    """Tier 1. Returns (zip_bytes, used_url) or (None, None)."""
+    if LOCAL_ZIP.exists() and LOCAL_ZIP.stat().st_size > 10_000:
+        print(f"  [INFO] using manually-dropped {LOCAL_ZIP.name}")
+        return LOCAL_ZIP.read_bytes(), f"local:{LOCAL_ZIP.name}"
+
+    candidates = [u for u in (_discover_release_url(), KNOWN_RELEASE) if u]
+    seen = set()
+    for url in candidates:
+        if url in seen:
+            continue
+        seen.add(url)
+        try:
+            r = http_get(url, timeout=180, headers=ZIP_HEADERS, retries=2, patient=True)
+        except Exception as e:
+            print(f"  [skip] {url}: {e}")
+            continue
+        body = r.content or b""
+        ctype = (r.headers.get("Content-Type") or "").lower()
+        # A 200 carrying HTML is the classic symptom here — treat it as failure
+        # rather than handing an HTML page to the zip parser.
+        if "html" in ctype or body[:2] != b"PK":
+            print(f"  [skip] {url}: not a zip (content-type={ctype!r}, {len(body)} bytes)")
+            continue
+        print(f"  [OK] downloaded {len(body)//1024} KB from {url}")
+        return body, url
+    return None, None
+
+
+def _fetch_imf_mirror():
+    """Tier 2. IMF ArcGIS mirror. Returns {iso3: row} or {}."""
+    print("[INFO] tier 1 failed — trying IMF ArcGIS mirror")
+    try:
+        r = http_get(IMF_QUERY, timeout=120, retries=2, patient=True)
+        payload = r.json()
+    except Exception as e:
+        print(f"  [skip] IMF mirror: {e}")
+        return {}
+    feats = payload.get("features") or []
+    if not feats:
+        print(f"  [skip] IMF mirror returned no features ({str(payload)[:200]})")
+        return {}
+
+    # Join on ISO3 only. The IMF service has corrupted COUNTRY strings on some
+    # rows (BTN is labelled "Bhutanese ngultrum"), so names are not trustworthy.
+    best = {}
+    _scale_rejects = []
+    for f in feats:
+        a = f.get("attributes") or {}
+        iso = (a.get("ISO3") or "").strip().upper()
+        if len(iso) != 3 or not iso.isalpha():
+            continue
+        year = a.get("Year") or a.get("year")
+        try:
+            year = int(year)
+        except (TypeError, ValueError):
+            continue
+        if iso in best and best[iso]["year"] >= year:
+            continue
+        # SCALE GUARD. Tier 1 publishes vulnerability/readiness/food on 0-1 and
+        # the composite on 0-100. The IMF mirror is a separate publication and
+        # is NOT guaranteed to keep those scales — if it ever switches to
+        # percentages, a 0-1 consumer would read 0.68 as 68 and every downstream
+        # climate score would be silently wrong by two orders of magnitude.
+        # Out-of-range values are dropped rather than coerced: a missing field
+        # degrades a card, a wrongly-scaled one corrupts the index.
+        SCALES = {
+            "gain_index": ("IMF_Adapted_ND_GAIN_Index", 0.0, 100.0),
+            "vulnerability": ("Vulnerability_score", 0.0, 1.0),
+            "readiness": ("IMF_Adapted_Readiness_score", 0.0, 1.0),
+            "food_vulnerability": ("vs_Food", 0.0, 1.0),
+        }
+        row = {"year": year}
+        for out_key, (src_key, lo, hi) in SCALES.items():
+            v = a.get(src_key)
+            if v is None:
+                continue
+            try:
+                fv = float(v)
+            except (TypeError, ValueError):
+                continue
+            if not (lo <= fv <= hi):
+                _scale_rejects.append(f"{iso}.{out_key}={fv}")
+                continue
+            row[out_key] = round(fv, 3)
+        if len(row) > 1:
+            best[iso] = row
+
+    for iso, row in best.items():
+        row["source"] = "ND-GAIN via IMF Climate Change Indicators (IMF-adapted)"
+        row["source_url"] = "https://climatedata.imf.org/"
+        row["quality_flag"] = "sourced"
+    if _scale_rejects:
+        # Loud on purpose. A handful means dirty rows; a flood means the mirror
+        # changed its units and this tier must not be trusted until checked.
+        print(f"  [WARN] IMF mirror: dropped {len(_scale_rejects)} out-of-range values "
+              f"(first few: {_scale_rejects[:5]}). If this count is large, the mirror's "
+              f"scales have changed — do NOT ship this tier until verified.")
+    print(f"  [OK] IMF mirror: {len(best)} countries")
+    # Attach the reject count so main() can persist it — a print() only reaches
+    # a CI log, and the operator who needs this reads the JSON.
+    best["_scale_rejects"] = len(_scale_rejects)
+    return best
 
 
 def main():
     print("[INFO] ND-GAIN Country Index download")
-    zip_bytes = None
-    used_url = None
-    for url in URLS:
-        try:
-            r = http_get(url, timeout=120, headers={"Accept": "application/zip,*/*"}, retries=2, patient=True)
-            if r.content and len(r.content) > 10_000:
-                zip_bytes = r.content
-                used_url = url
-                print(f"  [OK] downloaded {len(zip_bytes)//1024} KB from {url}")
-                break
-            print(f"  [skip] {url}: response too small ({len(r.content) if r.content else 0} bytes)")
-        except Exception as e:
-            print(f"  [skip] {url}: {e}")
+    zip_bytes, used_url = _fetch_release_zip()
 
     if not zip_bytes:
+        imf = _fetch_imf_mirror()
+        _scale_rejects = [None] * imf.pop("_scale_rejects", 0) if imf else []
+        if imf:
+            years = [r["year"] for r in imf.values() if r.get("year")]
+            vintage = max(years) if years else None
+            write_json(
+                "ndgain.json", imf,
+                source="ND-GAIN via IMF Climate Change Indicators mirror",
+                status="degraded_fallback",
+                notes=(
+                    f"TIER 2 FALLBACK — the ND-GAIN release ZIP could not be fetched, so "
+                    f"these figures come from the IMF Climate Change Indicators mirror. "
+                    f"Scores are IMF-ADAPTED, not raw ND-GAIN, and the series stops at "
+                    f"{vintage} rather than the current ND-GAIN release. Covered "
+                    f"{len(imf)} countries. Treat as a downgrade, not a healthy fetch."
+                    + (f" SCALE GUARD dropped {len(_scale_rejects)} out-of-range values "
+                       f"— if that count is large the mirror has changed units and this "
+                       f"tier should be verified before being trusted."
+                       if _scale_rejects else "")
+                ),
+            )
+            return
         write_json(
             "ndgain.json", {},
             source="ND-GAIN Country Index",
+            status="empty",
             notes=(
-                "All bulk-download URLs failed; ND-GAIN hosts the dataset behind a "
-                "session-scoped redirect that needs browser-style fetching. "
-                "Manual download: https://gain.nd.edu/our-work/country-index/download-data/ — "
-                "drop resources.zip into data/ndgain_resources.zip and re-run."
+                "Both tiers failed. Tier 1: could not fetch the release ZIP from "
+                f"{DOWNLOAD_PAGE} (the asset link is scraped from that page; if the page "
+                "layout changed, the scrape needs updating). Tier 2: the IMF ArcGIS "
+                "mirror returned nothing. Manual override: download the release ZIP and "
+                f"drop it at data/{LOCAL_ZIP.name}, then re-run."
             ),
         )
         return
@@ -114,15 +284,30 @@ def main():
         )
         return
 
+    # Context-managed below via closing() would restructure main() heavily;
+    # register the close explicitly instead so the handle is not leaked.
     members = zf.namelist()
     print(f"[INFO] ZIP contains {len(members)} files")
 
     # ND-GAIN's structure: multiple CSVs at root + per-sector subfolders.
     # We want the three composites + food-sector vulnerability.
+    # v43 — the output key is `gain_index`, NOT `gain`. index.html:35475 reads
+    # `LIVE.ndgain?.[c.iso]?.gain_index`, so the previous `gain` key meant the
+    # ND-GAIN composite column rendered null even on a successful fetch.
+    # Candidate paths are matched by path suffix, so `gain/gain.csv` must be
+    # listed ahead of the bare `gain.csv` to avoid matching a trends/ file.
     files_of_interest = {
-        "gain": ["gain.csv", "resources/gain.csv"],
-        "vulnerability": ["vulnerability.csv", "resources/vulnerability.csv"],
-        "readiness": ["readiness.csv", "resources/readiness.csv"],
+        "gain_index": ["gain/gain.csv", "resources/gain/gain.csv", "gain.csv"],
+        "vulnerability": [
+            "vulnerability/vulnerability.csv",
+            "resources/vulnerability/vulnerability.csv",
+            "vulnerability.csv",
+        ],
+        "readiness": [
+            "readiness/readiness.csv",
+            "resources/readiness/readiness.csv",
+            "readiness.csv",
+        ],
         "food_vulnerability": [
             "vulnerability/food.csv",
             "resources/vulnerability/food.csv",
@@ -138,10 +323,27 @@ def main():
                 match = candidate
                 break
         if not match:
-            # Fuzzy match: any file whose path ends with the candidate basename
-            for m in members:
-                if any(m.lower().endswith(c.lower()) for c in candidates):
-                    match = m
+            # Suffix match. Iterate CANDIDATES in the outer loop so the more
+            # specific path wins: the 2026 release nests files under a
+            # "ND-GAIN Country Index 2026 Release Data/" prefix, and there is
+            # both a gain/gain.csv and a trends/ tree. Iterating members first
+            # (the pre-v43 behaviour) let whichever file happened to come first
+            # in the archive win, which could silently bind gain_index to a
+            # trends series.
+            # PATH-BOUNDARY suffix match. A bare endswith() is not enough:
+            # candidate "vulnerability.csv" also matches
+            # ".../vulnerability/food_vulnerability.csv", which would bind the
+            # vulnerability metric to the FOOD series and ship it as
+            # quality_flag=sourced. Require the match to start at a path
+            # segment boundary so only whole path components can match.
+            for c in candidates:
+                cl = c.lower()
+                for m in members:
+                    ml = m.lower()
+                    if ml == cl or ml.endswith("/" + cl):
+                        match = m
+                        break
+                if match:
                     break
         if not match:
             print(f"  [warn] {metric}: file not found in ZIP")
@@ -180,28 +382,50 @@ def main():
         row["quality_flag"] = "sourced"
         out[iso] = row
 
-    print(f"[INFO] Compiled ND-GAIN scores for {len(out)} countries")
+    if not out:
+        write_json(
+            "ndgain.json", {},
+            source=f"ND-GAIN Country Index ({used_url})",
+            status="empty",
+            notes=(
+                f"Downloaded and opened the ZIP from {used_url}, but no country rows "
+                f"parsed out of it. The archive layout has probably changed — check "
+                f"the file paths in files_of_interest against the ZIP's namelist."
+            ),
+        )
+        return
+
+    vintage = max((r["year"] for r in out.values() if r.get("year")), default=None)
+    covered = {m: sum(1 for r in out.values() if m in r)
+               for m in ("gain_index", "vulnerability", "readiness", "food_vulnerability")}
+    print(f"[INFO] Compiled ND-GAIN scores for {len(out)} countries "
+          f"(latest year {vintage}) — per-metric coverage: {covered}")
 
     # Sanity check on a few well-known references
     for ref in ("USA", "NLD", "BGD", "AFG", "BRA", "JPN", "DEU"):
         if ref in out:
-            print(f"  [ref] {ref}: gain={out[ref].get('gain_index')}, "
+            print(f"  [ref] {ref}: gain_index={out[ref].get('gain_index')}, "
                   f"vuln={out[ref].get('vulnerability')}, "
                   f"ready={out[ref].get('readiness')}, "
                   f"food_vuln={out[ref].get('food_vulnerability')} "
                   f"(yr {out[ref].get('year')})")
 
+    zf.close()
+
     write_json(
         "ndgain.json",
         out,
         source=f"ND-GAIN Country Index ({used_url})",
+        status="ok",
         notes=(
+            f"TIER 1 — raw ND-GAIN release, latest year {vintage}. "
             f"Annual climate vulnerability + readiness scores per country. "
             f"Vulnerability: 0-1, higher = more vulnerable (NOT inverted). "
             f"Readiness: 0-1, higher = more resilient. "
             f"ND-GAIN composite: 0-100, higher = better adapted. "
             f"Food sector sub-score (food_vulnerability) directly feeds the FDRS climate "
-            f"component. Covered {len(out)} countries. "
+            f"component. Covered {len(out)} countries "
+            f"(per-metric: {covered}). "
             f"Source refreshes annually (typically Q3/Q4); pipeline runs every 6h but "
             f"data rarely changes between releases."
         ),
