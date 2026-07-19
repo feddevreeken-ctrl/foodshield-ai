@@ -1094,23 +1094,44 @@ body {
   text-transform: uppercase; letter-spacing: .14em;
 }
 .news-today-count { font-size: 9.5px; color: var(--t-meta, var(--t3)); }
+/* ── v49.2 — the latest band, as a paper prints it ────────────────────────
+   Was six rounded cards with fills, borders and a coloured left bar, scrolling
+   horizontally and clipping the last headline mid-word ("ICM to host lamb
+   production inf…"). Three problems at once: it contradicted the
+   rules-not-cards system the rest of the page now uses, its headlines were
+   sans while every other headline is serif, and a horizontal scroll with no
+   affordance hid content on a page whose entire argument is that nothing is
+   hidden. Now columns divided by hairlines, wrapping instead of scrolling, so
+   nothing is ever clipped. */
 .news-today-row {
-  display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px;
-  scrollbar-width: thin;
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0 0; padding-bottom: 2px;
 }
 .news-today-card {
-  flex: 0 0 auto; width: 230px; padding: 9px 11px;
-  background: var(--bg2); border: 1px solid var(--b1);
-  border-left: 2px solid var(--b3); border-radius: 6px;
+  padding: 0 16px; min-width: 0;
+  background: none; border: none; border-radius: 0;
+  border-left: 1px solid rgba(235,233,226,.10);
 }
-.news-today-card.disruption { border-left-color: #e58a78; }
+.news-today-card:first-child { padding-left: 0; border-left: none; }
+/* Disruption reads as a coloured kicker, not a coloured container. */
+.news-today-card.disruption { border-left-color: rgba(235,233,226,.10); }
 .news-today-flag {
-  font-size: 8.5px; font-weight: 700; letter-spacing: .07em;
-  text-transform: uppercase; color: #e58a78; margin-bottom: 3px;
+  font-size: 9px; font-weight: 600; letter-spacing: .09em;
+  text-transform: uppercase; color: #cc1452; margin-bottom: 4px;
 }
 .news-today-hl {
-  font-size: 11.5px; line-height: 1.35; color: var(--t1);
-  text-decoration: none; display: block; font-weight: 500;
+  font-family: 'Iowan Old Style', 'Palatino Linotype', ui-serif, Georgia, serif;
+  font-size: 14px; line-height: 1.25; font-weight: 400; color: var(--t1);
+  text-decoration: none; display: block;
+}
+@media (max-width: 1100px) {
+  .news-today-row { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 18px; }
+  .news-today-card:nth-child(3n+1) { padding-left: 0; border-left: none; }
+}
+@media (max-width: 700px) {
+  .news-today-row { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 16px; }
+  .news-today-card:nth-child(3n+1) { padding-left: 16px; border-left: 1px solid rgba(235,233,226,.10); }
+  .news-today-card:nth-child(2n+1) { padding-left: 0; border-left: none; }
 }
 .news-today-hl:hover { color: #8aa6c4; }
 .news-today-meta { font-size: 9px; color: var(--t-meta, var(--t3)); margin-top: 5px; }
@@ -1474,6 +1495,16 @@ body {
   font: 600 10.5px/1 ui-monospace, "SF Mono", Menlo, monospace;
   font-variant-numeric: tabular-nums;
 }
+/* The two claim types, kept apart inside the card as they are on the row. */
+.news-synth .nsv-modeled { color: var(--t3); margin-right: 4px; font-weight: 400; }
+.news-synth .nsv-modeled-note {
+  margin-left: 7px; font-size: 8px; letter-spacing: .1em; color: var(--t3);
+  opacity: .8; text-transform: uppercase;
+}
+.news-synth .nsv-route-label {
+  display: block; font: 400 8px/1 var(--sans, inherit); letter-spacing: .1em;
+  text-transform: uppercase; color: var(--t3); margin-bottom: 5px; opacity: .8;
+}
 .news-synth .nsv-iso { color: var(--t2); margin-right: 6px; letter-spacing: .04em; }
 .news-synth .nsv-kt  { color: #e58a78; }
 .news-synth .nsv-route > * + * { margin-left: 0; }
@@ -1537,7 +1568,11 @@ body {
 .news-body-wrap { animation: newsPost .3s cubic-bezier(.22,.61,.36,1) both; animation-delay: calc(var(--i, 0) * 20ms); }
 @media (prefers-reduced-motion: reduce) { .news-body-wrap { animation: none; } }
 @media (max-width: 640px) {
-  .news-stream { grid-template-columns: 54px 1px minmax(0, 1fr); }
+  /* The painted rail must move with the column. Narrowing the track to 54px
+     while leaving background-position at 76px left the hairline floating in
+     the middle of the text. */
+  .news-stream { grid-template-columns: 54px 1px minmax(0, 1fr);
+                 background-position: 54px 0, 0 0; }
   .news-body-wrap { padding-left: 11px; }
 }
 
@@ -25983,11 +26018,22 @@ function _newsSynthVisual(it) {
       ).join('<span class="nsv-dot">·</span>')
     : '';
 
+  // v49.2 — the subject is MODELED and must say so.
+  //
+  // Codex review: this card promoted matched[0] — our keyword match on the
+  // headline — into the dominant visual subject with no modeled marker, sitting
+  // directly beside sourced corridor tonnage. That is the modeled/sourced blur
+  // _meta.notes forbids, and it was the most prominent instance of it on the
+  // page. It also corrects my own commit claim that every string here comes
+  // from the payload: the kicker words below are written by this template, not
+  // read from data, and they are now labelled as descriptors rather than
+  // presented as if the source said them.
+  const modeled = !!(choke || matched.length || disrupt);
   return `<div class="news-synth" style="--c1:${tint[0]};--c2:${tint[1]}" aria-hidden="true">
     <div class="nsv-grain"></div>
-    <div class="nsv-kicker">${_escFeed(kicker)}</div>
+    <div class="nsv-kicker">${modeled ? '<span class="nsv-modeled">~</span>' : ''}${_escFeed(kicker)}<span class="nsv-modeled-note">${modeled ? 'modeled match' : ''}</span></div>
     <div class="nsv-subject">${_escFeed(subject)}</div>
-    ${route ? `<div class="nsv-route">${route}</div>` : ''}
+    ${route ? `<div class="nsv-route"><span class="nsv-route-label">sourced corridors</span>${route}</div>` : ''}
   </div>`;
 }
 
@@ -26089,7 +26135,7 @@ function renderNewsTab() {
   // "2 headlines" in the lede and "8 of 41" in the strip, listing stories the
   // filter had excluded. A strip that ignores the active filter is not a
   // summary of what you are looking at.
-  const _renderNewsToday = (pool) => {
+  const _renderNewsToday = (pool, filteredEmpty) => {
   const todayEl = document.getElementById('news-today');
   if (todayEl) {
     const now = Date.now();
@@ -26106,7 +26152,7 @@ function renderNewsTab() {
       const r = rank(a) - rank(b);
       if (r) return r;
       return (Date.parse(b.published_at || 0) || 0) - (Date.parse(a.published_at || 0) || 0);
-    }).slice(0, 8);
+    }).slice(0, 5);   // v49.2 — five, to match the five columns exactly
 
     todayEl.innerHTML = fresh.length ? `
       <div class="news-today-head">
@@ -26131,9 +26177,16 @@ function renderNewsTab() {
     // the feature. On a Sunday, with the ag trade press silent since Friday,
     // this is the DEFAULT state — and the branch above goes to real effort to
     // name a cause, so silence here is the inconsistency. Say why it is quiet.
-    : `<div class="news-empty">Nothing published in the last 48 hours. The
-         agriculture trade press publishes on weekdays, so this is normal at a
-         weekend — the stream below covers the last 14 days.</div>`;
+    // v49.2 — two different facts, two different messages. Once the strip was
+    // fed the filtered set, a filter matching nothing rendered "nothing
+    // published in the last 48 hours" — which is a claim about the WORLD, not
+    // about the filter. The publishers published; you filtered them out.
+    : filteredEmpty
+      ? `<div class="news-empty">No headlines match the current filters in the
+           last 48 hours.</div>`
+      : `<div class="news-empty">Nothing published in the last 48 hours. The
+           agriculture trade press publishes on weekdays, so this is normal at a
+           weekend — the stream below covers the last 14 days.</div>`;
   }
   };
 
@@ -26223,10 +26276,19 @@ function renderNewsTab() {
   if (_mh) {
     const _ne = (typeof LIVE !== 'undefined') ? LIVE.commodity_news : null;
     const g = _ne && _ne._meta && _ne._meta.generated_at ? Date.parse(_ne._meta.generated_at) : NaN;
-    const d = isFinite(g) ? new Date(g) : new Date();
-    _mh.textContent = d.toLocaleDateString(undefined,
-      { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-      + ' · built ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    // v49.2 — never fall back to the viewer's clock. This previously did
+    // `isFinite(g) ? new Date(g) : new Date()`, which silently substituted
+    // "now" for a missing or unparseable build time — a dateline asserting the
+    // edition was assembled this minute when we do not know when it was. If
+    // the timestamp is absent, say so.
+    if (!isFinite(g)) {
+      _mh.textContent = 'build time not reported';
+    } else {
+      const d = new Date(g);
+      _mh.textContent = d.toLocaleDateString(undefined,
+        { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+        + ' · built ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    }
   }
 
   _renderNewsToday(shown);
@@ -26285,8 +26347,9 @@ function renderNewsTab() {
       ${bits.length ? _escFeed(bits.join(' · ')) : 'the current filters'}.
       <button class="news-clear-filters" onclick="clearNewsFilters()">Clear filters</button></div>`;
     if (lede) lede.innerHTML = `<b>0</b> of ${all.length} headlines match the current filters.`;
-    // The strip must reflect the same empty result, not the previous filter's.
-    _renderNewsToday([]);
+    // The strip must reflect the same empty result, not the previous filter's,
+    // and must say it is the FILTER that is empty rather than the news.
+    _renderNewsToday([], true);
     return;
   }
   // Tier boundaries: 1 lead, the next 11 at mid weight, the rest as tail rows.
@@ -26460,11 +26523,51 @@ function renderNewsTab() {
     ev.preventDefault();                           // Space must not scroll
     _newsToggleRow(body);
   };
+  // v49.2 — keep aria-expanded honest when the NATIVE <summary> is used.
+  // _newsToggleRow was its only writer, and the click handler deliberately
+  // ignores clicks inside details — so opening a panel by its own summary left
+  // the row button still announcing aria-expanded="false". `toggle` does not
+  // bubble, hence capture.
+  stream.addEventListener('toggle', (ev) => {
+    const det = ev.target;
+    if (!det || !det.classList || !det.classList.contains('news-interp')) return;
+    const body = det.closest('.news-body-wrap');
+    if (!body || !body.hasAttribute('aria-expanded')) return;
+    const dets = body.querySelectorAll('details.news-interp');
+    body.setAttribute('aria-expanded',
+      Array.from(dets).some(d => d.open) ? 'true' : 'false');
+  }, true);
 
   // ── Exposure leaderboard ──
+  //
+  // v49.2 — recomputed from the FILTERED set. It read the static payload
+  // aggregate, so filtering the ledger to wheat still showed China at 74.6 Mt
+  // under "Most reached right now" — a rail contradicting the result set beside
+  // it. Same construction as the pipeline's own: kt is the LARGEST single
+  // corridor per country, never a sum, because adding a wheat corridor to a
+  // palm-oil one produces a number that means nothing. Ranked by headline count,
+  // which is what the rail foot says it ranks by.
   if (board) {
-    const d = LIVE.commodity_news;
-    const lb = (d && d.data && d.data.exposure_leaderboard) || [];
+    const _agg = new Map();
+    ranked.forEach(it => {
+      const seen = new Set();
+      (it.exposed || []).forEach(e => {
+        if (!e || !e.iso) return;
+        const cur = _agg.get(e.iso) || { iso: e.iso, name: e.name || e.iso, kt: 0, items: 0, commodities: new Set() };
+        cur.kt = Math.max(cur.kt, e.kt || 0);
+        if (!seen.has(e.iso)) { cur.items += 1; seen.add(e.iso); }
+        (it.matched || []).forEach(c => cur.commodities.add(c));
+        _agg.set(e.iso, cur);
+      });
+    });
+    // Carry the payload's country names across — the items only hold ISO codes.
+    const _names = {};
+    (((LIVE.commodity_news || {}).data || {}).exposure_leaderboard || [])
+      .forEach(r => { if (r && r.iso) _names[r.iso] = r.name; });
+    const lb = Array.from(_agg.values())
+      .map(r => ({ ...r, name: _names[r.iso] || r.iso, commodities: Array.from(r.commodities) }))
+      .sort((a, b) => (b.items - a.items) || (b.kt - a.kt))
+      .slice(0, 12);
     board.innerHTML = lb.length
       ? lb.map(r => `<div class="news-lb-row">
           <div>
@@ -26473,7 +26576,7 @@ function renderNewsTab() {
           </div>
           <div class="news-lb-kt">${_newsFmtKt(r.kt)}</div>
         </div>`).join('')
-      : `<div class="news-lb-sub">No corridor matches in the current window.</div>`;
+      : `<div class="news-lb-sub">No corridor matches in the current view.</div>`;
   }
 }
 
@@ -26614,6 +26717,7 @@ function stopNewsAutoRefresh() {
 }
 
 function setNewsFilter(key) {
+  _cancelNewsQ();
   _newsFilter = key;
   // A chip picked from the overflow is promoted into the visible row for the
   // rest of the session — a filter you have used should not need re-hunting.
@@ -26624,11 +26728,18 @@ function clearNewsFilters() {
   _newsFilter = 'all'; _newsCountry = 'all'; _newsQuery = '';
   renderNewsTab();
 }
+// v49.2 — any other control must cancel a pending search re-render. Otherwise
+// the timer fires ~160ms after you click sort or country, re-focuses #news-q
+// and slams the caret to the end of the string, stealing focus from the control
+// you actually just used.
+function _cancelNewsQ() { clearTimeout(_newsQTimer); _newsQTimer = null; }
 function setNewsSort(mode) {
+  _cancelNewsQ();
   _newsSort = (mode === 'newest') ? 'newest' : 'exposure';
   renderNewsTab();
 }
 function setNewsCountry(iso) {
+  _cancelNewsQ();
   _newsCountry = iso || 'all';
   renderNewsTab();
 }
