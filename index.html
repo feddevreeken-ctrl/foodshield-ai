@@ -1115,9 +1115,82 @@ body {
 .news-today-hl:hover { color: #8aa6c4; }
 .news-today-meta { font-size: 9px; color: var(--t-meta, var(--t3)); margin-top: 5px; }
 
-.news-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+/* ── v47 — the control bar ────────────────────────────────────────────────
+   Was 26 chips in one flex row: a wall, and 26 tab stops between the header
+   and the content. Now a masthead rule with four controls in the order an
+   analyst reaches for them — search, sort, country, then commodity. */
+.news-filters {
+  margin-bottom: 18px; padding-bottom: 12px;
+  border-bottom: 1px solid var(--b2);
+}
+.news-controls {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  margin-bottom: 11px;
+}
+.news-ctrl-search { position: relative; flex: 1 1 260px; min-width: 200px; }
+.news-search-ico {
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  color: var(--t3); font-size: 13px; pointer-events: none;
+}
+.news-search {
+  width: 100%; padding: 8px 28px 8px 28px; border-radius: 5px;
+  background: var(--bg2); border: 1px solid var(--b2); color: var(--t1);
+  font-size: 12.5px; font-family: inherit; transition: border-color .12s ease;
+}
+.news-search::placeholder { color: var(--t3); }
+.news-search:focus { outline: none; border-color: #8aa6c4; }
+.news-search:focus-visible { outline: 2px solid #8aa6c4; outline-offset: 1px; }
+.news-search-x {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; color: var(--t3); cursor: pointer;
+  font-size: 16px; line-height: 1; padding: 2px 5px; border-radius: 3px;
+}
+.news-search-x:hover { color: var(--t1); }
+/* Segmented sort control — two states, so a segmented control beats a select. */
+.news-ctrl-group {
+  display: inline-flex; border: 1px solid var(--b2); border-radius: 5px;
+  overflow: hidden; background: var(--bg2);
+}
+.news-seg {
+  padding: 7px 13px; background: none; border: none; cursor: pointer;
+  color: var(--t2); font-size: 11.5px; font-weight: 500; font-family: inherit;
+  transition: background .12s ease, color .12s ease; white-space: nowrap;
+}
+.news-seg + .news-seg { border-left: 1px solid var(--b2); }
+.news-seg:hover { color: var(--t1); }
+.news-seg.active { background: rgba(138,166,196,.14); color: #cfe0f0; font-weight: 600; }
+.news-seg:focus-visible { outline: 2px solid #8aa6c4; outline-offset: -2px; }
+.news-ctrl-country {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--t3);
+}
+.news-country-sel { font-size: 12px; padding: 7px 26px 7px 10px; }
+.news-chiprow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+/* Overflow disclosure — the long tail (tea 1, shrimp 1) is real but does not
+   deserve permanent frontage. A chip picked here is promoted for the session. */
+.news-more { position: relative; }
+.news-more > summary {
+  list-style: none; cursor: pointer; padding: 6px 12px; border-radius: 999px;
+  background: none; border: 1px dashed var(--b2); color: var(--t3); font-size: 11px;
+}
+.news-more > summary::-webkit-details-marker { display: none; }
+.news-more > summary:hover { color: var(--t1); border-color: var(--b3); }
+.news-more > summary:focus-visible { outline: 2px solid #8aa6c4; outline-offset: 2px; }
+.news-more-pop {
+  position: absolute; z-index: 40; top: calc(100% + 6px); left: 0;
+  display: flex; flex-wrap: wrap; gap: 6px; width: max-content; max-width: 420px;
+  max-height: 260px; overflow-y: auto; padding: 10px;
+  background: var(--bg3); border: 1px solid var(--b2); border-radius: 7px;
+  box-shadow: 0 18px 40px -20px rgba(0,0,0,.85);
+}
+.news-clear-filters {
+  margin-left: 10px; padding: 5px 11px; border-radius: 5px; cursor: pointer;
+  background: var(--bg3); border: 1px solid var(--b2); color: var(--t2);
+  font-size: 11px; font-family: inherit;
+}
+.news-clear-filters:hover { color: var(--t1); border-color: var(--b3); }
 .news-chip {
-  padding: 5px 11px; border-radius: 999px; cursor: pointer;
+  padding: 6px 12px; border-radius: 999px; cursor: pointer;
   background: var(--bg3); border: 1px solid var(--b2);
   color: var(--t2); font-size: 11px; font-weight: 500;
   letter-spacing: .01em; transition: all .12s ease;
@@ -1208,6 +1281,16 @@ body {
 
 /* Tier 2 — above-median exposure. */
 .news-item.tier-mid .news-headline { font-size: 14px; line-height: 1.3; font-weight: 600; }
+/* Publisher images on the LEAD only. At band height on a secondary row a
+   hot-linked photo is a colour smear carrying no information, it makes every
+   mid row compete with the lead, and it costs a network request and a
+   hot-link failure mode per card. One photo on the page, where it is big
+   enough to read. */
+.news-item.tier-mid .news-card-img { display: none; }
+.news-item.tier-lead .news-card-img {
+  height: 168px; border-radius: 6px; margin-bottom: 12px;
+  filter: brightness(.92) saturate(.95); border-bottom: none;
+}
 
 /* Tier 3 — the tail. Rows, not cards: no fill, no radius, tighter rhythm. */
 .news-item.tier-tail .news-body-wrap { padding: 7px 0 7px 16px; }
@@ -25532,6 +25615,13 @@ function closePanel() {
 // this function's only jobs are filtering, formatting and not lying about
 // what kind of claim each element is.
 let _newsFilter = 'all';
+// v47 — the rest of the control-bar state. Sort defaults to exposure because
+// that is what this page is for; "Newest" is one click away for the reader who
+// wants a wire.
+let _newsSort = 'exposure';
+let _newsCountry = 'all';
+let _newsQuery = '';
+const _newsPromoted = new Set();
 
 function _newsItems() {
   const d = LIVE.commodity_news;
@@ -25707,21 +25797,85 @@ function renderNewsTab() {
          weekend — the stream below covers the last 14 days.</div>`;
   }
 
-  // ── Filter chips, counted from the data rather than hardcoded ──
+  // ── v47 — the newsroom control bar ────────────────────────────────────────
+  //
+  // Was 26 raw commodity chips in one row: a wall, and 26 sequential tab stops
+  // between the page header and the content. Four controls now, in the order an
+  // analyst reaches for them: search, sort, country, commodity.
+  //
+  // The commodity row shows the top 8 by count plus a "+N more" disclosure —
+  // the long tail is real (tea 1, shrimp 1, barley 1) but it does not deserve
+  // permanent frontage. A chip chosen from the overflow is promoted into the
+  // visible row for the session, so a filter you use is never re-hunted.
   const counts = {};
   all.forEach(it => (it.matched || []).forEach(c => { counts[c] = (counts[c] || 0) + 1; }));
   const ordered = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  const TOP_N = 8;
+  const primary = ordered.slice(0, TOP_N);
+  _newsPromoted.forEach(k => { if (counts[k] && !primary.includes(k)) primary.push(k); });
+  const overflow = ordered.filter(c => !primary.includes(c));
+
+  // Country options come from the corridors actually present, so the list can
+  // never offer a country with zero results.
+  const isoCounts = {};
+  all.forEach(it => new Set((it.exposed || []).map(e => e.iso)).forEach(
+    iso => { isoCounts[iso] = (isoCounts[iso] || 0) + 1; }));
+  const isos = Object.keys(isoCounts).sort((a, b) => isoCounts[b] - isoCounts[a]);
+
   if (chips) {
     chips.innerHTML =
-      `<button class="news-chip ${_newsFilter === 'all' ? 'active' : ''}" onclick="setNewsFilter('all')">All<span class="news-chip-n">${all.length}</span></button>` +
-      ordered.map(c =>
-        `<button class="news-chip ${_newsFilter === c ? 'active' : ''}" onclick="setNewsFilter('${c}')">${_newsCommodityLabel(c)}<span class="news-chip-n">${counts[c]}</span></button>`
-      ).join('');
+      `<div class="news-controls">
+         <div class="news-ctrl-search">
+           <span class="news-search-ico" aria-hidden="true">⌕</span>
+           <input id="news-q" type="search" class="news-search" placeholder="Search headlines, publishers, countries…"
+                  value="${_escFeed(_newsQuery)}" oninput="setNewsQuery(this.value)"
+                  aria-label="Search headlines">
+           ${_newsQuery ? `<button class="news-search-x" onclick="setNewsQuery('')" aria-label="Clear search">×</button>` : ''}
+         </div>
+         <div class="news-ctrl-group" role="group" aria-label="Sort order">
+           <button class="news-seg ${_newsSort === 'exposure' ? 'active' : ''}"
+                   aria-pressed="${_newsSort === 'exposure'}" onclick="setNewsSort('exposure')">Biggest exposure</button>
+           <button class="news-seg ${_newsSort === 'newest' ? 'active' : ''}"
+                   aria-pressed="${_newsSort === 'newest'}" onclick="setNewsSort('newest')">Newest</button>
+         </div>
+         <label class="news-ctrl-country">
+           <span>Country</span>
+           <select class="fs-select news-country-sel" onchange="setNewsCountry(this.value)" aria-label="Filter by country">
+             <option value="all"${_newsCountry === 'all' ? ' selected' : ''}>All countries</option>
+             ${isos.map(iso => `<option value="${_escFeed(iso)}"${_newsCountry === iso ? ' selected' : ''}>${_escFeed(iso)} (${isoCounts[iso]})</option>`).join('')}
+           </select>
+         </label>
+       </div>
+       <div class="news-chiprow" role="group" aria-label="Filter by commodity">
+         <button class="news-chip ${_newsFilter === 'all' ? 'active' : ''}" aria-pressed="${_newsFilter === 'all'}" onclick="setNewsFilter('all')">All<span class="news-chip-n">${all.length}</span></button>` +
+      primary.map(c =>
+        `<button class="news-chip ${_newsFilter === c ? 'active' : ''}" aria-pressed="${_newsFilter === c}" onclick="setNewsFilter('${_escFeed(c)}')">${_escFeed(_newsCommodityLabel(c))}<span class="news-chip-n">${counts[c]}</span></button>`
+      ).join('') +
+      (overflow.length
+        ? `<details class="news-more"><summary>+${overflow.length} more</summary>
+             <div class="news-more-pop">${overflow.map(c =>
+               `<button class="news-chip" onclick="setNewsFilter('${_escFeed(c)}')">${_escFeed(_newsCommodityLabel(c))}<span class="news-chip-n">${counts[c]}</span></button>`).join('')}</div>
+           </details>`
+        : '') +
+      `</div>`;
   }
 
-  const shown = _newsFilter === 'all'
-    ? all
-    : all.filter(it => (it.matched || []).includes(_newsFilter));
+  // ── Apply every active filter ──
+  const q = _newsQuery.trim().toLowerCase();
+  const shown = all.filter(it => {
+    if (_newsFilter !== 'all' && !(it.matched || []).includes(_newsFilter)) return false;
+    if (_newsCountry !== 'all' && !(it.exposed || []).some(e => e.iso === _newsCountry)) return false;
+    if (q) {
+      const hay = [
+        it.title || '', it.source || '',
+        (it.matched || []).join(' '),
+        (it.exposed || []).map(e => e.iso + ' ' + (e.via || '')).join(' '),
+        (it.countries_mentioned || []).join(' ')
+      ].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
 
   // ── Lede: lead with the join, not the count ──
   const joined = shown.filter(it => (it.exposed || []).length).length;
@@ -25746,14 +25900,36 @@ function renderNewsTab() {
   // leaderboard has. Recency is what the Today strip above is for; this is the
   // ledger, and a ledger is ordered by size. Recency breaks ties only.
   const _peakKt = it => (it.exposed || []).reduce((m, e) => Math.max(m, e.kt || 0), 0);
+  const _t = it => Date.parse(it.published_at || 0) || 0;
   const ranked = shown.slice().sort((a, b) => {
+    if (_newsSort === 'newest') {
+      const dt = _t(b) - _t(a);
+      return dt || (_peakKt(b) - _peakKt(a));
+    }
     const d = _peakKt(b) - _peakKt(a);
-    if (d) return d;
-    return (Date.parse(b.published_at || 0) || 0) - (Date.parse(a.published_at || 0) || 0);
+    return d || (_t(b) - _t(a));
   });
-  // Max across ALL rows, not ranked[0] — with any other sort key those differ,
-  // and --share would exceed 1 and overflow the magnitude bar.
+  // Max across ALL rows, not ranked[0] — under "Newest" the top row is not the
+  // largest, and --share would exceed 1 and overflow the magnitude bar. Scoped
+  // to the filtered set on purpose: the bar answers "how big is this row
+  // relative to what I am looking at", which is the useful question once a
+  // filter is applied.
   const _maxKt = ranked.reduce((m, it) => Math.max(m, _peakKt(it)), 0) || 1;
+
+  // v47 — filtered to nothing is a different fact from "no news", and the
+  // guard above only tests `all`. Without this the stream renders an empty grid
+  // with no explanation, which looks like a broken render.
+  if (!ranked.length) {
+    const bits = [];
+    if (_newsFilter !== 'all') bits.push(_newsCommodityLabel(_newsFilter));
+    if (_newsCountry !== 'all') bits.push('corridors into ' + _newsCountry);
+    if (_newsQuery.trim()) bits.push(`“${_newsQuery.trim()}”`);
+    stream.innerHTML = `<div class="news-empty">No headlines in this window match
+      ${bits.length ? _escFeed(bits.join(' · ')) : 'the current filters'}.
+      <button class="news-clear-filters" onclick="clearNewsFilters()">Clear filters</button></div>`;
+    if (lede) lede.innerHTML = `<b>0</b> of ${all.length} headlines match the current filters.`;
+    return;
+  }
   // Tier boundaries: 1 lead, the next 11 at mid weight, the rest as tail rows.
   const _tierOf = i => i === 0 ? 'tier-lead' : i < 12 ? 'tier-mid' : 'tier-tail';
   let _brokeTier = false;
@@ -26023,7 +26199,35 @@ function stopNewsAutoRefresh() {
 
 function setNewsFilter(key) {
   _newsFilter = key;
+  // A chip picked from the overflow is promoted into the visible row for the
+  // rest of the session — a filter you have used should not need re-hunting.
+  if (key !== 'all') _newsPromoted.add(key);
   renderNewsTab();
+}
+function clearNewsFilters() {
+  _newsFilter = 'all'; _newsCountry = 'all'; _newsQuery = '';
+  renderNewsTab();
+}
+function setNewsSort(mode) {
+  _newsSort = (mode === 'newest') ? 'newest' : 'exposure';
+  renderNewsTab();
+}
+function setNewsCountry(iso) {
+  _newsCountry = iso || 'all';
+  renderNewsTab();
+}
+// Debounced so a re-render does not fire on every keystroke across 91 rows,
+// and focus/caret are restored afterwards because renderNewsTab replaces the
+// input's own markup wholesale.
+let _newsQTimer = null;
+function setNewsQuery(v) {
+  _newsQuery = v || '';
+  clearTimeout(_newsQTimer);
+  _newsQTimer = setTimeout(() => {
+    renderNewsTab();
+    const el = document.getElementById('news-q');
+    if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+  }, 160);
 }
 
 // ════════════════════════════════════════════════════
