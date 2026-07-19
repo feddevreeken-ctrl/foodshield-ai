@@ -27895,12 +27895,34 @@ function _ctrMountCharts(c) {
     const _pieLabels = _realMix ? _realMix.labels : _heritage.map(s => s.name);
     const _pieData   = _realMix ? _realMix.data   : _heritage.map(s => s.pct);
     const _pieReal   = !!_realMix;
-    chartInstances['supplier-pie'] = _safeChart(document.getElementById('supplier-pie'), {
+    // v52 — NEVER draw a fabricated split.
+    //
+    // This fell back to [20, 20, 20, 20, 20] when a country had neither cited
+    // flows nor a heritage vector: five equal slices, drawn in the same
+    // treatment as real data, with nothing marking them invented. On a page
+    // whose whole discipline is that no figure may be unsourced, it rendered a
+    // supplier mix that does not exist. Countries with no cited corridors
+    // (TUV, KIR, NRU and others) hit this path.
+    //
+    // An absence is stated instead. The canvas is left undrawn and the caption
+    // says why — the same treatment every table on this page already uses.
+    const _pieHas = (_pieData && _pieData.length) || (c.supPct && c.supPct.length);
+    const _pieHost = document.getElementById('supplier-pie');
+    if (!_pieHas) {
+      if (_pieHost && _pieHost.parentNode) {
+        _pieHost.parentNode.innerHTML =
+          '<div class="ctr-absence">No supplier mix is available for this country —'
+          + ' neither cited bilateral corridors nor a heritage ranking. Nothing is'
+          + ' drawn here rather than showing an even split that was never measured.</div>';
+      }
+      return;
+    }
+    chartInstances['supplier-pie'] = _safeChart(_pieHost, {
       type: 'doughnut',
       data: {
         labels: _pieLabels.length ? _pieLabels : (c.suppliers || []),
         datasets: [{
-          data: _pieData.length ? _pieData : (c.supPct || [20, 20, 20, 20, 20]),
+          data: _pieData.length ? _pieData : c.supPct,
           backgroundColor: ['#d49a4a', '#8aa8c9', '#5b9b8a', '#c9a957', '#9c7fc2', '#b87a8a'],
           borderWidth: 2, borderColor: '#14141a', hoverOffset: 6,
         }]
@@ -28264,13 +28286,48 @@ function renderCountryTab() {
       const sce = (typeof supplyChainExposure === 'function') ? supplyChainExposure(c) : 0;
       const wTd = commodityTradeDependency(c, 'Wheat');
       const rTd = commodityTradeDependency(c, 'Rice');
+      // v52 — two honesty bugs fixed here.
+      //
+      // 1. `null` and `0` rendered identically as "<0.5%". They are different
+      //    facts: one is "we have no figure", the other is "the figure is
+      //    approximately zero". Collapsing them states a measurement we do not
+      //    have.
+      // 2. The basis column hard-coded "USDA PSD · FAOSTAT food balance" for
+      //    these rows regardless of what the value actually is. For countries
+      //    still on the legacy vector it is not caloric share at all —
+      //    countries.json says so in the field's own method string: "Legacy
+      //    embedded import-dependency percentage (0-100) from index.html.
+      //    Semantically distinct from the FAOSTAT FBS caloric-share definition
+      //    this field now nominally holds." The label asserted a source the
+      //    data explicitly disclaims.
+      //
+      // The per-field provenance is already carried on c._provenance (populated
+      // at :16556) and was simply never read here.
       const calCell = (cal, td) => {
-        const v = (cal === 0 || cal == null) ? '&lt;0.5%' : cal + '%';
+        const v = cal == null ? '<span style="color:var(--t3)">not sourced</span>'
+                : cal === 0   ? '&lt;0.5%'
+                              : cal + '%';
         return v + (td != null ? ` <span style="color:var(--t3)">· ${td}% of trade</span>` : '');
       };
+      // Label the row by what the field IS for this country, not by what the
+      // field is nominally meant to hold.
+      const calBasis = (field) => {
+        const p = (c._provenance || {})[field];
+        if (!p) return 'USDA PSD · FAOSTAT food balance';
+        const legacy = /legacy/i.test(String(p.method || ''));
+        if (legacy) return 'legacy import-dependency — not caloric share';
+        return [p.source, p.as_of].filter(Boolean).join(' · ')
+               || 'USDA PSD · FAOSTAT food balance';
+      };
+      const calLabel = (field, name) => {
+        const p = (c._provenance || {})[field];
+        return /legacy/i.test(String((p || {}).method || ''))
+          ? name + ', import dependence'      // say what it actually measures
+          : name + ', share of calories';
+      };
       const rows = [];
-      rows.push(['Wheat, share of calories', calCell(c.w, wTd), 'USDA PSD · FAOSTAT food balance', '', TIP_COMMODITY]);
-      rows.push(['Rice, share of calories', calCell(c.r, rTd), 'USDA PSD · FAOSTAT food balance', '', TIP_COMMODITY]);
+      rows.push([calLabel('w', 'Wheat'), calCell(c.w, wTd), calBasis('w'), '', TIP_COMMODITY]);
+      rows.push([calLabel('r', 'Rice'), calCell(c.r, rTd), calBasis('r'), '', TIP_COMMODITY]);
       rows.push(['Food inflation',
         `<span style="color:${inflVal > 15 ? '#c44b3c' : inflVal > 8 ? '#d27a3e' : 'var(--t1)'}">${Number(inflVal).toFixed(1)}%/yr</span>${inflVal > 15 ? ' <span style="color:#c44b3c" title="Above the 15% shock threshold">▲</span>' : inflVal > 8 ? ' <span style="color:#d27a3e">▲</span>' : ''}`,
         liveInfl != null ? (inflSrc || 'live feed') : 'legacy value — no live feed for this country',
@@ -28547,7 +28604,11 @@ function renderCountryTab() {
       The tables below are cited bilateral tonnage, not dollar value, so the two figures answer different questions.
     </p>
 
-    ${liveFeedWarningHTML(c, { context: 'trade' })}
+    ${/* v52 — the second live-confidence banner is gone. liveFeedWarningHTML
+          accepts an `opts.context` and never reads it (:14891), so this
+          rendered output byte-identical to the banner at :28266 in the same
+          continuous report. One build-health notice per page; repeating it
+          does not make it more true, it makes readers skip both. */''}
     ${restrictionsPanelHTML(c.iso)}
 
     ${(function(){
@@ -29467,7 +29528,14 @@ function renderForecastCountry(iso) {
       </div>
 
       <div class="ct-ai-card" style="border-left-color:${futureCol}">
-        <div class="ct-ai-eyebrow" style="color:${futureCol}"><span class="ct-ai-asterisk">✱</span> AI Trend Interpretation</div>
+        ${/* v52 — was "AI Trend Interpretation". Nothing here is model-written:
+              the paragraph below is a template assembled in this function from
+              c.fdrs, c.f2030 and c.risk. Claiming AI authorship for a
+              deterministic template is the same class of error as the `ai:`
+              field name, pointed the other way — and on a page that DOES carry
+              genuinely model-written prose elsewhere (the commodity
+              interpretation), a false AI label makes the true ones worthless. */''}
+        <div class="ct-ai-eyebrow" style="color:${futureCol}"><span class="ct-ai-asterisk">✱</span> Trend read · computed, no LLM</div>
         <p class="ct-ai-body">
           ${trendUp
             ? `Under the moderate baseline, <strong style="color:var(--t1)">${c.name}</strong>'s modeled Food Disruption Risk Score rises from <strong style="color:${todayCol}">${c.fdrs}</strong> today to <strong style="color:${futureCol}">${c.f2030}</strong> by 2030. The primary driver in the model is ${c.risk.split('+')[0].trim().toLowerCase()}. ${c.f2030>88?'On this trajectory the model would cross into <em>Severe</em> territory before 2030.':c.f2030>75?'On this trajectory the model would cross into <em>Vulnerable</em> territory before 2030.':'The model implies a meaningful deterioration in food-system resilience.'} <span style="color:var(--t3);font-size:11px;">Modeled outlook — not a forecast.</span>`
