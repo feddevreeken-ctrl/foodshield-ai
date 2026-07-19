@@ -176,9 +176,12 @@ FAIL_THRESHOLD = 4
 EMPTY_OK = {"openaq.json", "nasa_firms.json", "acled.json", "ndgain.json",
             "trade_restrictions.json", "commodity_news.json"}
 
-# Outputs that legitimately do not exist at all when their key is absent. The
-# interpretation step skips cleanly (and preserves any existing file) without
-# ANTHROPIC_API_KEY, so its absence must not count as a missing output.
+# Outputs that legitimately do not exist at all on a first run. v46: the
+# interpretation step does NOT skip when no provider key is set — it degrades
+# to deterministic templates and still writes the file with
+# status=deterministic_only. Keys are resolved GROQ_API_KEY -> GEMINI_API_KEY
+# -> ANTHROPIC_API_KEY (build_news_interpretation.PROVIDER_PRIORITY), so a
+# missing key changes the prose, never the file's presence.
 OPTIONAL_OUTPUTS = {"commodity_interpretation.json"}
 
 

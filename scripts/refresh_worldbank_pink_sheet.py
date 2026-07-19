@@ -145,7 +145,18 @@ def latest_points(data_rows, col_idx):
 
 
 def _norm_code(c):
-    return str(c).strip().upper().replace(" ", "_").replace("-", "_") if c is not None else ""
+    """v47 — the workbook has no source-code row; _find_header_block therefore
+    matches against the human LABEL row ('Wheat, US SRW', 'Beef **'). Commas,
+    asterisks and percent signs in those labels survived normalisation and broke
+    the alias lookup for wheat, rice, sugar, coffee and beef — five series
+    silently absent from the site. Strip them so 'Wheat, US SRW' folds onto the
+    WHEAT_US_SRW alias. The seven series that already matched contain none of
+    these characters, so their normalised codes are unchanged."""
+    if c is None:
+        return ""
+    s = str(c).strip().upper().replace(" ", "_").replace("-", "_")
+    s = s.replace(",", "").replace("*", "").replace("%", "")
+    return re.sub(r"_+", "_", s).strip("_")
 
 
 def _find_header_block(rows):
@@ -165,8 +176,25 @@ def _find_header_block(rows):
     if best_idx is None or best_hits == 0:
         raise RuntimeError("Pink Sheet: could not locate the source-code header row")
     codes = rows[best_idx]
-    labels = rows[best_idx - 2] if best_idx >= 2 else rows[max(0, best_idx - 1)]
-    units = rows[best_idx - 1] if best_idx >= 1 else codes
+    # v47 — the matched row is the workbook's LABEL row, not a code row (no code
+    # row exists). Units sit directly BELOW it as '($/mt)' / '($/kg)'; the rows
+    # above are the title banner and are blank in every data column, which is why
+    # every series shipped with unit=null and label=null. Prefer the row below
+    # when it looks like a units row, and fall back to the old behaviour so a
+    # workbook that regains a real code row still parses.
+    below = rows[best_idx + 1] if best_idx + 1 < len(rows) else ()
+
+    def _looks_like_units(row):
+        return any(isinstance(c, str) and c.strip().startswith("($") for c in (row or ()))
+
+    if _looks_like_units(below):
+        units = below
+        labels = codes
+    else:
+        labels = rows[best_idx - 2] if best_idx >= 2 else rows[max(0, best_idx - 1)]
+        units = rows[best_idx - 1] if best_idx >= 1 else codes
+    # data_rows still starts below the matched row; parse_month skips the units
+    # row because '($/mt)' is not a YYYYMmm month token.
     data_rows = rows[best_idx + 1:]
     return labels, units, codes, data_rows, best_idx
 

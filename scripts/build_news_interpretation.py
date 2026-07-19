@@ -121,10 +121,15 @@ REQUEST_TIMEOUT = 60
 # null rather than substituted from something adjacent. In particular there is no
 # single "fertilizer" Pink Sheet series — urea is the closest single benchmark and
 # is labelled as urea in the facts (`price_series`), never as "fertilizer".
+# v47 — wheat and rice were pinned to None because refresh_worldbank_pink_sheet
+# silently dropped both series (a comma in 'Wheat, US SRW' survived code
+# normalisation and missed the alias). That was a parser bug, not a real gap in
+# the Pink Sheet, and it is why the wheat interpretation used to open with "the
+# absence of price data makes it difficult to assess". Both series now parse.
 SOURCE_MAP = {
-    "wheat":      {"pink": None,        "psd": "wheat",    "ffpi": "cereals", "label": "Wheat"},
+    "wheat":      {"pink": "wheat",     "psd": "wheat",    "ffpi": "cereals", "label": "Wheat"},
     "maize":      {"pink": "maize",     "psd": "corn",     "ffpi": "cereals", "label": "Maize"},
-    "rice":       {"pink": None,        "psd": "rice",     "ffpi": "cereals", "label": "Rice"},
+    "rice":       {"pink": "rice",      "psd": "rice",     "ffpi": "cereals", "label": "Rice"},
     "soybeans":   {"pink": "soybeans",  "psd": "soybeans", "ffpi": "oils",    "label": "Soybeans"},
     "palm_oil":   {"pink": "palm_oil",  "psd": None,       "ffpi": "oils",    "label": "Palm oil"},
     "fertilizer": {"pink": "urea",      "psd": None,       "ffpi": None,      "label": "Fertilizer (urea benchmark)"},
@@ -164,6 +169,16 @@ Style and substance rules:
 - You may name a news source (e.g. "Reuters reporting") but must not assert a
   headline's claim as established fact — attribute it.
 - If the inputs are thin or missing, say so plainly instead of inventing narrative.
+
+Formatting rules (these change how a figure is WRITTEN, never its value):
+- Field NAMES are not prose. Never write a field name, and never write the words
+  "per unit". Quote a price as the value followed by price_unit verbatim — e.g.
+  197.1 ($/mt). If price_unit is null, give the bare number with no unit words.
+- A field whose name contains "_pct" is a percentage. Attach a % sign to it:
+  write 33.3%, never a bare 33.3.
+- A field whose name ends in "_kt" is thousand tonnes. Write it with comma
+  thousands separators and the unit kt: 1,294,926 kt. Use commas, never spaces
+  or periods, as the group separator.
 - No preamble, no headings, no bullet points, no closing offer of further help.
   Respond with the 2-3 sentences only."""
 
@@ -654,6 +669,21 @@ def find_word_quantities(text):
     return sorted({m.group(0).strip().lower() for m in _WORD_QUANTITY_RE.finditer(text)})
 
 
+def find_field_names(text, facts):
+    """v47 — return FACTS field names the model pasted into prose.
+
+    Observed live: "a -8.8% change from the previous month, as the
+    price_prev_month_value was 216.2". The figure was correctly licensed, so the
+    numeric checks passed and shipped a raw identifier to readers. Asking the
+    model not to do this in SYSTEM_PROMPT is necessary but not sufficient — the
+    same run that was told the rule broke it. Only keys with an underscore are
+    checked: bare words like 'commodity' are ordinary English and would fire on
+    innocent prose.
+    """
+    low = text.lower()
+    return sorted({k for k in facts if "_" in k and k.lower() in low})
+
+
 def validate_text(text, facts):
     """Every honesty check that applies to publishable prose.
 
@@ -664,11 +694,22 @@ def validate_text(text, facts):
         "unsupported_numbers": find_unsupported_numbers(text, facts),
         "sign_inversions": find_sign_inversions(text, facts),
         "word_quantities": find_word_quantities(text),
+        "field_names": find_field_names(text, facts),
     }
     return (not any(detail.values())), detail
 
 
 # -------------------------------------------------------- deterministic fallback
+
+def _kt(v):
+    """v47 — thousand-tonne totals with comma group separators. The model is now
+    told to write '1,294,926 kt'; the template is the text a reader sees whenever
+    the model is unavailable or rejected, so it must not look shabbier than the
+    thing it stands in for. Commas are safe against the validator: NUMBER_RE
+    admits them inside a token and find_unsupported_numbers strips them before
+    comparing, so a comma'd figure still matches its locked fact."""
+    return f"{int(v):,}" if isinstance(v, (int, float)) else str(v)
+
 
 def deterministic_text(facts):
     """Pure-Python sentences. Used when there is no model output we can trust."""
@@ -677,7 +718,8 @@ def deterministic_text(facts):
     price, month = facts.get("price_usd_per_unit"), facts.get("price_month")
     chg = facts.get("price_change_mom_pct")
     if price is not None and month:
-        s = f"{name} benchmark price was {price} in {month}"
+        unit = facts.get("price_unit")
+        s = f"{name} benchmark price was {price}{' ' + unit if unit else ''} in {month}"
         if chg is not None:
             s += f", {'up' if chg >= 0 else 'down'} {abs(chg)}% month on month"
         bits.append(s + " (World Bank Pink Sheet).")
@@ -697,10 +739,10 @@ def deterministic_text(facts):
         y1 = facts.get("psd_marketing_year_max")
         span = (f"marketing year {y0}" if y0 == y1 else
                 f"marketing years {y0} to {y1}") if y0 and y1 else "the reported marketing years"
-        s = (f"USDA PSD reports {prod} thousand tonnes of production summed across "
+        s = (f"USDA PSD reports {_kt(prod)} kt of production summed across "
              f"{facts.get('psd_countries_counted')} reporting countries in {span}")
         if stocks is not None:
-            s += f", against {stocks} thousand tonnes of ending stocks"
+            s += f", against {_kt(stocks)} kt of ending stocks"
         excl = facts.get("psd_countries_excluded_stale_vintage")
         if excl:
             s += (f"; {excl} further country rows were excluded because their "
