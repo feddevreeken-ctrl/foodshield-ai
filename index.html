@@ -1711,6 +1711,21 @@ body {
    with the same amber the interpretation block uses elsewhere, so the reader
    can tell at a glance which cards carry model-written context. */
 .news-interp { margin-top: 7px; }
+/* v50 — the per-article note. One sentence, inline, with a two-letter
+   provenance mark rather than a badge: at one per row a badge is noise, but the
+   reader still has to be able to tell model-written from build-computed at a
+   glance. AI/CALC carries that in four characters. */
+.news-note {
+  display: flex; align-items: baseline; gap: 8px; margin: 8px 0 0;
+  font-size: 12px; line-height: 1.45; color: var(--t2);
+}
+.news-note-mark {
+  flex-shrink: 0; font-size: 8px; font-weight: 700; letter-spacing: .09em;
+  padding: 2px 4px; border-radius: 2px; cursor: help;
+  color: #d4894a; border: 1px solid rgba(196,122,60,.4);
+}
+.news-note-text { font-variant-numeric: tabular-nums; }
+
 /* v47 — DEMOTED, deliberately, after being over-promoted.
    The previous pass made this a bordered amber box because the interpretation
    was hard to find. That fixed discoverability and broke something worse: on 38
@@ -16284,7 +16299,7 @@ async function loadLiveData() {
   // v41 — fetched INSIDE the main Promise.all below (it used to be awaited
   // serially here, which put the single largest download ahead of every other
   // feed). The seed block right after the Promise.all consumes it.
-  const [cfEnv, nc, wfp, ipc, wb, ffpi, rw, ct, fa, wfpc, om, omf, aq, fires, usgs, estat, faostat, pink, manifest, cnews, cinterp] = await Promise.all([
+  const [cfEnv, nc, wfp, ipc, wb, ffpi, rw, ct, fa, wfpc, om, omf, aq, fires, usgs, estat, faostat, pink, manifest, cnews, cinterp, cnotes] = await Promise.all([
     _fetchData('commodity_flows'),
     _fetchData('nowcast'), _fetchData('wfp_hungermap'), _fetchData('ipc'),
     _fetchData('worldbank_wdi'), _fetchData('fao_ffpi'), _fetchData('reliefweb_alerts'),
@@ -16300,6 +16315,10 @@ async function loadLiveData() {
     // counts toward source health) + the build-time interpretation file (optional:
     // only written when an LLM provider is configured, so it must not be alarmed).
     _fetchData('commodity_news'), _fetchDataOptional('commodity_interpretation'),
+    // v50 — per-article notes. Optional for the same reason as the commodity
+    // file: only written when a provider is configured, so its absence must not
+    // count as a failed source.
+    _fetchDataOptional('commodity_article_notes'),
   ]);
   // v41 — the trade-atlas fetch has now resolved (success or failure). Mark it so
   // the copilot can tell "still loading" apart from "loaded, no cited flows" and
@@ -16540,6 +16559,7 @@ async function loadLiveData() {
   // (undefined) from "loaded and empty" (object) from "failed/absent" (null).
   LIVE.commodity_news = cnews || null;
   LIVE.commodity_interpretation = cinterp || null;
+  LIVE.commodity_article_notes = cnotes || null;
   // v46 — if the user already has a commodity drilldown open when the feeds land,
   // re-render it so the headline panel leaves its loading state.
   try {
@@ -26174,6 +26194,30 @@ function _newsThumb(it) {
          ` style="background-image:url(&quot;${_newsTileSvg(key, tint[0], tint[1])}&quot;)"></div>`;
 }
 
+// v50 — the per-article note, rendered inline.
+//
+// The commodity interpretation is commodity-level: 38 rows shared 9 texts, so
+// every soybeans headline carried the identical paragraph. This note is written
+// per article from that article's own corridor facts, so it differs row to row.
+// Shown inline rather than behind a toggle because it is one short sentence of
+// vital information — the declutter principle is that vital facts are visible
+// and the PROVENANCE folds, not the other way round.
+function _newsArticleNote(it) {
+  const env = (typeof LIVE !== 'undefined') ? LIVE.commodity_article_notes : undefined;
+  if (!env || !env.data) return '';
+  const key = it.dedup_key || it.url;
+  const n = key ? env.data[key] : null;
+  if (!n || !n.note) return '';
+  const isAI = n.is_ai_generated_interpretation === true
+            && n.content_type === 'ai_interpretation';
+  return `<div class="news-note">
+    <span class="news-note-mark" title="${isAI
+      ? 'Written by a language model from the corridor figures shown. Every number is computed in the build and validated against those figures; the model cannot introduce one.'
+      : 'Composed in the build from the corridor figures shown. No language model involved.'}">${isAI ? 'AI' : 'CALC'}</span>
+    <span class="news-note-text">${_escFeed(n.note)}</span>
+  </div>`;
+}
+
 function _newsInterpretationDetails(it) {
   // _cnInterpretationBlock lives in a later <script> block. It is hoisted and
   // defined long before any render runs, but guard anyway — the codebase
@@ -26589,6 +26633,7 @@ function renderNewsTab() {
               : `<span class="news-headline">${t}</span>`; })()}
         ${_tier !== 'tier-tail' ? expLine : ''}
         ${_tier === 'tier-lead' ? imgBand : _newsThumb(it)}
+        ${_tier !== 'tier-tail' ? _newsArticleNote(it) : ''}
         ${_tier !== 'tier-tail' && prod ? `<div class="news-prod">${prod}</div>` : ''}
         ${_interpHtml}
         <div class="news-meta">

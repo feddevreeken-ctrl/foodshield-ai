@@ -988,6 +988,144 @@ def _existing_has_ai_text():
                for v in payload.values())
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# v50 — PER-ARTICLE NOTES
+#
+# The commodity interpretation is commodity-level and article-independent: it
+# describes a price and stock position over the whole pull window. So 38 rows
+# were sharing 9 texts, and every soybeans headline carried the identical
+# paragraph. That is generic by construction, not by accident.
+#
+# A note is written only where the article has facts OF ITS OWN — a corridor
+# join. About a quarter of items do. The rest keep the commodity note, which is
+# at least honest about what it is; blanketing everything with per-article prose
+# that had no per-article facts behind it would only move the genericness.
+#
+# HARD CONSTRAINT: we hold the HEADLINE ONLY. There is no article body here and
+# there never will be (refresh_commodity_news.py:298 — the link is never
+# resolved to extract content). So the prompt forbids describing what the
+# article says beyond its headline and requires the headline be attributed as a
+# publisher claim. The number validator cannot catch a fabricated narrative — it
+# only checks digits — so that guard has to live in the prompt and in what the
+# facts block is allowed to contain.
+ARTICLE_OUTPUT = "commodity_article_notes.json"
+
+ARTICLE_PROMPT = """You write one-sentence trade-exposure notes for a food-security dashboard.
+
+You are given a HEADLINE and a FACTS block. You have NOT read the article — only
+its headline. Never describe, summarise or infer the article's contents.
+
+ABSOLUTE RULE: never write a number, percentage, date, month, year or quantity
+that is not already in FACTS. Do not compute, derive, round differently, average
+or infer any figure.
+
+What the note must do, in ONE sentence of at most 32 words:
+- State which trade corridors this headline touches, using only FACTS figures.
+- Name the country and the tonnage. If a corridor is downstream, say it is
+  reached via the named hub.
+Rules:
+- The headline is a CLAIM by its publisher. If you refer to it, attribute it
+  ("the report that...", "the publisher reports"). Never assert it as fact.
+- Never say the headline causes, moves or will move a price. Exposure means the
+  headline TOUCHES a corridor — nothing more.
+- No forecast. No "expected to", "will", "is set to".
+- A field whose name ends in _kt is thousand tonnes. Copy the digits EXACTLY as
+  given and write the unit kt. Add comma thousands separators only if the number
+  already has four or more digits. 166 is "166 kt" — never "166,000 tonnes".
+- NEVER CONVERT UNITS. Do not turn kt into tonnes, tonnes into kt, or scale any
+  figure by a thousand. Converting is computing, and computing is forbidden.
+  Every digit you write must appear character-for-character in FACTS.
+- Never write a field name and never write an underscore.
+- Write country codes as given. Do not expand them to country names.
+- Do not name the publisher and do not quote the headline back. Lead with the
+  exposure itself: "Touches CHN 1,012 kt and KOR 101 kt via CHN."
+- No preamble, no heading. The sentence only."""
+
+
+def _article_facts(it):
+    """Locked facts for ONE news item. Every value is copied from the payload,
+    never derived here, and only corridor data the trade atlas actually
+    sourced."""
+    exposed = [e for e in (it.get("exposed") or []) if isinstance(e, dict)]
+    if not exposed:
+        return None
+    top = sorted(exposed, key=lambda e: e.get("kt") or 0, reverse=True)[:3]
+    return {
+        "publisher": it.get("source") or None,
+        "commodities_matched": list(it.get("matched") or []),
+        "corridor_count": len(exposed),
+        "corridors": [
+            {"country": e.get("iso"),
+             "tonnage_kt": _r(e.get("kt"), 0),
+             "role": e.get("role"),
+             "reached_via": e.get("via")}
+            for e in top
+        ],
+        "largest_corridor_kt": _r(max((e.get("kt") or 0) for e in exposed), 0),
+    }
+
+
+def build_article_notes(provider, api_key, news, generated_at):
+    """One note per item that has corridor facts of its own."""
+    items = (news or {}).get("items") or []
+    out, made, skipped, rejected = {}, 0, 0, 0
+    for it in items:
+        facts = _article_facts(it)
+        key = it.get("dedup_key") or it.get("url")
+        if not facts or not key:
+            skipped += 1
+            continue
+        title = (it.get("title") or "").strip()
+        text = ""
+        validation = {"model_used": False, "rejected": False, "reason": None,
+                      "unsupported_numbers": [], "sign_inversions": [],
+                      "word_quantities": [], "field_names": []}
+        if provider:
+            if made:
+                time.sleep(CALL_SPACING_SECONDS)
+            prompt = (f"HEADLINE: {title}\n\nFACTS:\n"
+                      + json.dumps(facts, ensure_ascii=False, indent=1))
+            try:
+                raw = (call_llm(provider, api_key, ARTICLE_PROMPT, prompt) or "").strip()
+            except Exception as e:
+                raw = ""
+                validation["reason"] = f"{type(e).__name__}: {e}"
+            if raw:
+                ok, detail = validate_text(raw, facts)
+                validation.update(detail)
+                if ok:
+                    text, validation["model_used"] = raw, True
+                else:
+                    rejected += 1
+                    validation["rejected"] = True
+                    validation["reason"] = "numeric/field validation failed"
+        if not text:
+            # Deterministic fallback in the same shape, no model involved.
+            c = facts["corridors"][0]
+            via = (f" via {c['reached_via']}"
+                   if c.get("reached_via") and c.get("role") != "direct" else "")
+            n = facts["corridor_count"]
+            text = (f"Touches {n} mapped corridor{'s' if n != 1 else ''}; the largest "
+                    f"reaches {c['country']} at {int(c['tonnage_kt']):,} kt{via}.")
+        out[key] = {
+            "note": text,
+            "facts": facts,
+            "is_ai_generated_interpretation": validation["model_used"],
+            "content_type": ("ai_interpretation" if validation["model_used"]
+                             else "deterministic_template"),
+            "not_a_forecast": True,
+            "provider": provider if validation["model_used"] else None,
+            "model": (PROVIDERS[provider]["model"]
+                      if validation["model_used"] and provider else None),
+            "generated_at": generated_at,
+            "validation": validation,
+        }
+        made += 1
+    print(f"[OK] article notes: {made} written ({rejected} model outputs rejected), "
+          f"{skipped} items skipped — no corridor facts of their own.")
+    return out
+
+
 def main():
     provider, api_key = resolve_provider()
     if provider:
@@ -1085,6 +1223,30 @@ def main():
     )
     print(f"[OK] {model_used}/{len(COMMODITIES)} AI interpretations accepted, "
           f"{rejected} rejected by validation ({forced} caught at the output gate).")
+
+    # v50 — per-article notes, written to their own file so the commodity
+    # envelope keeps its exact shape and validate_data's honesty checks over it
+    # are unaffected.
+    notes = build_article_notes(provider, api_key, news, generated_at)
+    write_json(
+        ARTICLE_OUTPUT,
+        notes,
+        source=(f"{provider}/{PROVIDERS[provider]['model']}" if provider
+                else "deterministic templates (no LLM provider configured)")
+               + " (build-time) over committed commodity_news.json",
+        notes=("One note per news item that has corridor facts of its own; items "
+               "with no mapped corridor are absent by design rather than given "
+               "generic prose. Keyed by the item's dedup_key. Written from the "
+               "HEADLINE ONLY — no article body is fetched or stored, so a note "
+               "never describes an article's contents, and the headline is "
+               "referred to as a publisher claim. Every figure is computed in "
+               "Python and passed as a locked block; returned text is "
+               "regex-validated so no number can originate from the model. Text "
+               "failing validation is replaced by a deterministic sentence. "
+               "Exposure means a headline TOUCHES a corridor — no causal claim "
+               "about prices is made or implied."),
+        status=("ok" if provider else "deterministic_only"),
+    )
     return 0
 
 
