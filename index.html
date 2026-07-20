@@ -4252,23 +4252,60 @@ abbr.ac:hover, .ac:hover {
   font-size: 10px; font-weight: 600; letter-spacing: .14em;
   text-transform: uppercase; color: var(--t1); margin-bottom: 14px;
 }
-.scn-bp-rows { display: flex; flex-direction: column; gap: 14px; }
-.scn-bp-row { min-width: 0; animation: scn-bp-settle .3s ease-out both; }
+/* v64.1 — figures sit three-across on one ruled band instead of stacking down
+   the left edge of an empty canvas. Each cell: figure, caption beneath,
+   hairline between cells so the band reads as one instrument strip. */
+.scn-bp-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+  gap: 16px 0;
+  margin: 2px 0 4px;
+}
+.scn-bp-row { min-width: 0; padding: 2px 22px 4px 0; animation: scn-bp-settle .3s ease-out both; }
+.scn-bp-row + .scn-bp-row { border-left: 1px solid var(--b1); padding-left: 22px; }
 .scn-bp-row:nth-child(2) { animation-delay: .08s; }
 .scn-bp-row:nth-child(3) { animation-delay: .16s; }
 @keyframes scn-bp-settle { from { opacity: 0; transform: translateY(4px); } }
 .scn-bp-fig {
-  display: block; margin-left: -20px;   /* measured figures overhang the rule */
-  font: 500 30px/1.05 'Geist Mono', ui-monospace, "SF Mono", Menlo, monospace;
+  display: block;
+  font: 500 27px/1.1 'Geist Mono', ui-monospace, "SF Mono", Menlo, monospace;
   font-variant-numeric: tabular-nums; letter-spacing: -0.02em; color: var(--t1);
+  white-space: nowrap;
 }
-.scn-bp-fig .unit { font-size: 13px; letter-spacing: .04em; color: var(--t2); margin-left: 4px; font-weight: 400; }
+.scn-bp-fig .unit { font-size: 12px; letter-spacing: .04em; color: var(--t2); margin-left: 4px; font-weight: 400; }
 .scn-bp-cap {
-  display: block; margin-top: 3px;
-  font: 500 9.5px/1.5 'Geist Mono', ui-monospace, monospace;
-  letter-spacing: .12em; text-transform: uppercase; color: var(--t3);
+  display: block; margin-top: 5px; max-width: 36ch;
+  font: 500 9.5px/1.55 'Geist Mono', ui-monospace, monospace;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--t3);
 }
 .scn-bp-cap b { color: #e58a78; font-weight: 500; }
+/* Verdict + response share one ruled band: judgement left, action right. */
+.scn-bp-foot {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(260px, 1.5fr);
+  gap: 8px 36px; align-items: start;
+  border-top: 1px solid var(--b1);
+  margin-top: 14px; padding-top: 12px;
+}
+.scn-bp-foot > div { min-width: 0; }
+.scn-bp-foot .scn-bp-verdict { margin-top: 2px; }
+.scn-bpsw-response-body {
+  display: block; margin-top: 6px;
+  font-size: 12px; line-height: 1.6; color: var(--t2);
+}
+.scn-bpsw-response-body b { color: var(--t1); }
+@media (max-width: 760px) { .scn-bp-foot { grid-template-columns: 1fr; } }
+/* Route selector inside the brief — changing the route re-runs the engine. */
+.scn-bp-route {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 14px; padding: 8px 12px;
+  background: var(--bg0); border: 1px solid var(--b1); border-radius: 3px;
+}
+.scn-bp-route select {
+  background: var(--bg3); border: 1px solid var(--b2); color: var(--t1);
+  font: 500 11px/1.3 'Geist Mono', ui-monospace, monospace;
+  padding: 5px 8px; border-radius: 4px; max-width: 100%;
+}
 /* The stamp — the sole rotated element on the page. The verdict cannot appear
    before the evidence: its animation delay lands after the last figure rests. */
 .scn-bp-verdict {
@@ -4287,11 +4324,13 @@ abbr.ac:hover, .ac:hover {
   font: 400 10.5px/1.6 'Geist Mono', ui-monospace, monospace; color: var(--t2);
 }
 .scn-bp .prov-line { margin-top: 14px; }
-/* The analyst note — a different hand, structurally subordinate. Serif italic,
-   tucked inside the certificate but never touching the figure column's size. */
+/* The analyst note — a different hand, structurally subordinate. Upright serif
+   (italic at this size on dark reads scraggly), measured column, ruled off
+   from the instrument band above. */
 .scn-read {
-  margin: 18px 0 2px 0; max-width: 62ch;
-  font: italic 400 14px/1.65 'Instrument Serif', Georgia, serif; color: var(--t2);
+  margin: 14px 0 2px 0; max-width: 70ch;
+  border-top: 1px solid var(--b1); padding-top: 12px;
+  font: 400 14.5px/1.7 'Instrument Serif', Georgia, serif; color: var(--t2);
   animation: scn-bp-settle .3s ease-out .55s both;
 }
 .scn-read-label {
@@ -7513,9 +7552,13 @@ abbr.ac:hover, .ac:hover {
 @media (prefers-reduced-motion: reduce) {
   .scn-card:hover { transform: none; }
 }
+/* v64.1 — the title owns its row; chips sit on a meta row beneath. Inline
+   chips were wrapping THROUGH multi-word titles ("Port & customs friction"
+   read as three shredded lines with badges wedged between). */
 .scn-card-head {
   display: flex; align-items: center; justify-content: flex-start;
-  gap: 9px;
+  flex-wrap: wrap;
+  gap: 5px 8px;
   margin-bottom: 7px;
   padding-right: 30px;
   min-width: 0;
@@ -7525,8 +7568,11 @@ abbr.ac:hover, .ac:hover {
   font-weight: 600;
   color: var(--t1);
   line-height: 1.25;
-  min-width: 0; flex: 1;
+  min-width: 0; flex: 1 1 100%;
 }
+/* Category tag dropped from cards — the card already sits inside a labelled,
+   color-dotted category group; repeating it per card was pure noise. */
+.scn-card-head .scn-card-tag { display: none; }
 .scn-card-tag {
   font-family: 'Geist Mono', monospace;
   font-size:10px;
@@ -18578,6 +18624,143 @@ function _chokepointKick(c, s) {
   return dep * noAlt * SCENARIO_POINT_SCALE * s * 0.75;
 }
 
+// v65 — parameterized-shock helpers. Options are evaluated at render time so
+// selectors never offer choices that are not backed by shipped data.
+function _scnEsc(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function _scnParamValue(id, params) {
+  const map = params || ((typeof scenarioParams !== 'undefined') ? scenarioParams : {});
+  const s = (typeof SCENARIOS !== 'undefined' && Array.isArray(SCENARIOS)) ? SCENARIOS.find(x => x.id === id) : null;
+  if (map && map[id] != null) return map[id];
+  return (s && s._param) ? s._param.defaultValue : null;
+}
+function _scnCountryName(iso) {
+  if (typeof _nameFromISO === 'function') return _nameFromISO(iso);
+  const c = (typeof byISO === 'function') ? byISO(iso) : null;
+  return (c && c.name) || iso;
+}
+function _scnParamOptionList(s) {
+  try {
+    const opts = (s && s._param && typeof s._param.options === 'function') ? s._param.options() : [];
+    return Array.isArray(opts) ? opts.filter(o => o && o.value != null) : [];
+  } catch (e) { return []; }
+}
+function _scnMajorSupplierOptions() {
+  return [{ value:'top', label:'Top supplier of each country (generic)' }]
+    .concat(['RUS','UKR','USA','IND','THA','VNM','BRA','ARG','CAN','AUS','FRA']
+      .map(iso => ({ value: iso, label: _scnCountryName(iso) })));
+}
+function _scnRegionOptions() {
+  const seen = new Set();
+  const regions = [];
+  const list = (typeof COUNTRIES !== 'undefined' && Array.isArray(COUNTRIES)) ? COUNTRIES : [];
+  list.forEach(c => {
+    if (!c || !c.region || (c.iso && c.iso.startsWith('US-')) || seen.has(c.region)) return;
+    seen.add(c.region);
+    regions.push(c.region);
+  });
+  return [{ value:'global', label:'Global / worst-case everywhere' }]
+    .concat(regions.sort().map(r => ({ value: r, label: r })));
+}
+function _scnFertilizerParamOptions() {
+  const FERT = (typeof COMMODITY_TRADE_ROUTES !== 'undefined') ? COMMODITY_TRADE_ROUTES.fertilizer : null;
+  const exporters = FERT && Array.isArray(FERT.exporters) ? FERT.exporters : [];
+  return [{ value:'global', label:'Global price surge' }]
+    .concat(exporters.map(e => ({ value: e.iso, label: `${_scnCountryName(e.iso)} halts exports` })));
+}
+function _scnChokepointParamOptions() {
+  const cps = (typeof CHOKEPOINTS !== 'undefined' && Array.isArray(CHOKEPOINTS)) ? CHOKEPOINTS : [];
+  return [{ value:'global', label:'Global freight market' }]
+    .concat(cps.map(cp => ({ value: cp.id, label: cp.name })));
+}
+function _scnRestrictionParamOptions() {
+  const measures = (typeof LIVE !== 'undefined' && Array.isArray(LIVE.restrictions)) ? LIVE.restrictions : [];
+  return [{ value:'all', label:'All on-record measures' }]
+    .concat(measures.map((m, i) => ({
+      value: String(i),
+      label: `${m.country || _scnCountryName(m.iso) || 'Unknown origin'} — ${m.commodity || 'commodity'} (${m.announced_date || 'on record'})`
+    })));
+}
+function _scnSameOrigin(row, originIso, originName) {
+  if (!row || !originIso) return false;
+  const rIso = row.iso || row.iso3;
+  if (rIso && rIso === originIso) return true;
+  if (row.name && typeof byName === 'function') {
+    const hit = byName(row.name);
+    if (hit && hit.iso === originIso) return true;
+  }
+  const a = String(row.name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ');
+  const b = String(originName || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ');
+  return !!(a && b && a === b);
+}
+function _scnObservedStapleOriginShare(c, originIso) {
+  const _rs = (typeof realShares === 'function') ? realShares : (typeof window !== 'undefined' ? window.realShares : null);
+  if (typeof _rs !== 'function') return null;
+  const originName = _scnCountryName(originIso);
+  let share = 0, sawFlows = false;
+  ['Wheat','Rice','Maize'].forEach(label => {
+    const imp = _rs(c, label, 'import');
+    if (!imp || !imp.totalKt || !Array.isArray(imp.rows)) return;
+    sawFlows = true;
+    const row = imp.rows.find(r => _scnSameOrigin(r, originIso, originName));
+    if (row && row.share) share += row.share;
+  });
+  if (!sawFlows) return null;
+  return Math.min(1, share);
+}
+function _scnRegionScopedKick(id, c, calc) {
+  const param = _scnParamValue(id);
+  if (param && param !== 'global' && c && c.region !== param) return 0;
+  return calc();
+}
+function _scnGlobalShipKick(c, s) {
+  return (c.c?.[5] || 0) * 0.06 * (s / 0.50) + 1;
+}
+function _scnShipCorridorBasis(c, corridorId) {
+  const cpMap = (typeof LIVE !== 'undefined' && LIVE.chokepoint_flows && LIVE.chokepoint_flows.chokepoints)
+    ? LIVE.chokepoint_flows.chokepoints[corridorId] : null;
+  if (!cpMap || !Array.isArray(cpMap.exposed)) return { basis:'geography_blind', exposure:null };
+  const mine = cpMap.exposed.filter(e => e.iso === c.iso);
+  if (!mine.length) return { basis:'not_routed', exposure:0 };
+  const parts = mine.map(e => {
+    const f = { wheat:'w', rice:'r', maize:'m', corn:'m' }[e.commodity];
+    const d = f ? _psdImportDependence(c, f) : null;
+    const dep = (d && d.dep != null) ? d.dep : null;
+    if (dep == null) return null;
+    const share = (e.share_of_imports_pct != null) ? Math.min(1, e.share_of_imports_pct / 100) : 0.6;
+    return dep * share;
+  }).filter(v => v != null);
+  if (!parts.length) return { basis:'not_routed', exposure:0 };
+  return { basis:'route_mapped', exposure:Math.min(1, parts.reduce((a, b) => a + b, 0)) };
+}
+function _scnShipCorridorKick(c, s, corridorId) {
+  const basis = _scnShipCorridorBasis(c, corridorId);
+  if (basis.basis === 'route_mapped') return basis.exposure * SCENARIO_POINT_SCALE * s * 0.45;
+  if (basis.basis === 'not_routed') return (c.c?.[5] || 0) * 0.03 * (s / 0.50) + 0.5;
+  return _scnGlobalShipKick(c, s);
+}
+function _scnExportRestrictionKick(c, s, measureValue) {
+  const measures = (typeof LIVE !== 'undefined' && Array.isArray(LIVE.restrictions)) ? LIVE.restrictions : [];
+  if (!measures.length) return null;
+  const _rs = (typeof realShares === 'function') ? realShares : (typeof window !== 'undefined' ? window.realShares : null);
+  if (typeof _rs !== 'function') return null;
+  const selected = (measureValue == null || measureValue === 'all') ? measures : [measures[Number(measureValue)]].filter(Boolean);
+  if (!selected.length) return null;
+  let exposure = 0, matched = false;
+  selected.forEach(m => {
+    if (!m || !m.commodity) return;
+    const imp = _rs(c, m.commodity, 'import');
+    if (!imp || !imp.totalKt || !Array.isArray(imp.rows)) return;
+    matched = true;
+    imp.rows.forEach(r => {
+      if (_scnSameOrigin(r, m.iso, m.country) && r.share) exposure += r.share;
+    });
+  });
+  if (!matched) return null;
+  return Math.min(1, exposure) * 20 * (s / 0.50);
+}
+
 // ── v61 — THE BREAK POINT, in units a person can act on ────────────────────
 //
 // The scenario output led with "Peak shift +4 pts · Cross a risk threshold".
@@ -18700,6 +18883,7 @@ const SCENARIOS = [
     desc:'Phosphate / potash / urea supply shock — hits yield 1–2 seasons later.',
     formula:'Δ = fertilizer-import-conc × 8% × (shock / 0.30)   |   exporters: 1–2 pts',
     _basis:'sourced_flows',
+    _param:{ label:'Supply shock at', options:()=>_scnFertilizerParamOptions(), defaultValue:'global' },
     // v21 honesty pass: fertilizer shock now wires real COMMODITY_TRADE_ROUTES.fertilizer
     // data — net exporters (USA / Brazil / Russia / Canada / etc.) barely move,
     // importers with concentrated supplier mixes (India / Egypt / Bangladesh / Pakistan)
@@ -18707,6 +18891,7 @@ const SCENARIOS = [
     kick: (c, s=0.30) => {
       const FERT = (typeof COMMODITY_TRADE_ROUTES !== 'undefined') ? COMMODITY_TRADE_ROUTES.fertilizer : null;
       if (!FERT) return (4 + (c.c?.[2]||50) * 0.04) * (s/0.30);  // v34 polarity fix — scale with production fragility, not strength
+      const origin = _scnParamValue('fert30');
       // COUNTRIES entries already carry ISO3 codes (`c.iso`) — match directly.
       const candidate = c.iso;
       const exporterIsos = (FERT.exporters||[]).map(e=>e.iso);
@@ -18715,6 +18900,15 @@ const SCENARIOS = [
         // Net exporters: tiny kick (1-2 pts) — they may even benefit from price
         const expShare = (FERT.exporters.find(e=>e.iso===candidate)||{}).share || 0;
         return Math.max(1, 2 - expShare*0.05) * (s/0.30);
+      }
+      // v65 — named fertilizer-origin shock: uncovered importers are NO DATA;
+      // covered non-buyers keep only the diffuse reroute/repricing residual.
+      if (origin && origin !== 'global') {
+        const sup = FERT.importer_suppliers[candidate];
+        if (!sup || !sup.length) return null;
+        const row = sup.find(x => x.iso === origin);
+        if (!row) return 2 * (s/0.30);
+        return (8 + row.share * 0.16) * (s/0.30);
       }
       const suppliers = FERT.importer_suppliers[candidate];
       if (suppliers && suppliers.length) {
@@ -18728,17 +18922,18 @@ const SCENARIOS = [
     impact: function(c, s=0.30){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   {id:'drought', label:'Domestic drought',         cat:'Climate',   baseSev:0.15, sevUnit:'% yield', channel:4,
     desc:'15% shortfall in domestic food production for current season.',
-    formula:'Δ = production-trend fragility × 12% × (shock / 0.15)  [modeled — flags input-missing]',
+    formula:'Δ = production-trend fragility × 12% × (shock / 0.15)  [modeled — flags input-missing] — region-scoped: countries outside the selected region are unaffected (trade spillovers out of scope)',
     _basis:'modeled_component',
     _inputComponent:2,
+    _param:{ label:'Where', options:()=>_scnRegionOptions(), defaultValue:'global' },
     // v34 polarity fix — c[2] is RISK-coded (Sudan 90 = collapsing production, USA 8 =
     // robust). The old (100 − c[2]) hit STRONG producers hardest and barely moved
     // fragile ones — exactly backwards for a food-security score (the US absorbs a 15%
     // shortfall via reserves/trade; Sudan cannot). Drought now scales WITH fragility.
-    kick: (c, s=0.15) => (c.c?.[2]||50) * 0.12 * (s/0.15),
+    kick: (c, s=0.15) => _scnRegionScopedKick('drought', c, () => (c.c?.[2]||50) * 0.12 * (s/0.15)),
     impact: function(c, s=0.15){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   {id:'oil25',   label:'Fuel + logistics cost',    cat:'Logistics', baseSev:0.25, sevUnit:'%', channel:5,
-    desc:'Higher fuel costs cascade through fertilizer, transport, cold-chain — food inflation follow-on.',
+    desc:'Higher fuel costs cascade through fertilizer, transport, cold-chain — food inflation follow-on. Fuel is one global market — no origin selector, on purpose.',
     formula:'Δ = conflict/logistics × 8% + 2  [modeled — flags input-missing]',
     _basis:'modeled_component',
     _inputComponent:5,
@@ -18746,8 +18941,9 @@ const SCENARIOS = [
     impact: function(c, s=0.25){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   {id:'ban',     label:'Major supplier export ban',cat:'Geopolitics',baseSev:1.00, sevUnit:'×', channel:1,
     desc:'Top-1 supplier withdraws from the market (e.g. Russia, Ukraine, India for rice).',
-    formula:'Δ = real top-supplier share of the country\'s food imports (live Comtrade supplier mix, cited for 203 countries: 180 sourced + 23 partial) × 18 × shock (heritage supplier-concentration component only as fallback)',
+    formula:'Δ = observed import share from the banning origin (cited flows) × 18 × shock → c[1]',
     _basis:'sourced_flows',
+    _param:{ label:'Origin that bans', options:()=>_scnMajorSupplierOptions(), defaultValue:'top' },
     // v31 — SOURCED-FLOW supplier-ban kick. Was `c.c[1]×0.18` (heritage supplier-
     // concentration COMPONENT, unsourced). Now: take the country's LARGEST cited
     // food-staple import (rankedDependencies → real kt), read its real supplier mix
@@ -18764,6 +18960,13 @@ const SCENARIOS = [
       // 23 partial after the v41 honesty pass): Egypt 69% RUS,
       // Netherlands 35%, Sudan 100%. Kick = top-supplier share × 18 × severity,
       // exactly the scenario semantics ("your #1 supplier withdraws").
+      const origin = _scnParamValue('ban');
+      if (origin && origin !== 'top') {
+        const share = _scnObservedStapleOriginShare(c, origin);
+        if (share == null) return null;
+        if (share === 0) return 0;
+        return share * 18 * s;
+      }
       try {
         const sp = Array.isArray(c.supPct) ? c.supPct
                  : (c.supPct && Array.isArray(c.supPct.value) ? c.supPct.value : null);
@@ -18815,12 +19018,18 @@ const SCENARIOS = [
   {id:'ship',    label:'Shipping disruption',      cat:'Logistics', baseSev:0.50, sevUnit:'%', channel:5, _basis:'modeled_component',
     desc:'Suez / Panama / Red Sea bottleneck — global food freight 50% more expensive.',
     formula:'Δ = conflict/logistics × 6% + 1',
-    kick: (c, s=0.50) => (c.c?.[5]||0) * 0.06 * (s/0.50) + 1,
+    _param:{ label:'Corridor', options:()=>_scnChokepointParamOptions(), defaultValue:'global' },
+    kick: (c, s=0.50) => {
+      const corridor = _scnParamValue('ship');
+      if (!corridor || corridor === 'global') return _scnGlobalShipKick(c, s);
+      return _scnShipCorridorKick(c, s, corridor);
+    },
     impact: function(c, s=0.50){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   {id:'conflict',label:'Trade-route conflict',     cat:'Geopolitics',baseSev:1.00, sevUnit:'×', channel:5, _basis:'modeled_component',
     desc:'Regional conflict severs primary food trade corridor for the country.',
     formula:'Δ = conflict/logistics × 15%',
-    kick: (c, s=1.00) => (c.c?.[5]||0) * 0.15 * s,
+    _param:{ label:'Where', options:()=>_scnRegionOptions(), defaultValue:'global' },
+    kick: (c, s=1.00) => _scnRegionScopedKick('conflict', c, () => (c.c?.[5]||0) * 0.15 * s),
     impact: function(c, s=1.00){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
 
   // ── v64 — data-backed input blocks (handover §3). Each kick reads its
@@ -18830,24 +19039,30 @@ const SCENARIOS = [
   // input that moves a number with no data behind it is theatre. ──
   {id:'heatstress', label:'Heat-stress season', cat:'Climate', baseSev:0.15, sevUnit:'% yield', channel:4,
     desc:'A sustained heat anomaly hits the growing season. Countries already warming fastest (observed, WB CCKP) take the larger yield hit.',
-    formula:'Δ = climate fragility × 12% × observed-warming multiplier (CCKP, 0.6–1.8) × (shock / 0.15)',
+    formula:'Δ = climate fragility × 12% × observed-warming multiplier (CCKP, 0.6–1.8) × (shock / 0.15) — region-scoped: countries outside the selected region are unaffected (trade spillovers out of scope)',
     _basis:'sourced_indicator',
+    _param:{ label:'Where', options:()=>_scnRegionOptions(), defaultValue:'global' },
     kick: (c, s=0.15) => {
-      const row = (typeof LIVE !== 'undefined' && LIVE.cckp) ? LIVE.cckp[c.iso] : null;
-      if (!row || row.warming_c == null) return null;
-      const warmMult = Math.max(0.6, Math.min(1.8, 0.6 + row.warming_c / 1.2));
-      return (c.c?.[4] || 50) * 0.12 * warmMult * (s / 0.15);
+      return _scnRegionScopedKick('heatstress', c, () => {
+        const row = (typeof LIVE !== 'undefined' && LIVE.cckp) ? LIVE.cckp[c.iso] : null;
+        if (!row || row.warming_c == null) return null;
+        const warmMult = Math.max(0.6, Math.min(1.8, 0.6 + row.warming_c / 1.2));
+        return (c.c?.[4] || 50) * 0.12 * warmMult * (s / 0.15);
+      });
     },
     impact: function(c, s=0.15){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   {id:'waterstress', label:'Water-stress drawdown', cat:'Climate', baseSev:0.20, sevUnit:'%', channel:4,
     desc:'Irrigation water tightens sharply. Exposure is the country\'s WRI Aqueduct drought-risk score — 96 countries carry one; the rest honestly show NO DATA.',
-    formula:'Δ = (Aqueduct drought-risk / 5) × 14 × (shock / 0.20)',
+    formula:'Δ = (Aqueduct drought-risk / 5) × 14 × (shock / 0.20) — region-scoped: countries outside the selected region are unaffected (trade spillovers out of scope)',
     _basis:'sourced_indicator',
+    _param:{ label:'Where', options:()=>_scnRegionOptions(), defaultValue:'global' },
     kick: (c, s=0.20) => {
-      const row = (typeof LIVE !== 'undefined' && LIVE.aqueduct) ? LIVE.aqueduct[c.iso] : null;
-      const score = row && row.drought_risk && row.drought_risk.score;
-      if (score == null) return null;
-      return (score / 5) * 14 * (s / 0.20);
+      return _scnRegionScopedKick('waterstress', c, () => {
+        const row = (typeof LIVE !== 'undefined' && LIVE.aqueduct) ? LIVE.aqueduct[c.iso] : null;
+        const score = row && row.drought_risk && row.drought_risk.score;
+        if (score == null) return null;
+        return (score / 5) * 14 * (s / 0.20);
+      });
     },
     impact: function(c, s=0.20){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   {id:'portstress', label:'Port & customs friction', cat:'Logistics', baseSev:0.30, sevUnit:'%', channel:5,
@@ -18876,27 +19091,8 @@ const SCENARIOS = [
     desc:'On-record export restrictions (IFPRI tracker seed — historical measures, e.g. India rice 2023, Indonesia palm oil 2022) re-impose and widen. Exposure = your import share from the restricting origins.',
     formula:'Δ = Σ (import share from restricting origin, cited flows) × 20 × (shock / 0.50)',
     _basis:'sourced_indicator',
-    kick: (c, s=0.50) => {
-      const measures = (typeof LIVE !== 'undefined' && Array.isArray(LIVE.restrictions)) ? LIVE.restrictions : [];
-      if (!measures.length) return null;
-      const _rs = (typeof realShares === 'function') ? realShares : (typeof window !== 'undefined' ? window.realShares : null);
-      if (typeof _rs !== 'function') return null;
-      let exposure = 0, matched = false;
-      measures.forEach(m => {
-        if (!m || !m.commodity) return;
-        const imp = _rs(c, m.commodity, 'import');
-        if (!imp || !imp.totalKt || !Array.isArray(imp.rows)) return;
-        matched = true;
-        imp.rows.forEach(r => {
-          const rIso = r.iso || r.iso3;
-          const hit = (rIso && rIso === m.iso) ||
-                      (r.name && m.country && String(r.name).toLowerCase() === String(m.country).toLowerCase());
-          if (hit && r.share) exposure += r.share;
-        });
-      });
-      if (!matched) return null;          // no cited import flows for the restricted commodities
-      return Math.min(1, exposure) * 20 * (s / 0.50);
-    },
+    _param:{ label:'Measure', options:()=>_scnRestrictionParamOptions(), defaultValue:'all' },
+    kick: (c, s=0.50) => _scnExportRestrictionKick(c, s, _scnParamValue('exportrestrict')),
     impact: function(c, s=0.50){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   // ── Wheat sector shocks (cited) ──
 ];
@@ -18954,6 +19150,7 @@ const SCENARIO_PRESETS = [
     eyebrow: 'Geopolitics + commodity',
     meta: 'wheat +30% · supplier ban high',
     shocks: { wheat20: 0.30, ban: 1.6 },
+    params: { ban: 'RUS' },
   },
   {
     id: 'india-rice',
@@ -26878,6 +27075,9 @@ function closeForecastCountry() {
 // Severity state: id → 0–1 multiplier (default = baseSev)
 let scenarioSeverity = {};
 SCENARIOS.forEach(s => scenarioSeverity[s.id] = s.baseSev);
+// v65 — parameter state mirrors severity: shock id -> current selector value.
+let scenarioParams = {};
+SCENARIOS.forEach(s => { if (s._param) scenarioParams[s.id] = s._param.defaultValue; });
 
 function renderScenarioTab() {
   // v30.1 — the results drawer/backdrop get portaled to <body> on open (see
@@ -27189,6 +27389,17 @@ function renderScenarioTab() {
                     `<option value="${cp.id}" data-noalt="${cp.no_alternative?1:0}" ${cp.id===_scnChokepoint?'selected':''}>${cp.name}${cp.no_alternative?' — no alternative route':''}</option>`).join('')}
                 </select>
                 <span id="scn-choke-noalt" style="display:${(typeof CHOKEPOINTS!=='undefined'&&(CHOKEPOINTS.find(x=>x.id===_scnChokepoint)||{}).no_alternative)?'inline':'none'};font-size:9px;color:#c44b3c;font-family:'Geist Mono',monospace;letter-spacing:.06em;">×1.6 NO REROUTE</span>
+              </div>` : ''}
+              ${s._param ? `
+              <div class="scn-choke-toggle scn-param-toggle" onclick="event.stopPropagation()">
+                <label for="scn-param-${s.id}" style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;font-family:'Geist Mono',monospace;">${_scnEsc(s._param.label)}</label>
+                <select id="scn-param-${s.id}" class="scn-param-toggle" aria-label="${_scnEsc(s._param.label)}"
+                  onchange="scnParamChange('${s.id}', this.value)" onclick="event.stopPropagation()"
+                  style="background:var(--bg3);border:1px solid var(--b2);color:var(--t1);font-size:11px;padding:5px 8px;border-radius:6px;max-width:100%;">
+                  ${_scnParamOptionList(s).map(o =>
+                    `<option value="${_scnEsc(o.value)}" ${String(o.value)===String(_scnParamValue(s.id))?'selected':''}>${_scnEsc(o.label)}</option>`).join('')}
+                </select>
+                ${s._param.note ? `<span style="font-size:9px;color:var(--t3);font-family:'Geist Mono',monospace;letter-spacing:.06em;">${_scnEsc(s._param.note)}</span>` : ''}
               </div>` : ''}
               <div class="scn-card-resp-wrap">
                 <div class="scn-card-resp">
@@ -27521,6 +27732,21 @@ function countryResponse(c, selected, breakdown){
   }
 
   // Channel-led primary lever (which FDRS component took the biggest hit).
+  // v64.1 — chokepoint closures get route-specific advice, not the generic
+  // supplier-concentration line (every GCC row read identically).
+  const topShock = bd[0] ? bd[0].id : null;
+  if (topShock === 'chokeclose') {
+    const cp = (typeof CHOKEPOINTS !== 'undefined' ? CHOKEPOINTS : []).find(x => x.id === _scnChokepoint);
+    const routeName = cp ? cp.name : 'the closed route';
+    const urgency0 = (delta >= 12 || band === 'Severe') ? `High urgency (+${Math.round(delta)} pts${bandSuffix})`
+                   : (delta >= 6 || band === 'Vulnerable') ? `Act early (+${Math.round(delta)} pts${bandSuffix})`
+                   : (delta >= 2) ? `Watch (+${Math.round(delta)} pts${bandSuffix})`
+                   : `Low exposure (+${Math.round(delta)} pts)`;
+    const alt = cp && cp.no_alternative
+      ? `no maritime alternative exists, so the lever is stocks and origin — pre-position ${com} beyond ${routeName}, contract origins that discharge on the near side, and hold enough cover to outlast a closure window`
+      : `reroute early — book the alternative passage before freight reprices, extend contract laycans, and split cargoes across routes`;
+    return `<b style="color:var(--t1)">${urgency0}.</b> ${name}'s exposure runs through ${routeName}: ${alt}.`;
+  }
   let lever;
   switch (topCh) {
     case 0: lever = `cut import-dependency exposure on ${com} — diversify suppliers and pre-contract alternate origins before prices peak`; break;      // import dep
@@ -27552,6 +27778,22 @@ function updateSeverity(id, val){
   if (slider) slider.setAttribute('aria-valuetext', formatSev(parseFloat(val), s.sevUnit));
   if (typeof _updateSevTunedChip === 'function') _updateSevTunedChip();
   if (typeof updateActiveShocksBar === 'function') updateActiveShocksBar();
+}
+
+// v65 — parameter selector handler. Brief-side changes re-run active stacks,
+// matching the existing chokepoint route selector behavior.
+function _syncScenarioParamSelect(id) {
+  const val = scenarioParams ? scenarioParams[id] : null;
+  ['scn-param-' + id, 'scn-param-' + id + '-brief'].forEach(selId => {
+    const el = document.getElementById(selId);
+    if (el && val != null) el.value = val;
+  });
+}
+function scnParamChange(id, val){
+  if (!scenarioParams) scenarioParams = {};
+  scenarioParams[id] = val;
+  _syncScenarioParamSelect(id);
+  if (_lastStressResults && activeScenarios && activeScenarios.has(id) && typeof runScenarios === 'function') runScenarios();
 }
 
 // a11y — keyboard activation for div-based controls carrying role="button".
@@ -27734,6 +27976,16 @@ function applyScenarioPreset(presetId) {
     const slider = el ? el.querySelector('input[type="range"]') : null;
     if (slider) slider.value = sev;
   });
+  // v65 — presets may also pin selector parameters; unspecified params persist.
+  if (preset.params && typeof preset.params === 'object') {
+    Object.entries(preset.params).forEach(([rawId, val]) => {
+      const id = resolveScenarioId(rawId);
+      const s = SCENARIOS.find(x => x.id === id);
+      if (!s || !s._param) return;
+      scenarioParams[id] = val;
+      _syncScenarioParamSelect(id);
+    });
+  }
   updateScenarioCount();
   runScenarios();
   setTimeout(() => {
@@ -27813,6 +28065,8 @@ let _lastStressSelected = null;
 // LIVE scenarioSeverity, so moving a slider after Run then re-sorting relabelled
 // cached numbers with severities the engine never used.
 let _lastStressSeverity = null;
+// v65 — parameter labels are snapshotted the same way as severities.
+let _lastStressParams = null;
 let _stressSortMode = 'delta';   // 'delta' = largest jump (default) | 'after' = highest after-shock
 let _scnCmpIsos = [];
 let _scnCmpOpen = false;
@@ -27889,6 +28143,15 @@ function _scnBpHasCertificate(iso) {
   return !!(c && ctx.commodity && _scnBreakPoint(c, ctx.commodity.key, ctx.commodity.sev || 0.20));
 }
 
+// v65 — label a non-default shock parameter from the run snapshot, not live UI.
+function scnParamLabel(s, params) {
+  if (!s || !s._param) return '';
+  const val = _scnParamValue(s.id, params);
+  if (val == null || String(val) === String(s._param.defaultValue)) return '';
+  const hit = _scnParamOptionList(s).find(o => String(o.value) === String(val));
+  return hit ? hit.label : String(val);
+}
+
 function _scnBpSwitcherHTML() {
   const active = _scnBpActiveIso();
   const chips = _scnBpIsos.map(iso => {
@@ -27955,9 +28218,13 @@ function _scnCertificateHTML(iso) {
           <span class="scn-bp-cap">Stock cover at current draw — ${_scnBpFmtKtPlain(bp.stocks)} on hand</span>
         </div>` : ''}
       </div>
-      <span class="scn-bp-verdict">Binds first — ${_escFeed(bp.binding)}</span>
-      <span class="scn-bp-verdict-why">${_escFeed(bp.bindingWhy)}</span>
-      ${resp ? `<div class="scn-bpsw-response"><span class="scn-bp-cap">RESPONSE</span><span class="scn-bpsw-response-body">${resp}</span></div>` : ''}
+      <div class="scn-bp-foot">
+        <div>
+          <span class="scn-bp-verdict">Binds first — ${_escFeed(bp.binding)}</span>
+          <span class="scn-bp-verdict-why">${_escFeed(bp.bindingWhy)}</span>
+        </div>
+        ${resp ? `<div class="scn-bpsw-response"><span class="scn-bp-cap">Response</span><span class="scn-bpsw-response-body">${resp}</span></div>` : ''}
+      </div>
       ${_scnAnalystNote(bp, c)}
       <div class="prov-line">
         <span class="prov-kind" style="color:#e58a78">Source</span>
@@ -27969,11 +28236,60 @@ function _scnCertificateHTML(iso) {
     </div>`;
 }
 
+// v64.1 — when a chokepoint closure is in the stack, the brief carries its own
+// route selector: picking a different strait re-runs the engine, so the whole
+// output (ranking, certificate, panels) answers for THAT route.
+function _scnBpRouteHTML() {
+  const sel = (_scnBpContext && _scnBpContext.selected) || [];
+  if (!sel.some(s => s.id === 'chokeclose')) return '';
+  const cps = (typeof CHOKEPOINTS !== 'undefined') ? CHOKEPOINTS : [];
+  if (!cps.length) return '';
+  const cur = cps.find(x => x.id === _scnChokepoint) || {};
+  return `
+    <div class="scn-bp-route">
+      <span class="scn-bp-cap" style="margin:0;">Closed route</span>
+      <select aria-label="Which chokepoint closes — changing this re-runs the stress test"
+        onchange="scnRouteChange(this.value)">
+        ${cps.map(cp => `<option value="${cp.id}" ${cp.id===_scnChokepoint?'selected':''}>${cp.name}${cp.no_alternative?' — no alternative route':''}</option>`).join('')}
+      </select>
+      <span style="font:400 10px/1.5 'Geist Mono',monospace;color:var(--t3);">
+        ${cur.no_alternative ? '<b style="color:#c44b3c;font-weight:600;">×1.6 NO REROUTE</b> · ' : ''}changing the route re-runs the whole test</span>
+    </div>`;
+}
+function scnRouteChange(id) {
+  _scnChokepoint = id;
+  const cardSel = document.getElementById('scn-choke-select');
+  if (cardSel) cardSel.value = id;   // keep the input card in sync
+  if (typeof runScenarios === 'function') runScenarios();
+}
+
+function _scnParamsBarHTML() {
+  const selected = (_lastStressSelected && _lastStressSelected.length)
+    ? _lastStressSelected
+    : ((_scnBpContext && _scnBpContext.selected) || []);
+  const params = _lastStressParams || scenarioParams || {};
+  const items = (selected || []).filter(s => s && s._param && s.id !== 'chokeclose');
+  if (!items.length) return '';
+  return items.map(s => {
+    const cur = _scnParamValue(s.id, params);
+    return `
+    <div class="scn-bp-route">
+      <span class="scn-bp-cap" style="margin:0;">${_scnEsc(s._param.label)}</span>
+      <select id="scn-param-${s.id}-brief" class="scn-param-toggle" aria-label="${_scnEsc(s._param.label)} — changing this re-runs the stress test"
+        onchange="scnParamChange('${s.id}', this.value)">
+        ${_scnParamOptionList(s).map(o => `<option value="${_scnEsc(o.value)}" ${String(o.value)===String(cur)?'selected':''}>${_scnEsc(o.label)}</option>`).join('')}
+      </select>
+      <span style="font:400 10px/1.5 'Geist Mono',monospace;color:var(--t3);">changing this re-runs the whole test</span>
+    </div>`;
+  }).join('');
+}
+
 function _scnBpHTML() {
   const active = _scnBpActiveIso();
   return `
     <!-- v64-bpsw — stable wrapper re-rendered in place on chip clicks. -->
     <div id="scn-bpsw-wrap" class="scn-bpsw-wrap">
+      ${_scnBpRouteHTML()}
       ${_scnBpSwitcherHTML()}
       <div id="scn-bpsw-cert">${active ? _scnCertificateHTML(active) : ''}</div>
     </div>`;
@@ -28228,6 +28544,7 @@ function runScenarios() {
   _lastStressResults = results;
   _lastStressSelected = selected;
   _lastStressSeverity = { ...scenarioSeverity };
+  _lastStressParams = { ...scenarioParams };
   _renderStressResults();
 }
 
@@ -28281,7 +28598,11 @@ function _renderStressResults() {
       </div>
     </div>
     <div style="font-size:11.5px;color:var(--t2);line-height:1.75;border-top:1px solid var(--b1);padding-top:10px;">
-      <b style="color:var(--t1)">Stacked shocks:</b> ${selected.map(s=>'<span style="display:inline-flex;align-items:center;gap:5px;margin:0 2px 4px 0;">'+s.label+' ('+formatSev((_lastStressSeverity||scenarioSeverity)[s.id],s.sevUnit)+') '+scnBasisChip(s, (scenarioMode==='country' && Array.isArray(scenarioCountries) && scenarioCountries.length===1) ? byISO(scenarioCountries[0]) : null)+'</span>').join(' + ')}<br>
+      <b style="color:var(--t1)">Stacked shocks:</b> ${selected.map(s=>{
+        const sevTxt = formatSev((_lastStressSeverity||scenarioSeverity)[s.id],s.sevUnit);
+        const paramTxt = scnParamLabel(s, _lastStressParams || {});
+        return '<span style="display:inline-flex;align-items:center;gap:5px;margin:0 2px 4px 0;">'+s.label+' ('+(paramTxt ? _scnEsc(paramTxt)+', ' : '')+sevTxt+') '+scnBasisChip(s, (scenarioMode==='country' && Array.isArray(scenarioCountries) && scenarioCountries.length===1) ? byISO(scenarioCountries[0]) : null)+'</span>';
+      }).join(' + ')}<br>
       <b style="color:var(--t1)">Most exposed:</b> ${top3}<br>
       <b style="color:var(--t1)">Average shift:</b> ${avgDelta>=0?"+":""}${avgDelta} pts · <b style="color:var(--t1)">${newVuln}</b> new structurally vulnerable
     </div>`;
@@ -28320,7 +28641,10 @@ function _renderStressResults() {
       <button type="button" class="scn-method-link" style="margin-left:8px;font-size:10px;" onclick="scrollToMethodBadge()">how the math works →</button>
     </div>
     <div class="scn-why-formula">
-      ${selected.map(s=>`<div>${s.label} <span style="color:var(--t3)">(${formatSev((_lastStressSeverity||scenarioSeverity)[s.id],s.sevUnit)}, c[${s.channel}])</span> →  <span style="color:var(--t2)">${s.formula}</span></div>`).join('')}
+      ${selected.map(s=>{
+        const paramTxt = scnParamLabel(s, _lastStressParams || {});
+        return `<div>${s.label} <span style="color:var(--t3)">(${paramTxt ? `${_scnEsc(paramTxt)}, ` : ''}${formatSev((_lastStressSeverity||scenarioSeverity)[s.id],s.sevUnit)}, c[${s.channel}])</span> →  <span style="color:var(--t2)">${s.formula}</span></div>`;
+      }).join('')}
     </div>`;
 
   // Country impact table — top 40 with audit-breakdown expandable row.
@@ -28382,7 +28706,7 @@ function _renderStressResults() {
     return `
     <tr>
       <td style="color:var(--t3);font-family:'Geist Mono'">${String(i+1).padStart(2,'0')}</td>
-      <td><b>${c.name}</b><div style="font-size:9.5px;color:var(--t3)">${c.region}</div></td>
+      <td><b>${c.name}</b></td>
       <td style="color:var(--t3);font-size:11px">${c.region}</td>
       <td><span class="score-pill" style="background:${riskColor(c.fdrs)}1a;color:${riskColor(c.fdrs)}">${c.fdrs}</span></td>
       <td><span class="score-pill" style="background:${riskColor(c.newScore)}1a;color:${riskColor(c.newScore)}">${c.newScore}</span></td>
@@ -28459,12 +28783,19 @@ function _scnAnalystNote(bp, c) {
 
     // 2 — precedent: this country's own documented record, or a computed analogue.
     const evs = P.filter(e => (e.commodity || '').toLowerCase().includes(bp.commodity));
+    // v64.1 — precedent records are quoted at most two sentences: the note is a
+    // reading, not a dossier. The citation link carries the rest.
+    const clip = t => {
+      if (!t) return '';
+      const parts = String(t).split(/(?<=[.!?])\s+/);
+      return parts.slice(0, 2).join(' ');
+    };
     let mine = [];
     evs.forEach(e => (e.responses || []).forEach(r => { if (r.iso === c.iso) mine.push({ e, r }); }));
     let s2 = '', inferred = false;
     if (mine.length) {
       const { e, r } = mine[0];
-      s2 = `On record — ${e.name}: ${r.what}${r.outcome ? ` ${r.outcome}` : ''}${cite(r.citation_url)}`;
+      s2 = `On record — ${e.name}: ${clip(r.what)}${r.outcome ? ` ${clip(r.outcome)}` : ''}${cite(r.citation_url)}`;
     } else if (evs.length) {
       // Computed analogue: documented responder with the same binding class.
       let best = null;
@@ -28479,16 +28810,17 @@ function _scnAnalystNote(bp, c) {
       }));
       if (best) {
         inferred = true;
-        s2 = `No documented response record for ${bp.name} in the curated table. Nearest documented analogue <span class="scn-read-inference" title="Computed match: the documented responder whose binding-constraint class and import-reliance profile sit closest to this country's — an inference, not this country's history.">inference</span> — ${best.rc.name}${best.sameClass ? ' (same binding constraint)' : ''}, ${best.e.name}: ${best.r.what}${cite(best.r.citation_url)}`;
+        s2 = `No documented record for ${bp.name}. Nearest documented analogue <span class="scn-read-inference" title="Computed match: the documented responder whose binding-constraint class and import-reliance profile sit closest to this country's — an inference, not this country's history.">inference</span> — ${best.rc.name}${best.sameClass ? ' (same binding constraint)' : ''}, ${best.e.name}: ${clip(best.r.what)}${cite(best.r.citation_url)}`;
       }
     } else {
       s2 = `The curated precedent table documents no ${bp.commodity} shock episode — no historical claim is made.`;
     }
 
-    // 3 — the transferable lesson, cited, from the matched event set.
+    // 3 — the transferable lesson, cited — but only while the note stays a
+    // note: skip it once the precedent record already fills the column.
     let s3 = '';
     const lessons = evs.flatMap(e => e.lessons || []);
-    if (lessons.length) s3 = `${lessons[0].text}${cite(lessons[0].citation_url)}`;
+    if (lessons.length && (s1.length + s2.length) < 380) s3 = `${clip(lessons[0].text)}${cite(lessons[0].citation_url)}`;
 
     const body = [s1, s2, s3].filter(Boolean).join(' ');
     if (!body) return '';
@@ -28520,7 +28852,11 @@ function _renderScenarioBrief(results, selected, stats) {
   // _applyScenarioDelta compresses any kick to ~0 — Yemen at 100 → 100 is the
   // cap clamping, not buffering. Rank by the RAW engine delta, which the cap
   // never touches.
-  const exposedPool = sorted.filter(c => c.fdrs >= 51 && c.fdrs < 95 && !(c._dataHoles > 0));
+  // v65 — and the stack must have actually TOUCHED the country: a region-scoped
+  // drought zeroes everyone outside the region by definition, and "buffers"
+  // praising Afghanistan for not being in an African drought is noise.
+  const exposedPool = sorted.filter(c => c.fdrs >= 51 && c.fdrs < 95 && !(c._dataHoles > 0)
+    && (c._breakdown || []).some(b => b.raw != null && Math.abs(b.raw) > 0.01));
   const buffers = exposedPool.slice()
     .sort((a,b)=> Math.abs(a.rawDelta ?? a.delta) - Math.abs(b.rawDelta ?? b.delta))
     .slice(0, 4);
@@ -28702,7 +29038,8 @@ function _renderScenarioBrief(results, selected, stats) {
   const shockSentenceParts = selected.map(s => {
     const sev = ((_lastStressSeverity || scenarioSeverity)[s.id] ?? s.baseSev);   // v64 — snapshot, not live slider
     const sevDisp = formatSev(sev, s.sevUnit);
-    return `<span class="var">${s.label.toLowerCase()} (${sevDisp})</span>`;
+    const paramTxt = scnParamLabel(s, _lastStressParams || {});
+    return `<span class="var">${s.label.toLowerCase()} (${paramTxt ? `${_scnEsc(paramTxt)}, ` : ''}${sevDisp})</span>`;
   });
   const sentence = shockSentenceParts.length === 1
     ? `If <em>${shockSentenceParts[0]}</em> hits, here's what the model says.`
@@ -28715,7 +29052,9 @@ function _renderScenarioBrief(results, selected, stats) {
   const profitRows = (list) => list.length
     ? list.map(c => {
         const fdrsDir = c.delta > 0 ? '#c44b3c' : (c.delta < 0 ? '#6ba36b' : 'var(--t3)');
-        const fdrsTxt = `${c.delta>0?'+':''}${Math.round(c.delta)}`;
+        // v64.1 — "FDRS 0" read as a broken value; ±0 says "own risk unchanged".
+        const _rd = Math.round(c.delta);
+        const fdrsTxt = _rd > 0 ? `+${_rd}` : (_rd < 0 ? `${_rd}` : '±0');
         return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid var(--b1);font-size:11.5px;"
              title="Profit score ${c.profitScore}/100 — driven by this country's share of the shocked export market. Its own FDRS moves ${fdrsTxt} pts (revenue gain ≠ lower own-risk).">
           <span style="color:var(--t1);flex:1;min-width:0;">${c.name}</span>
@@ -28724,6 +29063,52 @@ function _renderScenarioBrief(results, selected, stats) {
         </div>`;
       }).join('')
     : `<div class="scn-brief-table-row empty">No tracked exporter of the shocked commodity in the dataset.</div>`;
+
+  // v64.1 — a buffer row must SAY WHY it barely moves, computed from the same
+  // data the engine used — "diversified supply" as a blanket guess was exactly
+  // the genericness this page is being cured of.
+  const _bufferWhy = (c) => {
+    try {
+      const reasons = [];
+      const stap = selected.find(s => ['wheat20','rice20','maize20'].includes(s.id) || ['wheat','rice','maize'].includes(s._commodity));
+      if (stap) {
+        const f = { wheat: 'w', rice: 'r', maize: 'm' }[stap._commodity || (/(wheat|rice|maize)/.exec(stap.id||'')||[])[1]];
+        const cc = (typeof byISO === 'function') ? byISO(c.iso) : null;
+        const d = (f && cc && typeof _psdImportDependence === 'function') ? _psdImportDependence(cc, f) : null;
+        if (d && d.dep != null && d.dep < 0.35) reasons.push(`grows its own — ${Math.round(d.dep*100)}% of ${stap._commodity || 'the staple'} imported`);
+        else if (typeof c.net === 'number' && c.net > 0) reasons.push('net food exporter — a price spike is upside here');
+      }
+      if (selected.some(s => s.id === 'chokeclose')) {
+        const cpMap = (typeof LIVE !== 'undefined' && LIVE.chokepoint_flows && LIVE.chokepoint_flows.chokepoints)
+          ? LIVE.chokepoint_flows.chokepoints[_scnChokepoint] : null;
+        const cp = (typeof CHOKEPOINTS !== 'undefined' ? CHOKEPOINTS : []).find(x => x.id === _scnChokepoint);
+        if (cpMap && Array.isArray(cpMap.exposed) && !cpMap.exposed.some(e => e.iso === c.iso))
+          reasons.push(`no staple flow routed through ${cp ? cp.name : 'the closed route'}`);
+      }
+      // v65 — region-scoped shocks: being outside the shocked region is the
+      // reason, and it is stated as one.
+      const pm = _lastStressParams || (typeof scenarioParams !== 'undefined' ? scenarioParams : {}) || {};
+      selected.forEach(s => {
+        if (!s._param || !['drought','heatstress','waterstress','conflict'].includes(s.id)) return;
+        const v = pm[s.id];
+        if (v && v !== 'global' && c.region !== v) reasons.push(`outside the shocked region (${v})`);
+      });
+      if (!reasons.length) reasons.push('small kicks across every selected channel — no single choke');
+      return reasons.join(' · ');
+    } catch (e) { return ''; }
+  };
+  const bufferRows = (list) => list.length
+    ? list.map(c => {
+        const why = _bufferWhy(c);
+        return `<div class="scn-brief-table-row" style="flex-wrap:wrap;">
+          <span class="name">${c.name}</span>
+          <span class="from">${c.fdrs}</span>
+          <span class="arr">→</span>
+          <span class="to neutral">${c.newScore}</span>
+          ${why ? `<span style="flex-basis:100%;font-size:9.5px;color:var(--t3);line-height:1.5;padding:1px 0 3px;">${why}</span>` : ''}
+        </div>`;
+      }).join('')
+    : `<div class="scn-brief-table-row empty">No fully-measured exposed country buffers this stack.</div>`;
 
   // Build table rows: from → to with the "to" colored by direction
   const fromToRows = (list) => list.length
@@ -28745,9 +29130,11 @@ function _renderScenarioBrief(results, selected, stats) {
     : `No country shifts meaningfully under this stack.`;
 
   // "Who buffers" lede sentence
+  // v64.1 — the lede states the criterion and the top buffer's COMPUTED reason,
+  // never the old blanket "diversified supply" guess.
   const topBuffer = buffers[0];
   const bufferLede = topBuffer
-    ? `Despite a structural FDRS of ${topBuffer.fdrs}, <b>${topBuffer.name}</b> only moves <span class="up">${topBuffer.delta>=0?"+":""}${topBuffer.delta.toFixed(1)}</span> — diversified supply or low exposure to this shock's channel.`
+    ? `Smallest engine movement among exposed countries with full data. <b>${topBuffer.name}</b> (FDRS ${topBuffer.fdrs}) barely moves: ${_bufferWhy(topBuffer)}.`
     : `No structurally exposed country buffered well.`;
 
   // "Who profits" lede
@@ -28820,6 +29207,7 @@ function _renderScenarioBrief(results, selected, stats) {
   _scnBpContext = _bpCommodity ? { commodity: _bpCommodity, selected, sorted, simCache: Object.create(null) } : null;
   _scnBpIsos = _scnBpDefaultIsos(sorted, _bpCommodity);
   const _breakPointHTML = _bpCommodity ? _scnBpHTML() : '';
+  const _paramBarHTML = _scnParamsBarHTML();
 
   el.innerHTML = `
     <div class="scn-brief-dateline">
@@ -28827,28 +29215,29 @@ function _renderScenarioBrief(results, selected, stats) {
       <span>${today} · Stress test brief</span>
     </div>
     <div class="scn-brief-sentence">${sentence}</div>
+    ${_paramBarHTML}
     ${_breakPointHTML}
     <div class="scn-brief-grid">
       <div class="scn-brief-panel" data-kind="break">
-        <span class="scn-brief-panel-num">01 · Who breaks first</span>
+        <span class="scn-brief-panel-num">01</span>
         <span class="scn-brief-panel-title">Who breaks <em>first</em></span>
         <div class="scn-brief-panel-lede">${breakLede}</div>
         <div class="scn-brief-table">${fromToRows(breaks)}</div>
       </div>
       <div class="scn-brief-panel" data-kind="buffer">
-        <span class="scn-brief-panel-num">02 · Who buffers</span>
+        <span class="scn-brief-panel-num">02</span>
         <span class="scn-brief-panel-title">Who <em>buffers</em></span>
         <div class="scn-brief-panel-lede">${bufferLede}</div>
-        <div class="scn-brief-table">${fromToRows(buffers)}</div>
+        <div class="scn-brief-table">${bufferRows(buffers)}</div>
       </div>
       <div class="scn-brief-panel" data-kind="profit">
-        <span class="scn-brief-panel-num">03 · Who profits</span>
+        <span class="scn-brief-panel-num">03</span>
         <span class="scn-brief-panel-title">Who <em>profits</em></span>
         <div class="scn-brief-panel-lede">${profitLede}</div>
         <div class="scn-brief-table">${profitRows(profitList)}</div>
       </div>
       <div class="scn-brief-panel" data-kind="lands">
-        <span class="scn-brief-panel-num">04 · When it lands</span>
+        <span class="scn-brief-panel-num">04</span>
         <span class="scn-brief-panel-title">When it <em>lands</em></span>
         <div class="scn-brief-panel-lede">${whenLede}</div>
         <div class="scn-brief-table">
@@ -35166,8 +35555,11 @@ function scnPerCountryBasis(scenario, c) {
     if (scenario.id === 'fert30') {
       const FERT = (typeof COMMODITY_TRADE_ROUTES !== 'undefined') ? COMMODITY_TRADE_ROUTES.fertilizer : null;
       if (!FERT) return down('MODELED', 'Fertilizer route table not loaded \u2014 component fallback used.');
+      const origin = _scnParamValue('fert30', _lastStressParams || scenarioParams || {});
       const isExp = (FERT.exporters || []).some(e => e.iso === c.iso);
       const hasSup = !!(FERT.importer_suppliers && FERT.importer_suppliers[c.iso] && FERT.importer_suppliers[c.iso].length);
+      if (origin && origin !== 'global' && !isExp && !hasSup)
+        return down('NO DATA', 'No cited fertilizer supplier row for this country \u2014 the named-origin shock returned no impact estimate.');
       if (!isExp && !hasSup) return down('MODELED', 'No cited fertilizer trade route for this country \u2014 magnitude is the modeled base constant, not cited flows.');
       return null;
     }
@@ -35181,6 +35573,20 @@ function scnPerCountryBasis(scenario, c) {
         return null;
       }
       return down('GEOGRAPHY-BLIND', 'Route map not loaded \u2014 magnitude is mean staple dependence regardless of which chokepoint is selected.');
+    }
+    // v65 — Shipping disruption corridor selector: global is modeled; named
+    // corridors use the same route map as chokepoint closure, without closure math.
+    if (scenario.id === 'ship') {
+      const corridor = _scnParamValue('ship', _lastStressParams || scenarioParams || {});
+      if (!corridor || corridor === 'global') return null;
+      const cpMap = (typeof LIVE !== 'undefined' && LIVE.chokepoint_flows && LIVE.chokepoint_flows.chokepoints)
+        ? LIVE.chokepoint_flows.chokepoints[corridor] : null;
+      if (cpMap && Array.isArray(cpMap.exposed)) {
+        if (!cpMap.exposed.some(e => e.iso === c.iso))
+          return { color: '#6a685e', mark: '\u25cb', label: 'NOT ROUTED', tip: 'Route map says this country does not move staples through the selected shipping corridor \u2014 only a weak global freight residual applies.' };
+        return { color: '#6b8db8', mark: '\u25d0', label: 'SOURCED INDICATOR', tip: 'Magnitude uses route-mapped staple dependence through the selected shipping corridor.' };
+      }
+      return down('GEOGRAPHY-BLIND', 'Route map not loaded \u2014 magnitude uses the global freight-market fallback.');
     }
   } catch (e) {}
   return null;
