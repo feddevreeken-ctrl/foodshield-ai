@@ -1142,6 +1142,48 @@ body {
             display: flex; flex-direction: column; min-width: 0; }
 #map-canvas { flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden; }
 #map { width: 100%; height: 100%; position: relative; background: #14141a; }
+/* v68.3 — scenario paint is an explicit temporary map mode. The banner sits
+   inside #map-canvas so teardown can remove one DOM node and leave the map clean. */
+#scn-paint-banner {
+  position: absolute; top: 16px; left: 18px; right: 18px; z-index: 930;
+  display: flex; align-items: center; gap: 10px; min-height: 42px;
+  padding: 9px 12px 9px 14px;
+  background: rgba(122,41,34,0.94);
+  border: 1px solid rgba(201,169,87,0.76);
+  box-shadow: 0 14px 38px rgba(0,0,0,0.42);
+  color: var(--t1);
+  font-family: 'Geist Mono', monospace; font-size: 11px; line-height: 1.35;
+  letter-spacing: .08em; text-transform: uppercase;
+  pointer-events: auto;
+}
+#scn-paint-banner .scn-paint-k { color: #c9a957; font-weight: 700; white-space: nowrap; }
+#scn-paint-banner .scn-paint-text {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: rgba(235,233,226,0.9);
+}
+#scn-paint-banner button {
+  flex: none; cursor: pointer; appearance: none; -webkit-appearance: none;
+  border: 1px solid rgba(235,233,226,0.74); background: var(--t1); color: var(--bg0);
+  font: 700 10px/1 'Geist Mono', monospace; letter-spacing: .12em; text-transform: uppercase;
+  padding: 8px 11px; border-radius: 3px;
+}
+#scn-paint-banner button:hover { opacity: .88; }
+.leaflet-interactive.scn-paint-choke-marker {
+  animation: scnPaintPulse 1.15s ease-out infinite;
+  filter: drop-shadow(0 0 8px rgba(201,169,87,0.9));
+}
+@keyframes scnPaintPulse {
+  0% { stroke-width: 2; stroke-opacity: 1; fill-opacity: .88; }
+  70% { stroke-width: 8; stroke-opacity: .24; fill-opacity: .44; }
+  100% { stroke-width: 10; stroke-opacity: 0; fill-opacity: .88; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .leaflet-interactive.scn-paint-choke-marker { animation: none; }
+}
+@media (max-width: 800px) {
+  #scn-paint-banner { top: 10px; left: 10px; right: 10px; font-size: 9.5px; letter-spacing: .06em; }
+  #scn-paint-banner button { padding: 7px 9px; }
+}
 
 /* ── SIGNALS PAGE (v46.1) ────────────────────────────────────────────────
    Deliberate hierarchy, because this page could easily become the wall of
@@ -20020,6 +20062,13 @@ function _simulateScenario(c, selected, severityById, paramsById) {
         }).addTo(map);
 
         G.ready = true;
+        // v68.3 — if scenario paint was armed before GeoJSON finished, the
+        // polygons get painted through styleFeature; place the route marker now.
+        try {
+          if (_scnPaintOn && typeof _scnRenderScenarioPaintMarker === 'function') {
+            _scnRenderScenarioPaintMarker();
+          }
+        } catch (e) {}
 
         if (typeof updateOverlayStats === 'function') updateOverlayStats();
         if (typeof updateRail === 'function') updateRail();
@@ -20045,6 +20094,15 @@ function _simulateScenario(c, selected, severityById, paramsById) {
   function styleFeature(f) {
     const c = lookupCountry(f);
     if (!c) return { fillColor:'#1a1a20', color:'#000', weight:0.4, fillOpacity:0.9 };
+
+    // v68.3 — while scenario paint is active, Leaflet resetStyle()/render()
+    // resolve through the delta overlay instead of the baseline risk palette.
+    try {
+      if (_scnPaintOn && typeof _scnPaintFeatureStyle === 'function') {
+        const painted = _scnPaintFeatureStyle(f, c);
+        if (painted) return painted;
+      }
+    } catch (e) {}
 
     // Filter dim
     if (typeof activeFilters !== 'undefined') {
@@ -21090,6 +21148,7 @@ function _simulateScenario(c, selected, severityById, paramsById) {
 let activeFilters = { region:'', risk:'', commodity:'' };
 let activeScenarios = new Set();
 let chartInstances = {};
+let _scnPaintOn = false;   // v68.3 — single source of truth for scenario map paint mode.
 
 function destroyChart(id) {
   if (chartInstances[id]) { chartInstances[id].destroy(); delete chartInstances[id]; }
@@ -21285,6 +21344,13 @@ function showTab(tab, btn) {
   // tab page and sub-nav button that actually get activated.
   const host  = TAB_HOST[tab] || tab;
   const group = TAB_GROUPS[tab] || 'explore';
+  // v68.3 — leaving Explore / Global Map is an exit path for scenario paint.
+  // Route it through the same hard teardown as the banner Exit and new Run.
+  try {
+    if (host !== 'global' && _scnPaintOn && typeof _scnTeardownScenarioPaint === 'function') {
+      _scnTeardownScenarioPaint();
+    }
+  } catch (e) {}
   // v22 — Clear stale pulse markers from the map when switching tabs. The
   // Disturbances list-tab used to auto-paint these and they survived tab
   // switches, leaving phantom yellow rings on the Global Map. The canonical
@@ -28437,6 +28503,190 @@ let _scnBpIso = null;
 let _scnBpIsos = [];
 let _scnBpContext = null;
 
+// v68.3 — Scenario paint state. _scnPaintOn above is the only boolean mode flag;
+// everything here is derived visual state and is nulled by _scnTeardownScenarioPaint().
+let _scnPaintDeltaByIso = null;
+let _scnPaintMaxAbs = 0;
+let _scnPaintMarker = null;
+
+function _scnPaintCssVar(name, fallback) {
+  try {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
+
+function _scnPaintRgb(value, fallback) {
+  let v = String(value || fallback || '').trim();
+  if (v.startsWith('#')) {
+    v = v.slice(1);
+    if (v.length === 3) v = v.split('').map(ch => ch + ch).join('');
+    const n = parseInt(v, 16);
+    if (Number.isFinite(n)) return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const m = /^rgba?\(\s*([0-9.]+)[,\s]+([0-9.]+)[,\s]+([0-9.]+)/.exec(v);
+  if (m) return [Number(m[1]) || 0, Number(m[2]) || 0, Number(m[3]) || 0];
+  return _scnPaintRgb(fallback || '#3d3d4a', '#3d3d4a');
+}
+
+function _scnPaintHex(rgb) {
+  return '#' + rgb.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+}
+
+function _scnPaintMix(a, b, t) {
+  return a.map((v, i) => v + (b[i] - v) * t);
+}
+
+function _scnPaintDeltaColor(delta) {
+  const maxAbs = _scnPaintMaxAbs || 0;
+  const t = maxAbs > 0 ? Math.max(0, Math.min(1, Math.abs(Number(delta) || 0) / maxAbs)) : 0;
+  const stops = [
+    { at: 0,    c: _scnPaintRgb(_scnPaintCssVar('--b2', '#3d3d4a'), '#3d3d4a') },
+    { at: 0.35, c: _scnPaintRgb('#c9a957', '#c9a957') },
+    { at: 0.70, c: _scnPaintRgb('#c44b3c', '#c44b3c') },
+    { at: 1,    c: _scnPaintRgb('#7a2922', '#7a2922') },
+  ];
+  for (let i = 1; i < stops.length; i++) {
+    if (t <= stops[i].at) {
+      const span = stops[i].at - stops[i - 1].at || 1;
+      return _scnPaintHex(_scnPaintMix(stops[i - 1].c, stops[i].c, (t - stops[i - 1].at) / span));
+    }
+  }
+  return '#7a2922';
+}
+
+function _scnPaintFeatureStyle(f, c) {
+  if (!_scnPaintOn || !c) return null;
+  const delta = (_scnPaintDeltaByIso && _scnPaintDeltaByIso.has(c.iso)) ? _scnPaintDeltaByIso.get(c.iso) : 0;
+  const maxAbs = _scnPaintMaxAbs || 0;
+  const t = maxAbs > 0 ? Math.max(0, Math.min(1, Math.abs(Number(delta) || 0) / maxAbs)) : 0;
+  return {
+    fillColor: _scnPaintDeltaColor(delta),
+    color: '#050507',
+    weight: t > 0 ? 0.62 : 0.38,
+    fillOpacity: t > 0 ? 0.58 + Math.sqrt(t) * 0.36 : 0.50,
+  };
+}
+
+function _scnBuildPaintDeltas(results) {
+  _scnPaintDeltaByIso = new Map();
+  _scnPaintMaxAbs = 0;
+  (results || []).forEach(r => {
+    const d = Number(r && r.delta);
+    if (!r || !r.iso || !Number.isFinite(d)) return;
+    _scnPaintDeltaByIso.set(r.iso, d);
+    _scnPaintMaxAbs = Math.max(_scnPaintMaxAbs, Math.abs(d));
+  });
+}
+
+function _scnPaintSummary() {
+  const selected = _lastStressSelected || [];
+  const severities = _lastStressSeverity || scenarioSeverity || {};
+  const params = _lastStressParams || scenarioParams || {};
+  const parts = selected.map(s => {
+    const paramTxt = (typeof scnParamLabel === 'function') ? scnParamLabel(s, params) : '';
+    const sev = (severities[s.id] != null) ? severities[s.id] : s.baseSev;
+    const sevTxt = (typeof formatSev === 'function') ? formatSev(sev, s.sevUnit) : String(sev);
+    return `${s.label}${paramTxt ? ` (${paramTxt})` : ''} ${sevTxt}`;
+  });
+  if (!parts.length) return 'current scenario run';
+  return parts.length <= 3 ? parts.join(' + ') : `${parts.slice(0, 3).join(' + ')} + ${parts.length - 3} more`;
+}
+
+function _scnRemoveScenarioPaintBanner() {
+  const banner = document.getElementById('scn-paint-banner');
+  if (banner) banner.remove();
+}
+
+function _scnRenderScenarioPaintBanner() {
+  const canvas = document.getElementById('map-canvas');
+  if (!canvas) return;
+  _scnRemoveScenarioPaintBanner();
+  const banner = document.createElement('div');
+  banner.id = 'scn-paint-banner';
+  banner.setAttribute('role', 'status');
+
+  const key = document.createElement('span');
+  key.className = 'scn-paint-k';
+  key.textContent = 'SCENARIO PAINT —';
+
+  const text = document.createElement('span');
+  text.className = 'scn-paint-text';
+  text.textContent = `${_scnPaintSummary()} · deltas, not baseline ·`;
+
+  const exit = document.createElement('button');
+  exit.type = 'button';
+  exit.textContent = 'Exit';
+  exit.setAttribute('aria-label', 'Exit scenario paint mode');
+  exit.onclick = _scnTeardownScenarioPaint;
+
+  banner.append(key, text, exit);
+  canvas.appendChild(banner);
+}
+
+function _scnRemoveScenarioPaintMarker() {
+  if (_scnPaintMarker) {
+    try {
+      const map = window.Globe && Globe.state && Globe.state.map;
+      if (map) map.removeLayer(_scnPaintMarker);
+      else if (typeof _scnPaintMarker.remove === 'function') _scnPaintMarker.remove();
+    } catch (e) {}
+  }
+  _scnPaintMarker = null;
+}
+
+function _scnRenderScenarioPaintMarker() {
+  _scnRemoveScenarioPaintMarker();
+  const selected = _lastStressSelected || [];
+  if (!selected.some(s => s && s.id === 'chokeclose')) return;
+  const cp = (typeof CHOKEPOINTS !== 'undefined' ? CHOKEPOINTS : []).find(x => x.id === _scnChokepoint);
+  const map = window.Globe && Globe.state && Globe.state.map;
+  const lat = Number(cp && cp.lat);
+  const lng = Number(cp && cp.lng);
+  if (!map || typeof L === 'undefined' || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+  _scnPaintMarker = L.circleMarker([lat, lng], {
+    pane: 'disturbances',
+    radius: 8,
+    color: '#c9a957',
+    weight: 2,
+    opacity: 1,
+    fillColor: '#c44b3c',
+    fillOpacity: 0.84,
+    interactive: false,
+    className: 'scn-paint-choke-marker',
+  }).addTo(map);
+}
+
+function _scnRepaintScenarioMap() {
+  try {
+    if (window.Globe && typeof Globe.render === 'function') Globe.render();
+    if (window.Globe && Globe.state && Globe.state.map) Globe.state.map.invalidateSize();
+  } catch (e) {}
+}
+
+function _scnTeardownScenarioPaint() {
+  _scnPaintOn = false;
+  _scnPaintDeltaByIso = null;
+  _scnPaintMaxAbs = 0;
+  _scnRemoveScenarioPaintMarker();
+  _scnRemoveScenarioPaintBanner();
+  _scnRepaintScenarioMap();
+}
+
+function scnPaintOnMap() {
+  const results = Array.isArray(_lastStressResults) ? _lastStressResults : [];
+  if (!results.length) return;
+  _scnTeardownScenarioPaint();
+  _scnBuildPaintDeltas(results);
+  _scnPaintOn = true;
+  if (typeof closeScenarioDrawer === 'function') closeScenarioDrawer();
+  if (typeof showTab === 'function') showTab('global', document.querySelector('.subnav-btn[data-tab="global"]'));
+  _scnRepaintScenarioMap();
+  _scnRenderScenarioPaintBanner();
+  _scnRenderScenarioPaintMarker();
+}
+
 // v64-bpsw — small helpers for the break-point switcher; all figures still come
 // from _scnBreakPoint(), and ad-hoc countries get only one _simulateScenario().
 function _scnBpSafeIso(iso) {
@@ -28877,6 +29127,8 @@ function scnCmpRemoveCountry(iso) {
 
 function runScenarios() {
   if (!activeScenarios.size) { _scnFlashHint('Select at least one shock first.'); return; }
+  // v68.3 — a new Run is an exit path for any currently painted scenario.
+  _scnTeardownScenarioPaint();
   const selected = SCENARIOS.filter(s=>activeScenarios.has(s.id));
 
   // Apply scope / mode
@@ -29702,6 +29954,7 @@ function _renderScenarioBrief(results, selected, stats) {
     </details>
     <div class="scn-brief-footer">
       <span class="scn-brief-method">${selected.length} shock${selected.length>1?'s':''} stacked · ${stats.crossing} cross a risk band · peak ${stats.maxDelta>=0?"+":""}${stats.maxDelta} pts</span>
+      <button type="button" id="scn-paint-map-btn" class="scn-brief-copy-btn" title="Paint this scenario's FDRS deltas on the Global Map." onclick="scnPaintOnMap()">Paint on map →</button>
       ${_bpCommodity ? `<button type="button" id="scn-cmp-toggle" class="scn-cmp-toggle" aria-label="Compare countries" aria-expanded="${_scnCmpOpen ? 'true' : 'false'}" aria-controls="scn-cmp-view" onclick="scnToggleCompareCountries()"></button>` : ''}
       <button type="button" id="scn-share-btn" class="scn-brief-copy-btn" title="Copy a link that reproduces this exact run — shocks, severities, parameters, route and scope." onclick="scnCopyPermalink()">Share run →</button>
       <button class="scn-brief-copy-btn" onclick="copyScenarioBrief()">Copy brief →</button>
