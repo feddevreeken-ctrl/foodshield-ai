@@ -49,12 +49,24 @@ VARIANT2_NOTE = (
     "anachronism standing in for unavailable 2009/2021 bilateral shares. Russia's world export "
     "share was lower in 2009 than today, so the 2010 variant overstates origin exposure."
 )
+REDIST_WEIGHT = 6  # v68.2 assumption: uncalibrated full-pass-through rerouting pressure is worth up to 6 composite pts.
+DIRECT_BAN_WEIGHT = 18.0
+VARIANT3_NOTE = (
+    "variant3 mirrors the browser's v68 redistribution pass for wheat: blocked volume from "
+    "the banned origins is allocated across remaining exporters by export capacity, their "
+    "customers receive a modeled rerouting kick capped at 6 points, and each country uses "
+    "max(direct ban kick, rerouting kick) rather than summing them."
+)
+
+
+def load_wheat_atlas():
+    flows_path = DATA_DIR / "commodity_flows.json"
+    return json.loads(flows_path.read_text())["commodities"]["wheat"]
 
 
 def load_wheat_origin_shares(banned_isos):
     """Share of each importer's cited wheat imports coming from `banned_isos` (2026 atlas)."""
-    flows_path = DATA_DIR / "commodity_flows.json"
-    flows = json.loads(flows_path.read_text())["commodities"]["wheat"]["flows"]
+    flows = load_wheat_atlas()["flows"]
     total = {}
     banned = {}
     for f in flows:
@@ -86,6 +98,110 @@ def build_variant2(event_id, ranked, documented_isos):
     hits = sum(1 for d in documented if d["predicted_rank"] is not None and d["predicted_rank"] <= 15)
     return {
         "anachronistic_shares": True,
+        "universe_size": len(scored),
+        "top15": top15,
+        "documented": documented,
+        "hits": hits,
+        "hit_rate": round(hits / len(documented_isos), 2) if documented_isos else None,
+    }
+
+
+def wheat_redistribution_kicks(banned_isos, severity=1.0):
+    """Modeled wheat rerouting pressure by importer ISO, mirroring _scnRedistribution()."""
+    atlas = load_wheat_atlas()
+    flows = [
+        f for f in atlas.get("flows", [])
+        if f.get("from") and f.get("to") and (f.get("value") or 0) > 0
+    ]
+    banned = set(banned_isos)
+    export_flow = {}
+    import_flow = {}
+    by_exporter = {}
+    for f in flows:
+        val = float(f.get("value") or 0.0)
+        export_flow[f["from"]] = export_flow.get(f["from"], 0.0) + val
+        import_flow[f["to"]] = import_flow.get(f["to"], 0.0) + val
+        by_exporter.setdefault(f["from"], []).append(f)
+
+    blocked = sum(float(f.get("value") or 0.0) for f in flows if f.get("from") in banned)
+    if blocked <= 0:
+        return {}
+
+    balances = atlas.get("balances") or {}
+
+    def export_volume(iso):
+        try:
+            exp = float((balances.get(iso) or {}).get("exp") or 0.0)
+        except (TypeError, ValueError):
+            exp = 0.0
+        return exp if exp > 0 else export_flow.get(iso, 0.0)
+
+    exporters = [
+        iso for iso in export_flow
+        if iso not in banned and export_volume(iso) > 0
+    ]
+    non_banned_export = sum(export_volume(iso) for iso in exporters)
+    if non_banned_export <= 0:
+        return {}
+
+    out = {}
+    for iso in exporters:
+        e_vol = export_volume(iso)
+        absorbed = blocked * (e_vol / non_banned_export)
+        pressure = absorbed / e_vol
+        for f in by_exporter.get(iso, []):
+            to = f.get("to")
+            total_imp = import_flow.get(to, 0.0)
+            if total_imp <= 0:
+                continue
+            import_share_from_e = float(f.get("value") or 0.0) / total_imp
+            extra = import_share_from_e * pressure * REDIST_WEIGHT * severity
+            if extra > 0:
+                out[to] = min(REDIST_WEIGHT, out.get(to, 0.0) + extra)
+    return out
+
+
+def build_variant3(event_id, ranked, documented_isos):
+    shares = load_wheat_origin_shares(BANNED_ORIGINS[event_id])
+    reroute = wheat_redistribution_kicks(BANNED_ORIGINS[event_id], severity=1.0)
+    scored = []
+    for row in ranked:
+        share = shares.get(row["iso"])
+        rerouting_kick = reroute.get(row["iso"], 0.0)
+        if share is None and rerouting_kick <= 0:
+            continue          # no cited wheat-flow path for direct or rerouted exposure
+        direct_kick = (share or 0.0) * DIRECT_BAN_WEIGHT
+        applied_kick = max(direct_kick, rerouting_kick)
+        scored.append(
+            {
+                **row,
+                "origin_share_pct": round((share or 0.0) * 100, 1),
+                "direct_kick_pts": round(direct_kick, 2),
+                "rerouting_kick_pts": round(rerouting_kick, 2),
+                "applied_kick_pts": round(applied_kick, 2),
+                "v3_score": row["_dependence"] * applied_kick,
+            }
+        )
+    scored.sort(key=lambda r: (-r["v3_score"], r["_cover_months"], r["name"]))
+    rank_of = {r["iso"]: i + 1 for i, r in enumerate(scored)}
+    top15 = [
+        {
+            "iso": r["iso"],
+            "name": r["name"],
+            "dependence_pct": r["dependence_pct"],
+            "origin_share_pct": r["origin_share_pct"],
+            "direct_kick_pts": r["direct_kick_pts"],
+            "rerouting_kick_pts": r["rerouting_kick_pts"],
+            "applied_kick_pts": r["applied_kick_pts"],
+            "rank": i + 1,
+        }
+        for i, r in enumerate(scored[:15])
+    ]
+    documented = [{"iso": iso, "predicted_rank": rank_of.get(iso)} for iso in documented_isos]
+    hits = sum(1 for d in documented if d["predicted_rank"] is not None and d["predicted_rank"] <= 15)
+    return {
+        "anachronistic_shares": True,
+        "modeled_redistribution": True,
         "universe_size": len(scored),
         "top15": top15,
         "documented": documented,
@@ -168,6 +284,7 @@ def main():
         documented_isos = precedents[event_id]
         result = build_event_result(event_id, year, ranked, documented_isos)
         result["variant2"] = build_variant2(event_id, ranked, documented_isos)
+        result["variant3"] = build_variant3(event_id, ranked, documented_isos)
         events_out.append(result)
 
     payload = {
@@ -177,6 +294,7 @@ def main():
             "quality_flag": "reconstruction",
             "caveat": "n=2 events — a smoke test of the engine's dominant term, not a validation of the model",
             "variant2_note": VARIANT2_NOTE,
+            "variant3_note": VARIANT3_NOTE,
         },
         "events": events_out,
     }
@@ -509,6 +627,25 @@ def print_summary(events_out):
         print("  unverified top:")
         for item in event["unverified_top"]:
             print(f"    #{item['rank']} {item['iso']} {item['name']} - unverified")
+        v2 = event.get("variant2") or {}
+        v3 = event.get("variant3") or {}
+        if v2 and v3:
+            v2_doc = {d["iso"]: d.get("predicted_rank") for d in v2.get("documented", [])}
+            v3_doc = {d["iso"]: d.get("predicted_rank") for d in v3.get("documented", [])}
+            moves = []
+            for iso in [d["iso"] for d in event["documented"]]:
+                before = v2_doc.get(iso)
+                after = v3_doc.get(iso)
+                before_txt = before if before is not None else "below floor"
+                after_txt = after if after is not None else "below floor"
+                moves.append(f"{iso}: v2 {before_txt} -> v3 {after_txt}")
+            hit_delta = v3.get("hits", 0) - v2.get("hits", 0)
+            verdict = "helps" if hit_delta > 0 else ("hurts" if hit_delta < 0 else "unchanged")
+            print(
+                f"  variant3 vs variant2: {v2.get('hits')}/{documented_count} -> "
+                f"{v3.get('hits')}/{documented_count} hits ({verdict})"
+            )
+            print("    " + "; ".join(moves))
 
 
 if __name__ == "__main__":

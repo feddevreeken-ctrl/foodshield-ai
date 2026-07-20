@@ -18742,8 +18742,9 @@ function _chokepointKick(c, s) {
 function _scnEsc(s) {
   return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+let _scnParamContext = null;
 function _scnParamValue(id, params) {
-  const map = params || ((typeof scenarioParams !== 'undefined') ? scenarioParams : {});
+  const map = params || _scnParamContext || ((typeof scenarioParams !== 'undefined') ? scenarioParams : {});
   const s = (typeof SCENARIOS !== 'undefined' && Array.isArray(SCENARIOS)) ? SCENARIOS.find(x => x.id === id) : null;
   if (map && map[id] != null) return map[id];
   return (s && s._param) ? s._param.defaultValue : null;
@@ -18872,6 +18873,125 @@ function _scnExportRestrictionKick(c, s, measureValue) {
   });
   if (!matched) return null;
   return Math.min(1, exposure) * 20 * (s / 0.50);
+}
+
+const REDIST_WEIGHT = 6; // v68.2 assumption: uncalibrated full-pass-through rerouting pressure is worth up to 6 composite pts.
+
+function _scnRedistributionParamMap(params) {
+  return (params && params.__scenarioParams) || params || ((typeof scenarioParams !== 'undefined') ? scenarioParams : {});
+}
+function _scnRedistributionSeverityMap(params) {
+  return (params && params.__severityById) || ((typeof scenarioSeverity !== 'undefined') ? scenarioSeverity : {});
+}
+function _scnStapleKey(label) {
+  const k = String(label || '').toLowerCase();
+  if (/wheat/.test(k)) return 'wheat';
+  if (/rice|paddy/.test(k)) return 'rice';
+  if (/maize|corn/.test(k)) return 'maize';
+  return null;
+}
+function _scnCommodityFlow(key) {
+  try {
+    if (typeof LIVE !== 'undefined' && LIVE && LIVE.commodity_flows && LIVE.commodity_flows[key]) return LIVE.commodity_flows[key];
+  } catch (e) {}
+  try {
+    const env = (typeof window !== 'undefined') ? window.__BEEF_DATA__ : null;
+    return env && env.commodities && env.commodities[key] ? env.commodities[key] : null;
+  } catch (e) {}
+  return null;
+}
+function _scnSelectedRestrictionMeasures(value) {
+  const measures = (typeof LIVE !== 'undefined' && Array.isArray(LIVE.restrictions)) ? LIVE.restrictions : [];
+  if (!measures.length) return [];
+  if (value == null || value === 'all') return measures;
+  const row = measures[Number(value)];
+  return row ? [row] : [];
+}
+function _scnScenarioSeverity(id, selected, sevMap) {
+  if (sevMap && sevMap[id] != null) return sevMap[id];
+  const sc = (selected || []).find(s => s && s.id === id);
+  return sc ? sc.baseSev : 1;
+}
+function _scnDirectRerouteScenario(sc, params) {
+  if (!sc) return false;
+  if (sc.id === 'exportrestrict') return true;
+  if (sc.id !== 'ban') return false;
+  const origin = _scnParamValue('ban', params);
+  return !!(origin && origin !== 'top');
+}
+function _scnRedistribution(selected, params) {
+  const active = Array.isArray(selected) ? selected : [];
+  const paramMap = _scnRedistributionParamMap(params);
+  const sevMap = _scnRedistributionSeverityMap(params);
+  const blocks = [];
+  const stapleStack = Array.from(new Set(active.map(s => _scnStapleKey(s && s._commodity)).filter(Boolean)));
+  const ban = active.find(s => s && s.id === 'ban');
+  const banOrigin = _scnParamValue('ban', paramMap);
+  if (ban && banOrigin && banOrigin !== 'top') {
+    const sev = _scnScenarioSeverity('ban', active, sevMap);
+    stapleStack.forEach(commodity => blocks.push({ commodity, origins:[banOrigin], severity:sev }));
+  }
+  const restrict = active.find(s => s && s.id === 'exportrestrict');
+  if (restrict) {
+    const sev = _scnScenarioSeverity('exportrestrict', active, sevMap);
+    _scnSelectedRestrictionMeasures(_scnParamValue('exportrestrict', paramMap)).forEach(m => {
+      const commodity = _scnStapleKey(m && m.commodity);
+      if (commodity && m && m.iso) blocks.push({ commodity, origins:[m.iso], severity:sev });
+    });
+  }
+  if (!blocks.length) return {};
+
+  const byIso = {};
+  blocks.forEach(block => {
+    const com = _scnCommodityFlow(block.commodity);
+    const flows = (com && Array.isArray(com.flows)) ? com.flows.filter(f => f && f.from && f.to && Number(f.value) > 0) : [];
+    if (!flows.length) return;
+    const banned = new Set((block.origins || []).filter(Boolean));
+    if (!banned.size) return;
+    const exportFlow = {}, importFlow = {}, byExporter = {};
+    flows.forEach(f => {
+      const v = Number(f.value) || 0;
+      exportFlow[f.from] = (exportFlow[f.from] || 0) + v;
+      importFlow[f.to] = (importFlow[f.to] || 0) + v;
+      (byExporter[f.from] ||= []).push(f);
+    });
+    const blocked = flows.reduce((sum, f) => sum + (banned.has(f.from) ? (Number(f.value) || 0) : 0), 0);
+    if (!(blocked > 0)) return;
+    const exportVolume = iso => {
+      const b = com.balances && com.balances[iso];
+      const exp = b && Number(b.exp);
+      return exp > 0 ? exp : (exportFlow[iso] || 0);
+    };
+    const exporters = Object.keys(exportFlow).filter(iso => !banned.has(iso) && exportVolume(iso) > 0);
+    const nonBannedExport = exporters.reduce((sum, iso) => sum + exportVolume(iso), 0);
+    if (!(nonBannedExport > 0)) return;
+    exporters.forEach(iso => {
+      const eVol = exportVolume(iso);
+      const absorbed = blocked * (eVol / nonBannedExport);
+      const pressure = absorbed / eVol;
+      (byExporter[iso] || []).forEach(f => {
+        const totalImp = importFlow[f.to] || 0;
+        if (!(totalImp > 0)) return;
+        const importShareFromE = (Number(f.value) || 0) / totalImp;
+        const extra = importShareFromE * pressure * REDIST_WEIGHT * block.severity;
+        if (!(extra > 0)) return;
+        const slot = byIso[f.to] || (byIso[f.to] = { raw:0, commodities:new Set(), origins:new Set(), sev:0 });
+        slot.raw = Math.min(6, slot.raw + extra);
+        slot.commodities.add(block.commodity);
+        banned.forEach(o => slot.origins.add(o));
+        slot.sev = Math.max(slot.sev || 0, block.severity || 0);
+      });
+    });
+  });
+  Object.keys(byIso).forEach(iso => {
+    byIso[iso] = {
+      raw: byIso[iso].raw,
+      commodities: Array.from(byIso[iso].commodities),
+      origins: Array.from(byIso[iso].origins),
+      sev: byIso[iso].sev,
+    };
+  });
+  return byIso;
 }
 
 // ── v61 — THE BREAK POINT, in units a person can act on ────────────────────
@@ -19446,9 +19566,13 @@ function _foodWeight(sc){
 // dependency-risk score can reuse the same food-security weighting.
 if (typeof window !== 'undefined') window.FOOD_WEIGHT = FOOD_WEIGHT;
 
-function _simulateScenario(c, selected, severityById) {
+function _simulateScenario(c, selected, severityById, paramsById) {
+  const paramsForRun = paramsById || ((typeof scenarioParams !== 'undefined') ? scenarioParams : {});
   const byChannel = {};        // channel -> array of raw kicks
   const breakdown = [];        // ordered list for audit display
+  const directRerouteEntries = [];
+  const prevParamContext = _scnParamContext;
+  _scnParamContext = paramsForRun;
   
   selected.forEach(sc => {
     const sev = (severityById && severityById[sc.id] != null) ? severityById[sc.id] : sc.baseSev;
@@ -19458,8 +19582,10 @@ function _simulateScenario(c, selected, severityById) {
     // to 0, which then renders as "+0.0" and gets praised by the buffers panel
     // as resilience. Record the hole and keep it out of the math entirely.
     if (raw == null) {
-      breakdown.push({ id: sc.id, label: sc.label, channel: (sc.channel != null) ? sc.channel : -1,
-                       raw: null, sev: sev, basis: 'unavailable' });
+      const entry = { id: sc.id, label: sc.label, channel: (sc.channel != null) ? sc.channel : -1,
+                      raw: null, sev: sev, basis: 'unavailable' };
+      breakdown.push(entry);
+      if (_scnDirectRerouteScenario(sc, paramsForRun)) directRerouteEntries.push(entry);
       return;
     }
     // v23 — apply the trade-direction factor to price/supply-driven shocks only, so
@@ -19472,8 +19598,36 @@ function _simulateScenario(c, selected, severityById) {
     raw = raw * _foodWeight(sc);
     const ch  = (sc.channel != null) ? sc.channel : -1;
     (byChannel[ch] ||= []).push(raw);
-    breakdown.push({ id: sc.id, label: sc.label, channel: ch, raw: raw, sev: sev });
+    const entry = { id: sc.id, label: sc.label, channel: ch, raw: raw, sev: sev };
+    breakdown.push(entry);
+    if (_scnDirectRerouteScenario(sc, paramsForRun)) directRerouteEntries.push(entry);
   });
+  _scnParamContext = prevParamContext;
+  const redist = _scnRedistribution(selected, { __scenarioParams: paramsForRun, __severityById: severityById || {} });
+  const rr = redist && c && c.iso ? redist[c.iso] : null;
+  if (rr && rr.raw > 0) {
+    const redistEntry = {
+      id:'redistribution', label:'Rerouting pressure (modeled)', channel:1,
+      raw:rr.raw, sev:rr.sev, basis:'modeled_redistribution',
+    };
+    const directBest = directRerouteEntries
+      .filter(b => b && b.channel === 1 && b.raw != null)
+      .sort((a, b) => Math.abs(b.raw) - Math.abs(a.raw))[0] || null;
+    const directRaw = directBest ? Math.max(0, directBest.raw || 0) : 0;
+    if (directBest && directRaw >= rr.raw) {
+      redistEntry.appliedRaw = 0;
+    } else if (directBest) {
+      directBest.appliedRaw = 0;
+      redistEntry.appliedRaw = rr.raw;
+      const arr = byChannel[1] || (byChannel[1] = []);
+      const ix = arr.indexOf(directBest.raw);
+      if (ix >= 0) arr[ix] = rr.raw; else arr.push(rr.raw);
+    } else {
+      redistEntry.appliedRaw = rr.raw;
+      (byChannel[1] ||= []).push(rr.raw);
+    }
+    breakdown.push(redistEntry);
+  }
   // Square-root combining per channel — overlap damper.
   let totalDelta = 0;
   const channelTotals = {};
@@ -27419,6 +27573,7 @@ function renderScenarioTab() {
         <div class="scn-method-formulas">
           <div><b>Wheat / rice / maize price spike</b> &nbsp;Δ = import_dependency × concentration_premium × 24 × shock × provenance_factor → c[0]<br><span style="color:var(--t3);font-size:9.5px;">import_dependency = sourced % of supply imported; concentration_premium (1.0–1.4) from the real cited supplier mix — single-source importers more exposed. Net exporters discounted by the trade-direction factor.</span></div>
           <div><b>Supplier ban</b> &nbsp;Δ = real top-supplier share (cited flows) × 18 × food-weight × shock → c[1] <span style="color:var(--t3);font-size:9.5px;">(heritage fallback where no cited flow exists: supplier_concentration × 0.18)</span></div>
+          <div><b>Rerouting pressure</b> &nbsp;Δ = import_share_from_remaining_exporter × (blocked_volume redistributed by exporter spare share / exporter export volume) × 6 × severity → c[1] <span style="color:var(--t3);font-size:9.5px;">(modeled second pass; maxed with the direct trade-block kick, never summed)</span></div>
           <div><b>FX / debt crisis</b> &nbsp;Δ = economic_access × 0.16 × provenance-damp × (shock/0.30) → c[7]</div>
           <div><b>Fertilizer surge</b> &nbsp;Δ = (8 + fert_import_conc × 0.08) × (shock/0.30) → c[2]</div>
           <div><b>Reserve drawdown</b> &nbsp;Δ = grain_buffer × 0.12 × provenance-damp × (shock/0.40) → c[8]</div>
@@ -28330,7 +28485,7 @@ function _scnBpSimFor(c) {
   if (row) return null;
   ctx.simCache ||= Object.create(null);
   if (!ctx.simCache[c.iso]) {
-    ctx.simCache[c.iso] = _simulateScenario(c, ctx.selected || [], _lastStressSeverity || scenarioSeverity);
+    ctx.simCache[c.iso] = _simulateScenario(c, ctx.selected || [], _lastStressSeverity || scenarioSeverity, _lastStressParams || scenarioParams);
   }
   return ctx.simCache[c.iso];
 }
@@ -28737,7 +28892,7 @@ function runScenarios() {
   // v21 honesty pass — use _simulateScenario() so every shock goes through the
   // square-root channel-overlap damper and produces an auditable breakdown.
   const results = pool.map(c=>{
-    const sim = _simulateScenario(c, selected, scenarioSeverity);
+    const sim = _simulateScenario(c, selected, scenarioSeverity, scenarioParams);
     // v23 — diminishing-returns combine (not a hard linear cap), so high-baseline
     // countries don't all peg at 100. `delta` is the EFFECTIVE point change shown to
     // the user, so "shifts +X pts" always matches the from→to numbers.
@@ -28879,13 +29034,16 @@ function _renderStressResults() {
                      3:'c[3] food inflation',4:'c[4] climate',5:'c[5] conflict/logistics',6:'c[6] supply-chain',7:'c[7] economic access',8:'c[8] grain buffer'};
     // v22.12 — full per-country breakdown: every shock + channel total + damper math.
     const auditRows = bd.map(b => {
-      const sc = SCENARIOS.find(s=>s.id===b.id);
+      const sc = SCENARIOS.find(s=>s.id===b.id) || (b.basis ? { _basis:b.basis } : null);
       const sevDisp = sc ? formatSev(b.sev, sc.sevUnit) : b.sev;
       // v39 — per-shock basis + per-country confidence chip (CITED FLOWS /
       // SOURCED INDICATOR / MODELED, plus ⚠ INPUT MISSING when a component
       // shock's input is absent for THIS country). Surfaces the honesty signal
       // the engine already knows but used to discard at the row level.
       const basisChip = (sc && typeof scnBasisChip==='function') ? scnBasisChip(sc, c) : '';
+      const maxRuleChip = (b.appliedRaw === 0 && b.raw != null)
+        ? ` <span style="font-size:8.5px;letter-spacing:.06em;border:1px solid #c9a95755;padding:1px 5px;color:#c9a957;" title="No-double-count rule: direct trade-block pressure and rerouting pressure use the larger value, not a sum.">MAX RULE — NOT ADDED</span>`
+        : '';
       // v64 — a data hole renders as a data hole, never as "+0.0".
       if (b.raw == null) {
         return `<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-family:'Geist Mono',monospace;font-size:10px;border-bottom:1px dashed var(--b1);">
@@ -28894,7 +29052,7 @@ function _renderStressResults() {
         </div>`;
       }
       return `<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-family:'Geist Mono',monospace;font-size:10px;border-bottom:1px dashed var(--b1);">
-        <span style="color:var(--t1)"><b>${b.raw>=0?"+":""}${b.raw.toFixed(1)}</b> <span style="color:var(--t2);font-weight:400;">${b.label}</span> ${basisChip}</span>
+        <span style="color:var(--t1)"><b>${b.raw>=0?"+":""}${b.raw.toFixed(1)}</b> <span style="color:var(--t2);font-weight:400;">${b.label}</span> ${basisChip}${maxRuleChip}</span>
         <span style="color:var(--t3)">${chLabel[b.channel]||'—'} · sev ${sevDisp}</span>
       </div>`;
     }).join('');
@@ -28902,7 +29060,11 @@ function _renderStressResults() {
     // (v64 — null raws are data holes; they were never in the engine's math and
     // must not enter the damper display either).
     const channelGroups = {};
-    bd.filter(b => b.raw != null).forEach(b => { (channelGroups[b.channel] = channelGroups[b.channel] || []).push(b); });
+    bd.filter(b => b.raw != null).forEach(b => {
+      const applied = (b.appliedRaw != null) ? b.appliedRaw : b.raw;
+      if (!(Math.abs(applied) > 1e-9)) return;
+      (channelGroups[b.channel] = channelGroups[b.channel] || []).push({ ...b, raw: applied });
+    });
     const channelTotalRows = Object.entries(channelGroups).filter(([_,arr])=>arr.length>1).map(([ch,arr]) => {
       const sumSq = arr.reduce((s,b)=> s + b.raw*b.raw, 0);
       const damped = Math.sqrt(sumSq);
@@ -35825,6 +35987,7 @@ function scnBasisMeta(scenario) {
     sourced_flows:     { color: '#6ba36b', mark: '●', label: 'CITED FLOWS',       tip: 'Magnitude derived from real cited bilateral trade flows.' },
     sourced_indicator: { color: '#6b8db8', mark: '◐', label: 'SOURCED INDICATOR', tip: 'Magnitude derived from a sourced indicator (FX rate / USDA PSD grain buffer), provenance-damped.' },
     modeled_component: { color: '#c9a957', mark: '○', label: 'MODELED',           tip: 'Magnitude from a heritage FDRS component scalar × a modeling constant — directional, not calibrated.' },
+    modeled_redistribution: { color: '#c9a957', mark: '○', label: 'MODELED REROUTING', tip: 'Modeled second-pass pressure from blocked staple flows redistributed across remaining cited exporters; directional, not calibrated.' },
   };
   return map[b] || map.modeled_component;
 }
