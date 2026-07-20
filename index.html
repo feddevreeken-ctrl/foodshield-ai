@@ -18056,6 +18056,42 @@ function _stapleSpikeKick(c, label, scalarField, s){
 }
 const SCENARIO_POINT_SCALE = 24;
 
+// ── v64 — CHOKEPOINT CLOSURE, with a real toggle ───────────────────────────
+//
+// The requested "toggleable where the trade route conflicts are" block. It is
+// built first because it has the best data behind it of the four proposed
+// groups: CHOKEPOINTS ships 9 entries, each with a food_role and — critically
+// — a no_alternative flag, which is the difference between a closure that
+// costs time and money and one that has no reroute at all.
+//
+// Three of the nine have NO maritime alternative: the Turkish Straits, Hormuz,
+// and the Black Sea port cluster. That is a published Chatham House finding
+// carried in the data, not a judgement made here, and it is what makes the
+// toggle meaningful rather than decorative — picking Hormuz is a materially
+// different shock from picking Gibraltar.
+//
+// Exposure is import dependence on the staples that actually transit the
+// selected chokepoint, so a country that grows its own is barely moved however
+// dramatic the closure.
+let _scnChokepoint = 'hormuz';   // the toggle's current selection
+
+function _chokepointKick(c, s) {
+  const cp = (typeof CHOKEPOINTS !== 'undefined' ? CHOKEPOINTS : [])
+    .find(x => x.id === _scnChokepoint);
+  if (!cp) return null;
+  // Staple import dependence, averaged across the three grains PSD covers.
+  const deps = ['wheat', 'rice', 'maize']
+    .map(k => _psdImportDependence(c, { wheat: 'w', rice: 'r', maize: 'm' }[k]))
+    .filter(d => d && d.dep != null)
+    .map(d => d.dep);
+  if (!deps.length) return null;
+  const dep = deps.reduce((a, b) => a + b, 0) / deps.length;
+  // No alternative route is the multiplier that matters: a closure you can
+  // sail around costs freight and weeks; one you cannot is a supply stop.
+  const noAlt = cp.no_alternative ? 1.6 : 1.0;
+  return dep * noAlt * SCENARIO_POINT_SCALE * s * 0.75;
+}
+
 // ── v61 — THE BREAK POINT, in units a person can act on ────────────────────
 //
 // The scenario output led with "Peak shift +4 pts · Cross a risk threshold".
@@ -18280,6 +18316,13 @@ const SCENARIOS = [
       return (c.c?.[8] || 0) * 0.12 * (s/0.40) * damp;
     },
     impact: function(c, s=0.40){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
+  {id:'chokeclose', label:'Chokepoint closure',   cat:'Logistics', baseSev:0.50, sevUnit:'%', channel:1,
+    desc:'A maritime food chokepoint closes. Three of the nine have no alternative route.',
+    formula:'Δ = mean staple import-dependence (USDA PSD) × no-alternative multiplier × 24 × shock × 0.75',
+    _basis:'sourced_flows',
+    _toggle:'chokepoint',
+    kick: (c, s=0.50) => _chokepointKick(c, s),
+    impact: function(c, s=0.50){ const k = this.kick(c, s); return k == null ? null : Math.round(k); }},
   {id:'ship',    label:'Shipping disruption',      cat:'Logistics', baseSev:0.50, sevUnit:'%', channel:5, _basis:'modeled_component',
     desc:'Suez / Panama / Red Sea bottleneck — global food freight 50% more expensive.',
     formula:'Δ = conflict/logistics × 6% + 1',
