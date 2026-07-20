@@ -18094,21 +18094,52 @@ function _scnBreakPoint(c, commodity, shock) {
   const billAfter = bill != null ? bill * (1 + shock) : null;
   const coverMonths = (stocks != null && consumption) ? (12 * stocks / consumption) : null;
 
-  // WHICH CONSTRAINT BINDS FIRST is a real per-country difference, and it is
-  // what stops every scenario reading the same. A country with deep stocks and
-  // a thin current account breaks on the money; one with cash and no silo
-  // breaks on the grain.
+  // ── WHICH CONSTRAINT BINDS FIRST ─────────────────────────────────────────
+  //
+  // v63 — rewritten after cross-checking the first version against real
+  // countries. It had three faults, and one produced a wrong answer:
+  //
+  // 1. IT IGNORED ABILITY TO PAY. Japan is 87% import-dependent with 2.2
+  //    months of cover, and the old logic called that "import cost binds".
+  //    Japan's economic-access component is 8.6 against Yemen's 74.2 — Japan
+  //    has never struggled to pay for wheat. High dependence is not a cost
+  //    problem; high dependence PLUS a weak external position is. c[7] carries
+  //    exactly that and was sitting unused.
+  //
+  // 2. THE COPY WAS ECONOMICALLY WRONG. It read "stocks absorb the volume".
+  //    Stocks do not absorb a PRICE shock — next season is still bought at the
+  //    higher price. Stocks buy TIME to react: to switch origin, tender early,
+  //    or let a subsidy carry the gap. That is a different claim and the text
+  //    now makes it.
+  //
+  // 3. THE THRESHOLDS ARE JUDGEMENTS, and are named as such rather than left
+  //    inline. They are reasoned, not fitted: 35% import share is where
+  //    domestic harvest stops dominating supply; 2 months is roughly one
+  //    procurement cycle for a state buyer; 50 on the 0-100 economic-access
+  //    component is its own mid-point.
+  const DEP_DOMESTIC_MAX = 0.35;   // below this, the harvest dominates supply
+  const COVER_TIGHT_MONTHS = 2;    // roughly one state procurement cycle
+  const ECON_FRAGILE = 50;         // midpoint of the 0-100 access component
+  const econFragility = (c && Array.isArray(c.c) && c.c[7] != null) ? c.c[7] : null;
+
   let binding = 'unknown', bindingWhy = '';
   if (coverMonths != null) {
-    if (dep >= 0.5 && coverMonths < 2) {
-      binding = 'physical supply';
-      bindingWhy = `stocks cover ${coverMonths.toFixed(1)} months against ${Math.round(dep * 100)}% import reliance`;
-    } else if (dep >= 0.5) {
-      binding = 'import cost';
-      bindingWhy = `${coverMonths.toFixed(1)} months of stock absorbs the volume; the bill is what moves`;
-    } else {
+    const canPay = econFragility != null && econFragility < ECON_FRAGILE;
+    if (dep < DEP_DOMESTIC_MAX) {
       binding = 'domestic production';
-      bindingWhy = `only ${Math.round(dep * 100)}% is imported — most supply is grown, not bought`;
+      bindingWhy = `only ${Math.round(dep * 100)}% is imported — the harvest sets supply, not the market`;
+    } else if (coverMonths < COVER_TIGHT_MONTHS && !canPay) {
+      binding = 'physical supply';
+      bindingWhy = `${coverMonths.toFixed(1)} months of stock against ${Math.round(dep * 100)}% import reliance, `
+                 + `with a weak external position — too little time to re-source`;
+    } else if (!canPay) {
+      binding = 'import cost';
+      bindingWhy = `${coverMonths.toFixed(1)} months of stock buys time to re-source, but the bill lands on a `
+                 + `constrained external position`;
+    } else {
+      binding = 'absorbed';
+      bindingWhy = `${Math.round(dep * 100)}% imported, but a strong external position means the higher bill is `
+                 + `payable — exposure here is price, not access`;
     }
   }
 
