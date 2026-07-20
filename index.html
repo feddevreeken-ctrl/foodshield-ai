@@ -4843,6 +4843,27 @@ button.scn-bar-row:focus-visible { outline: 2px solid var(--accent); outline-off
   .scn-bar-row { grid-template-columns: minmax(90px, 110px) 1fr 40px; }
   .scn-bar-fromto { display: none; }
 }
+/* v68.5 — static scenario preview: SVG, not a second Leaflet map. */
+.scn-mini-map {
+  display: block; width: 100%; margin: -6px 0 18px; padding: 0;
+  background: transparent; border: 0; color: inherit; cursor: pointer;
+  text-align: left;
+}
+.scn-mini-map:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.scn-mini-map-stage {
+  height: 190px; overflow: hidden; border: 1px solid var(--b1); border-radius: 3px;
+  background: var(--bg0);
+}
+.scn-mini-map-stage svg { display: block; width: 100%; height: 190px; }
+.scn-mini-map-empty {
+  display: flex; align-items: center; justify-content: center; height: 100%;
+  font: 500 10px/1 'Geist Mono', ui-monospace, monospace;
+  color: var(--t-meta); letter-spacing: .08em; text-transform: uppercase;
+}
+.scn-mini-map-caption {
+  margin-top: 5px; font: 400 10px/1.4 'Geist Mono', ui-monospace, monospace;
+  color: var(--t3);
+}
 
 /* v66 — this stack's formulas, folded behind a disclosure in the brief. */
 .scn-brief-formulas {
@@ -9577,6 +9598,8 @@ body::before {
 #map-layers{position:absolute;top:84px;left:18px;z-index:850;width:228px;background:var(--glass);
   border:1px solid var(--b1);border-radius:6px;padding:9px 11px;
   font-family:'Geist',sans-serif;backdrop-filter:blur(8px);}
+/* v68.5 — layer controls pause while scenario paint owns the choropleth. */
+#map-layers.ml-paint-dim{pointer-events:none;opacity:.35;}
 .mlp-head{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--t-meta);margin-bottom:9px;}
 .mlp-row{display:flex;align-items:center;gap:9px;padding:5px 2px;cursor:pointer;user-select:none;border-radius:3px;transition:background .12s;}
 .mlp-row:hover{background:rgba(255,255,255,0.03);}
@@ -19931,6 +19954,7 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     countryLayer: null,
     flowLines: [],
     flowMarkers: [],
+    scnPaintArcs: [],
     selectedISO: null,
     selectedLayer: null,
     flowsActive: false,
@@ -20188,6 +20212,9 @@ function _simulateScenario(c, selected, severityById, paramsById) {
         try {
           if (_scnPaintOn && typeof _scnRenderScenarioPaintMarker === 'function') {
             _scnRenderScenarioPaintMarker();
+          }
+          if (_scnPaintOn && typeof _scnRenderScenarioSeveredCorridors === 'function') {
+            _scnRenderScenarioSeveredCorridors();
           }
         } catch (e) {}
 
@@ -20819,6 +20846,61 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     clearFlowsOnly();
   }
 
+  function clearScenarioSeveredCorridors() {
+    (G.scnPaintArcs || []).forEach(l => { try { G.map.removeLayer(l); } catch (e) {} });
+    G.scnPaintArcs = [];
+  }
+
+  function drawScenarioSeveredCorridors(blocks) {
+    clearScenarioSeveredCorridors();
+    if (!G.map || typeof L === 'undefined' || !Array.isArray(blocks) || !blocks.length) return 0;
+    const esc = (typeof _escFeed === 'function') ? _escFeed : (s => String(s == null ? '' : s));
+    const nm = x => (typeof _nameFromISO === 'function' && _nameFromISO(x)) || x;
+    const specs = [];
+    blocks.forEach(block => {
+      const key = block && block.commodityKey;
+      const origin = block && block.originIso;
+      if (!key || !origin) return;
+      const com = (typeof _scnCommodityFlow === 'function' && _scnCommodityFlow(key))
+        || (typeof _beefData === 'function' ? _beefData()[key] : null);
+      const flows = (com && Array.isArray(com.flows)) ? com.flows : [];
+      flows.forEach(f => {
+        const kt = Number(f && f.value) || 0;
+        if (!f || f.from !== origin || !f.to || !(kt > 0)) return;
+        specs.push({ block, flow:f, kt });
+      });
+    });
+    if (!specs.length) return 0;
+    const maxKt = Math.max(1, ...specs.map(s => s.kt));
+    let drawn = 0;
+    specs.sort((a, b) => b.kt - a.kt).forEach(spec => {
+      const a = getCoord(spec.flow.from), b = getCoord(spec.flow.to);
+      if (!a || !b) return;
+      const segs = greatCirclePath(a, b, 24);
+      const runs = [[segs[0]]];
+      for (let si = 1; si < segs.length; si++) {
+        if (Math.abs(segs[si][1] - segs[si - 1][1]) > 180) runs.push([]);
+        runs[runs.length - 1].push(segs[si]);
+      }
+      const line = L.polyline(runs.length > 1 ? runs : segs, {
+        color: '#c44b3c',
+        weight: 1.1 + 2.2 * Math.sqrt(spec.kt / maxKt),
+        opacity: 0.55,
+        dashArray: '7 7',
+        lineCap: 'round',
+        pane: 'flows',
+        className: 'scn-severed-corridor',
+        interactive: true,
+      }).addTo(G.map);
+      line.bindTooltip(`${esc(nm(spec.flow.from))}→${esc(nm(spec.flow.to))} · ${Math.round(spec.kt).toLocaleString()} kt · cited flow interrupted`, {
+        sticky: true, direction: 'top', className: 'map-tip',
+      });
+      G.scnPaintArcs.push(line);
+      drawn++;
+    });
+    return drawn;
+  }
+
   // Great-circle interpolation [lat,lng] → segments
   function greatCirclePath(a, b, n) {
     // a, b are [lat, lng]; d3.geoInterpolate wants [lng, lat]
@@ -20848,6 +20930,7 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     drawCommodityFlows,
     drawExportFlows,
     drawAtlasFlows,
+    drawScenarioSeveredCorridors, clearScenarioSeveredCorridors,
     showDisturbances, clearDisturbances,
     drawImpactArcs, clearImpactArcs,
     // v21.x TFA hover/focus sync
@@ -23673,10 +23756,19 @@ function openPanel(c, skipDrilldown) {
   // Forecast arrow
   const trend = c.f2030 > c.fdrs ? '▲' : '▼';
   const tCol  = c.f2030 > c.fdrs ? '#c44b3c' : '#6ba36b';
+  const scenario2030Line = (function() {
+    try {
+      const row = Array.isArray(_lastStressResults) ? _lastStressResults.find(r => r && r.iso === c.iso) : null;
+      const rawDelta = row ? Number(row.rawDelta) : NaN;
+      if (!Number.isFinite(rawDelta) || typeof c.f2030 !== 'number') return '';
+      const endpoint = _applyScenarioDelta(c.f2030, rawDelta);
+      return ` <span style="font-family:'Geist Mono',monospace;color:${riskColor(endpoint)};" title="Assumes the painted shock persists to 2030 — endpoint arithmetic on the modeled outlook, not a dynamic forecast.">· under the current scenario, sustained: <b>${endpoint}</b></span>`;
+    } catch (e) { return ''; }
+  })();
   document.getElementById('sp-forecast').innerHTML =
     `<span class="trend-arrow" style="color:${tCol}">${trend}</span>
      <span style="color:#9a988f" title="Modeled scenario under a moderate baseline — not a prediction.">2030 modeled: </span>
-     <b style="color:${riskColor(c.f2030)}">${c.f2030}</b>`;
+     <b style="color:${riskColor(c.f2030)}">${c.f2030}</b>${scenario2030Line}`;
 
   // Score bar
   const fill = document.getElementById('sp-score-fill');
@@ -28629,6 +28721,9 @@ let _scnBpContext = null;
 let _scnPaintDeltaByIso = null;
 let _scnPaintMaxAbs = 0;
 let _scnPaintMarker = null;
+let _scnPaintLegendState = null;
+let _scnPaintLayersState = null;
+let _scnMiniMapRenderToken = 0;
 
 function _scnPaintCssVar(name, fallback) {
   try {
@@ -28659,8 +28754,7 @@ function _scnPaintMix(a, b, t) {
   return a.map((v, i) => v + (b[i] - v) * t);
 }
 
-function _scnPaintDeltaColor(delta) {
-  const maxAbs = _scnPaintMaxAbs || 0;
+function _scnDeltaRampColor(delta, maxAbs) {
   const t = maxAbs > 0 ? Math.max(0, Math.min(1, Math.abs(Number(delta) || 0) / maxAbs)) : 0;
   const stops = [
     { at: 0,    c: _scnPaintRgb(_scnPaintCssVar('--b2', '#3d3d4a'), '#3d3d4a') },
@@ -28675,6 +28769,78 @@ function _scnPaintDeltaColor(delta) {
     }
   }
   return '#7a2922';
+}
+
+function _scnPaintDeltaColor(delta) {
+  return _scnDeltaRampColor(delta, _scnPaintMaxAbs || 0);
+}
+
+function _scnPaintLegendTicks() {
+  const max = Math.max(0, Math.ceil(_scnPaintMaxAbs || 0));
+  const mid = Math.max(1, Math.round(max / 2));
+  return { mid, max: Math.max(1, max) };
+}
+
+function _scnApplyScenarioPaintChrome() {
+  // v68.5 — swap legend/layers while painted; teardown restores exact snapshots.
+  const legend = document.getElementById('map-legend');
+  if (legend) {
+    if (!_scnPaintLegendState) {
+      _scnPaintLegendState = {
+        html: legend.innerHTML,
+        hadTitle: legend.hasAttribute('title'),
+        title: legend.getAttribute('title'),
+        hadAria: legend.hasAttribute('aria-label'),
+        aria: legend.getAttribute('aria-label'),
+      };
+    }
+    const ticks = _scnPaintLegendTicks();
+    legend.setAttribute('aria-label', 'Scenario FDRS shift legend');
+    legend.innerHTML = `
+      <div class="legend-title">FDRS shift under scenario
+        <span class="legend-nd legend-item"><span class="legend-swatch legend-nodata"></span><span class="legend-label">No data</span></span>
+      </div>
+      <div class="legend-ramp">
+        <div class="legend-item" title="No scenario shift · 0"><span class="legend-swatch" style="background:${_scnDeltaRampColor(0, ticks.max)}"></span><span class="legend-label">0</span></div>
+        <div class="legend-item" title="Moderate scenario shift · +${ticks.mid}"><span class="legend-swatch" style="background:#c9a957"></span><span class="legend-label">+${ticks.mid}</span></div>
+        <div class="legend-item" title="High scenario shift"><span class="legend-swatch" style="background:#c44b3c"></span><span class="legend-label">High</span></div>
+        <div class="legend-item" title="Peak scenario shift · +${ticks.max}"><span class="legend-swatch" style="background:#7a2922"></span><span class="legend-label">+${ticks.max}</span></div>
+      </div>
+      <div class="legend-scale"><span>0</span><span>+${ticks.mid}</span><span>+${ticks.max}</span></div>`;
+  }
+
+  const layers = document.getElementById('map-layers');
+  if (layers) {
+    if (!_scnPaintLayersState) {
+      _scnPaintLayersState = {
+        className: layers.className,
+        hadTitle: layers.hasAttribute('title'),
+        title: layers.getAttribute('title'),
+      };
+    }
+    layers.classList.add('ml-paint-dim');
+    layers.setAttribute('title', 'Layers pause while a scenario is painted');
+  }
+}
+
+function _scnRestoreScenarioPaintChrome() {
+  const legend = document.getElementById('map-legend');
+  if (legend && _scnPaintLegendState) {
+    legend.innerHTML = _scnPaintLegendState.html;
+    if (_scnPaintLegendState.hadTitle) legend.setAttribute('title', _scnPaintLegendState.title || '');
+    else legend.removeAttribute('title');
+    if (_scnPaintLegendState.hadAria) legend.setAttribute('aria-label', _scnPaintLegendState.aria || '');
+    else legend.removeAttribute('aria-label');
+  }
+  _scnPaintLegendState = null;
+
+  const layers = document.getElementById('map-layers');
+  if (layers && _scnPaintLayersState) {
+    layers.className = _scnPaintLayersState.className || '';
+    if (_scnPaintLayersState.hadTitle) layers.setAttribute('title', _scnPaintLayersState.title || '');
+    else layers.removeAttribute('title');
+  }
+  _scnPaintLayersState = null;
 }
 
 function _scnPaintFeatureStyle(f, c) {
@@ -28779,6 +28945,64 @@ function _scnRenderScenarioPaintMarker() {
   }).addTo(map);
 }
 
+function _scnPaintCommodityKeys(selected) {
+  const keys = new Set();
+  (selected || []).forEach(s => {
+    const k = (s && s._commodity) || (/(wheat|rice|maize)/.exec((s && s.id) || '') || [])[1];
+    if (k) keys.add(k);
+  });
+  return Array.from(keys);
+}
+
+function _scnScenarioSeveredBlocks() {
+  const selected = _lastStressSelected || [];
+  const params = _lastStressParams || scenarioParams || {};
+  const blocks = [];
+  const push = (originIso, commodityKey) => {
+    if (!originIso || !commodityKey) return;
+    const id = `${originIso}::${commodityKey}`;
+    if (blocks.some(b => b.id === id)) return;
+    blocks.push({
+      id, originIso, commodityKey,
+      commodityLabel: (typeof _CURATED_LABEL !== 'undefined' && _CURATED_LABEL[commodityKey]) || commodityKey,
+    });
+  };
+
+  const ban = selected.find(s => s && s.id === 'ban');
+  const banOrigin = _scnParamValue('ban', params);
+  if (ban && banOrigin && banOrigin !== 'top') {
+    _scnPaintCommodityKeys(selected).forEach(k => push(banOrigin, k));
+  }
+
+  const restrict = selected.find(s => s && s.id === 'exportrestrict');
+  const restrictParam = _scnParamValue('exportrestrict', params);
+  if (restrict && restrictParam != null && restrictParam !== 'all') {
+    _scnSelectedRestrictionMeasures(restrictParam).forEach(m => {
+      const key = (typeof _curatedKey === 'function' ? _curatedKey(m && m.commodity) : null)
+        || _scnStapleKey(m && m.commodity);
+      if (m && m.iso) push(m.iso, key);
+    });
+  }
+  return blocks;
+}
+
+function _scnClearScenarioSeveredCorridors() {
+  try {
+    if (window.Globe && typeof Globe.clearScenarioSeveredCorridors === 'function') {
+      Globe.clearScenarioSeveredCorridors();
+    }
+  } catch (e) {}
+}
+
+function _scnRenderScenarioSeveredCorridors() {
+  if (!_scnPaintOn) return;
+  try {
+    if (window.Globe && typeof Globe.drawScenarioSeveredCorridors === 'function') {
+      Globe.drawScenarioSeveredCorridors(_scnScenarioSeveredBlocks());
+    }
+  } catch (e) {}
+}
+
 function _scnRepaintScenarioMap() {
   try {
     if (window.Globe && typeof Globe.render === 'function') Globe.render();
@@ -28791,7 +29015,9 @@ function _scnTeardownScenarioPaint() {
   _scnPaintDeltaByIso = null;
   _scnPaintMaxAbs = 0;
   _scnRemoveScenarioPaintMarker();
+  _scnClearScenarioSeveredCorridors();
   _scnRemoveScenarioPaintBanner();
+  _scnRestoreScenarioPaintChrome();
   _scnRepaintScenarioMap();
 }
 
@@ -28805,13 +29031,91 @@ function scnPaintOnMap() {
   if (typeof showTab === 'function') showTab('global', document.querySelector('.subnav-btn[data-tab="global"]'));
   _scnRepaintScenarioMap();
   _scnRenderScenarioPaintBanner();
+  _scnApplyScenarioPaintChrome();
   _scnRenderScenarioPaintMarker();
+  _scnRenderScenarioSeveredCorridors();
 }
 
 // v64-bpsw — small helpers for the break-point switcher; all figures still come
 // from _scnBreakPoint(), and ad-hoc countries get only one _simulateScenario().
 function _scnBpSafeIso(iso) {
   return String(iso || '').replace(/[^A-Za-z0-9_-]/g, '');
+}
+
+function _scnMiniMapKey(e) {
+  if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+  e.preventDefault();
+  if (typeof scnPaintOnMap === 'function') scnPaintOnMap();
+}
+
+function _scnMiniMapShellHTML() {
+  return `
+    <div id="scn-mini-map" class="scn-mini-map" role="button" tabindex="0"
+         title="Paint this scenario on the Global Map."
+         onclick="scnPaintOnMap()" onkeydown="_scnMiniMapKey(event)">
+      <div class="scn-mini-map-stage" aria-hidden="true">
+        <span class="scn-mini-map-empty">Map preview loading</span>
+      </div>
+      <div class="scn-mini-map-caption">Deltas under this stack — click for the full map</div>
+    </div>`;
+}
+
+function _scnMiniMapSvgHTML(results, selected, features) {
+  if (!features || !features.length || typeof d3 === 'undefined' || !d3.geoEquirectangular || !d3.geoPath) return '';
+  const width = 760, height = 190;
+  const deltaByIso = new Map();
+  let maxAbs = 0;
+  (results || []).forEach(r => {
+    const d = Number(r && r.delta);
+    if (!r || !r.iso || !Number.isFinite(d)) return;
+    deltaByIso.set(r.iso, d);
+    maxAbs = Math.max(maxAbs, Math.abs(d));
+  });
+  const fc = { type:'FeatureCollection', features };
+  const projection = d3.geoEquirectangular().fitExtent([[8, 8], [width - 8, height - 22]], fc);
+  const path = d3.geoPath(projection);
+  const esc = (typeof _escFeed === 'function') ? _escFeed : (s => String(s == null ? '' : s));
+  const paths = features.map(f => {
+    const d = path(f);
+    if (!d) return '';
+    const c = (typeof lookupFeature === 'function') ? lookupFeature(f) : null;
+    const hasDelta = !!(c && deltaByIso.has(c.iso));
+    const delta = hasDelta ? deltaByIso.get(c.iso) : null;
+    const t = (hasDelta && maxAbs > 0) ? Math.max(0, Math.min(1, Math.abs(delta) / maxAbs)) : 0;
+    const fill = hasDelta ? _scnDeltaRampColor(delta, maxAbs || 1) : '#17171d';
+    const opacity = hasDelta ? (t > 0 ? 0.52 + Math.sqrt(t) * 0.42 : 0.44) : 0.28;
+    const name = c ? c.name : ((f.properties && (f.properties.name || f.properties.NAME || f.properties.ADMIN)) || 'No data');
+    return `<path d="${d}" fill="${fill}" fill-opacity="${opacity.toFixed(2)}" stroke="#050507" stroke-width=".42" vector-effect="non-scaling-stroke"><title>${esc(name)}${hasDelta ? ` · ${delta > 0 ? '+' : ''}${delta}` : ' · no scenario result'}</title></path>`;
+  }).join('');
+  let chokeDot = '';
+  try {
+    if ((selected || []).some(s => s && s.id === 'chokeclose')) {
+      const cp = (typeof CHOKEPOINTS !== 'undefined' ? CHOKEPOINTS : []).find(x => x.id === _scnChokepoint);
+      const pt = cp ? projection([Number(cp.lng), Number(cp.lat)]) : null;
+      if (pt && Number.isFinite(pt[0]) && Number.isFinite(pt[1])) {
+        chokeDot = `<circle cx="${pt[0].toFixed(1)}" cy="${pt[1].toFixed(1)}" r="4.6" fill="#c44b3c" stroke="#c9a957" stroke-width="1.5"><title>${esc(cp.name)} chokepoint shock</title></circle>`;
+      }
+    }
+  } catch (e) {}
+  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Scenario FDRS shift map preview">
+    <rect width="${width}" height="${height}" fill="#111117"></rect>
+    ${paths}
+    ${chokeDot}
+  </svg>`;
+}
+
+function _scnHydrateScenarioMiniMap(results, selected, token, attempt) {
+  if (token !== _scnMiniMapRenderToken) return;
+  const host = document.getElementById('scn-mini-map');
+  const stage = host && host.querySelector('.scn-mini-map-stage');
+  if (!stage) return;
+  const features = (window.Globe && Globe.state && Array.isArray(Globe.state.features)) ? Globe.state.features : [];
+  if (!features.length || typeof d3 === 'undefined') {
+    if ((attempt || 0) < 20) setTimeout(() => _scnHydrateScenarioMiniMap(results, selected, token, (attempt || 0) + 1), 250);
+    return;
+  }
+  const svg = _scnMiniMapSvgHTML(results, selected, features);
+  if (svg) stage.innerHTML = svg;
 }
 
 function _scnBpCountry(iso) {
@@ -29779,7 +30083,16 @@ function _renderScenarioBrief(results, selected, stats) {
   }).filter(Boolean).sort((a,b)=> b.profitScore - a.profitScore);
 
   const negatives = sorted.filter(c => c.delta < 0).sort((a,b)=> a.delta - b.delta);
-  const profitList = profitScored.slice(0, 4);
+  // v68.5 — an origin that BANS its own exports does not profit from the ban:
+  // it forfeits the sales. Exclude the named ban origin (and any restricting
+  // origins in the stack) from the winners' board.
+  const _banParams = _lastStressParams || scenarioParams || {};
+  const _excludedOrigins = new Set();
+  if (selected.some(s => s.id === 'ban') && _banParams.ban && _banParams.ban !== 'top') _excludedOrigins.add(_banParams.ban);
+  if (selected.some(s => s.id === 'exportrestrict') && typeof LIVE !== 'undefined' && Array.isArray(LIVE.restrictions)) {
+    LIVE.restrictions.forEach(m => { if (m && m.iso) _excludedOrigins.add(m.iso); });
+  }
+  const profitList = profitScored.filter(c => !_excludedOrigins.has(c.iso)).slice(0, 4);
 
   // When it lands — heuristic from shock categories
   const cats = selected.map(s => (s.cat || '').toLowerCase());
@@ -30047,6 +30360,8 @@ function _renderScenarioBrief(results, selected, stats) {
           <span class="scn-bar-fromto">${c.fdrs}→<b style="color:${riskColor(c.newScore)}">${c.newScore}</b></span>
         </${_bpCommodity ? 'button' : 'div'}>`).join('')}
     </div>` : '';
+  const _miniMapToken = ++_scnMiniMapRenderToken;
+  const _miniMapHTML = _scnMiniMapShellHTML();
 
   // v68.4 — trader exposure cross-link: cited company footprint ∩ top-8 movers.
   const _traderExposureHTML = (() => {
@@ -30107,6 +30422,7 @@ function _renderScenarioBrief(results, selected, stats) {
     ${_heroHTML}
     ${_paramBarHTML}
     ${_barsHTML}
+    ${_miniMapHTML}
     ${_breakPointHTML}
     <div class="scn-brief-grid scn-brief-grid-3">
       <div class="scn-brief-panel" data-kind="buffer">
@@ -30155,6 +30471,7 @@ function _renderScenarioBrief(results, selected, stats) {
       <button type="button" id="scn-share-btn" class="scn-brief-copy-btn" title="Copy a link that reproduces this exact run — shocks, severities, parameters, route and scope." onclick="scnCopyPermalink()">Share run →</button>
       <button class="scn-brief-copy-btn" onclick="copyScenarioBrief()">Copy brief →</button>
     </div>`;
+  _scnHydrateScenarioMiniMap(results, selected, _miniMapToken);
 }
 
 // v22 — Copy the brief as plain text to the clipboard.
