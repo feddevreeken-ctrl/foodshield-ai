@@ -2118,51 +2118,56 @@ body {
 }
 
 /* Legend */
-/* v67.1 — the legend was a six-row card squatting on the South Atlantic.
-   Same markup, recomposed as one slim horizontal strip: swatch + name + range
-   per chip, chips flowing in a row. Map first, chrome second. */
+/* v68 — cartographic ramp legend: a continuous scale bar, band names under
+   their segments, breakpoint values on a tick row. Small, quiet, standard. */
 #map-legend {
   position: absolute;
   bottom: 26px; left: 18px;
   z-index: 900;
-  display: flex; align-items: center; flex-wrap: wrap;
-  gap: 2px 10px;
   background: var(--glass);
   border: 1px solid var(--b1);
   border-radius: 6px;
-  padding: 7px 12px;
+  padding: 9px 12px 7px;
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  max-width: min(820px, calc(100vw - 380px));
+  width: 296px;
   box-shadow: none;
 }
 .legend-title {
+  display: flex; align-items: center; justify-content: space-between;
   font-size: 8.5px; font-weight: 600;
   color: var(--t3);
   text-transform: uppercase; letter-spacing: 0.14em;
-  margin-right: 4px;
-  flex: 0 0 auto;
+  margin-bottom: 7px;
 }
+.legend-nd { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.legend-nd .legend-label { font-size: 9px; color: var(--t3); }
+.legend-nd .legend-swatch { width: 12px; }
 /* v22.22 — removed .legend-howto block per user request */
-.legend-item {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 1px 0;
-  flex: 0 0 auto;
+.legend-ramp { display: flex; }
+.legend-ramp .legend-item {
+  flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; gap: 4px;
 }
-.legend-swatch {
-  width: 14px; height: 4px; border-radius: 2px;
-  flex-shrink: 0;
+.legend-ramp .legend-swatch {
+  display: block; height: 7px; width: 100%; border-radius: 0;
 }
-.legend-label {
-  font-size: 10.5px;
-  color: var(--t1);
-  font-weight: 400;
-  white-space: nowrap;
-}
-.legend-range {
-  font-size: 9px;
+.legend-ramp .legend-item:first-child .legend-swatch { border-radius: 3px 0 0 3px; }
+.legend-ramp .legend-item:last-child .legend-swatch { border-radius: 0 3px 3px 0; }
+.legend-ramp .legend-label {
+  font-size: 8.5px;
   color: var(--t3);
-  padding-left: 2px;
+  text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.legend-swatch { width: 14px; height: 4px; border-radius: 2px; flex-shrink: 0; }
+.legend-label { font-size: 10px; color: var(--t1); }
+.legend-scale {
+  display: flex; justify-content: space-between;
+  margin-top: 3px; padding: 0 1px;
+  font-size: 8px;
+  color: var(--t-meta);
   font-family: 'Geist Mono', monospace;
   font-weight: 500;
   white-space: nowrap;
@@ -9628,38 +9633,21 @@ body::before {
       <!-- v21 (#16) — persistent 5-tier legend, always visible on the Global Map
            tab. Uses the same saturated palette as the map polygons (mapRiskColor)
            so the legend swatches match what users see on the map. -->
+      <!-- v68 — cartographic ramp legend: one continuous scale bar with band
+           labels beneath and tick values at the breakpoints — the standard
+           choropleth pattern, not a toolbar of chips and not a card. -->
       <div id="map-legend" role="region" aria-label="Food Disruption Risk Score legend">
-        <div class="legend-title"><abbr class="ac" title="Food Disruption Risk Score — 0–100 composite measuring how exposed a country is to food shocks (imports, climate, conflict, logistics, prices).">Food Disruption Risk Score</abbr></div>
-        <div class="legend-item">
-          <div class="legend-swatch" style="background:#5fa85f"></div>
-          <div class="legend-label">Resilient</div>
-          <div class="legend-range">0—25</div>
+        <div class="legend-title"><abbr class="ac" title="Food Disruption Risk Score — 0–100 composite measuring how exposed a country is to food shocks (imports, climate, conflict, logistics, prices).">Food disruption risk</abbr>
+          <span class="legend-nd legend-item"><span class="legend-swatch legend-nodata"></span><span class="legend-label">No data</span></span>
         </div>
-        <div class="legend-item">
-          <div class="legend-swatch" style="background:#e0b94a"></div>
-          <div class="legend-label">Exposed</div>
-          <div class="legend-range">26—50</div>
+        <div class="legend-ramp">
+          <div class="legend-item" title="Resilient · 0–25"><span class="legend-swatch" style="background:#5fa85f"></span><span class="legend-label">Resilient</span></div>
+          <div class="legend-item" title="Exposed · 26–50"><span class="legend-swatch" style="background:#e0b94a"></span><span class="legend-label">Exposed</span></div>
+          <div class="legend-item" title="Dependent · 51–75"><span class="legend-swatch" style="background:#e07a2e"></span><span class="legend-label">Dependent</span></div>
+          <div class="legend-item" title="Vulnerable · 76–88"><span class="legend-swatch" style="background:#d23a2a"></span><span class="legend-label">Vulnerable</span></div>
+          <div class="legend-item" title="Severe · 89–100"><span class="legend-swatch" style="background:#b5342a"></span><span class="legend-label">Severe</span></div>
         </div>
-        <div class="legend-item">
-          <div class="legend-swatch" style="background:#e07a2e"></div>
-          <div class="legend-label">Dependent</div>
-          <div class="legend-range">51—75</div>
-        </div>
-        <div class="legend-item">
-          <div class="legend-swatch" style="background:#d23a2a"></div>
-          <div class="legend-label">Vulnerable</div>
-          <div class="legend-range">76—88</div>
-        </div>
-        <div class="legend-item">
-          <div class="legend-swatch" style="background:#b5342a"></div>
-          <div class="legend-label">Severe</div>
-          <div class="legend-range">89—100</div>
-        </div>
-        <div class="legend-item">
-          <div class="legend-swatch legend-nodata"></div>
-          <div class="legend-label">No data</div>
-          <div class="legend-range">—</div>
-        </div>
+        <div class="legend-scale"><span>0</span><span>25</span><span>50</span><span>75</span><span>88</span><span>100</span></div>
       </div>
 
       </div><!-- /#map-canvas -->
@@ -24751,11 +24739,11 @@ function updateRail() {
   // Both figures are correct; the clause below says so rather than leaving the
   // two numbers to look like a contradiction.
   document.getElementById('dist-list').innerHTML = `
-    <div class="dist-lede">
+    <div class="dist-lede" title="${total} scored rows — the 193 UN member states plus tracked territories">
       <div class="dist-lede-num">${atRisk}</div>
       <div class="dist-lede-cap">
-        <span>countries at <em>dependent, vulnerable or severe</em> risk</span>
-        <span class="dist-lede-meta">${Math.round(atRisk/total*100)}% of ${total} scored rows — the 193 UN member states plus tracked territories</span>
+        <span>of ${total} scored countries sit at <em>Dependent</em> risk or worse</span>
+        <span class="dist-lede-meta">${Math.round(atRisk/total*100)}% of the scored world</span>
       </div>
     </div>
     <div class="dist-stack-bar" title="Stacked share by FDRS band">
