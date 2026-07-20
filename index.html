@@ -18026,6 +18026,72 @@ function _stapleSpikeKick(c, label, scalarField, s){
   return dependence * concPremium * SCENARIO_POINT_SCALE * s * damp;
 }
 const SCENARIO_POINT_SCALE = 24;
+
+// ── v61 — THE BREAK POINT, in units a person can act on ────────────────────
+//
+// The scenario output led with "Peak shift +4 pts · Cross a risk threshold".
+// A point delta on a composite index is not a fact anyone can check, argue
+// with, or act on — it is the model talking about itself. And it reads
+// identically for every country and every shock, which is exactly the
+// "generic output" complaint.
+//
+// Every figure below is computed here from shipped data; none comes from a
+// model:
+//   imports / consumption / production / stocks   USDA PSD (quality_flag sourced)
+//   benchmark price, unit, month                  World Bank Pink Sheet
+//
+// One deliberate correction to the agreed design: it called for "reserve cover
+// in months", implying FX reserves. This repo ships no FX-reserve series — I
+// checked wb_wfso.json, worldbank_wdi.json and countries.json. What PSD does
+// carry is physical grain stocks, so cover here is STOCK cover: how long the
+// grain itself lasts at current consumption. For a food-security page that is
+// arguably the better question, but it is a DIFFERENT claim and is labelled as
+// one rather than quietly substituted.
+function _scnBreakPoint(c, commodity, shock) {
+  const psdKey = { wheat: 'wheat', rice: 'rice', maize: 'corn' }[commodity];
+  const row = (c && c.iso && typeof LIVE !== 'undefined' && LIVE.psd)
+    ? ((LIVE.psd[c.iso] || {})[psdKey] || null) : null;
+  const series = (typeof LIVE !== 'undefined' && LIVE.pink_sheet)
+    ? ((LIVE.pink_sheet.series || {})[commodity] || null) : null;
+  if (!row || row.imports_kt == null || !row.consumption_kt) return null;
+
+  const imports = row.imports_kt, consumption = row.consumption_kt;
+  const stocks = row.stocks_kt, price = series && series.latest_value;
+  const dep = imports / consumption;
+
+  // Import bill only where a benchmark price exists. No price, no bill — the
+  // tonnage still stands on its own rather than being multiplied by a guess.
+  const bill = price ? (imports * 1000 * price) / 1e9 : null;   // $bn
+  const billAfter = bill != null ? bill * (1 + shock) : null;
+  const coverMonths = (stocks != null && consumption) ? (12 * stocks / consumption) : null;
+
+  // WHICH CONSTRAINT BINDS FIRST is a real per-country difference, and it is
+  // what stops every scenario reading the same. A country with deep stocks and
+  // a thin current account breaks on the money; one with cash and no silo
+  // breaks on the grain.
+  let binding = 'unknown', bindingWhy = '';
+  if (coverMonths != null) {
+    if (dep >= 0.5 && coverMonths < 2) {
+      binding = 'physical supply';
+      bindingWhy = `stocks cover ${coverMonths.toFixed(1)} months against ${Math.round(dep * 100)}% import reliance`;
+    } else if (dep >= 0.5) {
+      binding = 'import cost';
+      bindingWhy = `${coverMonths.toFixed(1)} months of stock absorbs the volume; the bill is what moves`;
+    } else {
+      binding = 'domestic production';
+      bindingWhy = `only ${Math.round(dep * 100)}% is imported — most supply is grown, not bought`;
+    }
+  }
+
+  return {
+    iso: c.iso, name: c.name, commodity, shock,
+    imports, consumption, production: row.production_kt, stocks,
+    dependence: dep, year: row.year,
+    price, priceUnit: series && series.unit, priceMonth: series && series.latest_month,
+    bill, billAfter, billDelta: bill != null ? billAfter - bill : null,
+    coverMonths, binding, bindingWhy,
+  };
+}
 const SCENARIOS = [
   {id:'wheat20', label:'Wheat price spike',        cat:'Commodity', baseSev:0.20, sevUnit:'%', channel:0,
     desc:'Global wheat futures shock — Black Sea disruption or Northern Hemisphere harvest failure.',
