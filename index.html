@@ -17168,6 +17168,13 @@ async function loadLiveData() {
     LIVE.scenario_profiles = profEnv || null;
   } catch (e) { LIVE.scenario_profiles = null; }
 
+  // v67 — historical replay smoke test (scripts/backtest_scenarios.py output);
+  // rendered inside the methodology badge. Non-critical load.
+  try {
+    const btEnv = await _fetchData('backtest_scenarios');
+    LIVE.backtest = btEnv || null;
+  } catch (e) { LIVE.backtest = null; }
+
   // v66.2 (L3) — the featured-crisis preview memoizes a full engine pass for
   // the page lifetime; a data (re)load changes its inputs, so drop the memo.
   try { if (typeof window !== 'undefined') window.__featuredPreviewCache = undefined; } catch (e) {}
@@ -27415,6 +27422,25 @@ function renderScenarioTab() {
           <div><b>Imported-inflation squeeze</b> &nbsp;Δ = (min(CPI, 40)/40) × 13 × (shock/0.25) → c[3]</div>
           <div><b>Export restrictions widen</b> &nbsp;Δ = Σ import-share from restricting origins (cited flows) × 20 × (shock/0.50) → c[1] <span style="color:var(--t3);font-size:9.5px;">(IFPRI tracker seed — historical measures)</span></div>
         </div>
+        <!-- v67 — the replay smoke test, published win or lose. Filled from
+             data/backtest_scenarios.json once LIVE loads. -->
+        <div id="scn-backtest-note" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--b1);">
+          ${(() => {
+            try {
+              const bt = (typeof LIVE !== 'undefined' && LIVE.backtest) ? LIVE.backtest : null;
+              if (!bt || !Array.isArray(bt.events)) return '<span style="font-size:10.5px;color:var(--t3);">Historical replay smoke test: not yet generated in this build.</span>';
+              const rows = bt.events.map(e => {
+                const v2 = e.variant2 || {};
+                const dr = (v2.documented || []).map(x => `${x.iso} #${x.predicted_rank ?? '—'}`).join(', ');
+                return `<div style="padding:2px 0;"><b style="color:var(--t1)">${e.id.replace(/_/g, ' ')}</b> (MY${e.vintage_market_year}): dependence-only ranked the documented victims #${(e.documented||[]).map(x=>x.predicted_rank ?? '—').join('/#')} (0 hits); dependence × banned-origin share ranks them ${dr} — <b style="color:#6ba36b">${v2.hits}/${(v2.documented||[]).length} in the top 15</b>.</div>`;
+              }).join('');
+              return `
+                <div style="font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin-bottom:5px;">Replay smoke test — 2010 Russian ban · 2022 Black Sea</div>
+                <div style="font-size:10.5px;color:var(--t2);line-height:1.65;">${rows}
+                <div style="margin-top:4px;color:var(--t3);">Reconstructed from USDA PSD vintage market years. The origin-share term uses today's cited flow atlas standing in for 2009/2021 shares — disclosed anachronism. n=2 events: a smoke test showing WHO-you-buy-from is the load-bearing variable (which the engine's concentration premium encodes), not a validation of the model.</div></div>`;
+            } catch (e) { return ''; }
+          })()}
+        </div>
       </div>
     </details>
 
@@ -28717,6 +28743,68 @@ function runScenarios() {
   _lastStressSeverity = { ...scenarioSeverity };
   _lastStressParams = { ...scenarioParams };
   _renderStressResults();
+  _scnWritePermalink(selected);   // v67 — the URL always reproduces this run
+}
+
+// ── v67 — SCENARIO PERMALINKS ───────────────────────────────────────────────
+// The whole run — armed shocks, severities, parameters, route, scope — lives
+// in the URL hash, so "look at this Hormuz run" is a link, not a screenshot
+// plus instructions. Format: #scn=<base64url JSON>, written on every run,
+// applied once at boot.
+function _scnWritePermalink(selected) {
+  try {
+    const state = {
+      s: Object.fromEntries(selected.map(x => [x.id, (_lastStressSeverity || scenarioSeverity)[x.id] ?? x.baseSev])),
+      p: Object.fromEntries(Object.entries(_lastStressParams || scenarioParams || {})
+            .filter(([id]) => selected.some(x => x.id === id))),
+      cp: selected.some(x => x.id === 'chokeclose') ? _scnChokepoint : undefined,
+      sc: scenarioScope !== 'all' ? scenarioScope : undefined,
+      m: scenarioMode !== 'global' ? scenarioMode : undefined,
+      c: (scenarioMode === 'country' && scenarioCountries.length) ? scenarioCountries : undefined,
+    };
+    const b64 = btoa(JSON.stringify(state)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', 'scenario');
+    url.hash = 'scn=' + b64;
+    history.replaceState(null, '', url.toString());
+  } catch (e) {}
+}
+function scnApplyPermalink() {
+  try {
+    const mHash = /(?:^|[#&])scn=([A-Za-z0-9_-]+)/.exec(window.location.hash || '');
+    if (!mHash) return false;
+    const state = JSON.parse(atob(mHash[1].replace(/-/g, '+').replace(/_/g, '/')));
+    if (!state || !state.s || typeof state.s !== 'object') return false;
+    activeScenarios.clear();
+    Object.entries(state.s).forEach(([id, sev]) => {
+      const rid = (typeof resolveScenarioId === 'function') ? resolveScenarioId(id) : id;
+      if (!SCENARIOS.find(x => x.id === rid)) return;   // unknown ids dropped, never guessed
+      activeScenarios.add(rid);
+      if (typeof sev === 'number' && isFinite(sev)) scenarioSeverity[rid] = sev;
+    });
+    if (!activeScenarios.size) return false;
+    Object.entries(state.p || {}).forEach(([id, val]) => {
+      const s = SCENARIOS.find(x => x.id === id);
+      if (s && s._param) scenarioParams[id] = val;
+    });
+    if (state.cp && (typeof CHOKEPOINTS === 'undefined' || CHOKEPOINTS.some(x => x.id === state.cp))) _scnChokepoint = state.cp;
+    if (state.sc) scenarioScope = state.sc;
+    if (state.m === 'country' && Array.isArray(state.c) && state.c.length) {
+      scenarioMode = 'country';
+      scenarioCountries = state.c.filter(iso => typeof byISO === 'function' && byISO(iso));
+    }
+    renderScenarioTab();          // re-marks cards, sliders, selects from state
+    runScenarios();
+    return true;
+  } catch (e) { return false; }
+}
+function scnCopyPermalink() {
+  try {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      const btn = document.getElementById('scn-share-btn');
+      if (btn) { const old = btn.textContent; btn.textContent = 'Link copied ✓'; setTimeout(() => { btn.textContent = old; }, 1600); }
+    });
+  } catch (e) {}
 }
 
 // v64 — non-blocking inline validation (replaces alert(), which blocks the
@@ -29444,6 +29532,7 @@ function _renderScenarioBrief(results, selected, stats) {
     <div class="scn-brief-footer">
       <span class="scn-brief-method">${selected.length} shock${selected.length>1?'s':''} stacked · ${stats.crossing} cross a risk band · peak ${stats.maxDelta>=0?"+":""}${stats.maxDelta} pts</span>
       ${_bpCommodity ? `<button type="button" id="scn-cmp-toggle" class="scn-cmp-toggle" aria-label="Compare countries" aria-expanded="${_scnCmpOpen ? 'true' : 'false'}" aria-controls="scn-cmp-view" onclick="scnToggleCompareCountries()"></button>` : ''}
+      <button type="button" id="scn-share-btn" class="scn-brief-copy-btn" title="Copy a link that reproduces this exact run — shocks, severities, parameters, route and scope." onclick="scnCopyPermalink()">Share run →</button>
       <button class="scn-brief-copy-btn" onclick="copyScenarioBrief()">Copy brief →</button>
     </div>`;
 }
@@ -30679,6 +30768,8 @@ window.addEventListener('load',()=>{
   // it's only updated when the user manually clicks the rail toggle.
   // Pre-render tabs so they aren't blank on first visit
   setTimeout(()=>{ renderForecastTab(); renderCountryTab(); renderScenarioTab(); }, 120);
+  // v67 — a #scn= permalink reproduces the exact run once everything above is live.
+  setTimeout(()=>{ if (typeof scnApplyPermalink === 'function') scnApplyPermalink(); }, 600);
   // Load disturbance data in background — updates map toggle count
   setTimeout(()=>{
     if (typeof loadDisturbanceData === 'function') {
