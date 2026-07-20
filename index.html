@@ -4224,6 +4224,35 @@ abbr.ac:hover, .ac:hover {
    hairline grid). Each answer ("breaks / buffers / profits / lands") gets its
    own semantic color, a strong title, a readable lede, and a clean from→to
    ledger with score chips so the numbers actually carry weight. */
+/* ── v62 — the break-point strip ──────────────────────────────────────────
+   Figures in mono tabular so the column aligns and two runs can be compared at
+   a glance; the sentence around each number in sans, because a label is prose
+   and only the figure is data. One raised surface, matching the chokepoint
+   callout on the country page — this is the equivalent claim on this page. */
+.scn-bp {
+  margin: 18px 0 22px; padding: 16px 18px 13px;
+  background: var(--bg3); border: 1px solid var(--b2); border-radius: 3px;
+  border-left: 3px solid #e58a78;
+}
+.scn-bp-head {
+  font-size: 10px; font-weight: 600; letter-spacing: .11em;
+  text-transform: uppercase; color: var(--t1); margin-bottom: 12px;
+}
+.scn-bp-rows { display: flex; flex-direction: column; gap: 9px; }
+.scn-bp-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.scn-bp-fig {
+  font: 600 15px/1.15 ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums; color: #e58a78;
+  flex: 0 0 auto; min-width: 168px;
+}
+.scn-bp-lbl { font-size: 12.5px; line-height: 1.5; color: var(--t2); min-width: 0; }
+.scn-bp-lbl b { color: var(--t1); font-weight: 600; }
+/* The binding constraint is the one editorial judgement in the strip, so it
+   reads as a verdict rather than another measurement. */
+.scn-bp-binding { margin-top: 3px; padding-top: 10px; border-top: 1px solid var(--b1); }
+.scn-bp-binding .scn-bp-fig { color: #c9a957; text-transform: uppercase; font-size: 12px; letter-spacing: .06em; }
+.scn-bp .prov-line { margin-top: 12px; }
+
 .scn-brief-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -31230,12 +31259,70 @@ function _renderScenarioBrief(results, selected, stats) {
     : `No tracked exporter of the shocked commodity is in the dataset — the shock hits importers; the winners would be its major producing/exporting nations.`;
 
   el.style.display = 'block';
+  // ── v62 — the break point leads, in real units ──────────────────────────
+  //
+  // The brief opened on a point delta. This puts the physical fact first: how
+  // much grain, what it costs, how long the stocks last, and which constraint
+  // binds. Computed by _scnBreakPoint from USDA PSD and the World Bank Pink
+  // Sheet — no figure here is modelled, and none comes from a language model.
+  //
+  // Rendered only for the worst-hit country and only where a staple shock is
+  // actually selected: a break point needs a commodity and a supply balance,
+  // and inventing one for a scenario that has neither is how the rest of this
+  // page ended up generic.
+  const _bpCommodity = (() => {
+    for (const s of selected) {
+      const k = s._commodity || (/(wheat|rice|maize)/.exec(s.id || '') || [])[1];
+      if (k && ['wheat', 'rice', 'maize'].includes(k)) return { key: k, sev: (scenarioSeverity && scenarioSeverity[s.id]) ?? s.baseSev };
+    }
+    return null;
+  })();
+  const _bpTarget = sorted[0] && (typeof byISO === 'function' ? byISO(sorted[0].iso) : null);
+  const _bp = (_bpCommodity && _bpTarget)
+    ? _scnBreakPoint(_bpTarget, _bpCommodity.key, _bpCommodity.sev || 0.20) : null;
+
+  const _fmtKt = v => v >= 1000 ? (v / 1000).toFixed(1) + ' Mt' : Math.round(v).toLocaleString() + ' kt';
+  const _breakPointHTML = !_bp ? '' : `
+    <div class="scn-bp">
+      <div class="scn-bp-head">${_escFeed(_bp.name)} · ${_escFeed(_bp.commodity)} +${Math.round(_bp.shock * 100)}%</div>
+      <div class="scn-bp-rows">
+        <div class="scn-bp-row">
+          <span class="scn-bp-fig">${_fmtKt(_bp.imports)}</span>
+          <span class="scn-bp-lbl">imported of ${_fmtKt(_bp.consumption)} consumed —
+            <b>${Math.round(_bp.dependence * 100)}%</b> import reliance</span>
+        </div>
+        ${_bp.bill != null ? `
+        <div class="scn-bp-row">
+          <span class="scn-bp-fig">$${_bp.bill.toFixed(2)}bn → $${_bp.billAfter.toFixed(2)}bn</span>
+          <span class="scn-bp-lbl">import bill at ${_bp.price} ${_escFeed(_bp.priceUnit || '')} —
+            <b>+$${Math.round(_bp.billDelta * 1000)}M</b></span>
+        </div>` : ''}
+        ${_bp.coverMonths != null ? `
+        <div class="scn-bp-row">
+          <span class="scn-bp-fig">${_bp.coverMonths.toFixed(1)} months</span>
+          <span class="scn-bp-lbl">of stock cover at current consumption (${_fmtKt(_bp.stocks)})</span>
+        </div>` : ''}
+        <div class="scn-bp-row scn-bp-binding">
+          <span class="scn-bp-fig">${_escFeed(_bp.binding)}</span>
+          <span class="scn-bp-lbl">binds first — ${_escFeed(_bp.bindingWhy)}</span>
+        </div>
+      </div>
+      <div class="prov-line">
+        <span class="prov-kind" style="color:#e58a78">Source</span>
+        <span class="prov-dash">—</span>
+        <span class="prov-body">USDA PSD ${_bp.year || ''} supply balance${
+          _bp.priceMonth ? ` · World Bank Pink Sheet ${_bp.priceMonth}` : ''}. The shock
+          percentage is your input; every other figure here is measured.</span>
+      </div>
+    </div>`;
+
   el.innerHTML = `
     <div class="scn-brief-dateline">
       <span class="dot"></span>
       <span>${today} · Stress test brief</span>
     </div>
     <div class="scn-brief-sentence">${sentence}</div>
+    ${_breakPointHTML}
     <div class="scn-brief-grid">
       <div class="scn-brief-panel" data-kind="break">
         <span class="scn-brief-panel-num">01 · Who breaks first</span>
