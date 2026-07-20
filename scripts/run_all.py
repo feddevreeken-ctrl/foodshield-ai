@@ -75,6 +75,7 @@ import build_companies
 # + GROQ_API_KEY / GEMINI_API_KEY / ANTHROPIC_API_KEY. With no key at all it still
 # writes a complete deterministic (zero-cost) output and exits 0.
 import build_news_interpretation
+import build_scenario_profiles
 
 
 # v20.32 — (label, fn, expected_output_file). The third field is what the
@@ -152,6 +153,7 @@ STEPS = [
     # Python and the model's prose is regex-validated against it, so a cheap free-tier
     # model cannot introduce a figure.
     ("Commodity interpretation", build_news_interpretation.main, "commodity_interpretation.json"),
+    ("Scenario profiles",      build_scenario_profiles.main,    "scenario_profiles.json"),
 ]
 
 

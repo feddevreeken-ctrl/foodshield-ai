@@ -17159,6 +17159,15 @@ async function loadLiveData() {
     LIVE.precedents = precEnv || null;
   } catch (e) { LIVE.precedents = null; }
 
+  // v66.1 — CI-generated per-country analyst profiles (scenario tab). LLM
+  // prose that is numbers-free by construction (any digit rejects at build
+  // time) and validated against locked facts; the client only ever displays
+  // it next to figures it computed itself.
+  try {
+    const profEnv = await _fetchData('scenario_profiles');
+    LIVE.scenario_profiles = profEnv || null;
+  } catch (e) { LIVE.scenario_profiles = null; }
+
   // v20.20 — Pipeline 6: ND-GAIN climate vulnerability + readiness per country.
   // Feeds the climate dimension of the FDRS (blended 60% sourced / 40% heritage,
   // alongside Aqueduct + CCKP) and shows on the country panel as a sourced card.
@@ -27821,10 +27830,27 @@ function countryResponse(c, selected, breakdown){
       : `reroute early — book the alternative passage before freight reprices, extend contract laycans, and split cargoes across routes`;
     return `<b style="color:var(--t1)">${urgency0}.</b> ${name}'s exposure runs through ${routeName}: ${alt}.`;
   }
+  // v66.1 — country-specific: name the country's ACTUAL top supplier and its
+  // real alternates from the cited flow atlas, instead of the generic
+  // "diversify suppliers" line that read identically for every GCC state.
+  let supplierClause = '';
+  try {
+    const s0 = selected.find(x => x._commodity) || selected[0];
+    const label = (s0 && s0._commodity && typeof _CURATED_LABEL !== 'undefined' && _CURATED_LABEL[s0._commodity]) || null;
+    const _rs = (typeof realShares === 'function') ? realShares : (typeof window !== 'undefined' ? window.realShares : null);
+    const imp = (label && typeof _rs === 'function') ? _rs(c, label, 'import') : null;
+    if (imp && imp.totalKt > 0 && Array.isArray(imp.rows) && imp.rows.length) {
+      const nm = r => r.name || ((typeof byISO === 'function' && byISO(r.iso || r.iso3) || {}).name) || (r.iso || r.iso3) || 'its top origin';
+      const top = imp.rows[0];
+      const alts = imp.rows.slice(1, 3).map(nm).filter(Boolean);
+      supplierClause = ` — ${Math.round((top.share || 0) * 100)}% of its cited ${com} imports come from ${nm(top)}${
+        alts.length ? `; realistic second sources on record: ${alts.join(', ')}` : `; no alternate origin appears in its cited flows — new corridors must be opened, not just re-weighted`}`;
+    }
+  } catch (e) {}
   let lever;
   switch (topCh) {
-    case 0: lever = `cut import-dependency exposure on ${com} — diversify suppliers and pre-contract alternate origins before prices peak`; break;      // import dep
-    case 1: lever = `break supplier concentration — ${name} leans on too few origins; open regional trade corridors and second-source contracts`; break; // supplier conc
+    case 0: lever = `cut import-dependency exposure on ${com}${supplierClause || ' — diversify suppliers and pre-contract alternate origins before prices peak'}`; break;      // import dep
+    case 1: lever = `break supplier concentration${supplierClause || ` — ${name} leans on too few origins; open regional trade corridors and second-source contracts`}`; break; // supplier conc
     case 2: lever = `protect domestic production — bridge the yield/output gap with buffer stocks and input support over the next season`; break;        // production trend
     case 3: lever = `shield purchasing power — FX/inflation is the main channel; use targeted food subsidies and local-currency import financing`; break; // food inflation
     case 4: lever = `harden against the climate hit — pre-position reserves and broaden sourcing, since a weather shock is hard to substitute fast`; break; // climate
@@ -28850,10 +28876,28 @@ function _scnAnalystNote(bp, c) {
 
     const body = [s1, s2, s3].filter(Boolean).join(' ');
     if (!body) return '';
+
+    // v66.1 — the AI layer, for every country with a profile: CI-generated
+    // prose (build_scenario_profiles.py), numbers-free by construction (any
+    // digit rejects at build time) and validated against the same locked
+    // facts. Rendered as its own labelled register so it can never be
+    // mistaken for the computed sentences above it.
+    let aiHTML = '';
+    try {
+      const prof = (typeof LIVE !== 'undefined' && LIVE.scenario_profiles && LIVE.scenario_profiles.profiles)
+        ? (LIVE.scenario_profiles.profiles[c.iso] || {})[bp.commodity] : null;
+      if (prof && prof.text && prof.status === 'llm' && !/[0-9]/.test(prof.text)) {
+        aiHTML = `
+          <span class="scn-read-label" style="margin-top:10px;">AI read · model-phrased, numbers-free, validated</span>
+          ${_escFeed(prof.text)}`;
+      }
+    } catch (e) {}
+
     return `
       <div class="scn-read">
         <span class="scn-read-label">Analyst note · computed, source-locked</span>
         ${body}
+        ${aiHTML}
       </div>`;
   } catch (e) { return ''; }
 }
@@ -29013,43 +29057,44 @@ function _renderScenarioBrief(results, selected, stats) {
 
   // When it lands — heuristic from shock categories
   const cats = selected.map(s => (s.cat || '').toLowerCase());
-  let whenLede = '';
-  let whenTimeline = [];
-  if (cats.some(c => c.includes('logistic') || c.includes('geopolit'))) {
-    whenLede = `<b>Days to weeks.</b> Logistics and supplier-ban shocks transmit fastest — port and corridor disruption shows in spot prices within <span class="up">5–10 days</span>.`;
-    whenTimeline = [
-      {phase:'Spot price', when:'D 0–7'},
-      {phase:'Import contract', when:'D 14–30'},
-      {phase:'Retail shelves', when:'D 30–60'},
-    ];
-  } else if (cats.some(c => c.includes('commodity'))) {
-    whenLede = `<b>4–8 weeks.</b> Price shocks transmit through import contracts, then retail. Most import-dependent countries see CPI impact within <span class="up">two months</span>.`;
-    whenTimeline = [
-      {phase:'Futures', when:'D 0–3'},
-      {phase:'Import unloading', when:'D 20–45'},
-      {phase:'Consumer CPI', when:'D 45–90'},
-    ];
-  } else if (cats.some(c => c.includes('climate'))) {
-    whenLede = `<b>One marketing year.</b> Climate shocks land at the next harvest — visible in stock-to-use ratios within <span class="up">6–9 months</span>.`;
-    whenTimeline = [
-      {phase:'Production forecast', when:'M 1–3'},
-      {phase:'Stocks-to-use', when:'M 6–9'},
-      {phase:'Import surge', when:'M 9–12'},
-    ];
-  } else if (cats.some(c => c.includes('input'))) {
-    whenLede = `<b>One growing season.</b> Fertilizer shocks compound through yield reductions at the next planting cycle (<span class="up">~6–12 months</span>).`;
-    whenTimeline = [
-      {phase:'Input cost rise', when:'D 0–14'},
-      {phase:'Planted area cut', when:'M 1–3'},
-      {phase:'Yield shortfall', when:'M 6–12'},
-    ];
-  } else if (cats.some(c => c.includes('macro'))) {
-    whenLede = `<b>Weeks.</b> FX-driven food inflation shows up at import unloading and in retail within <span class="up">2–6 weeks</span>.`;
-    whenTimeline = [
-      {phase:'FX move', when:'D 0'},
-      {phase:'Import cost', when:'D 7–21'},
-      {phase:'Retail CPI', when:'D 21–45'},
-    ];
+  // v66.1 — the panel used to show ONLY the fastest matched category
+  // (first-match-wins), so a wheat + ban + drought stack claimed "days to
+  // weeks" and the drought's next-harvest lag silently vanished — and a pure
+  // export ban was described with "port and corridor disruption". Now: one
+  // row per ARMED channel, fastest first, and the lede names the actual
+  // fastest and slowest channels in this stack. Windows are reasoned
+  // transmission estimates (uncalibrated), same status as the shock formulas.
+  const CAT_LAG = [
+    { match: c => c.includes('logistic'),   order: 1, label: 'Logistics / freight',   when: 'D 0–7',   via: 'spot freight & reroute costs' },
+    { match: c => c.includes('geopolit'),   order: 2, label: 'Export restrictions',   when: 'D 3–14',  via: 'offers pulled, tenders repriced' },
+    { match: c => c.includes('commodity') || / sector$/.test(c), order: 3, label: 'Commodity price', when: 'D 0–3 → D 45–90', via: 'futures first, consumer CPI last' },
+    { match: c => c.includes('macro'),      order: 4, label: 'FX / inflation',        when: 'D 7–45',  via: 'import cost → retail CPI' },
+    { match: c => c.includes('supply'),     order: 5, label: 'Reserve drawdown',      when: 'M 1–6',   via: 'cover erodes between tenders' },
+    { match: c => c.includes('input'),      order: 6, label: 'Fertilizer / inputs',   when: 'M 6–12',  via: 'next planting cycle’s yields' },
+    { match: c => c.includes('climate'),    order: 7, label: 'Climate / harvest',     when: 'M 6–9',   via: 'next harvest, stocks-to-use' },
+  ];
+  const _armedLags = CAT_LAG.filter(l => cats.some(c => l.match(c))).sort((a, b) => a.order - b.order);
+  // v66.1 — a single-channel stack shows that channel's full transmission
+  // path (three phases), not one lonely row in an empty panel; multi-channel
+  // stacks show one row per channel, fastest first.
+  const CAT_PHASES = {
+    'Logistics / freight':   [{phase:'Spot freight & reroutes', when:'D 0–7'}, {phase:'Import contract laycans', when:'D 14–30'}, {phase:'Retail shelves', when:'D 30–60'}],
+    'Export restrictions':   [{phase:'Offers pulled, tenders repriced', when:'D 3–14'}, {phase:'Origin switching', when:'D 14–45'}, {phase:'Retail prices', when:'D 30–90'}],
+    'Commodity price':       [{phase:'Futures', when:'D 0–3'}, {phase:'Import unloading', when:'D 20–45'}, {phase:'Consumer CPI', when:'D 45–90'}],
+    'FX / inflation':        [{phase:'FX move', when:'D 0'}, {phase:'Import cost', when:'D 7–21'}, {phase:'Retail CPI', when:'D 21–45'}],
+    'Reserve drawdown':      [{phase:'Cover erodes', when:'M 1–3'}, {phase:'Tender urgency', when:'M 3–6'}, {phase:'Vulnerability to next shock', when:'M 6+'}],
+    'Fertilizer / inputs':   [{phase:'Input cost rise', when:'D 0–14'}, {phase:'Planted area cut', when:'M 1–3'}, {phase:'Yield shortfall', when:'M 6–12'}],
+    'Climate / harvest':     [{phase:'Production forecast', when:'M 1–3'}, {phase:'Stocks-to-use', when:'M 6–9'}, {phase:'Import surge', when:'M 9–12'}],
+  };
+  let whenLede = '', whenTimeline = [];
+  if (_armedLags.length === 1) {
+    const only = _armedLags[0];
+    whenTimeline = CAT_PHASES[only.label] || [{ phase: `${only.label} — ${only.via}`, when: only.when }];
+    whenLede = `<b>${only.when}.</b> This stack transmits through one channel: ${only.label.toLowerCase()} via ${only.via}.`;
+  } else if (_armedLags.length) {
+    whenTimeline = _armedLags.map(l => ({ phase: `${l.label} — ${l.via}`, when: l.when }));
+    const fast = _armedLags[0], slow = _armedLags[_armedLags.length - 1];
+    whenLede = `Fastest channel in this stack: <b>${fast.label.toLowerCase()}</b> (${fast.when}). Slowest: <b>${slow.label.toLowerCase()}</b> (${slow.when}) — the pressure arrives in waves, not at once.`;
   } else {
     whenLede = `<b>Weeks to months.</b> Mixed channels — fastest transmission via spot markets, slowest via production cycles.`;
     whenTimeline = [
@@ -29100,8 +29145,17 @@ function _renderScenarioBrief(results, selected, stats) {
         const f = { wheat: 'w', rice: 'r', maize: 'm' }[stap._commodity || (/(wheat|rice|maize)/.exec(stap.id||'')||[])[1]];
         const cc = (typeof byISO === 'function') ? byISO(c.iso) : null;
         const d = (f && cc && typeof _psdImportDependence === 'function') ? _psdImportDependence(cc, f) : null;
-        if (d && d.dep != null && d.dep < 0.35) reasons.push(`grows its own — ${Math.round(d.dep*100)}% of ${stap._commodity || 'the staple'} imported`);
-        else if (typeof c.net === 'number' && c.net > 0) reasons.push('net food exporter — a price spike is upside here');
+        // v66.1 — the "% imported" claim is only made on a SOURCED (PSD)
+        // basis. The legacy fallback number is a caloric diet share, not
+        // import dependence — reading it as one is the exact §2 formula bug
+        // this project already fixed once ("grows its own — 0% of wheat
+        // imported" for Equatorial Guinea was that bug resurfacing here).
+        if (d && d.dep != null && d.basis === 'sourced' && d.dep < 0.35)
+          reasons.push(`grows its own — ${Math.round(d.dep*100)}% of ${stap._commodity || 'the staple'} imported`);
+        else if (typeof c.net === 'number' && c.net > 0)
+          reasons.push('net food exporter — a price spike is upside here');
+        else if (d && d.basis !== 'sourced')
+          reasons.push('small engine kick — but no PSD balance to verify its dependence, treat with care');
       }
       if (selected.some(s => s.id === 'chokeclose')) {
         const cpMap = (typeof LIVE !== 'undefined' && LIVE.chokepoint_flows && LIVE.chokepoint_flows.chokepoints)
