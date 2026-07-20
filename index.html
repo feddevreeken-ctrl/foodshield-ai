@@ -17168,6 +17168,10 @@ async function loadLiveData() {
     LIVE.scenario_profiles = profEnv || null;
   } catch (e) { LIVE.scenario_profiles = null; }
 
+  // v66.2 (L3) — the featured-crisis preview memoizes a full engine pass for
+  // the page lifetime; a data (re)load changes its inputs, so drop the memo.
+  try { if (typeof window !== 'undefined') window.__featuredPreviewCache = undefined; } catch (e) {}
+
   // v20.20 — Pipeline 6: ND-GAIN climate vulnerability + readiness per country.
   // Feeds the climate dimension of the FDRS (blended 60% sourced / 40% heritage,
   // alongside Aqueduct + CCKP) and shows on the country panel as a sourced card.
@@ -19219,6 +19223,23 @@ const SCENARIOS = [
       });
       if (dead.length) console.warn('[FoodShield] DEAD SHOCKS (no atlas flows for _shockIso — produce zero risk):\n  ' + dead.join('\n  '));
       else console.info('[FoodShield] scenario self-check: all ' + (SCENARIOS||[]).filter(function(s){return s&&s._commodity;}).length + ' flow-based shocks have live atlas flows.');
+      // v66.2 (L2) — core scenarios too: warn when a kick returns null (NO
+      // DATA) for more than half the dashboard, so a broken data feed can't
+      // silently hollow a shock out. Would have caught the original null-kick
+      // hole (63 countries of confident zeros). Console-only.
+      try {
+        var pool = (typeof COUNTRIES !== 'undefined' ? COUNTRIES : []).filter(function(c){ return c.iso && c.iso.indexOf('US-') !== 0; });
+        if (pool.length > 50) {
+          var hollow = [];
+          (SCENARIOS||[]).forEach(function(s){
+            if (!s || s._commodity || typeof s.kick !== 'function') return;   // core shocks only
+            var nulls = 0;
+            pool.forEach(function(c){ try { if (s.kick(c, s.baseSev) == null) nulls++; } catch(e){ nulls++; } });
+            if (nulls / pool.length > 0.5) hollow.push(s.id + ' (' + nulls + '/' + pool.length + ' NO DATA)');
+          });
+          if (hollow.length) console.warn('[FoodShield] HOLLOW SHOCKS (kick returns null for >50% of countries — check the backing feed):\n  ' + hollow.join('\n  '));
+        }
+      } catch(e){}
     } catch(e){ /* never break the app over a diagnostic */ }
   }
   if (typeof window !== 'undefined' && window.requestIdleCallback) window.requestIdleCallback(run);
@@ -19249,22 +19270,25 @@ const SCENARIO_PRESETS = [
     id: 'india-rice',
     label: 'India rice export ban',
     eyebrow: 'Commodity + supply',
-    meta: 'rice +25% · supplier ban',
+    meta: 'rice +25% · India bans',
     shocks: { rice20: 0.25, ban: 1.4 },
+    params: { ban: 'IND' },          // v66.2 — pin the ban to India's observed flows
   },
   {
     id: 'red-sea',
     label: 'Red Sea shipping disruption',
     eyebrow: 'Logistics',
-    meta: 'shipping +70% · fuel +25%',
+    meta: 'Bab el-Mandeb +70% · fuel +25%',
     shocks: { ship: 0.70, oil25: 0.25 },
+    params: { ship: 'bab_el_mandeb' },   // v66.2 — the actual corridor, not global freight
   },
   {
     id: 'el-nino',
     label: 'El Niño drought',
     eyebrow: 'Climate',
-    meta: 'drought 20% · maize +20%',
+    meta: 'SE-Asia drought 20% · maize +20%',
     shocks: { drought: 0.20, maize20: 0.20 },
+    params: { drought: 'Southeast Asia' },
   },
   {
     id: 'fert-spike',
@@ -19272,6 +19296,31 @@ const SCENARIO_PRESETS = [
     eyebrow: 'Input',
     meta: 'fertilizer +50% · fuel +25%',
     shocks: { fert30: 0.50, oil25: 0.25 },
+  },
+  // ── v66.2 — corporate presets: the stacks a procurement, treasury or
+  // supply-chain team would actually war-game. Same engine, same honesty
+  // rules — these only bundle existing shocks + parameters. ──
+  {
+    id: 'procurement-squeeze',
+    label: 'CPG input-cost squeeze',
+    eyebrow: 'Corporate · procurement',
+    meta: 'wheat +25% · fertilizer +40% · fuel +30%',
+    shocks: { wheat20: 0.25, fert30: 0.40, oil25: 0.30 },
+  },
+  {
+    id: 'gulf-closure',
+    label: 'Strait of Hormuz closure',
+    eyebrow: 'Corporate · supply stop',
+    meta: 'Hormuz closes 60% · fuel +35%',
+    shocks: { chokeclose: 0.60, oil25: 0.35 },
+    params: { chokeclose: 'hormuz' },
+  },
+  {
+    id: 'em-financing',
+    label: 'EM import-financing crunch',
+    eyebrow: 'Corporate · treasury',
+    meta: 'FX crisis 40% · inflation squeeze 30% · wheat +20%',
+    shocks: { fxcrisis: 0.40, macrostress: 0.30, wheat20: 0.20 },
   },
 ];
 
@@ -27711,9 +27760,22 @@ function scrollToMethodBadge(){
 // Results live in #scn-results, which is physically inside the drawer body now.
 // runScenarios()/_renderStressResults() still populate it by ID; we just open
 // the drawer instead of scrolling the page.
+// v66.2 (M5) — focus trap: Tab cycles inside the open drawer instead of
+// walking into the visually-inert page behind the backdrop.
+function _scnDrawerTrapFocus(e){
+  if (e.key !== 'Tab') return;
+  const dr = document.getElementById('scn-drawer');
+  if (!dr || !dr.classList.contains('open')) return;
+  const focusables = dr.querySelectorAll('button, [href], input, select, textarea, summary, [tabindex]:not([tabindex="-1"])');
+  if (!focusables.length) return;
+  const first = focusables[0], last = focusables[focusables.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+}
 function openScenarioDrawer(){
   const bd = document.getElementById('scn-drawer-backdrop');
   const dr = document.getElementById('scn-drawer');
+  document.addEventListener('keydown', _scnDrawerTrapFocus);
   // v30.1 — PORTAL FIX. #scenario-body and #tab-scenario carry a transform
   // (fade-in / GPU promotion), and any non-none transform makes a position:fixed
   // descendant resolve against THAT element, not the viewport — which shoved the
@@ -27739,6 +27801,7 @@ let _scnDrawerReturnFocus = null;
 function closeScenarioDrawer(){
   const bd = document.getElementById('scn-drawer-backdrop');
   const dr = document.getElementById('scn-drawer');
+  document.removeEventListener('keydown', _scnDrawerTrapFocus);   // v66.2 — release the trap
   if (bd) bd.classList.remove('open');
   if (dr) dr.classList.remove('open');
   document.body.style.overflow = '';
@@ -28080,6 +28143,14 @@ function applyScenarioPreset(presetId) {
   if (preset.params && typeof preset.params === 'object') {
     Object.entries(preset.params).forEach(([rawId, val]) => {
       const id = resolveScenarioId(rawId);
+      // v66.2 — chokeclose's route lives in its own selector, not the param
+      // framework; presets can still pin it (e.g. the Hormuz-closure preset).
+      if (id === 'chokeclose') {
+        _scnChokepoint = val;
+        const sel = document.getElementById('scn-choke-select');
+        if (sel) sel.value = val;
+        return;
+      }
       const s = SCENARIOS.find(x => x.id === id);
       if (!s || !s._param) return;
       scenarioParams[id] = val;
