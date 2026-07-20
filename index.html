@@ -4949,6 +4949,53 @@ button.scn-bar-row:focus-visible { outline: 2px solid var(--accent); outline-off
 .scn-brief-table-row .to.down { color: #8fce8f; background: rgba(107,163,107,0.13); }
 .scn-brief-table-row .to.neutral { color: var(--t2); background: rgba(255,255,255,0.04); }
 .scn-brief-table-row.empty { color: var(--t3); display: block; font-style: italic; }
+/* v68.4 — scenario brief trader cross-link. */
+.scn-trader-band {
+  margin: -4px 0 18px;
+  padding: 13px 15px 12px;
+  background: var(--bg1);
+  border: 1px solid var(--b1);
+  border-left: 3px solid #c9a957;
+  border-radius: 3px;
+}
+.scn-trader-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-bottom: 8px;
+}
+.scn-trader-title {
+  font: 600 11px/1.35 'Geist Mono', ui-monospace, monospace;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--t2);
+}
+.scn-trader-basis {
+  font: 500 9.5px/1.4 'Geist Mono', ui-monospace, monospace;
+  color: var(--t3);
+  margin-top: 8px;
+}
+.scn-trader-list {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 6px 12px;
+}
+.scn-trader-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 5px 0;
+  border-top: 1px solid var(--b1);
+  font-size: 11.5px;
+  color: var(--t1);
+  min-width: 0;
+}
+.scn-trader-row:first-child { border-top: 0; }
+.scn-trader-row span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scn-trader-empty {
+  padding-top: 3px;
+  font-size: 11.5px;
+  color: var(--t3);
+  font-style: italic;
+}
 @media (prefers-reduced-motion: reduce) {
   .scn-brief-panel:hover { transform: none; }
 }
@@ -4978,6 +5025,80 @@ button.scn-bar-row:focus-visible { outline: 2px solid var(--accent); outline-off
   transition: opacity .15s;
 }
 .scn-brief-copy-btn:hover { opacity: 0.85; }
+/* v68.4 — one-page scenario brief print mode. */
+@media print {
+  @page { margin: 14mm; }
+  html, body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  body.scn-printing > *:not(#scn-drawer) {
+    display: none !important;
+  }
+  body.scn-printing #scn-drawer-backdrop,
+  body.scn-printing .scn-drawer-bar,
+  body.scn-printing #scn-results > :not(#scn-brief),
+  body.scn-printing #scn-brief button,
+  body.scn-printing #scn-brief input,
+  body.scn-printing #scn-brief select,
+  body.scn-printing #scn-brief textarea {
+    display: none !important;
+  }
+  body.scn-printing #scn-drawer,
+  body.scn-printing .scn-drawer-body,
+  body.scn-printing #scn-results,
+  body.scn-printing #scn-brief {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    width: auto !important;
+    height: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    transform: none !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+  body.scn-printing #scn-brief,
+  body.scn-printing #scn-brief * {
+    background: #fff !important;
+    color: #000 !important;
+    border-color: #000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  body.scn-printing #scn-brief .scn-brief-panel,
+  body.scn-printing #scn-brief .scn-hero-tile,
+  body.scn-printing #scn-brief .scn-trader-band,
+  body.scn-printing #scn-brief .scn-cmp-cert {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  body.scn-printing #scn-brief .scn-bar-fill {
+    background: #000 !important;
+  }
+  body.scn-printing #scn-brief a {
+    color: #000 !important;
+    text-decoration: underline !important;
+  }
+  body.scn-printing #scn-brief::after {
+    content: "Permalink: " attr(data-scn-print-url);
+    display: block;
+    margin-top: 16px;
+    padding-top: 8px;
+    border-top: 1px solid #000;
+    font: 8.5pt/1.4 'Geist Mono', ui-monospace, monospace;
+    color: #000;
+    word-break: break-all;
+  }
+}
 @media (max-width: 800px) {
   .scn-brief-grid { grid-template-columns: 1fr; }
   .scn-brief-panel { border-right: none; border-bottom: 1px solid var(--b1); }
@@ -29222,6 +29343,29 @@ function scnCopyPermalink() {
     });
   } catch (e) {}
 }
+// v68.4 — print the rendered brief in-place, with CSS owning the one-page view.
+let _scnPrintCleanupTimer = null;
+function _scnFinishPrintBrief() {
+  try {
+    document.body.classList.remove('scn-printing');
+    if (_scnPrintCleanupTimer) clearTimeout(_scnPrintCleanupTimer);
+    _scnPrintCleanupTimer = null;
+  } catch (e) {}
+}
+if (typeof window !== 'undefined') window.addEventListener('afterprint', _scnFinishPrintBrief);
+function scnPrintBrief() {
+  try {
+    const brief = document.getElementById('scn-brief');
+    if (!brief) return;
+    brief.setAttribute('data-scn-print-url', window.location.href);
+    document.body.classList.add('scn-printing');
+    if (_scnPrintCleanupTimer) clearTimeout(_scnPrintCleanupTimer);
+    _scnPrintCleanupTimer = setTimeout(_scnFinishPrintBrief, 12000);
+    setTimeout(() => window.print(), 30);
+  } catch (e) {
+    _scnFinishPrintBrief();
+  }
+}
 
 // v64 — non-blocking inline validation (replaces alert(), which blocks the
 // event loop and reads poorly to assistive tech).
@@ -29904,6 +30048,56 @@ function _renderScenarioBrief(results, selected, stats) {
         </${_bpCommodity ? 'button' : 'div'}>`).join('')}
     </div>` : '';
 
+  // v68.4 — trader exposure cross-link: cited company footprint ∩ top-8 movers.
+  const _traderExposureHTML = (() => {
+    const worstHit = _barsPool.slice(0, 8);
+    const worstByIso = Object.create(null);
+    worstHit.forEach((c, i) => { if (c && c.iso) worstByIso[c.iso] = { country: c, rank: i }; });
+    const companies = (typeof LIVE !== 'undefined' && LIVE && LIVE.companies) ? LIVE.companies : {};
+    const rows = [];
+    Object.entries(companies || {}).forEach(([name, src]) => {
+      const claims = Array.isArray(src && src.country_claims) ? src.country_claims : [];
+      const seen = new Set();
+      const matches = [];
+      claims.forEach(cl => {
+        const iso = String(cl && cl.iso3 || '').toUpperCase();
+        if (!iso || seen.has(iso) || !worstByIso[iso] || !cl.citation_url) return;
+        seen.add(iso);
+        matches.push({ claim: cl, hit: worstByIso[iso] });
+      });
+      if (!matches.length) return;
+      matches.sort((a, b) => a.hit.rank - b.hit.rank);
+      const first = matches[0];
+      rows.push({
+        company: (src && src.display_name) || name,
+        first,
+        count: matches.length,
+        rank: first.hit.rank,
+      });
+    });
+    rows.sort((a, b) => a.rank - b.rank || b.count - a.count || String(a.company).localeCompare(String(b.company)));
+    const commodityLabel = raw => String(raw || 'footprint').toLowerCase().replace(/^soybeans?$/, 'soy');
+    const body = rows.length
+      ? `<div class="scn-trader-list">${rows.slice(0, 6).map(r => {
+          const cl = r.first.claim;
+          const c = r.first.hit.country;
+          const extra = r.count > 1 ? ` (+${r.count - 1})` : '';
+          return `<div class="scn-trader-row">
+            <span>${_scnEsc(r.company)} — ${_scnEsc(commodityLabel(cl.commodity))} · ${_scnEsc(c.name || cl.country || c.iso)}${extra}</span>
+            ${claimProvBadge(cl.provenance_class)}
+          </div>`;
+        }).join('')}</div>`
+      : `<div class="scn-trader-empty">No cited trader country_claims intersect the top-8 worst-hit countries for this run.</div>`;
+    return `
+      <div class="scn-trader-band">
+        <div class="scn-trader-head">
+          <div class="scn-trader-title">Trader exposure under this stack</div>
+        </div>
+        ${body}
+        <div class="scn-trader-basis">disclosed footprint ∩ worst-hit countries — not customs-attributed volumes</div>
+      </div>`;
+  })();
+
   el.innerHTML = `
     <div class="scn-brief-dateline">
       <span class="dot"></span>
@@ -29942,6 +30136,7 @@ function _renderScenarioBrief(results, selected, stats) {
         </div>
       </div>
     </div>
+    ${_traderExposureHTML}
     ${_bpCommodity ? `<div id="scn-cmp-view" class="scn-cmp-view" ${_scnCmpOpen ? '' : 'hidden'}>${_scnCmpOpen ? _scnCmpHTML(_bpCommodity, sorted, false) : ''}</div>` : ''}
     <details class="scn-brief-formulas">
       <summary>✱ This stack's formulas — <span class="scn-method-link">how each shock's magnitude was derived</span></summary>
@@ -29955,6 +30150,7 @@ function _renderScenarioBrief(results, selected, stats) {
     <div class="scn-brief-footer">
       <span class="scn-brief-method">${selected.length} shock${selected.length>1?'s':''} stacked · ${stats.crossing} cross a risk band · peak ${stats.maxDelta>=0?"+":""}${stats.maxDelta} pts</span>
       <button type="button" id="scn-paint-map-btn" class="scn-brief-copy-btn" title="Paint this scenario's FDRS deltas on the Global Map." onclick="scnPaintOnMap()">Paint on map →</button>
+      <button type="button" id="scn-print-brief-btn" class="scn-brief-copy-btn" title="Print this scenario brief as a one-page export." onclick="scnPrintBrief()">Export brief (print) →</button>
       ${_bpCommodity ? `<button type="button" id="scn-cmp-toggle" class="scn-cmp-toggle" aria-label="Compare countries" aria-expanded="${_scnCmpOpen ? 'true' : 'false'}" aria-controls="scn-cmp-view" onclick="scnToggleCompareCountries()"></button>` : ''}
       <button type="button" id="scn-share-btn" class="scn-brief-copy-btn" title="Copy a link that reproduces this exact run — shocks, severities, parameters, route and scope." onclick="scnCopyPermalink()">Share run →</button>
       <button class="scn-brief-copy-btn" onclick="copyScenarioBrief()">Copy brief →</button>
