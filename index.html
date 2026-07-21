@@ -2285,6 +2285,16 @@ body {
   line-height: 1.02;
   color: var(--t1);
 }
+/* v72.1 — serif name inside the score block itself. */
+.sp-score-country {
+  font-family: 'Instrument Serif', serif;
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  color: var(--t1);
+  margin-bottom: 3px;
+}
 .sp-region {
   font-size:12px;
   color: var(--t2);
@@ -2562,14 +2572,18 @@ body {
 }
 /* v71: Remove browser default details marker so the custom chevron is the only affordance. */
 .sp-fold > summary::-webkit-details-marker { display: none; }
-/* v71: Preserve the existing title/provenance badge rhythm inside the folded header. */
+/* v72.1 — title and badge flow INLINE and wrap together; space-between was
+   parking the badge mid-row where long titles wrapped straight through it. */
 .sp-fold-head {
   display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  justify-content: flex-start;
   align-items: center;
-  gap: 8px;
+  gap: 3px 8px;
   min-width: 0;
 }
+.sp-fold-head > * + * { white-space: nowrap; flex-shrink: 0; }
+.sp-fold-head > * + * br { display: none; }   /* badges never break lines in the summary row */
 /* v71: Keep the collapsed headline metric scan-friendly and tabular. */
 .sp-fold-metric {
   font-family: 'Geist Mono', monospace;
@@ -9966,6 +9980,10 @@ body::before {
       <div class="sp-score-row">
         <div class="sp-score-num" id="sp-score">—</div>
         <div class="sp-score-meta">
+          <!-- v72.1 — the country's name lives WITH its score: the block is
+               screenshotted and read in isolation, and a score without a name
+               is an orphan. -->
+          <div class="sp-score-country" id="sp-score-country">—</div>
           <div class="sp-score-label"><abbr class="ac" title="Food Disruption Risk Score — 0–100 composite measuring how exposed a country is to food shocks (imports, climate, conflict, logistics, prices).">Food Disruption Risk</abbr></div>
           <div id="sp-badge" class="risk-badge">—</div>
           <!-- v22.21 — confidence pill: shows what fraction of this country's
@@ -19679,8 +19697,18 @@ const SCENARIOS = [
       } catch(e){}
     } catch(e){ /* never break the app over a diagnostic */ }
   }
-  if (typeof window !== 'undefined' && window.requestIdleCallback) window.requestIdleCallback(run);
-  else setTimeout(run, 4000);
+  // v72.1 — gate on LIVE feeds being applied: requestIdleCallback can fire before
+  // the data fetches land, making every kick return null and flagging all core
+  // shocks as hollow (false alarm). Retry a few times, then run regardless so a
+  // genuinely dead feed still gets reported.
+  var _scnSelfCheckTries = 0;
+  function schedule(){
+    var ready = (typeof LIVE !== 'undefined') && LIVE && LIVE.meta;
+    if (!ready && _scnSelfCheckTries++ < 10) { setTimeout(schedule, 3000); return; }
+    if (typeof window !== 'undefined' && window.requestIdleCallback) window.requestIdleCallback(run);
+    else setTimeout(run, 1000);
+  }
+  setTimeout(schedule, 2000);
 })();
 
 // v2 — back-compat alias map for retired/renamed shock ids. The old `fx`
@@ -23401,6 +23429,8 @@ function openPanel(c, skipDrilldown) {
   // Trigger AI narrative (non-blocking)
   fetchAINarrative(c.iso, false);
   document.getElementById('sp-name').textContent   = c.name;
+  const _spScoreCountry = document.getElementById('sp-score-country');   // v72.1
+  if (_spScoreCountry) _spScoreCountry.textContent = c.name;
   document.getElementById('sp-region').textContent = c.region;
   const col = riskColor(c.fdrs);
   document.getElementById('sp-header-bg').style.background =
