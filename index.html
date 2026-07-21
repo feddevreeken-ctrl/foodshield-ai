@@ -2532,6 +2532,51 @@ body {
   white-space: nowrap;
 }
 
+/* v71: Fold long sidepanel reference sections behind compact summary rows. */
+.sp-fold {
+  margin: 0 0 14px;
+  border-top: 1px solid var(--b1);
+  padding-top: 10px;
+}
+/* v71: Summary acts like the old title row plus a right-aligned headline metric. */
+.sp-fold > summary {
+  cursor: pointer;
+  list-style: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+}
+/* v71: Remove browser default details marker so the custom chevron is the only affordance. */
+.sp-fold > summary::-webkit-details-marker { display: none; }
+/* v71: Preserve the existing title/provenance badge rhythm inside the folded header. */
+.sp-fold-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+/* v71: Keep the collapsed headline metric scan-friendly and tabular. */
+.sp-fold-metric {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10.5px;
+  color: var(--t1);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* v71: Custom chevron rotates when the reference section is expanded. */
+.sp-fold-chev {
+  color: var(--t3);
+  font-size: 11px;
+  line-height: 1;
+  transition: transform .15s;
+}
+/* v71: Rotate the custom chevron for open folded reference sections. */
+.sp-fold[open] .sp-fold-chev { transform: rotate(90deg); }
+/* v71: Expanded reference rows keep the old no-indent layout with only vertical breathing room. */
+.sp-fold-body { margin-top: 8px; }
+
 .import-tag {
   display: inline-flex; align-items: center;
   background: var(--bg2);
@@ -16151,15 +16196,30 @@ function aqueductCardHTML(iso3) {
     </div>`;
   }).filter(Boolean).join('');
   if (!rows) return '';
-  return `
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1);">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Water risk (WRI Aqueduct 4.0)</div>
-        <span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">WRI · sourced</span>
-      </div>
-      ${rows}
-      <div style="font-size:9.5px;color:var(--t3);margin-top:6px;">baseline · WRI Aqueduct 4.0 via WB Data360 (drought + flood; the mirror omits water-stress)</div>
-    </div>`;
+  const first = indicators.map(spec => ({ spec, ind: row[spec.key] })).find(x => x.ind && typeof x.ind.score === 'number'); // v71: Headline metric is the first rendered Aqueduct row.
+  return spFoldHTML( // v71: Fold the Aqueduct climate-reference rows by default.
+    `<div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Water risk (WRI Aqueduct 4.0)</div>`,
+    `<span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">WRI · sourced</span>`,
+    first ? `${first.spec.label} ${scoreLabel(first.ind.score)} ${first.ind.score.toFixed(1)}/5` : '—',
+    rows,
+    `<div style="font-size:9.5px;color:var(--t3);margin-top:6px;">baseline · WRI Aqueduct 4.0 via WB Data360 (drought + flood; the mirror omits water-stress)</div>`
+  );
+}
+
+// v71: Shared wrapper for sidepanel reference cards folded behind compact headlines.
+function spFoldHTML(titleHtml, badgeHtml, headlineHtml, bodyHtml, footerHtml='') {
+  // v71: Keep title/badge markup owned by each card so existing provenance styling stays intact.
+  return `<details class="sp-fold">
+    <summary>
+      <span class="sp-fold-head">${titleHtml}${badgeHtml}</span>
+      <span class="sp-fold-metric">${headlineHtml}</span>
+      <span class="sp-fold-chev" aria-hidden="true">▸</span>
+    </summary>
+    <div class="sp-fold-body">
+      ${bodyHtml}
+      ${footerHtml}
+    </div>
+  </details>`;
 }
 
 // v20.22 — Pipeline 9: EU JRC INFORM Risk Index card.
@@ -16193,15 +16253,14 @@ function informCardHTML(iso3) {
       <span class="v" style="color:${col(row.lack_coping_capacity)};">${fmt(row.lack_coping_capacity)}</span>
     </div>` : '',
   ].filter(Boolean).join('');
-  return `
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1);">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">INFORM Risk Index${trendStr}</div>
-        <span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">JRC · sourced</span>
-      </div>
-      ${rows}
-      <div style="font-size:9.5px;color:var(--t3);margin-top:6px;">${row.year || 'latest'} · EU Joint Research Centre</div>
-    </div>`;
+  const headline = `INFORM Risk ${fmt(row.inform_risk)}/10${rankStr}`; // v71: Collapsed INFORM headline uses the risk-class row value.
+  return spFoldHTML( // v71: Fold the JRC INFORM reference rows by default.
+    `<div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">INFORM Risk Index${trendStr}</div>`,
+    `<span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">JRC · sourced</span>`,
+    headline,
+    rows,
+    `<div style="font-size:9.5px;color:var(--t3);margin-top:6px;">${row.year || 'latest'} · EU Joint Research Centre</div>`
+  );
 }
 
 // v20.29 — Generic SVG sparkline.
@@ -16288,15 +16347,14 @@ function wgiCardHTML(iso3) {
     </div>`;
   }).filter(Boolean).join('');
   if (!rows) return '';
-  return `
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1);">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Governance (WB WGI)</div>
-        <span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">WB · sourced</span>
-      </div>
-      ${rows}
-      <div style="font-size:9.5px;color:var(--t3);margin-top:6px;">${row.year || 'latest'} · range −2.5 (weak) to +2.5 (strong)</div>
-    </div>`;
+  const headline = row.rule_of_law?.value != null ? `Rule of law ${fmt(row.rule_of_law.value)}` : 'Rule of law —'; // v71: Collapsed WGI headline uses the rule-of-law row value.
+  return spFoldHTML( // v71: Fold the six WGI governance reference rows by default.
+    `<div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Governance (WB WGI)</div>`,
+    `<span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">WB · sourced</span>`,
+    headline,
+    rows,
+    `<div style="font-size:9.5px;color:var(--t3);margin-top:6px;">${row.year || 'latest'} · range −2.5 (weak) to +2.5 (strong)</div>`
+  );
 }
 
 // v20.26 — Pipeline 14: WB Logistics Performance Index card.
@@ -16327,19 +16385,17 @@ function lpiCardHTML(iso3) {
       <span class="v" style="color:${col(ind.value)};font-family:'Geist Mono',monospace;">${fmt(ind.value)}</span>
     </div>`;
   }).filter(Boolean).join('');
-  return `
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1);">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Logistics performance (WB LPI)</div>
-        <span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">WB · sourced</span>
-      </div>
-      <div class="sp-row" style="font-weight:600;" title="Overall LPI composite — average of the 6 sub-dimensions. Used by IMF, ECB, WTO as the canonical cross-country logistics benchmark.">
+  const overallRow = `<div class="sp-row" style="font-weight:600;" title="Overall LPI composite — average of the 6 sub-dimensions. Used by IMF, ECB, WTO as the canonical cross-country logistics benchmark.">
         <span class="k">Overall <abbr class="ac" title="Logistics Performance Index — World Bank score (1=worst, 5=best) of trade, customs, and infrastructure efficiency.">LPI</abbr></span>
         <span class="v" style="color:${col(row.overall.value)};font-family:'Geist Mono',monospace;font-weight:700;">${fmt(row.overall.value)}/5</span>
-      </div>
-      ${subRows}
-      <div style="font-size:9.5px;color:var(--t3);margin-top:6px;">${row.year || 'latest'} · range 1 (worst) to 5 (best) · biennial release</div>
-    </div>`;
+      </div>`; // v71: Preserve the original Overall LPI row inside the expanded fold body.
+  return spFoldHTML( // v71: Fold the LPI overall + six logistics rows by default.
+    `<div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Logistics performance (WB LPI)</div>`,
+    `<span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">WB · sourced</span>`,
+    `Overall ${fmt(row.overall.value)}/5`,
+    overallRow + subRows,
+    `<div style="font-size:9.5px;color:var(--t3);margin-top:6px;">${row.year || 'latest'} · range 1 (worst) to 5 (best) · biennial release</div>`
+  );
 }
 
 // v20.26 — Pipeline 15: UNDP HDI card.
@@ -16368,18 +16424,18 @@ function hdiCardHTML(iso3) {
   if (!indicators.length) return '';
   const rankStr = row.hdi_rank ? ` · rank #${row.hdi_rank}` : '';
   const groupStr = row.hdi_group ? ` · ${row.hdi_group}` : '';
-  return `
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1);">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Human Development (UNDP)</div>
-        <span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">UNDP · sourced</span>
-      </div>
-      ${indicators.map(ind => `<div class="sp-row" title="${ind.tip}">
+  const rows = indicators.map(ind => `<div class="sp-row" title="${ind.tip}">
         <span class="k">${ind.label}</span>
         <span class="v" style="color:${ind.col};font-family:'Geist Mono',monospace;">${ind.val}</span>
-      </div>`).join('')}
-      <div style="font-size:9.5px;color:var(--t3);margin-top:6px;">${row.year || 'latest'}${rankStr}${groupStr}</div>
-    </div>`;
+      </div>`).join(''); // v71: Preserve existing HDI row rendering inside the expanded fold body.
+  const headline = row.hdi ? `HDI composite ${row.hdi.value.toFixed(3)}` : `${indicators[0].label.replace(/<[^>]+>/g, '')} ${indicators[0].val}`; // v71: Collapsed HDI headline uses the composite row.
+  return spFoldHTML( // v71: Fold the UNDP human-development reference rows by default.
+    `<div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Human Development (UNDP)</div>`,
+    `<span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">UNDP · sourced</span>`,
+    headline,
+    rows,
+    `<div style="font-size:9.5px;color:var(--t3);margin-top:6px;">${row.year || 'latest'}${rankStr}${groupStr}</div>`
+  );
 }
 
 // v20.26 — Pipeline 16: WB Climate Change Knowledge Portal card.
@@ -16397,31 +16453,33 @@ function cckpCardHTML(iso3) {
     Math.abs(pct) < 15 ? '#c9a957' :
                          '#c44b3c';
   const rows = [];
+  let headline = ''; // v71: Collapsed CCKP headline follows the first rendered climate row.
   if (row.hist_temp_c != null) rows.push(`<div class="sp-row" title="Mean annual temperature, 1991-2000 baseline (observed, WB CCKP / ERA5).">
     <span class="k">Baseline mean temp (1991-2000)</span>
     <span class="v" style="color:var(--t1);font-family:'Geist Mono',monospace;">${row.hist_temp_c.toFixed(1)}°C</span>
   </div>`);
+  if (!headline && row.hist_temp_c != null) headline = `Baseline mean temp ${row.hist_temp_c.toFixed(1)}°C`; // v71: Use the first CCKP row as the collapsed metric.
   if (row.warming_c != null) rows.push(`<div class="sp-row" title="Observed warming: recent decade (2014-2024) mean annual temperature minus the 1991-2000 baseline. Observed, not a model projection.">
     <span class="k">Observed warming</span>
     <span class="v" style="color:${tempCol(row.warming_c)};font-family:'Geist Mono',monospace;">${row.warming_c >= 0 ? '+' : ''}${row.warming_c.toFixed(1)}°C</span>
   </div>`);
+  if (!headline && row.warming_c != null) headline = `Observed warming ${row.warming_c >= 0 ? '+' : ''}${row.warming_c.toFixed(1)}°C`; // v71: Fallback CCKP headline if baseline temp is absent.
   if (row.precip_change_pct != null) {
     const v = row.precip_change_pct;
     rows.push(`<div class="sp-row" title="Observed precipitation change: recent decade vs 1991-2000 baseline.">
       <span class="k">Δ Precipitation (observed)</span>
       <span class="v" style="color:${prCol(v)};font-family:'Geist Mono',monospace;">${v >= 0 ? '+' : ''}${v.toFixed(1)}%</span>
     </div>`);
+    if (!headline) headline = `Δ Precipitation ${v >= 0 ? '+' : ''}${v.toFixed(1)}%`; // v71: Fallback CCKP headline if precipitation is the first available row.
   }
   if (!rows.length) return '';
-  return `
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1);">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Observed climate (WB CCKP)</div>
-        <span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">WB · sourced</span>
-      </div>
-      ${rows.join('')}
-      <div style="font-size:9.5px;color:var(--t3);margin-top:6px;">Observed annual series · recent decade (2014-2024) vs 1991-2000 baseline</div>
-    </div>`;
+  return spFoldHTML( // v71: Fold the WB CCKP climate-reference rows by default.
+    `<div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Observed climate (WB CCKP)</div>`,
+    `<span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">WB · sourced</span>`,
+    headline || '—',
+    rows.join(''),
+    `<div style="font-size:9.5px;color:var(--t3);margin-top:6px;">Observed annual series · recent decade (2014-2024) vs 1991-2000 baseline</div>`
+  );
 }
 
 // v20.18 — Pipeline 4: WB WDI Structural Indicators card.
@@ -16473,14 +16531,12 @@ function ndgainCardHTML(iso3) {
   if (!row) {
     const deg = !LIVE.ndgain || !Object.keys(LIVE.ndgain).length;
     if (!deg) return ''; // feed healthy, this country simply isn't covered
-    return `
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1);">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Climate adaptation</div>
-        <span style="font-size:9px;color:#c9a957;background:#c9a95722;border:1px solid #c9a95744;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">ND-GAIN · feed unavailable</span>
-      </div>
-      <div style="font-size:10px;color:var(--t-meta);margin-top:6px;line-height:1.5;">The ND-GAIN download last failed, so climate-adaptation figures are unavailable and the score falls back to its heritage climate value (see Data Status).</div>
-    </div>`;
+    return spFoldHTML( // v71: Fold the ND-GAIN unavailable notice so it stays visible without becoming a prose block.
+      `<div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Climate adaptation</div>`,
+      `<span style="font-size:9px;color:#c9a957;background:#c9a95722;border:1px solid #c9a95744;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">ND-GAIN · feed unavailable</span>`,
+      `feed unavailable`,
+      `<div style="font-size:10px;color:var(--t-meta);line-height:1.5;">The ND-GAIN download last failed, so climate-adaptation figures are unavailable and the score falls back to its heritage climate value (see Data Status).</div>`
+    );
   }
   // Color-band the vulnerability score: 0-0.35 green, 0.35-0.5 yellow,
   // 0.5-0.65 orange, >0.65 red.
@@ -16513,19 +16569,19 @@ function ndgainCardHTML(iso3) {
     </div>` : '',
   ].filter(Boolean).join('');
   if (!rows) return '';
-  return `
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1);">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Climate adaptation</div>
-        <div style="display:flex;gap:6px;align-items:center;">
-          <span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">ND-GAIN · sourced</span>
-        </div>
-      </div>
-      ${rows}
-      <div style="font-size:9.5px;color:var(--t3);margin-top:6px;">
+  const headline = row.gain_index != null ? `ND-GAIN index ${fmtInt(row.gain_index)}/100` // v71: Collapsed ND-GAIN headline uses the first rendered climate row.
+    : row.vulnerability != null ? `Climate vulnerability ${fmt(row.vulnerability)}`
+    : row.readiness != null ? `Adaptation readiness ${fmt(row.readiness)}`
+    : `Food-system climate exposure ${fmt(row.food_vulnerability)}`;
+  return spFoldHTML( // v71: Fold the ND-GAIN climate-reference rows by default.
+    `<div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Climate adaptation</div>`,
+    `<div style="display:flex;gap:6px;align-items:center;"><span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">ND-GAIN · sourced</span></div>`,
+    headline,
+    rows,
+    `<div style="font-size:9.5px;color:var(--t3);margin-top:6px;">
         ${row.year ? `latest ${row.year} · ` : ''}Notre Dame Global Adaptation Initiative
-      </div>
-    </div>`;
+      </div>`
+  );
 }
 
 function wdiStructuralCardHTML(iso3) {
@@ -16557,31 +16613,29 @@ function wdiStructuralCardHTML(iso3) {
 
   const headlineHtml = headline.map(renderRow).join('');
   const extendedHtml = extended.map(renderRow).join('');
+  const first = headline[0]; // v71: Collapsed WDI headline uses the first rendered structural-indicator row.
+  const foldHeadline = first ? `${first.spec.label} ${first.spec.fmt(first.hit.value)}` : '—'; // v71: Keep WDI summary metric derived from row data, not hardcoded.
 
   // v20.26 — collapse/expand toggle. The extended rows are rendered into a
   // hidden div; the toggle flips display + button label. iso3 is used to
   // disambiguate the DOM ids if the card is rendered multiple times.
   const toggleId = `wdi-extended-${iso3}`;
   const btnId = `wdi-toggle-btn-${iso3}`;
-  return `
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1);">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Structural indicators</div>
-        <div style="display:flex;gap:6px;align-items:center;">
-          <span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">WB WDI · sourced</span>
-        </div>
-      </div>
-      ${headlineHtml}
+  return spFoldHTML( // v71: Fold the WB WDI structural reference rows by default.
+    `<div style="font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;">Structural indicators</div>`,
+    `<div style="display:flex;gap:6px;align-items:center;"><span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">WB WDI · sourced</span></div>`,
+    foldHeadline,
+    `${headlineHtml}
       ${extended.length ? `
         <div id="${toggleId}" style="display:none;">${extendedHtml}</div>
         <button id="${btnId}" onclick="(function(){const d=document.getElementById('${toggleId}');const b=document.getElementById('${btnId}');const open=d.style.display==='none';d.style.display=open?'block':'none';b.textContent=open?'− Hide ${extended.length} more':'+ Show all ${headline.length + extended.length} indicators';})()" style="margin-top:8px;background:transparent;border:1px solid var(--b2);color:var(--accent);font-size:10px;padding:4px 8px;border-radius:4px;cursor:pointer;letter-spacing:.04em;width:100%;">
           + Show all ${headline.length + extended.length} indicators
         </button>
-      ` : ''}
-      <div style="font-size:9.5px;color:var(--t3);margin-top:6px;">
+      ` : ''}`,
+    `<div style="font-size:9.5px;color:var(--t3);margin-top:6px;">
         latest ${latestYear || 'unknown'} · World Bank WDI bulk
-      </div>
-    </div>`;
+      </div>`
+  );
 }
 function cloneStructured(value) {
   if (value == null) return value;
@@ -23369,9 +23423,9 @@ function openPanel(c, skipDrilldown) {
     if (sEl) sEl.textContent = (struct != null) ? struct : '—';
     if (nEl) nEl.textContent = (now != null) ? now : '—';
     const hasAdj = (adj != null) && (adj !== 0);
+    const sign = adj > 0 ? '+' : ''; // v71: Shared sign for the strip value and moved why-link.
     if (aEl) {
       if (hasAdj) {
-        const sign = adj > 0 ? '+' : '';
         aEl.textContent = sign + adj;
       } else {
         aEl.textContent = '—';
@@ -23380,6 +23434,11 @@ function openPanel(c, skipDrilldown) {
     // Confidence + no-live-signal note.
     const conf = c._nowcastConfidence;
     const confLabel = conf ? (conf.charAt(0).toUpperCase() + conf.slice(1)) : null;
+    const nowcastEntry = (typeof LIVE !== 'undefined' && LIVE.nowcast) ? LIVE.nowcast[c.iso] : null; // v71: Read breakdown data here so the why-link can live in the strip note.
+    const components = nowcastEntry && nowcastEntry.components; // v71: Existing nowcast component payload reused by the moved toggle.
+    const whyLink = (hasAdj && components) // v71: Move the old "why +N?" toggle into the score-strip explainer line.
+      ? `<span id="sp-nowcast-toggle" role="button" tabindex="0" style="color:var(--accent);cursor:pointer;font-size:11px;font-weight:600;margin-left:6px;padding:1px 8px;border:1px solid var(--accent)55;border-radius:10px;white-space:nowrap;">▸ why ${sign}${adj}?</span><div id="sp-nowcast-breakdown" style="display:none;margin-top:6px;padding:8px 10px;background:var(--bg2);border:1px solid var(--b1);border-radius:6px;font-size:10.5px;line-height:1.7;color:var(--t2);text-align:left;white-space:normal;"></div>`
+      : '';
     let noteTxt = '';
     if (!hasAdj) noteTxt = 'no live adjustment';
     if (confLabel) noteTxt += (noteTxt ? ' · ' : '') + 'Confidence: ' + confLabel;
@@ -23413,7 +23472,8 @@ function openPanel(c, skipDrilldown) {
       noteTxt += (noteTxt ? ' · ' : '') + 'US-state model (6-component) — not directly comparable to country scores';
     }
     if (note) {
-      if (noteTxt) { note.textContent = noteTxt; note.hidden = false; }
+      const noteHtml = noteTxt + (whyLink ? (noteTxt ? ' · ' : '') + whyLink : ''); // v71: Keep the moved why-link on the same explainer line.
+      if (noteHtml) { note.innerHTML = noteHtml; note.hidden = false; } // v71: Use HTML because the explainer now owns the toggle and breakdown node.
       else { note.hidden = true; }
     }
     wrap.hidden = (struct == null && now == null);
@@ -23516,17 +23576,14 @@ function openPanel(c, skipDrilldown) {
       detailStrip.insertBefore(metaEl, detailStrip.firstChild);
     }
     if (metaEl) {
+      metaEl.style.display = 'none'; // v71: Remove the redundant structural summary line above the split strip.
+      metaEl.innerHTML = ''; // v71: Keep the old container empty; the why-link now renders in #sp-score-split-note.
       if (struct != null && adj != null && adj !== 0) {
         const sign = adj > 0 ? '+' : '';
-        const adjCol = adj > 0 ? '#c44b3c' : '#6ba36b';
         // v21 — clickable to reveal full nowcast component breakdown (traceability fix).
         const nowcastEntry = (typeof LIVE !== 'undefined' && LIVE.nowcast) ? LIVE.nowcast[c.iso] : null;
         const components = nowcastEntry && nowcastEntry.components;
-        const liveDot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle;animation:livePulse 1.5s infinite;" title="live-adjusted — a real signal moved this score off its structural baseline"></span>`;
-        metaEl.innerHTML =
-          liveDot + `Structural ${struct} <span style="color:${adjCol}">${sign}${adj} nowcast</span>` +
-          (components ? ` <span id="sp-nowcast-toggle" role="button" tabindex="0" style="color:var(--accent);cursor:pointer;font-size:11px;font-weight:600;margin-left:6px;padding:1px 8px;border:1px solid var(--accent)55;border-radius:10px;white-space:nowrap;">▸ why ${sign}${adj}?</span><div id="sp-nowcast-breakdown" style="display:none;margin-top:6px;padding:8px 10px;background:var(--bg2);border:1px solid var(--b1);border-radius:6px;font-size:10.5px;line-height:1.7;color:var(--t2);"></div>` : '');
-        metaEl.title = 'Structural FDRS from baseline data; nowcast adjustment from live WFP/IPC/ACLED/FFPI signals.';
+        // v71: Visible summary HTML was removed; only the breakdown wiring below remains.
         if (components) {
           // Human labels for each component key in build_nowcast.py
           const COMP_LABELS = {
@@ -23589,18 +23646,8 @@ function openPanel(c, skipDrilldown) {
             }
           }, 0);
         }
-      } else if (struct != null) {
-        // v42 — distinguish "no live feed at all" from "live-monitored but calm".
-        // A high/monitored country reading ~0 is genuinely calm; a 'none' country
-        // has no live feed, so ~0 is absence-of-data, not confirmed calm.
-        const cf = c._nowcastConfidence;
-        const calm = (cf && cf !== 'none');
-        const dot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${calm ? '#6ba36b' : 'var(--t3)'};margin-right:6px;vertical-align:middle;" title="${calm ? 'live-monitored — currently no net pressure' : 'no live feed for this country — structural score only'}"></span>`;
-        metaEl.innerHTML = dot + (calm
-          ? `Structural · live-monitored, no net pressure`
-          : `Structural · no live feed for this country`);
       } else {
-        metaEl.innerHTML = '';
+        metaEl.innerHTML = ''; // v71: Keep non-adjusted structural meta deduped too.
       }
     }
 
@@ -23678,7 +23725,7 @@ function openPanel(c, skipDrilldown) {
       } else if (a.fires_7d == null) {
         const fr = LIVE.manifest?.sources?.nasa_firms;
         if (fr && fr.status && fr.status !== 'ok' && fr.status !== 'manual') {
-          signalGaps.push(`Fire detection <span style="color:var(--t3)">(NASA FIRMS)</span> — feed unavailable, no fire signal either way`);
+          signalGaps.push({ name: fr.label || 'NASA FIRMS', detail: 'fire' }); // v71: Store gap metadata for one dynamic summary line.
         }
       }
       if (a.pm25_flag && a.pm25_latest != null) {
@@ -23686,7 +23733,7 @@ function openPanel(c, skipDrilldown) {
       } else if (a.pm25_latest == null) {
         const ar = LIVE.manifest?.sources?.openaq;
         if (ar && ar.status && ar.status !== 'ok' && ar.status !== 'manual') {
-          signalGaps.push(`PM2.5 air quality <span style="color:var(--t3)">(OpenAQ)</span> — feed unavailable, no air-quality signal either way`);
+          signalGaps.push({ name: ar.label || 'OpenAQ', detail: 'air quality' }); // v71: Store gap metadata for one dynamic summary line.
         }
       }
       if (a.us_flow_anomaly === 'low') {
@@ -23734,8 +23781,9 @@ function openPanel(c, skipDrilldown) {
         }
         if (signalGaps.length) {
           // v41 — muted, non-alarming: an honest gap notice, not a shock.
+          const gapLine = signalGaps.map(g => `${g.name}${g.detail ? ` (${g.detail})` : ''}`).join(' · '); // v71: Collapse variable gap items into one feed-unavailable line.
           html += `<div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.14em;margin:${(items.length||liveShocks.length)?10:0}px 0 6px;">Signal gaps</div>` +
-            signalGaps.map(s => `<div style="font-size:10.5px;color:var(--t3);padding:2px 0;">${s}</div>`).join('');
+            `<div style="font-size:10.5px;color:var(--t3);padding:2px 0;">Feeds unavailable: ${gapLine}</div>`; // v71: Replace per-feed prose sentences with a single compact gap summary.
         }
         anchEl.innerHTML = html;
       }
