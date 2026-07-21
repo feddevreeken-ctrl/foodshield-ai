@@ -186,6 +186,14 @@ EMPTY_OK = {"openaq.json", "nasa_firms.json", "acled.json", "ndgain.json",
 # missing key changes the prose, never the file's presence.
 OPTIONAL_OUTPUTS = {"commodity_interpretation.json"}
 
+# v73 — per-step wall-clock overrides. The Comtrade retry-queue (v45) makes
+# ~290 sequential calls at 1.5s throttle plus 30s backoffs on every 429, so the
+# default 900s cap kills it before the queue drains — every CI run since the
+# dedup fix landed hit [TIMEOUT] and kept serving the pre-dedup (over-counted)
+# file. 2700s covers the observed worst case (~55 rate-limited calls × up to
+# 3 × 30s backoff) with headroom; all other steps keep the 900s default.
+STEP_TIMEOUTS = {"Comtrade": 2700}
+
 
 def main():
     failures = 0
@@ -200,7 +208,10 @@ def main():
         # safe_run catches everything internally and returns True/False; the
         # except arms are belt-and-braces for anything that escapes it.
         try:
-            ok = safe_run(label, fn, output_name=output)
+            if label in STEP_TIMEOUTS:
+                ok = safe_run(label, fn, output_name=output, timeout=STEP_TIMEOUTS[label])
+            else:
+                ok = safe_run(label, fn, output_name=output)
         except SystemExit:
             ok = False
         except Exception:

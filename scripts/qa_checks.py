@@ -330,7 +330,12 @@ def check_schema_shape(rep):
     # worklists and intentionally different shapes (commodity atlas keyed on
     # 'commodities', scenario_spec) were producing ~70 false FAILs that buried
     # the real signal.
-    SHAPE_EXEMPT = {"commodity_flows.json", "scenario_spec.json"}
+    SHAPE_EXEMPT = {"commodity_flows.json", "scenario_spec.json",
+                    # v73 — scenario-engine files (v64–v67) carry _meta plus a
+                    # domain payload key the frontend reads directly
+                    # (events / chokepoints / profiles), not the 'data' envelope.
+                    "backtest_scenarios.json", "chokepoint_flows.json",
+                    "precedents.json", "scenario_profiles.json"}
     files = [p for p in files
              if not p.name.startswith((".archive", "_"))
              and not p.name.endswith((".rebuilt.json", ".bak"))

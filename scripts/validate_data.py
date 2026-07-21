@@ -497,6 +497,7 @@ def validate_comtrade_unit_prices():
     Two independent sources, both already on disk. No network access needed.
     """
     failures = []
+    forecast_skips = 0   # v73: pairs skipped because PSD vintage is a forecast year
     cp = DATA_DIR / 'comtrade_staples.json'
     pp = DATA_DIR / 'usda_psd.json'
     if not cp.exists() or not pp.exists():
@@ -533,6 +534,17 @@ def validate_comtrade_unit_prices():
             psd_year = psd_row.get('_year_imports_kt')
             if not isinstance(psd_year, int) or abs(psd_year - _COMTRADE_YEAR) > _MAX_YEAR_GAP:
                 continue
+            # v73 — forecast-vintage guard. In July, PSD rolls its latest vintage
+            # to the NEW marketing year (e.g. 2026/27), whose early-season import
+            # forecasts are partial (IDN rice: 500 kt forecast vs ~4,000 kt of
+            # 2024 actuals). Dividing 2024 Comtrade dollars by a small forecast
+            # tonnage produces implied prices far above band — 17 false
+            # "over-counted" failures that blocked every commit after the July
+            # rollover. Only compare against actual-ish vintages (<= Comtrade
+            # year + 1); count skips so a fully-dormant check is visible in CI.
+            if psd_year > _COMTRADE_YEAR + 1:
+                forecast_skips += 1
+                continue
             if not isinstance(usd, (int, float)) or usd <= 0:
                 continue
             implied = usd / (kt * 1000.0)
@@ -564,7 +576,11 @@ def validate_comtrade_unit_prices():
     print(f"  checked commodities:   {sorted(COMTRADE_UNIT_PRICE_BOUNDS)}")
     print(f"  UNCHECKED (no USDA PSD tonnage denominator): {unchecked}")
     print(f"  vintage guard:         PSD year within +/-{_MAX_YEAR_GAP} of "
-          f"Comtrade {_COMTRADE_YEAR}")
+          f"Comtrade {_COMTRADE_YEAR}, and not a forecast vintage "
+          f"(> {_COMTRADE_YEAR + 1})")
+    print(f"  forecast-vintage skips: {forecast_skips}"
+          + (" — check is DORMANT until PSD carries actuals or Comtrade year advances"
+             if forecast_skips and not failures else ""))
     print(f"  failures:              {len(failures)}")
     return failures
 
