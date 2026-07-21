@@ -7148,6 +7148,7 @@ button.scn-bar-row:focus-visible { outline: 2px solid var(--accent); outline-off
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
   gap: 10px;
+  align-items: start;   /* v70 — cards size to content; no stretched voids */
 }
 /* v22.12 — scenario presets row */
 .scn-presets {
@@ -29299,7 +29300,7 @@ function _scnCertificateHTML(iso) {
   return `
     <!-- v64-bpsw — reusable break-point certificate body. -->
     <div class="scn-bp" data-scn-bpsw-iso="${_escFeed(_scnBpSafeIso(iso))}">
-      <div class="scn-bp-head">${_escFeed(bp.name)} · ${_escFeed(bp.commodity)} +${Math.round(bp.shock * 100)}%</div>
+      <div class="scn-bp-head">${_escFeed(bp.name)} · ${_escFeed(bp.commodity)} ${ctx.commodity && ctx.commodity.assumed ? `— price response assumed +${Math.round(bp.shock * 100)}%` : `+${Math.round(bp.shock * 100)}%`}</div>
       <div class="scn-bp-rows">
         <div class="scn-bp-row">
           <span class="scn-bp-fig">${_scnBpFmtKt(bp.imports)}</span>
@@ -29328,8 +29329,10 @@ function _scnCertificateHTML(iso) {
         <span class="prov-kind" style="color:#e58a78">Source</span>
         <span class="prov-dash">—</span>
         <span class="prov-body">USDA PSD ${bp.year || ''} supply balance${
-          bp.priceMonth ? ` · World Bank Pink Sheet ${bp.priceMonth}` : ''}. The shock
-          percentage is your input; every other figure here is measured.</span>
+          bp.priceMonth ? ` · World Bank Pink Sheet ${bp.priceMonth}` : ''}. ${
+          ctx.commodity && ctx.commodity.assumed
+            ? `This stack is a supply-stop event, not a price shock — the +${Math.round(bp.shock * 100)}% price response is an assumption, labelled as one; every other figure is measured.`
+            : `The shock percentage is your input; every other figure here is measured.`}</span>
       </div>
     </div>`;
 }
@@ -30057,10 +30060,14 @@ function _renderScenarioBrief(results, selected, stats) {
     } catch (e) {}
     return false;
   };
-  const buffers = exposedPool
-    .filter(c => Math.abs(c.rawDelta ?? c.delta) <= BUFFER_MAX_RAW)
-    .sort((a,b)=> Math.abs(a.rawDelta ?? a.delta) - Math.abs(b.rawDelta ?? b.delta))
-    .slice(0, 4);
+  // v70 (user fix) — the panel must never sit empty: when nothing stays
+  // within the threshold (a heavy stack moves everyone), show the LEAST-HURT
+  // fully-measured countries and say that's what they are.
+  const _leastMoved = exposedPool.slice()
+    .sort((a,b)=> Math.abs(a.rawDelta ?? a.delta) - Math.abs(b.rawDelta ?? b.delta));
+  const _trueBuffers = _leastMoved.filter(c => Math.abs(c.rawDelta ?? c.delta) <= BUFFER_MAX_RAW);
+  const _buffersAreTrue = _trueBuffers.length > 0;
+  const buffers = (_buffersAreTrue ? _trueBuffers : _leastMoved).slice(0, 4);
 
   // ── WHO PROFITS — v31 atlas-flow formula ──────────────────────────────────
   // A country profits from a shock when it is a REAL exporter of the shocked
@@ -30368,8 +30375,10 @@ function _renderScenarioBrief(results, selected, stats) {
   // never the old blanket "diversified supply" guess.
   const topBuffer = buffers[0];
   const bufferLede = topBuffer
-    ? `Exposed countries (full data) whose engine movement stays within ±${BUFFER_MAX_RAW} pts. <b>${topBuffer.name}</b> (FDRS ${topBuffer.fdrs}): ${_bufferWhy(topBuffer)}.`
-    : `No fully-measured exposed country stayed within ±${BUFFER_MAX_RAW} pts under this stack — nothing here buffers it.`;
+    ? (_buffersAreTrue
+        ? `Exposed countries (full data) whose engine movement stays within ±${BUFFER_MAX_RAW} pts. <b>${topBuffer.name}</b> (FDRS ${topBuffer.fdrs}): ${_bufferWhy(topBuffer)}.`
+        : `Nothing stays within ±${BUFFER_MAX_RAW} pts under this stack — these are the LEAST-HURT fully-measured countries, not true buffers. <b>${topBuffer.name}</b> (FDRS ${topBuffer.fdrs}, +${Math.round(topBuffer.delta)}): ${_bufferWhy(topBuffer)}.`)
+    : `No fully-measured exposed country qualifies under this stack.`;
 
   // "Who profits" lede
   const profitLede = profitList.length
@@ -30448,6 +30457,41 @@ function _renderScenarioBrief(results, selected, stats) {
       // documented default price assumption instead of the multiplier.
       const sev = (s.sevUnit === '%') ? ((sevMap[s.id] != null) ? sevMap[s.id] : s.baseSev) : 0.20;
       return { key: k, sev, id: s.id };
+    }
+    // v70 (user fix) — supply-shock stacks WITHOUT a staple price spike
+    // (Hormuz closure, a named-origin ban, export restrictions) still stress a
+    // staple supply balance, so the certificate renders for them too. The
+    // commodity comes from the event itself — the dominant staple routed
+    // through the closed strait, or the banned origin's dominant staple — and
+    // the price response is an ASSUMPTION (+20%), labelled as one.
+    const supply = selected.find(s => ['chokeclose', 'ban', 'exportrestrict'].includes(s.id));
+    if (supply) {
+      let k = null;
+      if (supply.id === 'chokeclose') {
+        try {
+          const cpMap = (LIVE.chokepoint_flows && LIVE.chokepoint_flows.chokepoints)
+            ? LIVE.chokepoint_flows.chokepoints[_scnChokepoint] : null;
+          if (cpMap && Array.isArray(cpMap.exposed)) {
+            const counts = {};
+            cpMap.exposed.forEach(e => {
+              const kk = e.commodity === 'corn' ? 'maize' : e.commodity;
+              if (['wheat', 'rice', 'maize'].includes(kk)) counts[kk] = (counts[kk] || 0) + 1;
+            });
+            k = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+          }
+        } catch (e) {}
+      } else if (supply.id === 'ban') {
+        const origin = (_lastStressParams || scenarioParams || {}).ban;
+        const ORIGIN_STAPLE = { RUS:'wheat', UKR:'wheat', KAZ:'wheat', AUS:'wheat', CAN:'wheat', FRA:'wheat',
+                                IND:'rice', THA:'rice', VNM:'rice', PAK:'rice', USA:'maize', BRA:'maize', ARG:'maize' };
+        k = (origin && origin !== 'top') ? (ORIGIN_STAPLE[origin] || 'wheat') : 'wheat';
+      } else {
+        const mv = (_lastStressParams || scenarioParams || {}).exportrestrict;
+        const m = (Array.isArray(LIVE.restrictions) && mv != null && mv !== 'all') ? LIVE.restrictions[+mv] : (LIVE.restrictions || [])[0];
+        const mc = String((m && m.commodity) || '').toLowerCase();
+        k = ['wheat', 'rice', 'maize'].find(x => mc.includes(x) || (x === 'maize' && mc.includes('corn'))) || null;
+      }
+      if (k) return { key: k, sev: 0.20, id: supply.id, assumed: true };
     }
     return null;
   })();
