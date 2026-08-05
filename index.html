@@ -20101,20 +20101,34 @@ function _simulateScenario(c, selected, severityById, paramsById) {
   // and add the CHANGE in the import-dep × economic-access amplifier. So a combined
   // Debt/FX + import shock triggers the double-bind it structurally implies — and a
   // shock to a resilient economy (low c[7]) still barely moves it (amp ~ c7/100).
+  // v79 — PARITY WITH THE SCORING FORMULA. This block used `|| 0` on the
+  // component vector, which turned an UNOBSERVED component into a real zero and
+  // then shocked it upward from there. 70 countries have no economic-access
+  // reading (c[7] === null); for North Korea an 8-point economic-access shock
+  // invented c7 = 66.7 out of a data gap and produced a +2.2 "double-bind"
+  // amplifier — one the displayed score can never produce, because fdrsV2 now
+  // SKIPS the amplifier when either of its two inputs is unobserved. The
+  // scenario was computing against a formula the site no longer uses.
+  // The amplifier is an interaction between two measured quantities: if either
+  // is missing it is not computable, and a shock cannot conjure it into being.
   let ampDelta = 0;
   try {
     const W = (typeof window !== 'undefined' && window.FDRS_V2_W) || null;
     const cv = Array.isArray(c.c) ? c.c : null;
-    if (W && cv) {
+    const obs = (v) => (typeof v === 'number' && isFinite(v));
+    if (W && cv && obs(cv[0]) && obs(cv[7])) {
       const shocked = cv.slice();
+      // Only components that were actually observed can be shocked — the same
+      // rule the base score applies. An unobserved component stays unobserved.
       Object.keys(channelTotals).forEach(k => {
         const ci = Number(k);                       // structural channels use component index
         if (!Number.isInteger(ci) || ci < 0 || ci > 8 || !W[ci]) return;
+        if (!obs(shocked[ci])) return;
         const cd = channelTotals[k] / W[ci];        // composite-point → component-point space
-        shocked[ci] = Math.max(0, Math.min(100, (shocked[ci] || 0) + cd));
+        shocked[ci] = Math.max(0, Math.min(100, shocked[ci] + cd));
       });
       const amp = (v0, v7) => Math.min(6 * (v0 / 100) * (v7 / 100), 6);
-      ampDelta = amp(shocked[0] || 0, shocked[7] || 0) - amp(cv[0] || 0, cv[7] || 0);
+      ampDelta = amp(shocked[0], shocked[7]) - amp(cv[0], cv[7]);
     }
   } catch (e) {}
   return {
