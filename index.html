@@ -10553,11 +10553,14 @@ body::before {
         <button class="viewswitch-btn" id="viewbtn-datastatus" role="tab" aria-selected="false" aria-controls="subview-datastatus" title="Per-source health, last refresh and what each pipeline feeds — full audit of the live data layer." onclick="showTab('datastatus',this)">Data Status</button>
       </div>
 
+      <!-- v79 — scope narrowed to the market-benchmark layer. Risk distribution
+           and the exposure ranking live on the Global Map; the events feed lives
+           on Disturbances. The ↻ Refresh button is gone: it never fetched
+           anything, it re-rendered already-loaded objects and then stamped the
+           viewer's own clock as the snapshot time. -->
       <div class="subview active" id="subview-livedata" role="tabpanel" aria-labelledby="viewbtn-livedata">
-        <div class="subview-lede">Commodity prices, the FAO Food Price Index, risk distribution, and the countries carrying the most exposure.</div>
-      <div style="margin-bottom:20px;">
-        <button class="live-refresh-btn" onclick="refreshLiveData()">↻ Refresh</button>
-      </div>
+        <div class="subview-lede">Market benchmarks behind the score: the FAO Food Price Index and the World Bank Pink Sheet commodity references. Country risk lives on the Global Map; events live on Disturbances.</div>
+      <div id="live-last-updated" style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.06em;color:var(--t3);margin-bottom:16px;"></div>
       <div id="live-data-body"></div>
       </div>
 
@@ -24538,8 +24541,40 @@ function _newsAgeCompact(it) {
 // licensing exposure, and nothing invented — the only content is the commodity
 // key we already matched, rendered as a monogram. It is deliberately quiet so
 // it never competes with a real photograph beside it.
-function _newsTileSvg(key, c1, c2) {
+// v79 — the tile now carries a FACT, not just a monogram.
+//
+// 34 of 77 current items ship no publisher image, concentrated in the trade
+// press (thepoultrysite, undercurrentnews, fertilizerdaily) whose feeds declare
+// no media:thumbnail. The obvious fix — scrape og:image — is one this project
+// has explicitly refused (see refresh_commodity_news.py::_feed_image: taking an
+// image the publisher never offered in the feed), and that refusal is right on a
+// site whose entire claim is provenance. So the slot is filled with something a
+// stock photograph could never provide: the corridor tonnage this story touches.
+// Where no figure exists it degrades to the original quiet monogram.
+function _newsTileSvg(key, c1, c2, it) {
   const letter = String(key || '?').charAt(0).toUpperCase();
+  // exposure_kt is computed in the build from the cited bilateral flows; it is
+  // the one number that makes this headline matter to FoodShield's readers.
+  const kt = Number(it && it.exposure_kt);
+  let figure = '', label = '';
+  if (isFinite(kt) && kt > 0) {
+    figure = kt >= 1000 ? (kt / 1000).toFixed(kt >= 10000 ? 0 : 1) + ' Mt'
+                        : Math.round(kt) + ' kt';
+    label = 'corridor exposure';
+  }
+  const body = figure
+    ? `<text x="50" y="41" text-anchor="middle" dominant-baseline="central" ` +
+        `font-family="Geist Mono,ui-monospace,monospace" font-size="19" letter-spacing="-0.5" ` +
+        `fill="${c1}" fill-opacity=".95">${figure}</text>` +
+      `<text x="50" y="62" text-anchor="middle" dominant-baseline="central" ` +
+        `font-family="Geist Mono,ui-monospace,monospace" font-size="7" letter-spacing="1.1" ` +
+        `fill="${c1}" fill-opacity=".55">${label.toUpperCase()}</text>` +
+      `<text x="50" y="80" text-anchor="middle" dominant-baseline="central" ` +
+        `font-family="Iowan Old Style,Palatino,Georgia,serif" font-size="11" ` +
+        `fill="${c2}" fill-opacity=".65">${String(key || '').slice(0, 12)}</text>`
+    : `<text x="50" y="50" text-anchor="middle" dominant-baseline="central" ` +
+        `font-family="Iowan Old Style,Palatino,Georgia,serif" font-size="46" ` +
+        `fill="${c1}" fill-opacity=".85">${letter}</text>`;
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">` +
       `<defs>` +
@@ -24554,9 +24589,7 @@ function _newsTileSvg(key, c1, c2) {
       `<rect width="100" height="100" fill="#16161c"/>` +
       `<rect width="100" height="100" fill="url(#g)"/>` +
       `<rect width="100" height="100" fill="url(#p)"/>` +
-      `<text x="50" y="50" text-anchor="middle" dominant-baseline="central" ` +
-        `font-family="Iowan Old Style,Palatino,Georgia,serif" font-size="46" ` +
-        `fill="${c1}" fill-opacity=".85">${letter}</text>` +
+      body +
     `</svg>`;
   return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
 }
@@ -24573,7 +24606,7 @@ function _newsThumb(it) {
   // aria-hidden and title-free: it is a generated mark standing in for a
   // photograph, and must never read as evidence about the story.
   return `<div class="news-thumb news-thumb-gen" aria-hidden="true"` +
-         ` style="background-image:url(&quot;${_newsTileSvg(key, tint[0], tint[1])}&quot;)"></div>`;
+         ` style="background-image:url(&quot;${_newsTileSvg(key, tint[0], tint[1], it)}&quot;)"></div>`;
 }
 
 // v50 — the per-article note, rendered inline.
@@ -27508,19 +27541,33 @@ function renderForecastWhy(c, delta, trendUp, futureCol, todayCol){
     return 0;
   });
 
-  // Project each component to 2030 with mild stress relative to FDRS delta
+  // v79 — THE OLD "DRIVER ATTRIBUTION" WAS CIRCULAR AND SAID NOTHING.
+  //
+  // It took the already-decided delta, spread it across components in
+  // proportion to their weights (stress = delta × wᵢ × 2.5), and then
+  // "attributed" the delta back to those manufactured changes:
+  //     change  = delta × wᵢ × 2.5
+  //     share   = change × wᵢ / Σ(change × wᵢ) = wᵢ² / Σwⱼ²
+  // The delta cancels. So did the country. With Σw² = 0.1348, import
+  // dependence reported 0.23²/0.1348 = 39.2% of the movement for EVERY
+  // country on EVERY dataset, supplier concentration 19.0%, economic access
+  // 10.7% — fixed constants dressed as findings, and the UI called the first
+  // one "most of the movement".
+  //
+  // A real decomposition needs each component forecast from its own forward
+  // inputs, which this model does not have. So we stop pretending: the
+  // projection is shown as what it is — a uniform structural drift the model
+  // applies by weight — and the per-component split is no longer ranked or
+  // described as causal. Components are listed in their canonical order with
+  // their weight, because the weight IS the whole explanation.
   const proj = compVals.map((v, i) => {
     const stress = (delta * compWeights[i] * 2.5);
     return Math.max(0, Math.min(100, Math.round(v + stress)));
   });
-
-  // Driver contribution to delta (rough attribution: contribution ∝ component × weight × stressor)
-  const contribTotal = compVals.reduce((s,v,i)=>s + (proj[i]-v) * compWeights[i], 0) || 1;
-  const drivers = compVals.map((v,i)=>{
-    const change = proj[i] - v;
-    const share = ((proj[i]-v) * compWeights[i]) / contribTotal;
-    return { name: compLabels[i], color: compColors[i], today: v, future: proj[i], change, share, weight: compWeights[i] };
-  }).sort((a,b)=>Math.abs(b.share)-Math.abs(a.share));
+  const drivers = compVals.map((v, i) => ({
+    name: compLabels[i], color: compColors[i], today: v, future: proj[i],
+    change: proj[i] - v, weight: compWeights[i],
+  }));
 
   // v21 honesty pass — confidence % and ±band are heuristic penalties, not calibrated
   // forecast statistics. The calculation is preserved for any callers, but the UI
@@ -27556,14 +27603,21 @@ function renderForecastWhy(c, delta, trendUp, futureCol, todayCol){
         </div>
       </div>
 
-      <div style="font-size:10.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.14em;font-weight:600;margin-bottom:8px;">
-        Driver attribution — where the model puts the pressure
+      <div style="font-size:10.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.14em;font-weight:600;margin-bottom:4px;">
+        Component projection — how the drift is applied
+      </div>
+      <div style="font-size:11px;color:var(--t3);line-height:1.55;margin-bottom:10px;max-width:78ch;">
+        The model applies one uniform drift and splits it across components <b style="color:var(--t2)">by weight</b>.
+        That means these movements are a restatement of the weighting, not evidence about
+        ${c.name}: no component is forecast from its own forward inputs, so this panel
+        <b style="color:var(--t2)">cannot tell you which factor causes the shift</b>. It shows where the model
+        places pressure, and nothing more. A causal decomposition needs per-component
+        forecasts and a backtest — neither exists yet.
       </div>
       <div class="fc-drivers">
         ${drivers.map(d => {
           const dirCol = d.change > 0 ? '#c44b3c' : (d.change < 0 ? '#6ba36b' : 'var(--t3)');
           const arrow = d.change > 0 ? '▲' : (d.change < 0 ? '▼' : '·');
-          const sharePct = Math.abs(d.share*100).toFixed(0);
           return `
           <div class="fc-driver">
             <div class="fc-driver-name">${d.name} <span style="color:var(--t3);font-family:'Geist Mono',monospace;font-size:10px;margin-left:2px;">·${(d.weight*100).toFixed(0)}%</span></div>
@@ -27574,7 +27628,7 @@ function renderForecastWhy(c, delta, trendUp, futureCol, todayCol){
             <div class="fc-driver-bar"><div class="fc-driver-bar-fill" style="width:${d.future}%;background:${d.color}"></div></div>
             <div class="fc-driver-note">
               <span style="color:${dirCol};font-family:'Geist Mono',monospace;font-weight:500;">${arrow} ${d.change>0?'+':''}${d.change} pts</span> ·
-              ${sharePct}% of modeled shift
+              drift × ${(d.weight*100).toFixed(0)}% weight
             </div>
           </div>`;
         }).join('')}
@@ -34788,14 +34842,17 @@ async function renderDisturbancesTab() {
           <div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;">Global Risk Summary</div>
           <div id="dist-summary">Loading…</div>
         </div>
-        <div style="background:var(--bg2);border:1px solid var(--b1);border-radius:10px;padding:16px;">
-          <div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;">Active API Sources</div>
-          <div id="dist-sources"></div>
-        </div>
-        <div style="background:var(--bg2);border:1px solid var(--b1);border-radius:10px;padding:16px;">
-          <div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;">Food Price Index</div>
-          <div id="dist-prices"></div>
-        </div>
+        <!-- v79 — "Active API Sources" reprinted the Data Status table and
+             "Food Price Index" reprinted the Data tab's FFPI panel (with an
+             index-point delta mislabelled as a percentage). Both are one click
+             away and neither belongs beside an event list; together they pushed
+             the events — this tab's entire reason to exist — into a narrow
+             column. Replaced by a single link to the surface that owns it. -->
+        <a href="#" onclick="event.preventDefault();showTab('datastatus',document.querySelector('.subnav-btn[data-tab=&quot;livedata&quot;]'));"
+           style="background:var(--bg2);border:1px solid var(--b1);border-radius:10px;padding:13px 16px;text-decoration:none;color:var(--t2);font-size:11.5px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <span>Source health &amp; market benchmarks</span>
+          <span style="color:var(--t3);font-size:10px;">Data tab ↗</span>
+        </a>
       </div>
     </div>`;
 
@@ -36441,62 +36498,17 @@ async function refreshLiveData() {
     .sort((a,b) => b.fdrs - a.fdrs)
     .slice(0, 8);
 
+  // v79 DECLUTTER. This tab carried six panels; four of them were other tabs
+  // repeated. The events feed duplicated Disturbances, and Global Risk
+  // Distribution / High-Alert Countries / Most Vulnerable Ranking all restated
+  // the Global Map. What is UNIQUE here is the market benchmark layer: the FAO
+  // Food Price Index and the World Bank Pink Sheet. That is what the tab now is.
   body.innerHTML = `
-    <!-- Latest events feed -->
-    <div id="live-events-feed"></div>
-    <!-- Global stats -->
     <div class="live-data-grid" style="margin-bottom:18px;">
-      <div class="live-stat-card">
-        <div class="live-stat-label">Global Average FDRS</div>
-        <div class="live-stat-val" style="color:${riskColor(avgFDRS)}">${avgFDRS}<span class="live-stat-unit">/100</span></div>
-        <div class="live-stat-source">Across ${COUNTRIES.filter(c=>c.fdrs>0).length} tracked countries · live nowcast snapshot</div>
-      </div>
-      <div class="live-stat-card">
-        <div class="live-stat-label">Countries at Severe Risk</div>
-        <div class="live-stat-val" style="color:#c44b3c">${severe}<span class="live-stat-unit"> nation${severe===1?"":"s"}</span></div>
-        <div class="live-stat-source">FDRS ≥ 89 · Requires urgent intervention</div>
-      </div>
-      <div class="live-stat-card">
-        <div class="live-stat-label">Avg Food Inflation</div>
-        <div class="live-stat-val" style="color:${avgInflation>15?'#c44b3c':avgInflation>8?'#c9a957':'#6ba36b'}">${avgInflation}<span class="live-stat-unit">%/yr</span></div>
-        <div class="live-stat-source">Average across tracked countries (unweighted)</div>
-      </div>
       <div class="live-stat-card">
         <div class="live-stat-label">FAO Food Price Index</div>
         <div class="live-stat-val" style="color:${ffpiTile.color}">${ffpiTile.val}<span class="live-stat-unit">${ffpiTile.unit}</span></div>
         <div class="live-stat-source">${ffpiTile.note}${ffpiTile.chg !== '—' && ffpiTile.chg !== 'n/a' ? ' · ' + ffpiTile.chg : ''}</div>
-      </div>
-    </div>
-
-    <!-- Risk distribution -->
-    <div class="grid-2" style="margin-bottom:18px;">
-      <div class="card">
-        <div class="card-title"><span class="card-marker"></span> Global Risk Distribution</div>
-        <div style="height:160px;"><canvas id="live-dist-chart"></canvas></div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:12px;">
-          ${[
-            {label:'Resilient',val:resilient,col:'#6ba36b'},
-            {label:'Exposed',val:exposed,col:'#c9a957'},
-            {label:'Vulnerable',val:vuln,col:'#d27a3e'},
-            {label:'Severe',val:severe,col:'#c44b3c'}
-          ].map(r=>`
-            <div style="text-align:center;">
-              <div style="font-size:18px;font-weight:700;color:${r.col};font-family:'Geist Mono',monospace">${r.val}</div>
-              <div style="font-size:10px;color:var(--t3)">${r.label}</div>
-            </div>`).join('')}
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title"><span class="card-marker"></span> High-Alert Countries</div>
-        ${alerts.length ? '' : '<div style="font-size:12px;color:var(--t3);padding:10px 0;">No countries currently meet the high-alert criteria.</div>'}
-        ${alerts.map(c=>`
-          <div class="live-indicator-row">
-            <div class="live-status-dot ${c.fdrs>=76?'red':c.fdrs>=51?'yellow':'green'}"></div>
-            <div class="live-indicator-name">${c.name}</div>
-            <div class="live-indicator-val" style="color:${riskColor(c.fdrs)}">${c.fdrs}</div>
-            <div class="live-indicator-chg" style="color:var(--t3);font-size:10px;">${riskLabel(c.fdrs)}</div>
-          </div>`).join('')}
       </div>
     </div>
 
@@ -36515,46 +36527,19 @@ async function refreshLiveData() {
         </div>`).join('')}
       <div style="font-size:10px;color:var(--t3);margin-top:10px;">Source: World Bank Commodity Markets Pink Sheet · monthly release · ${pinkSheetMonth ? 'as-of ' + pinkSheetMonth : 'snapshot missing'}${pinkSheetUpdated ? ' · dataset updated ' + pinkSheetUpdated : ''}. Benchmark reference prices — not customs-cleared transactions.</div>
       ${chartSourceFooter('World Bank Pink Sheet · monthly commodity benchmarks', chartSourceTime('pink_sheet'))}
-    </div>
-
-    <!-- Top 10 most vulnerable -->
-    <div class="card">
-      <div class="card-title"><span class="card-marker"></span> Most Vulnerable Countries · Live Ranking</div>
-      ${topVulnerable.map((c,i)=>`
-        <div class="live-indicator-row" style="cursor:pointer;" onclick="openPanel(byISO('${c.iso}'))">
-          <div style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--t3);width:20px;">${String(i+1).padStart(2,'0')}</div>
-          <div class="live-indicator-name">${c.name}</div>
-          <div style="flex:1;padding:0 10px;">
-            <div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;">
-              <div style="height:100%;width:${c.fdrs}%;background:${riskColor(c.fdrs)};border-radius:2px;"></div>
-            </div>
-          </div>
-          <div class="live-indicator-val" style="color:${riskColor(c.fdrs)}">${c.fdrs}</div>
-          <div style="font-size:10px;color:var(--t3);width:80px;text-align:right;">${c.region}</div>
-        </div>`).join('')}
     </div>`;
 
-  // Render distribution doughnut
-  setTimeout(()=>{
-    const ctx = document.getElementById('live-dist-chart');
-    if (!ctx) return;
-    destroyChart('live-dist-chart');
-    chartInstances['live-dist-chart'] = _safeChart(ctx, {
-      type: 'doughnut',
-      data: {
-        labels: ['Lower risk (0-50)','Dependent (51-75)','Vulnerable (76-88)','Severe (89+)'],
-        datasets: [{ data: [resilient,exposed,vuln,severe], backgroundColor: ['#6ba36b','#c9a957','#d27a3e','#c44b3c'], borderWidth: 0 }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false, cutout: '62%',
-        plugins: { legend: { position: 'bottom', labels: { color: '#6a685e', font: { size: 9 }, padding: 8 } } }
-      }
-    });
-  }, 50);
-
+  // v79 — the doughnut, the viewer-clock "snapshot" stamp and the events feed
+  // all belonged to panels that are gone. The stamp was actively misleading:
+  // it printed the BROWSER's current time for data generated hours earlier.
+  // The source generation time is shown by the Pink Sheet footer instead.
   const upd = document.getElementById('live-last-updated');
-  if (upd) upd.textContent = `Snapshot loaded ${new Date().toLocaleString()} · Sources: FAO FFPI · World Bank Pink Sheet · WB WDI · pipeline manifest`;
-  renderLiveEventsFeed();
+  if (upd) {
+    const gen = (typeof chartSourceTime === 'function') ? chartSourceTime('pink_sheet') : null;
+    upd.textContent = gen
+      ? `Benchmarks generated ${(typeof formatAge === 'function' && formatAge(gen)) || gen}`
+      : 'FAO Food Price Index + World Bank Pink Sheet';
+  }
 }
 
 function renderLiveEventsFeed() {
@@ -37256,10 +37241,17 @@ function renderSourcedCompanyDetail(el, company, src) {
     };
   }).filter(r => r.fdrs != null).sort((a,b) => b.fdrs - a.fdrs);
 
-  const expScore = rows.length
+  // v79 — CALM BY ABSENCE, COMPANY EDITION. This fell back to 0 when no scored
+  // sourcing row survived, and 0 renders green as "Low" — so a company we know
+  // nothing about displayed as the safest company on the page. That is exactly
+  // backwards: the opaque private traders (Cargill, LDC, Mars) disclose least
+  // and are often the most systemically important. Absence of evidence is now
+  // its own state, never a score. Same fix as the FDRS component vector.
+  const expBounded = rows.length > 0;
+  const expScore = expBounded
     ? Math.round(rows.reduce((s,r) => s + r.fdrs, 0) / rows.length)
-    : 0;
-  const expCol = riskColor(expScore);
+    : null;
+  const expCol = expBounded ? riskColor(expScore) : 'var(--t3)';
   const highRisk = rows.filter(r => r.fdrs >= 70);
   const medRisk  = rows.filter(r => r.fdrs >= 40 && r.fdrs < 70);
   const lowRisk  = rows.filter(r => r.fdrs < 40);
@@ -37282,9 +37274,14 @@ function renderSourcedCompanyDetail(el, company, src) {
           </div>
         </div>
         <div class="cmpd-score" style="border-color:${expCol}55;">
-          <div class="cmpd-score-label" title="Average Food Disruption Risk of all countries the company itself discloses as a sourcing origin. Equally weighted because tonnage shares are not publicly disclosed.">${companyProvFor(company).label === 'SOURCED' ? 'Sourced Exposure' : 'Cited · provisional'}</div>
+          ${expBounded ? `
+          <div class="cmpd-score-label" title="Average Food Disruption Risk of all countries the company itself discloses as a sourcing origin. Equally weighted because tonnage shares are not publicly disclosed — it is a lower bound on exposure, not a measure of it.">${companyProvFor(company).label === 'SOURCED' ? 'Sourced Exposure' : 'Cited · provisional'}</div>
           <div class="cmpd-score-num" style="color:${expCol}">${expScore}</div>
-          <div class="cmpd-score-risk" style="color:${expCol}">${riskLabel(expScore)}</div>
+          <div class="cmpd-score-risk" style="color:${expCol}">${riskLabel(expScore)}</div>`
+          : `
+          <div class="cmpd-score-label" title="This company discloses no sourcing origin we can join to a country risk score. That is a gap in the public record, not a low-risk finding.">Exposure not bounded</div>
+          <div class="cmpd-score-num" style="color:var(--t3);font-size:0.62em;letter-spacing:.06em;">NO DATA</div>
+          <div class="cmpd-score-risk" style="color:var(--t3);">absence of disclosure</div>`}
         </div>
       </div>
 

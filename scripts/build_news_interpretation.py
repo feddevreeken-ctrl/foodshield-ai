@@ -68,10 +68,10 @@ from _news_taxonomy import COMMODITIES as NEWS_COMMODITIES
 
 OUTPUT = "commodity_interpretation.json"
 
-# Provider registry. Model IDs verified against official docs on 2026-07-18:
+# Provider registry. Model IDs verified against official docs on 2026-08-04:
 #   groq      console.groq.com/docs/models       -> llama-3.3-70b-versatile (production)
 #   gemini    ai.google.dev/gemini-api/docs/models -> gemini-2.5-flash (stable, free tier)
-#   anthropic claude-api skill model catalogue   -> claude-opus-4-8
+#   anthropic claude-api skill model catalogue   -> claude-opus-5 ($5/$25 per MTok)
 # Re-verify before changing any of these; do not write model IDs from memory.
 PROVIDERS = {
     "groq": {
@@ -88,8 +88,14 @@ PROVIDERS = {
     },
     "anthropic": {
         "key_env": "ANTHROPIC_API_KEY",
-        "model": "claude-opus-4-8",
-        "free_tier": "paid — no free tier",
+        # v79 — claude-opus-4-8 -> claude-opus-5. Same $5/$25 per MTok and the
+        # same feature set, but note the behaviour change handled in the request
+        # below: on claude-opus-5 thinking is ON by default (omitting the field
+        # runs adaptive, unlike 4.8/4.7 where omitting it meant no thinking),
+        # and max_tokens caps thinking + response text TOGETHER — the previous
+        # max_tokens=400 would have truncated the note mid-sentence.
+        "model": "claude-opus-5",
+        "free_tier": "paid — no free tier ($5 / $25 per MTok)",
     },
 }
 
@@ -939,7 +945,11 @@ def call_llm(provider, api_key, system_prompt, user_prompt):
                      "Content-Type": "application/json"},
             payload={
                 "model": model,
-                "max_tokens": 400,
+                # v79 — headroom for adaptive thinking. This is a hard cap on
+                # thinking AND visible text on claude-opus-5; the note itself is
+                # still ~400 tokens, the rest is room for the model to reason
+                # about the numeric constraints before writing. 24 calls/day.
+                "max_tokens": 4000,
                 "system": system_prompt,
                 "messages": [{"role": "user", "content": user_prompt}],
             },
