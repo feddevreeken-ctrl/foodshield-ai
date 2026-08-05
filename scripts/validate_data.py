@@ -54,7 +54,6 @@ EXPECTED_FILES = {
     'reliefweb_alerts.json':      ('soft',     'object'),
     'acled.json':                 ('soft',     'dict_or_empty'),  # API key gated
     'openaq.json':                ('soft',     'dict_or_empty'),  # API key gated
-    'nasa_firms.json':            ('soft',     'dict_or_empty'),  # API key gated
     'comtrade_staples.json':      ('soft',     'dict_or_empty'),
     # Reference / structural — must be populated
     'fao_ffpi.json':              ('critical', 'flexible'),

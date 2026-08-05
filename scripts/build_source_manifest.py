@@ -129,13 +129,6 @@ SOURCES = [
         "mode": "live",
     },
     {
-        "key": "nasa_firms",
-        "file": "nasa_firms.json",
-        "label": "NASA FIRMS",
-        "cadence": "daily",
-        "mode": "live",
-    },
-    {
         "key": "wb_wfso",
         "file": "wb_wfso.json",
         "label": "World Bank WFSO (Food Security Outlook)",

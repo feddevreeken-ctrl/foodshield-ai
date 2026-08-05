@@ -99,8 +99,20 @@ PROVIDERS = {
     },
 }
 
-# Order used when NEWS_LLM_PROVIDER is unset: cheapest-free first.
-PROVIDER_PRIORITY = ("groq", "gemini", "anthropic")
+# v79 — quality-first, not cheapest-first.
+#
+# The old order put groq first AND the workflow hardcoded
+# NEWS_LLM_PROVIDER=groq, so the Anthropic branch had never executed in
+# production — every published note was llama-3.3-70b. Upgrading the model ID
+# to claude-opus-5 therefore changed nothing visible, which is exactly how it
+# was reported: "the LLM looks the same".
+#
+# This job is 6 commodities x 4 runs/day = 24 calls of a few thousand tokens.
+# At Opus 5 rates that is cents per day, and this prose is the most-read writing
+# on the site — the one place where model quality is worth paying for. Groq
+# stays next in line, so a missing ANTHROPIC_API_KEY degrades silently to the
+# previous behaviour rather than failing the run.
+PROVIDER_PRIORITY = ("anthropic", "groq", "gemini")
 
 # This job runs 4x/day over 6 commodities = 24 calls/day, comfortably inside
 # Groq's 1000 req/day. The 12k tokens/min ceiling is the binding one, so we
@@ -164,10 +176,24 @@ COMMODITIES = {k: SOURCE_MAP[k] for k in NEWS_COMMODITIES}
 
 SYSTEM_PROMPT = """You write short interpretive notes for a food-security dashboard.
 
+WHAT THE NOTE IS FOR
+A reader is looking at a commodity panel that already shows them the figures.
+The note earns its place only by saying what those figures MEAN for food
+security — which importers are exposed, why this movement matters more (or
+less) than its size suggests, what would have to happen next for it to bite.
+Restating the numbers back to the reader is the failure mode: they can already
+see them. Prefer the specific over the general — a named corridor or importer
+beats "some countries may be affected". If the figures genuinely say little,
+one honest sentence saying so is better than three of manufactured significance.
+
 ABSOLUTE RULE: you must never write a number, percentage, date, month, year, or
 quantity that is not already present in the FACTS block you are given. Do not
 compute, derive, round differently, average, or infer any figure. If a figure is
-null in FACTS, say the input is unavailable — never estimate it.
+null in FACTS, say the input is unavailable — never estimate it. This is not a
+style preference: every figure you write is checked against FACTS after
+generation, and a note containing an unsupported number is discarded and
+replaced by a template. Reasoning about the figures is encouraged; producing new
+ones is not.
 
 Style and substance rules:
 - Never reverse a direction. If a change figure is negative, it fell; if
@@ -176,6 +202,8 @@ Style and substance rules:
   "a third", "tenfold", "ten percent". Those are numbers too.
 - 2 to 3 sentences. No more.
 - Describe what moved (using only FACTS figures), then what could PLAUSIBLY follow.
+- Write for someone who trades or buys this commodity, not for a general reader.
+  Assume they know what the commodity is; do not define it or set the scene.
 - Forward-looking statements must be explicitly hedged pathways, never predictions
   or forecasts. This project maps structural exposure; it does not claim predictive
   accuracy. Never imply it does.

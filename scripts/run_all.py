@@ -36,7 +36,6 @@ import refresh_openmeteo
 import refresh_openmeteo_flood
 import refresh_usgs_water
 import refresh_openaq
-import refresh_nasa_firms
 import refresh_eurostat
 import refresh_faostat
 import refresh_faostat_fbs
@@ -97,7 +96,6 @@ STEPS = [
     ("Open-Meteo Flood",       refresh_openmeteo_flood.main,    "openmeteo_flood.json"),
     ("USGS Water",             refresh_usgs_water.main,         "usgs_water.json"),
     ("OpenAQ Air Quality",     refresh_openaq.main,             "openaq.json"),
-    ("NASA FIRMS Fires",       refresh_nasa_firms.main,         "nasa_firms.json"),
     ("Eurostat food HICP",     refresh_eurostat.main,           "eurostat_food.json"),
     ("FAOSTAT food CPI",       refresh_faostat.main,            "faostat_food.json"),
     ("FAOSTAT FBS shares",     refresh_faostat_fbs.main,        "country_caloric_shares.json"),
@@ -177,7 +175,7 @@ FAIL_THRESHOLD = 4
 #                           on the step above); entries are owner-curated
 #   commodity_news.json     GDELT throttles per-IP under CI egress; a fully
 #                           throttled run legitimately yields zero items (v46)
-EMPTY_OK = {"openaq.json", "nasa_firms.json", "acled.json", "ndgain.json",
+EMPTY_OK = {"openaq.json", "acled.json", "ndgain.json",
             "trade_restrictions.json", "commodity_news.json"}
 
 # Outputs that legitimately do not exist at all on a first run. v46: the

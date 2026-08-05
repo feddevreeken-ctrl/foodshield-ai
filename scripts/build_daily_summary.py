@@ -49,7 +49,6 @@ def main():
     estat   = (load("eurostat_food.json") or {}).get("data") or {}
     om      = (load("openmeteo.json") or {}).get("data") or {}
     flood   = (load("openmeteo_flood.json") or {}).get("data") or {}
-    fires   = (load("nasa_firms.json") or {}).get("data") or {}
     inform  = (load("inform_risk.json") or {}).get("data") or {}
 
     bullets = []
@@ -119,17 +118,15 @@ def main():
     # Active drought / heat / flood / fire / fx shocks (count countries flagged)
     drought_count = sum(1 for r in om.values() if isinstance(r, dict) and r.get("drought_flag"))
     flood_count = sum(1 for r in flood.values() if isinstance(r, dict) and r.get("flood_flag"))
-    fire_count = sum(1 for r in fires.values() if isinstance(r, dict) and r.get("fire_flag"))
     fx_count = sum(1 for r in wfp_c.values() if isinstance(r, dict) and r.get("fx_currency_shock"))
 
     env_parts = []
     if drought_count >= 1: env_parts.append(f"{drought_count} drought-flagged")
     if flood_count >= 1: env_parts.append(f"{flood_count} flood-flagged")
-    if fire_count >= 1: env_parts.append(f"{fire_count} fire-active")
     if env_parts:
         bullets.append({
             "text": "Active environmental signals: " + ", ".join(env_parts) + " countries today.",
-            "source": "Open-Meteo + Open-Meteo Flood + NASA FIRMS",
+            "source": "Open-Meteo + Open-Meteo Flood",
         })
 
     if fx_count >= 1:
@@ -159,7 +156,7 @@ def main():
         headline = f"{len(movers)} countries with active nowcast pressure; {worst_name} leads."
     elif high_ipc:
         headline = f"{len(high_ipc)} countries in active IPC Phase 3+ crisis; quiet day on the nowcast layer."
-    elif drought_count or flood_count or fire_count:
+    elif drought_count or flood_count:
         headline = "Quiet on FDRS movements; environmental signals firing across multiple regions."
     else:
         headline = "No major shocks today; structural FDRS unchanged at most countries."
@@ -169,8 +166,8 @@ def main():
         subhead_bits.append(f"{len(movers)} country nowcast moves")
     if high_ipc:
         subhead_bits.append(f"{len(high_ipc)} IPC Phase 3+ crises")
-    if drought_count + flood_count + fire_count:
-        subhead_bits.append(f"{drought_count + flood_count + fire_count} environmental flags")
+    if drought_count + flood_count:
+        subhead_bits.append(f"{drought_count + flood_count} environmental flags")
     if fx_count:
         subhead_bits.append(f"{fx_count} currency shocks")
     subhead = ("Today: " + " · ".join(subhead_bits) + ".") if subhead_bits else "All sources nominal."

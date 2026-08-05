@@ -5,7 +5,7 @@ an adjusted current-conditions score.
 Reads: data/wfp_hungermap.json, data/ipc.json, data/acled.json,
        data/reliefweb_alerts.json, data/fao_ffpi.json,
        data/wfp_country.json, data/openmeteo.json, data/openmeteo_flood.json,
-       data/openaq.json, data/nasa_firms.json, data/usgs_water.json,
+       data/openaq.json, data/usgs_water.json,
        data/eurostat_food.json, data/faostat_food.json
 Writes: data/nowcast.json
 
@@ -26,7 +26,6 @@ Formula (extended May 2026, expanded May 2026 v20.27):
                                    signal only. Field retained for consumers.
     + weather_kick       (0-4)   — drought | heat extremes
     + flood_kick         (0-3)   — river discharge anomaly
-    + fire_kick          (0-2)   — fire activity >2x baseline
     + aq_kick            (0-1)   — PM2.5 > WHO target-2 (35 µg/m³)
     + us_water_kick      (0-2)   — only for US-XX state codes
     + us_fi_kick          (0-3)   — US-state food insecurity (Feeding America)
@@ -88,7 +87,6 @@ def main():
     rw      = load("reliefweb_alerts.json")["data"]
     om      = load("openmeteo.json")["data"]
     flood   = load("openmeteo_flood.json")["data"]
-    fires   = load("nasa_firms.json")["data"]
     aq      = load("openaq.json")["data"]
     usgs    = load("usgs_water.json")["data"]
     estat   = load("eurostat_food.json")["data"]
@@ -163,7 +161,6 @@ def main():
         wc       = wfp_c.get(iso) or {}
         om_row   = om.get(iso) or {}
         fl_row   = flood.get(iso) or {}
-        fi_row   = fires.get(iso) or {}
         aq_row   = aq.get(iso) or {}
         usg_row  = usgs.get(iso) or {}
 
@@ -299,9 +296,6 @@ def main():
         # Floods
         flood_kick = 3 if fl_row.get("flood_flag") else 0
 
-        # Fires
-        fire_kick = 2 if fi_row.get("fire_flag") else 0
-
         # Air quality (background factor; small weight)
         aq_kick = 1 if aq_row.get("pm25_flag") else 0
 
@@ -397,7 +391,7 @@ def main():
         adj = round(
             ipc_pressure + fews_kick + wfp_pressure + displacement_kick + conflict_kick + global_food_kick
             + fx_shock + inflation_shock + weather_kick + flood_kick
-            + fire_kick + aq_kick + us_water_kick + us_fi_kick
+            + aq_kick + us_water_kick + us_fi_kick
             + inform_amp + governance_drag + psd_shortfall
             + relief_damp - cluster_overage,
             1
@@ -458,7 +452,6 @@ def main():
                 "inflation_shock": round(inflation_shock, 1),
                 "weather_kick":    round(weather_kick, 1),
                 "flood_kick":      flood_kick,
-                "fire_kick":       fire_kick,
                 "aq_kick":         aq_kick,
                 "us_water_kick":   us_water_kick,
                 "us_fi_kick":      round(us_fi_kick, 1),
@@ -491,7 +484,6 @@ def main():
                 "heat_flag":            om_row.get("heat_flag"),
                 "wet_flag":             om_row.get("wet_flag"),
                 "flood_flag":           fl_row.get("flood_flag"),
-                "fire_flag":            fi_row.get("fire_flag"),
                 "pm25_latest":          aq_row.get("pm25_latest"),
                 "us_flow_anomaly":      usg_row.get("flow_anomaly"),
                 "us_food_insecurity_pct": fa_pct,
@@ -508,8 +500,27 @@ def main():
     n_mon  = sum(1 for v in out.values() if v.get("confidence") == "monitored")
     n_low  = sum(1 for v in out.values() if v.get("confidence") == "low")
     n_none = sum(1 for v in out.values() if v.get("confidence") == "none")
-    ipc_live = bool(ipc)
-    wfp_live = bool(wfp)
+    # v79 — "live" must mean the feed carries SIGNAL, not merely rows.
+    #
+    # These were bool(dict): true whenever the file had any keys at all. WFP is
+    # currently in its IPC fallback (public FCS endpoints are down), so it ships
+    # 56 rows in which every fcs_pct is null — the field wfp_pressure actually
+    # scores. Shape without substance: the dict is non-empty, the signal is
+    # absent, and the coverage meta cheerfully reported the crisis feed as live
+    # while every country's wfp_pressure was 0. That is the precise shape of
+    # "absence of data presented as calm" the QA honesty gate exists to catch,
+    # and it caught it.
+    #
+    # Count the field each feed is scored on instead of the rows it happens to
+    # contain. Same principle as validate_data's scored-field coverage rule.
+    def _n_scored(feed, field):
+        return sum(1 for v in (feed or {}).values()
+                   if isinstance(v, dict) and isinstance(v.get(field), (int, float)))
+
+    n_ipc_scored = _n_scored(ipc, "phase3plus_pct")
+    n_wfp_scored = _n_scored(wfp, "fcs_pct")
+    ipc_live = n_ipc_scored > 0
+    wfp_live = n_wfp_scored > 0
     crisis_feeds_live = ipc_live or wfp_live
 
     envelope = {
@@ -536,15 +547,20 @@ def main():
                 "ipc_feed_live": ipc_live,
                 "wfp_hungermap_feed_live": wfp_live,
                 "crisis_feeds_live": crisis_feeds_live,
+                # v79 — publish the counts the flags are derived from, so a
+                # consumer can tell "feed absent" from "feed present but
+                # carrying no scored values" without re-reading the raw file.
+                "ipc_scored_countries": n_ipc_scored,
+                "wfp_fcs_scored_countries": n_wfp_scored,
                 "countries_high_confidence": n_high,
                 "countries_monitored": n_mon,
                 "countries_low_confidence": n_low,
                 "countries_no_live_signal": n_none,
-                # v41 — record secondary feeds that were EMPTY at build time, so a
-                # fire_kick/aq_kick of 0 is auditable as "feed down" rather than
-                # reading as "no fires / clean air" (audit 2026-07-01).
+                # v41 — record secondary feeds that were EMPTY at build time, so an
+                # aq_kick of 0 is auditable as "feed down" rather than reading as
+                # "clean air" (audit 2026-07-01). v79: nasa_firms removed entirely.
                 "secondary_feeds_empty": [name for name, feed in (
-                    ("nasa_firms", fires), ("openaq", aq), ("usgs_water", usgs),
+                    ("openaq", aq), ("usgs_water", usgs),
                 ) if not feed],
                 # v42 — ACLED is licence-gated: on a lagged/unlicensed tier its
                 # conflict_kick is 0 for every country. Surface the live-contribution
