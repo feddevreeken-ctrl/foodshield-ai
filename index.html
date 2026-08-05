@@ -4299,6 +4299,40 @@ abbr.ac:hover, .ac:hover {
 /* v22.3 — Lock the commodity grid to 5 columns. 10 cards = clean 5×2.
    Each card gets a 1px right + bottom border; outer wrap gets top+left so
    the grid reads as a single bordered sheet without double-borders. */
+/* v79 — Modeled-match disclosure in the commodity drilldown. Sourced corridors
+   stay open; the 40 heuristic country rows fold behind one click. The summary
+   row stays a legible control at rest so it reads as an affordance, not a
+   hidden section. */
+.cmd-modeled-fold {
+  margin-top: 18px;
+  border-top: 1px solid var(--b1);
+  padding-top: 14px;
+}
+.cmd-modeled-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+  padding: 7px 0;
+  border-radius: 6px;
+  transition: color .12s;
+}
+.cmd-modeled-fold > summary::-webkit-details-marker { display: none; }
+.cmd-modeled-fold > summary::before {
+  content: '▸';
+  color: #c47a3c;
+  font-size: 10px;
+  transition: transform .15s ease;
+  flex: none;
+}
+.cmd-modeled-fold[open] > summary::before { transform: rotate(90deg); }
+.cmd-modeled-fold > summary:hover { color: var(--t1); }
+.cmd-modeled-fold > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 /* v79 — Disturbances layout. Was an inline `grid-template-columns:1fr 320px`
    with no breakpoint, so the fixed sidebar plus the 20px gap forced 271px of
    horizontal overflow at a 390px viewport (measured). Now a class with a
@@ -36632,6 +36666,44 @@ function companyProvFor(name){
   const q = src && src.data_quality;
   return COMPANY_PROV[q] || COMPANY_PROV.modeled;
 }
+// v79 — OPACITY AS ITS OWN AXIS.
+//
+// The exposure score is an average over the countries a company DISCLOSES. That
+// makes it a lower bound whose tightness depends entirely on how much the
+// company chose to publish — so a listed trader filing detailed sourcing data
+// gets a well-bounded number, while an opaque private one gets a number built
+// from the handful of origins that happened to leak into the public record.
+// Ranking those two on the same scale rewards secrecy: the least transparent
+// companies, which are often the most systemically important, look calmest.
+//
+// This does not attempt to price that in — inventing an opacity-adjusted score
+// would be the same fabrication in a new coat. It surfaces the uncertainty
+// beside the number, from data already in companies.json: the company's own
+// evidence_gaps list (what the researcher recorded as unknown) and whether it
+// is publicly listed at all. The reader sees both and can discount accordingly.
+function companyOpacity(name){
+  const src = (window.LIVE && LIVE.companies) ? LIVE.companies[name] : null;
+  if (!src) return null;
+  const gaps = Array.isArray(src.evidence_gaps) ? src.evidence_gaps.length : 0;
+  const isPrivate = /private|wholly-owned|state-owned/i.test(String(src.ownership || ''));
+  // Bands are deliberately coarse. The underlying count is a researcher's
+  // judgement, not a measurement, so a fine-grained scale would overstate it.
+  let band, color, label;
+  if (gaps >= 7)      { band = 'high';   color = '#c44b3c'; label = 'High opacity'; }
+  else if (gaps >= 4) { band = 'medium'; color = '#d27a3e'; label = 'Partial disclosure'; }
+  else if (gaps > 0)  { band = 'low';    color = '#c9a957'; label = 'Mostly disclosed'; }
+  else                { band = 'none';   color = 'var(--t3)'; label = 'No gaps recorded'; }
+  return { gaps, isPrivate, band, color, label };
+}
+
+function companyOpacityChip(name){
+  const o = companyOpacity(name);
+  if (!o || !o.gaps) return '';
+  return `<div style="font-size:10px;color:${o.color};margin-top:5px;white-space:nowrap;" `
+    + `title="${o.gaps} disclosure gap${o.gaps===1?'':'s'} recorded for this company${o.isPrivate ? ' — and it is privately held, so there is no filing obligation behind the missing fields' : ''}. The exposure score is an average over DISCLOSED origins only, so more gaps mean a looser lower bound, not a lower risk.">`
+    + `◐ ${o.gaps} unknown${o.gaps===1?'':'s'}${o.isPrivate ? ' · private' : ''}</div>`;
+}
+
 function companyProvBadge(name){
   const p = companyProvFor(name);
   return `<span class="company-prov-badge" title="${p.tip}" `
@@ -36921,14 +36993,29 @@ function renderCompanyList(companies, el) {
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
           <div>
             <div class="company-name">${company} ${companyProvBadge(company)}</div>
-            <div class="company-meta">Active in ${uniqueCountries.length} countries · ${uniqueCommodities.join(', ')}</div>
+            <!-- v79 — "Active in N countries" was N from the COMMODITY-OVERLAP
+                 index: every country that trades any commodity the company also
+                 trades. For Cargill that printed 264 — literally every country
+                 in the dataset — against 9 it actually discloses. Commodity
+                 overlap is not presence, and stating it as presence invented a
+                 global footprint the evidence never claimed. Prefer the
+                 disclosed count; fall back to naming the overlap for what it
+                 is. -->
+            <div class="company-meta">${(() => {
+              const rec = (window.LIVE && LIVE.companies) ? LIVE.companies[company] : null;
+              const disclosed = rec && Number(rec.n_countries);
+              return (disclosed > 0)
+                ? `Discloses ${disclosed} sourcing ${disclosed === 1 ? 'country' : 'countries'}`
+                : `${uniqueCountries.length} countries share its commodity mix`;
+            })()} · ${uniqueCommodities.join(', ')}</div>
           </div>
           <div style="text-align:right;flex-shrink:0;">
-            <div style="font-size:10px;color:var(--t3);margin-bottom:4px;">${companyProvFor(company).label === 'MODELED' ? 'Modeled Exposure' : 'Exposure Score'}</div>
+            <div style="font-size:10px;color:var(--t3);margin-bottom:4px;" title="Average Food Disruption Risk across the origins this company DISCLOSES. A lower bound on exposure, not a measure of it — see the unknowns count below.">${companyProvFor(company).label === 'MODELED' ? 'Modeled Exposure' : 'Disclosed-origin exposure'}</div>
             <div class="company-risk-score" style="background:${expCol}18;color:${expCol};border:1px solid ${expCol}44">
               ${expScore}/100
             </div>
             ${topHigh > 0 ? `<div style="font-size:10px;color:#c44b3c;margin-top:4px;">${topHigh} high-risk</div>` : ''}
+            ${companyOpacityChip(company)}
           </div>
         </div>
         <div style="margin-top:12px;">
@@ -38761,11 +38848,23 @@ function showCommodityDetail(key) {
         } catch(e) { return ''; }
       })()}
 
-      <div style="font-size:11px;font-weight:700;color:#c47a3c;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">
-        Modeled dependency / exposure
-        <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#c47a3c;background:#c47a3c18;padding:1px 4px;border-radius:3px;margin-left:4px;letter-spacing:.04em;text-transform:uppercase;">modeled</span>
-      </div>
-      <div style="font-size:10.5px;color:var(--t3);margin-bottom:10px;">Below: countries whose curated import/export list mentions ${key}. Heuristic match — not customs records.</div>
+      <!-- v79 — MODELED MATCHES FOLD AWAY.
+           This block stacked up to 20 importers + 20 exporters = 40 heuristic
+           rows directly beneath the sourced corridors, so the cited trade data
+           and the concentration signal — the reason the ledger leads with
+           concentration at all — were pushed off-screen by a keyword match on
+           curated country prose. The rows are still here for anyone who wants
+           them; they just no longer outrank the evidence. Sourced first,
+           modeled on request: the provenance tiers expressed as layout. -->
+      <details class="cmd-modeled-fold">
+      <summary>
+        <span style="font-size:11px;font-weight:700;color:#c47a3c;text-transform:uppercase;letter-spacing:.08em;">
+          Modeled dependency / exposure
+          <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#c47a3c;background:#c47a3c18;padding:1px 4px;border-radius:3px;margin-left:4px;letter-spacing:.04em;text-transform:uppercase;">modeled</span>
+        </span>
+        <span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--t3);margin-left:auto;">${importers.length} importers · ${exporters.length} exporters</span>
+      </summary>
+      <div style="font-size:10.5px;color:var(--t3);margin:10px 0;">Countries whose curated import/export list mentions ${key}. A keyword match on curated prose — <b style="color:var(--t2)">not customs records</b>, and not ranked by volume. The cited corridors above are the sourced view.</div>
 
       <div class="grid-2">
         <!-- Importers -->
@@ -38808,6 +38907,7 @@ function showCommodityDetail(key) {
           ${exporters.length > 20 ? `<div style="font-size:11px;color:var(--t3);padding:8px 0;">+ ${exporters.length-20} more countries</div>` : ''}
         </div>
       </div>
+      </details>
 
       <!-- v46 — headlines + interpretation. Commodities tab only. -->
       ${(typeof renderCommodityNewsPanel === 'function') ? renderCommodityNewsPanel(key) : ''}
