@@ -32,7 +32,20 @@ DEFAULT_TIMEOUT = 30
 # headroom for the heaviest legit feeds (FAOSTAT TCL ~250MB, WB WFSO ~60 pages)
 # while still letting ~40 feeds finish well under the 50-min job budget even if
 # one hangs and burns its full cap. Lowering Actions-minutes burn is a bonus.
-DEFAULT_STEP_TIMEOUT = int(os.environ.get("FOODSHIELD_STEP_TIMEOUT", "900"))
+# v79 — 900s -> 300s. The reasoning above assumed ONE feed hangs and burns its
+# cap. The real 2026-08 failure had several hanging at once, and 9 x 15min
+# overruns the 120-min job ceiling on its own. The workflow was then killed
+# before validate / QA / commit, so nothing shipped and every dataset aged
+# together with no error naming a cause — the refresh silently stopped
+# committing on 2026-08-03 and surfaced only as failure emails.
+#
+# Five minutes is still generous: the heaviest legitimate feeds finish inside
+# it, and the one that genuinely needs longer already carries an explicit
+# override (run_all.STEP_TIMEOUTS = {"Comtrade": 2700}). A feed still silent
+# after five minutes is not about to answer — it is a hung socket or a
+# throttling upstream, and waiting three times longer buys nothing but a dead
+# job. run_all.RUN_BUDGET_SECONDS bounds the SUM as the second guard.
+DEFAULT_STEP_TIMEOUT = int(os.environ.get("FOODSHIELD_STEP_TIMEOUT", "300"))
 
 
 def http_get(url, *, params=None, headers=None, timeout=DEFAULT_TIMEOUT, retries=3, backoff=2, patient=False):
@@ -99,8 +112,28 @@ def write_json(filename, payload, *, source=None, notes=None, status=None):
     return path
 
 
-class _StepTimeout(Exception):
-    """Raised by safe_run's SIGALRM handler when a feed exceeds its wall-clock cap."""
+class _StepTimeout(BaseException):
+    """Raised by safe_run's SIGALRM handler when a feed exceeds its wall-clock cap.
+
+    v79 — inherits BaseException, NOT Exception, and that is the whole point.
+
+    As an Exception this cap silently did nothing on any collector with a broad
+    catch. refresh_wfp_country loops over 195 ISO3 codes with
+    `except Exception: continue` around each one — a perfectly reasonable guard
+    for territories whose endpoint 404s. The alarm fired on schedule, that
+    handler swallowed it, and the loop carried straight on to the next country.
+    Every subsequent iteration could be interrupted and swallowed the same way,
+    so the "wall-clock cap" was decorative: observed locally still running 13
+    minutes into a 300-second cap.
+
+    That is how the 2026-08 workflow failures happened. The cap existed, looked
+    correct, and had never once stopped a feed.
+
+    BaseException sits outside `except Exception`, so a timeout now unwinds
+    through collector error handling and reaches safe_run's explicit
+    `except _StepTimeout` at the bottom of this file. The only code that can
+    intercept it is code that deliberately names it — which is the intent.
+    """
 
 
 def _has_existing_data(filename):

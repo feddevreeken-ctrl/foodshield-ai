@@ -20,7 +20,10 @@ Formula (extended May 2026, expanded May 2026 v20.27):
     + conflict_kick      (0-5)   — ACLED 30-day intensity
     + global_food_kick   (0-2)   — FAO FFPI MoM > +3%
     + fx_shock           (0-3)   — local currency fell >10% in 90d vs USD
-    + inflation_shock    (0-3)   — food inflation >15%
+    + inflation_shock    (0)     — DISABLED v79: the YoY level now feeds
+                                   structural c[3]; charging it here too was a
+                                   double-count. Re-enable as an acceleration
+                                   signal only. Field retained for consumers.
     + weather_kick       (0-4)   — drought | heat extremes
     + flood_kick         (0-3)   — river discharge anomaly
     + fire_kick          (0-2)   — fire activity >2x baseline
@@ -258,11 +261,32 @@ def main():
             if fs.get("food_cpi_yoy_pct") is not None:
                 food_infl = fs["food_cpi_yoy_pct"]
                 food_infl_source = "faostat"
+        # v79 — THE SAME READING WAS BEING CHARGED TWICE.
+        #
+        # Until today, food inflation only ever reached the display field `fi`,
+        # so this nowcast kick was the sole place it touched a score. v79 wired
+        # the same WFP/Eurostat/FAOSTAT reading into structural component c[3]
+        # (build_countries_dataset._fi_to_component) — the component literally
+        # named food_infl — which made this a duplicate charge on one number.
+        # Argentina: a single 251.3% YoY reading becomes c[3]=100 -> 9.0
+        # structural points AND min(3,(251.3-15)*0.1) = 3.0 here. 12.0 points
+        # from one observation, across 18 countries.
+        #
+        # A level/delta split would justify keeping both, but only if this side
+        # measured ACCELERATION. It does not: all three feeds expose only the
+        # latest YoY figure, so this is a second level test on the same value.
+        # The structural component is the better home — it is weighted, it
+        # renormalises when absent, and it is what the component is named for.
+        #
+        # The field stays in the payload (the "why +N?" breakdown enumerates
+        # every component) but contributes 0. Re-enable only once a feed retains
+        # a comparable prior-period YoY, making this a true delta:
+        # inflation_shock = f(yoy_now - yoy_prior).
         inflation_shock = 0
-        # Eurostat uses 8% threshold (EU baseline lower); others use 15%
+        # Eurostat uses 8% threshold (EU baseline lower); others use 15%.
+        # Retained: the confidence branch below reads food_infl, and the
+        # threshold documents what the re-enabled delta should clear.
         threshold = 8 if food_infl_source == "eurostat" else 15
-        if isinstance(food_infl, (int, float)) and food_infl > threshold:
-            inflation_shock = min(3, (food_infl - threshold) * 0.1)
 
         # Weather extremes — drought + heat
         weather_kick = 0

@@ -13,11 +13,13 @@ False per step) or a critical set of outputs is missing/empty, exit
 non-zero so the workflow status reflects reality instead of always being
 green.
 """
+import os
 import sys
+import time
 import traceback
 from pathlib import Path
 
-from _common import DATA_DIR, _has_existing_data, safe_run
+from _common import DATA_DIR, DEFAULT_STEP_TIMEOUT, _has_existing_data, safe_run
 
 # Import each refresh module
 import refresh_wfp
@@ -195,10 +197,46 @@ OPTIONAL_OUTPUTS = {"commodity_interpretation.json"}
 STEP_TIMEOUTS = {"Comtrade": 2700}
 
 
+# v79 — GLOBAL WALL-CLOCK BUDGET.
+#
+# The refresh had not committed since 2026-08-03: every scheduled run failed and
+# the whole site went stale, news included. The cause is arithmetic, not a
+# broken feed. There are 46 steps and each may burn the per-step timeout before
+# safe_run gives up, so a run where a handful of upstreams hang can spend
+# 9 x 15min = 135 min just waiting — past the workflow's 120-minute ceiling.
+# GitHub then kills the job mid-pipeline, so validate / QA / commit never run.
+# Nothing names a bad feed; the run simply vanishes and every dataset ages
+# together. Exactly the silent-staleness failure this project keeps designing
+# against.
+#
+# Per-step caps alone cannot bound a 46-step total, so this caps the SUM. Once
+# the budget is spent the remaining feeds are skipped rather than started.
+# safe_run already preserves last-good data, so a skipped feed goes honestly
+# stale instead of empty — and, critically, the run always reaches the gates and
+# the commit step, so whatever DID refresh actually ships.
+#
+# Skipped steps still count as failures, so the exit gate and the workflow email
+# fire as before. The goal is not to hide the problem; it is to stop one slow
+# upstream from silently freezing every other feed on the site.
+RUN_BUDGET_SECONDS = int(os.environ.get("FOODSHIELD_RUN_BUDGET", "5400"))  # 90 min
+
+
 def main():
     failures = 0
     failed_labels = []
+    skipped_labels = []
+    run_started = time.monotonic()
     for step in STEPS:
+        elapsed = time.monotonic() - run_started
+        if elapsed > RUN_BUDGET_SECONDS:
+            label_only = step[0]
+            skipped_labels.append(label_only)
+            failures += 1
+            failed_labels.append(label_only)
+            print(f"[SKIP] {label_only} — run budget ({RUN_BUDGET_SECONDS}s) "
+                  f"exhausted at {elapsed:.0f}s; keeping last-good data so the "
+                  f"run still reaches validation and commit")
+            continue
         # Tolerate the legacy 2-tuple form during the rollout, but new code uses 3-tuples.
         if len(step) == 3:
             label, fn, output = step
@@ -207,11 +245,17 @@ def main():
             output = None
         # safe_run catches everything internally and returns True/False; the
         # except arms are belt-and-braces for anything that escapes it.
+        #
+        # v79 — clamp this step's cap to whatever budget is left. Checking the
+        # budget only BEFORE a step is not sufficient: Comtrade carries a 2700s
+        # override, so starting it at minute 89 would run to minute 134 and blow
+        # the 120-min ceiling anyway — the exact failure the budget exists to
+        # prevent. Clamping makes the total genuinely bounded rather than
+        # bounded-until-the-last-long-step.
+        remaining = max(30, int(RUN_BUDGET_SECONDS - (time.monotonic() - run_started)))
+        step_timeout = min(STEP_TIMEOUTS.get(label, DEFAULT_STEP_TIMEOUT), remaining)
         try:
-            if label in STEP_TIMEOUTS:
-                ok = safe_run(label, fn, output_name=output, timeout=STEP_TIMEOUTS[label])
-            else:
-                ok = safe_run(label, fn, output_name=output)
+            ok = safe_run(label, fn, output_name=output, timeout=step_timeout)
         except SystemExit:
             ok = False
         except Exception:
@@ -236,6 +280,11 @@ def main():
     print(f"\n=== Done — {len(STEPS) - failures}/{len(STEPS)} steps succeeded ===")
     if failed_labels:
         print(f"=== Failed steps: {failed_labels}")
+    if skipped_labels:
+        print(f"=== Skipped (run budget exhausted): {skipped_labels}")
+        print("=== These kept their previous data. If this list is non-empty on "
+              "consecutive runs, a slow upstream is crowding out the tail of the "
+              "pipeline — reorder STEPS or raise FOODSHIELD_RUN_BUDGET.")
     print(f"=== Output audit — {present}/{len(expected_files)} expected files present with data ===")
     if missing:
         print(f"=== Missing/empty files: {missing}")
