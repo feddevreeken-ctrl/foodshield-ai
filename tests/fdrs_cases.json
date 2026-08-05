@@ -70,6 +70,34 @@
       "c": [70, 60, 50, 40, 40, 30, 30, 50, 0],
       "expected_fdrs": 51,
       "assert": "grain_buffer absence costs <=6 pts"
+    },
+    {
+      "name": "unobserved_econ_access_skips_amplifier",
+      "desc": "v79. c7 is null (UNOBSERVED, not a sourced zero). The amplifier is an interaction between two measured quantities, so with one missing it is not computable and is skipped; the base renormalises over the 0.88 of weight actually observed. Contrast with missing_econ_access_no_amplifier above: an identical-looking vector carrying a REAL zero scores 61. That 8-point gap is the entire point — a country genuinely free of economic-access risk is not the same as a country we know nothing about, and the unknown one must never look safer.",
+      "c": [90, 80, 70, 60, 60, 50, 40, null, 40],
+      "expected_fdrs": 69,
+      "assert": "null c7 scores HIGHER than real-zero c7 (61) — absence is not resilience"
+    },
+    {
+      "name": "unobserved_tail_renormalised",
+      "desc": "v79. The Aruba shape: c6/c7/c8 all unobserved, so only 0.82 of the weight is observed. Under the old missing-as-zero rule this scored 38 and looked calmer than a fully-sourced country at identical real risk; renormalising over observed weight gives 42.",
+      "c": [60, 55, 30, 25, 40, 5, null, null, null],
+      "expected_fdrs": 42,
+      "assert": "renormalised over observed weight (was 38 under missing-as-zero)"
+    },
+    {
+      "name": "only_one_component_observed",
+      "desc": "v79. Degenerate case: a single observed component renormalises to itself. Guards the divide-by-observed-weight path against returning a diluted score when coverage is minimal.",
+      "c": [80, null, null, null, null, null, null, null, null],
+      "expected_fdrs": 80,
+      "assert": "single observed component renormalises to its own value"
+    },
+    {
+      "name": "all_unobserved_returns_zero",
+      "desc": "v79. No observed weight at all -> the formula cannot produce a score. Returns 0 as a sentinel rather than dividing by zero; consumers gate on completeness before displaying it.",
+      "c": [null, null, null, null, null, null, null, null, null],
+      "expected_fdrs": 0,
+      "assert": "zero observed weight returns 0 without dividing by zero"
     }
   ]
 }

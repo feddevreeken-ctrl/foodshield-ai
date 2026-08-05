@@ -15,15 +15,28 @@ import json, os, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIX = os.path.join(ROOT, "tests", "fdrs_cases.json")
 
-# The canonical formula — keep in lockstep with build_countries_dataset.py::_fdrs_v2
-# and index.html::fdrsV2. The weights live in the fixture file's _meta.weights.
+# v79 — IMPORT THE REAL FORMULA, DO NOT MIRROR IT.
+#
+# This file used to carry its own copy of the arithmetic, "kept in lockstep" by
+# hand. It drifted in the worst possible way: when the shipped formula changed
+# to renormalise over observed weight, this copy kept the old missing-as-zero
+# behaviour and went on passing — a green regression gate that was testing
+# itself and had stopped touching the code it guards. A test that reimplements
+# its subject cannot detect a change in its subject.
+#
+# It now imports the builder's function directly, so the Python side is
+# genuinely pinned. index.html's copy is checked separately by
+# test_fdrs_v2_js.mjs, which extracts the shipped JS and runs these same
+# fixtures — that pair is the actual parity guarantee.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from build_countries_dataset import _fdrs_v2, FDRS_V2_WEIGHTS
+
+
 def fdrs_v2(cv, weights):
-    base = sum(weights[i] * (cv[i] if i < len(cv) and cv[i] is not None else 0) for i in range(9))
-    c0 = cv[0] if len(cv) > 0 and cv[0] is not None else 0
-    c7 = cv[7] if len(cv) > 7 and cv[7] is not None else 0
-    amp = min(6 * (c0 / 100) * (c7 / 100), 6)
-    # half-up to match JS Math.round (index.html::fdrsV2) and build_countries_dataset.py::_fdrs_v2
-    return int(min(100, max(0, base + amp)) + 0.5)
+    if list(weights) != list(FDRS_V2_WEIGHTS):
+        raise AssertionError(
+            f"fixture weights {weights} != builder FDRS_V2_WEIGHTS {FDRS_V2_WEIGHTS}")
+    return _fdrs_v2(cv)
 
 def main():
     fx = json.load(open(FIX))
