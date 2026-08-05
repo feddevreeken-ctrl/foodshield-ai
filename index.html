@@ -4299,27 +4299,65 @@ abbr.ac:hover, .ac:hover {
 /* v22.3 — Lock the commodity grid to 5 columns. 10 cards = clean 5×2.
    Each card gets a 1px right + bottom border; outer wrap gets top+left so
    the grid reads as a single bordered sheet without double-borders. */
+/* v79 — Disturbances layout. Was an inline `grid-template-columns:1fr 320px`
+   with no breakpoint, so the fixed sidebar plus the 20px gap forced 271px of
+   horizontal overflow at a 390px viewport (measured). Now a class with a
+   single-column fallback, and the min-width:0 the 1fr track needed anyway. */
+.dist-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
+  height: 100%;
+  min-height: 0;
+}
+@media (max-width: 860px) {
+  .dist-grid { grid-template-columns: minmax(0, 1fr); }
+  .dist-grid #dist-sidebar { max-height: none; }
+}
+
+/* v79 — Commodity concentration LEDGER (replaces the boxed 5-col card grid).
+   One scannable ruled row per commodity: who controls supply first, live
+   price sparkline + move on the right, volume/provenance/restriction demoted
+   to a quiet meta line. Insights-first; far less crowded. */
 #commodities-grid {
-  display: grid !important;
-  grid-template-columns: repeat(5, 1fr) !important;
+  display: flex !important;
+  flex-direction: column;
   gap: 0 !important;
   border-top: 1px solid var(--b1);
-  border-left: 1px solid var(--b1);
 }
-#commodities-grid .cmd-card {
-  border: none;
-  border-right: 1px solid var(--b1);
+.cmd-row {
+  display: grid;
+  grid-template-columns: 172px minmax(0,1fr) 150px;
+  gap: 20px;
+  align-items: center;
+  padding: 14px 6px 13px;
   border-bottom: 1px solid var(--b1);
+  cursor: pointer;
+  transition: background-color .12s;
 }
-@media (max-width: 1280px) {
-  #commodities-grid { grid-template-columns: repeat(4, 1fr) !important; }
-}
-@media (max-width: 980px) {
+.cmd-row:hover { background: var(--bg1); }
+.cmd-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cmd-row-name { font-family: 'Instrument Serif', serif; font-size: 21px; line-height: 1; color: var(--t1); letter-spacing: .01em; }
+.cmd-row-cat { font-family: 'Geist Mono', monospace; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--t3); margin-top: 6px; display: flex; align-items: center; gap: 7px; }
+.cmd-row-cat i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
+.cmd-row-conc { display: grid; grid-template-columns: 44px minmax(0,1fr); gap: 13px; align-items: center; min-width: 0; }
+.cmd-row-pct { font-family: 'Geist Mono', monospace; font-size: 22px; font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1; }
+.cmd-row-pct small { display: block; font-size: 8px; letter-spacing: .12em; text-transform: uppercase; color: var(--t3); margin-top: 3px; }
+.cmd-row-concbody { min-width: 0; }
+.cmd-row-bar { height: 5px; border-radius: 3px; background: var(--bg3); overflow: hidden; margin-bottom: 7px; max-width: 560px; }
+.cmd-row-bar i { display: block; height: 100%; border-radius: 3px; }
+.cmd-row-story { font-size: 12px; color: var(--t2); line-height: 1.4; }
+.cmd-row-story b { color: var(--t1); font-weight: 500; }
+.cmd-row-price { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.cmd-row-spark { width: 96px; height: 24px; display: block; }
+.cmd-row-priceline { font-family: 'Geist Mono', monospace; font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cmd-row-priceline .n { color: var(--t1); }
+.cmd-row-meta { grid-column: 1 / -1; font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: .04em; color: var(--t3); margin-top: 3px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+.cmd-row-badge { font-family: 'Geist Mono', monospace; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+@media (max-width: 860px) {
   .cmd-hero { grid-template-columns: 1fr; gap: 20px; }
-  #commodities-grid { grid-template-columns: repeat(3, 1fr) !important; }
-}
-@media (max-width: 700px) {
-  #commodities-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  .cmd-row { grid-template-columns: 1fr; gap: 11px; }
+  .cmd-row-price { align-items: flex-start; flex-direction: row; gap: 12px; }
 }
 
 /* v22.2 — Scenario publishable brief, V1-reference style.
@@ -9780,7 +9818,7 @@ body::before {
     </button>
     <button class="nav-btn" data-group="live" onclick="showGroup('live',this)">
       <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 16.24a6 6 0 0 1 0-8.49M20.49 3.51a12 12 0 0 1 0 16.98M3.51 20.49a12 12 0 0 1 0-16.98"/></svg>
-      Live
+      News
     </button>
     <button class="nav-btn" data-group="about" onclick="showGroup('about',this)">
       <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -10100,17 +10138,20 @@ body::before {
         <div id="sp-suppliers"></div>
       </div>
 
+      <!-- v79 — HONEST LABELLING. Nothing in this card calls a model: #sp-ai is
+           stored prose and the "live" block is a deterministic template (its own
+           code comment records that the LLM path was removed). Calling it "AI
+           Analysis" with a pulsing dot and a refresh button implied inference
+           that never happens. Renamed to what it is; the refresh theatrics are
+           gone because re-running a pure function of already-loaded data cannot
+           produce a different answer. -->
       <div class="ai-card">
         <div class="ai-card-label">
-          <span class="asterisk">✱</span> AI Analysis
+          <span class="asterisk">✱</span> Indicator synthesis
+          <span style="font-family:'Geist Mono',monospace;font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin-left:6px;">rules-based · no model call</span>
         </div>
         <p id="sp-ai"></p>
         <div id="sp-ai-live" style="margin-top:8px;display:none;">
-          <div class="ai-narrative-eyebrow" style="margin-bottom:6px;">
-            <span id="sp-ai-live-dot" class="ai-narrative-dot"></span>
-            Live AI Analysis
-            <button class="ai-refresh-btn" onclick="fetchAINarrative(window._currentPanelISO, true)">↻</button>
-          </div>
           <div id="sp-ai-live-text" class="ai-narrative-text"></div>
           <div id="sp-ai-live-meta" class="ai-narrative-meta"></div>
         </div>
@@ -10397,7 +10438,7 @@ body::before {
           </div>
           <div class="editorial-headline">A free dashboard for <em>the question no single source answers</em>.</div>
           <div class="editorial-standfirst">
-            If something goes wrong in one country tomorrow — a war, a drought, a port closure — <b>who actually gets hurt, and how badly?</b> Built solo by a student at Erasmus University Rotterdam, FoodShield wires together 34 public data feeds into one comparable score per country, refreshed every six hours, with every input traceable.
+            If something goes wrong in one country tomorrow — a war, a drought, a port closure — <b>who actually gets hurt, and how badly?</b> Built solo by a student at Erasmus University Rotterdam, FoodShield wires together 35 public data sources into one comparable score per country — 30 of them refreshed automatically every six hours, four curated by hand, one currently offline pending an API key. Every input is traceable.
           </div>
         </div>
         <div id="about-body" class="fade-in"></div>
@@ -16991,15 +17032,24 @@ const DATASTATUS_FEEDS = {
   wb_wfso:       'World Bank Food Security Outlook (baseline + downside projections)',
   net_food_trade: 'FAOSTAT net agri-food trade balance · country panel + commodity rows',
   worldbank_bulk: '20 structural indicators × ~201 countries · structural FDRS inputs',
-  worldbank_wgi: '6 governance indicators · structural FDRS conflict/logistics component',
-  worldbank_lpi: 'World Bank Logistics Performance Index · structural FDRS conflict/logistics',
-  undp_hdi:      'UNDP HDI + sub-indices · structural FDRS context',
-  worldbank_cckp: 'World Bank Climate Change Knowledge Portal · observed temperature + precipitation, feeds the structural climate component',
+  // v79 — these five keys must match source_manifest.json's own source ids
+  // (wgi / lpi / hdi / cckp / inform_risk). They previously read
+  // worldbank_wgi / worldbank_lpi / undp_hdi / worldbank_cckp / inform, which
+  // match no manifest entry, so five feeds rendered with no description.
+  wgi:           '6 governance indicators · structural FDRS conflict/logistics component',
+  lpi:           'World Bank Logistics Performance Index · structural FDRS conflict/logistics',
+  hdi:           'UNDP HDI + sub-indices · structural FDRS context',
+  cckp:          'World Bank Climate Change Knowledge Portal · observed temperature + precipitation, feeds the structural climate component',
   ndgain:        'ND-GAIN climate vulnerability + readiness · structural FDRS climate',
   aqueduct:      'WRI Aqueduct 4.0 water-stress, drought, flood risk · structural FDRS climate',
-  inform:        'EU JRC INFORM Risk Index · structural FDRS amplifier',
+  inform_risk:   'EU JRC INFORM Risk Index · structural FDRS amplifier',
   usda_psd:      'USDA PSD observed production/imports/exports for staples · commodity panel',
   faostat_fbs:   'FAOSTAT Food Balance Sheets · caloric shares of wheat/rice/maize per country',
+  // v79 — the manifest tracks these three but had no description, so they
+  // rendered blank in the source-status panel.
+  fx_rates:      'Daily FX rates vs USD · powers the currency-depreciation nowcast signal and import-cost stress',
+  commodity_news: 'Per-commodity news headlines · situational context on the Commodities tab, not a scoring input',
+  daily_summary: 'Derived digest built from the other feeds after each refresh · powers the landing brief',
   fao_giews:     'FAO GIEWS quarterly country briefs · country-panel deep-link (static)',
   fews:          'FEWS NET IPC-style classifications · live FDW API (current + 3/8-month projection) · ~29 of 35 priority countries, public/unauthenticated tier · feeds the nowcast (≤+6)',
   hapi_idps:     'Internal displacement (IDPs) · HDX HAPI · national totals for ~54 countries · feeds the nowcast displacement signal (≤+4)',
@@ -17741,14 +17791,35 @@ async function loadLiveData() {
       const v = cv[i];
       return (typeof v === 'number' && isFinite(v)) ? v : fb;
     };
-    const comp = [
-      g(0, 0), g(1, 0), g(2, 0), g(3, 0), g(4, 0), g(5, 0),
-      g(6, (typeof sceFallback === 'number' && isFinite(sceFallback)) ? sceFallback : 0),
-      g(7, 0), g(8, 0)
-    ];
-    let base = 0;
-    for (let i = 0; i < 9; i++) base += FDRS_V2_W[i] * comp[i];
-    const amp = Math.min(6 * (comp[0] / 100) * (comp[7] / 100), 6);
+    // v79 — MISSING COMPONENTS NO LONGER READ AS PERFECT RESILIENCE.
+    // Previously every gap was substituted with 0, so an unscored component
+    // contributed nothing to the weighted base and the country looked *more*
+    // resilient than a fully-sourced country at identical real risk ("calm by
+    // absence"). 59 of 214 countries are missing c7 or c8. Aruba, observed on
+    // only 82% of the weight, scored 38; renormalising the observed weight puts
+    // it at 46. The weights themselves are unchanged — we divide by the weight
+    // actually observed instead of pretending the gap is a zero.
+    // A stored 0 is a REAL value (China's grain-reserve risk is genuinely ~0);
+    // only null/non-finite counts as a gap.
+    const comp = new Array(9);
+    for (let i = 0; i < 9; i++) {
+      let v = (i === 6) ? g(6, (typeof sceFallback === 'number' && isFinite(sceFallback)) ? sceFallback : null)
+                        : g(i, null);
+      comp[i] = (typeof v === 'number' && isFinite(v)) ? v : null;
+    }
+    let base = 0, wObs = 0;
+    for (let i = 0; i < 9; i++) {
+      if (comp[i] !== null) { base += FDRS_V2_W[i] * comp[i]; wObs += FDRS_V2_W[i]; }
+    }
+    if (wObs <= 0) return 0;
+    if (wObs < 1) base = base / wObs;
+    // The amplifier is an interaction between import dependence and economic
+    // access. With either side unobserved it is not computable — it is omitted
+    // rather than silently evaluated as zero, which the renormalised base above
+    // now accounts for honestly.
+    const amp = (comp[0] !== null && comp[7] !== null)
+      ? Math.min(6 * (comp[0] / 100) * (comp[7] / 100), 6)
+      : 0;
     return Math.max(0, Math.min(100, Math.round(base + amp)));
   };
   // Decompose the amplifier for the FDRS Composition card (badged MODELED).
@@ -17991,6 +18062,49 @@ async function loadLiveData() {
   }
   // v20.4: refresh the status-pill from the manifest now that LIVE.manifest is loaded
   if (typeof updateLiveStatusUI === 'function') updateLiveStatusUI();
+  // v79 — the footer source count was static text with no writer anywhere in the
+  // file, so it read "34 data pipelines" regardless of what the manifest tracked.
+  // Drive it from summary.total_sources like the landing stat now does.
+  try {
+    const _sum = LIVE.manifest?.summary || {};
+    const _n = Number(_sum.total_sources)
+      || (LIVE.manifest?.sources ? Object.keys(LIVE.manifest.sources).length : 0);
+    const _bb = document.getElementById('bb-source-count');
+    if (_bb && _n) _bb.textContent = `${_n} data pipelines`;
+    // v79 — tooltip carried its own hardcoded "34"; derive it too.
+    const _link = document.getElementById('bb-status-link');
+    if (_link && _n) {
+      const _ok = Number(_sum.ok_sources);
+      _link.title = `Open Data Status — per-source health for all ${_n} pipelines`
+        + (Number.isFinite(_ok) ? ` (${_ok} refreshing automatically)` : '');
+    }
+    // Atlas totals: count the real cited flows rather than repeating a literal.
+    const _atlas = document.getElementById('bb-atlas-stat');
+    const _flows = (typeof COMMODITY_TRADE_FLOWS_COUNT === 'number') ? COMMODITY_TRADE_FLOWS_COUNT : null;
+    if (_atlas) {
+      const _cm = (typeof COMMODITY_META !== 'undefined' && COMMODITY_META.length) ? COMMODITY_META.length : null;
+      const _obs = COMMODITY_META?.filter?.(c => typeof c.obsPct === 'number') || [];
+      const _avgObs = _obs.length
+        ? Math.round(_obs.reduce((s, c) => s + c.obsPct, 0) / _obs.length * 10) / 10
+        : null;
+      const _cited = _cm ? (COMMODITY_META.reduce((s, c) => s + (Number(c.flows) || 0), 0) || null) : null;
+      _atlas.textContent = [
+        _cm ? `${_cm} commodities` : null,
+        _cited ? `${_cited.toLocaleString()} cited flows` : null,
+        _avgObs != null ? `${_avgObs}% observed` : null,
+      ].filter(Boolean).join(' · ') || 'trade atlas';
+    }
+    // Build stamp: the manifest's own load time, not a frozen version string.
+    const _stamp = document.getElementById('bb-build-stamp');
+    if (_stamp && _sum.loaded_at) {
+      const d = new Date(_sum.loaded_at);
+      if (!isNaN(d)) {
+        _stamp.textContent = 'data ' + d.toLocaleDateString('en-GB',
+          { day: '2-digit', month: 'short', year: 'numeric' });
+        _stamp.title = `Last successful data refresh: ${d.toISOString()}`;
+      }
+    }
+  } catch (e) {}
   // v43 — the Most-at-risk / Most-resilient rails were rendered once at init with
   // STRUCTURAL scores and never refreshed, so they disagreed with every other surface
   // (which shows the nowcast-adjusted score) and the live delta badge never appeared.
@@ -21536,7 +21650,10 @@ const HOST_VIEWS = {
   livedata:['livedata','datastatus'],
   about:['about','methodology'],
 };
-const GROUP_FIRST = { explore:'global', analyze:'scenario', live:'disturbances', about:'about' };
+// v79 — the "live" group is labelled News in the nav and now lands on the news
+// tab first (was disturbances). The group id stays "live" so every
+// data-sub-group / #subnav[data-group] selector and ?tab= deep-link still works.
+const GROUP_FIRST = { explore:'global', analyze:'scenario', live:'news', about:'about' };
 
 // v45 — Country & Flows uses ONE country selector for both sub-views. #trade-sel
 // survives as a hidden mirror (the boot-time option
@@ -26630,10 +26747,11 @@ function renderCountryTab() {
         <div class="ai-narrative-panel" id="ct-ai-live-${c.iso}">
           <div class="ai-narrative-eyebrow">
             <span class="ai-narrative-dot"></span>
-            Live narrative
-            <button class="ai-refresh-btn" onclick="fetchAINarrative('${c.iso}', true, 'ct-ai-live-text-${c.iso}')">↻ Refresh</button>
+            Indicator synthesis
           </div>
-          <div id="ct-ai-live-text-${c.iso}" class="ai-narrative-text" style="color:var(--t3);font-style:italic;">Generating analysis…</div>
+          <!-- v79 — "Generating analysis…" implied a model was thinking. This is a
+               deterministic template over already-loaded data; it resolves instantly. -->
+          <div id="ct-ai-live-text-${c.iso}" class="ai-narrative-text" style="color:var(--t3);font-style:italic;">Composing from live components…</div>
           <div class="ai-narrative-meta">Deterministic synthesis from FDRS components + live shocks · no LLM</div>
         </div>
       </div>
@@ -30888,7 +31006,7 @@ function renderAboutTab() {
               ${ac('FAO')} has prices. ${ac('WFP')} has hunger. World Bank has trade. ${ac('NASA')} has weather. ${ac('ACLED')} has conflict. Each is excellent. <b style="color:var(--t1)">None of them, alone, answers that question.</b>
             </p>
             <p style="margin:0 0 14px;">
-              So I started wiring them together. One pipeline became three. Three became ten. It ended up at <b style="color:var(--t1)">34 public feeds, refreshing every six hours, covering 193 countries and 50 US states</b> — distilled into one 0–100 Food Disruption Risk Score per country with every input traceable.
+              So I started wiring them together. One pipeline became three. Three became ten. It ended up at <b style="color:var(--t1)">35 public sources — 30 of them refreshing every six hours — covering 193 countries and 50 US states</b> — distilled into one 0–100 Food Disruption Risk Score per country with every input traceable.
             </p>
             <p style="margin:0;">
               I'm not a food-security expert. I'm a student, this is open and honest about what it knows and doesn't know. <em style="font-style:italic;color:var(--t1);">The synthesis is the product.</em>
@@ -31147,10 +31265,15 @@ function _fillLandingStats(){
       }).length;
       set('instr-stat-countries', sov);
     }
-    // live pipelines from the source manifest if present
+    // live pipelines from the source manifest if present.
+    // v79 — this read two things that never existed: LIVE.source_manifest (the
+    // loader assigns LIVE.manifest) and an array-shaped `sources` (it is a dict
+    // keyed by source id). Both fell through, so the stat stayed pinned at the
+    // hardcoded 34 no matter what the manifest said. Read summary.total_sources.
     try {
-      const man = (typeof LIVE!=='undefined' && LIVE && LIVE.source_manifest) ? LIVE.source_manifest : null;
-      const n = man && Array.isArray(man.sources) ? man.sources.length : (man && man.length) ? man.length : null;
+      const man = (typeof LIVE!=='undefined' && LIVE) ? LIVE.manifest : null;
+      const n = (man && man.summary && Number(man.summary.total_sources))
+        || (man && man.sources ? Object.keys(man.sources).length : null);
       if (n) set('instr-stat-pipelines', n);
     } catch(e){}
   } catch(e){}
@@ -34302,7 +34425,7 @@ function renderMethodologyTab() {
           {src:'UN Comtrade Plus (public preview)',yr:'2024',used:'Bilateral staples trade flows — observed wheat/rice/corn/soy by importer × exporter',url:'https://comtradeplus.un.org'},
           {src:'Open-Meteo Weather + Flood',yr:'live',used:'Precipitation + temperature anomalies, river discharge in flood-exposed basins',url:'https://open-meteo.com'},
           {src:'USGS Water Services',yr:'live',used:'US river flow anomalies (drought / flood proxies for cropland regions)',url:'https://waterservices.usgs.gov'},
-          {src:'NASA FIRMS',yr:'live',used:'Active fire detection over cropland (MODIS / VIIRS)',url:'https://firms.modaps.eosdis.nasa.gov'},
+          {src:'NASA FIRMS',yr:'offline',used:'Active fire detection over cropland (MODIS / VIIRS) — API key rejected upstream, so this feed is currently empty and contributes nothing to any score',url:'https://firms.modaps.eosdis.nasa.gov'},
           {src:'OpenAQ',yr:'live',used:'PM2.5 background — labour + crop stress proxy',url:'https://openaq.org'},
           {src:'Eurostat food HICP',yr:'monthly',used:'EU 27 monthly food inflation (HICP CP011)',url:'https://ec.europa.eu/eurostat'},
           {src:'FAOSTAT food CPI',yr:'quarterly',used:'Global annual food consumer-price index',url:'https://www.fao.org/faostat/en/#data/CP'},
@@ -34641,7 +34764,7 @@ async function renderDisturbancesTab() {
   // Show skeleton while loading
   el.innerHTML = `
     ${dailySummaryBanner}
-    <div style="display:grid;grid-template-columns:1fr 320px;gap:20px;height:100%;min-height:0;">
+    <div class="dist-grid">
       <div>
         <div id="dist-filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
           ${['all','famine','drought','flood','conflict','price_spike','earthquake','cyclone','chokepoint'].map(t=>
@@ -35809,7 +35932,7 @@ function renderDisturbanceSidebar() {
           return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--b1);">
             <span style="font-size:11.5px;color:var(--t2);flex:1;">${c.name}</span>
             <span style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--t1);">${c.val}</span>
-            <span style="font-size:11px;font-weight:600;color:${c.chg==null?'var(--t3)':c.chg>0?'#c44b3c':c.chg<0?'#6ba36b':'var(--t3)'};">${trend}${trend?' ':''}${sign}${c.chg==null?'':c.chg+'%'}</span>
+            <span style="font-size:11px;font-weight:600;color:${c.chg==null?'var(--t3)':c.chg>0?'#c44b3c':c.chg<0?'#6ba36b':'var(--t3)'};" title="Month-on-month change in index points. The FFPI is an index (2014–2016 = 100), so a move from 120 to 121 is +1.0 pts, not +1%.">${trend}${trend?' ':''}${sign}${c.chg==null?'':c.chg+' pts'}</span>
           </div>`;
         }).join('')}
         <div style="font-size:10px;color:var(--t3);margin-top:8px;">Source: <a href="https://www.fao.org/worldfoodsituation/foodpricesindex/en/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">FAO FFPI</a> · refreshed every 6h.</div>
@@ -36210,7 +36333,7 @@ If active live shocks are listed, your analysis MUST acknowledge at least one of
         const adjTxt = (c._fdrsAdj || 0) > 0 ? `lifting nowcast +${c._fdrsAdj} above structural` : '';
         liveSentence = ` Active live signals (${new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}): ${liveShocks.slice(0, 2).join(' and ')}${adjTxt ? `, ${adjTxt}` : ''}.`;
       }
-      narrative = `${c.name}'s food security trajectory is ${trend}, with FDRS projected to ${c.f2030 > c.fdrs ? 'rise to' : 'hold at'} ${c.f2030} by 2030 — a ${c.f2030 > c.fdrs ? '+' : ''}${c.f2030 - c.fdrs} point shift. The primary structural vulnerability is ${mainRisk}${suppliers ? `, with heavy reliance on ${suppliers}` : ''}.${liveSentence} Peak vulnerability was observed in ${peakYear} (score: ${peak}); the current reading of ${c.fdrs} reflects ${c.fdrs < peak ? 'partial stabilization' : 'ongoing stress'}.`;
+      narrative = `${c.name}'s food security trajectory is ${trend}, with FDRS projected to ${c.f2030 > c.fdrs ? 'rise to' : 'hold at'} ${c.f2030} by 2030 — a ${c.f2030 > c.fdrs ? '+' : ''}${c.f2030 - c.fdrs} point shift. The primary structural vulnerability is ${mainRisk}${suppliers ? `, with heavy reliance on ${suppliers}` : ''}.${liveSentence} The modeled backcast peaks in ${peakYear} (score: ${peak}) — a reconstruction, not a measured history; the current reading of ${c.fdrs} reflects ${c.fdrs < peak ? 'partial stabilization' : 'ongoing stress'}.`;
     }
 
     _aiNarrativeCache[cacheKey] = narrative;
@@ -36445,22 +36568,34 @@ function renderLiveEventsFeed() {
     return;
   }
   const sevCol = {critical:'#c44b3c', high:'#d27a3e', medium:'#c9a957', low:'#6ba36b'};
+  // v79 SECURITY — every string below originates in a third-party feed
+  // (ReliefWeb / GDACS titles, places, summaries) and lands in innerHTML.
+  // The main Disturbances list has escaped these since v32 via _escFeed(); this
+  // renderer did not, so a feed item containing markup executed here instead of
+  // rendering as text. Same data, same sink, one of them was unguarded.
+  const esc = (typeof _escFeed === 'function')
+    ? _escFeed
+    : (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   const items = disturbanceEvents.slice(0, 6).map(ev => {
     const col = sevCol[ev.severity] || '#9a988f';
-    const title = ev.title || ev.headline || ev.type || 'Food-system event';
-    const place = ev.country || ev.region || '';
-    const date = ev.date || '';
+    const title = esc(ev.title || ev.headline || ev.type || 'Food-system event');
+    const place = esc(ev.country || ev.region || '');
+    const date = esc(ev.date || '');
+    const kind = esc((ev.type || ev.severity || 'event').toString().toUpperCase());
+    const bodyRaw = (ev.summary || ev.description || '').toString();
+    const body = esc(bodyRaw.substring(0, 180)) + (bodyRaw.length > 180 ? '…' : '');
     return `
       <div class="live-event-row">
         <div class="live-event-bar" style="background:${col}"></div>
         <div class="live-event-body">
           <div class="live-event-top">
-            <span class="live-event-type" style="color:${col}">${(ev.type||ev.severity||'event').toString().toUpperCase()}</span>
+            <span class="live-event-type" style="color:${col}">${kind}</span>
             <span class="live-event-place">${place}</span>
             <span class="live-event-date">${date}</span>
           </div>
           <div class="live-event-title">${title}</div>
-          ${ev.summary || ev.description ? `<div class="live-event-desc">${(ev.summary||ev.description||'').substring(0,180)}${(ev.summary||ev.description||'').length>180?'…':''}</div>` : ''}
+          ${bodyRaw ? `<div class="live-event-desc">${body}</div>` : ''}
         </div>
       </div>`;
   }).join('');
@@ -37809,6 +37944,32 @@ function commodityLivePrice(cmKey) {
            note: `WB Pink Sheet · ${s.label || seriesKey} · ${s.latest_month || ''}` };
 }
 
+// v79 — live-price sparkline. Reads the WB Pink Sheet 60-month history for a
+// commodity and returns an inline SVG polyline (last 24 months), coloured by
+// the month-on-month direction (rising price = red import-cost stress). No
+// history on file → empty string, so the row simply omits the chart.
+function _cmSparkline(cmKey) {
+  const seriesKey = COMMODITY_PINK_KEY[cmKey];
+  const s = seriesKey && LIVE.pink_sheet && LIVE.pink_sheet.series && LIVE.pink_sheet.series[seriesKey];
+  const hist = (s && Array.isArray(s.history)) ? s.history.slice(-24) : null;
+  if (!hist) return '';
+  const vals = hist.map(h => h && h.value).filter(v => v != null && !isNaN(v));
+  if (vals.length < 4) return '';
+  const min = Math.min(...vals), max = Math.max(...vals), rng = (max - min) || 1;
+  const W = 96, H = 24, pad = 2;
+  const pts = vals.map((v, i) => {
+    const x = pad + i * (W - 2 * pad) / (vals.length - 1);
+    const y = pad + (1 - (v - min) / rng) * (H - 2 * pad);
+    return x.toFixed(1) + ',' + y.toFixed(1);
+  });
+  const up = (Number(s.change_mom_pct) || 0) > 0;
+  const col = up ? '#c44b3c' : '#6ba36b';
+  const last = pts[pts.length - 1].split(',');
+  return `<svg class="cmd-row-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">`
+    + `<polyline points="${pts.join(' ')}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity="0.85"/>`
+    + `<circle cx="${last[0]}" cy="${last[1]}" r="1.9" fill="${col}"/></svg>`;
+}
+
 // v22 — concentration helper. Reads top-N exporter shares from
 // COMMODITY_TRADE_ROUTES and returns { score, story, topCountries, topShare }.
 // Score is the HHI-style concentration of the top-2 suppliers (0-100).
@@ -38075,35 +38236,42 @@ function renderCommodityGrid() {
     const provBadge = isObserved
       ? `<span class="cmd-card-prov-badge cmd-prov-observed" title="${cm.obsPct!=null?cm.obsPct+'% of cited bilateral flows are importer-reported/observed (FAOSTAT 2024 / UN Comtrade).':'Observed bilateral trade from UN Comtrade.'}">${cm.obsPct!=null?cm.obsPct+'% observed':'Observed · Comtrade'}</span>`
       : `<span class="cmd-card-prov-badge cmd-prov-modeled" title="${cm.obsPct!=null?cm.obsPct+'% observed; remainder exporter-mirror/modeled with basis stated.':'Route shares modeled from top exporters.'}">${cm.obsPct!=null?cm.obsPct+'% observed':'Modeled route'}</span>`;
+    // v79 — LEDGER ROW. One ruled line per commodity: name + family on the
+    // left, the concentration verdict (the reason anyone opens this tab) in
+    // the middle, live price + sparkline on the right, and everything
+    // volume/provenance/restriction related demoted to a quiet meta line.
+    const spark = _cmSparkline(cm.key);
+    const priceLine = live
+      ? `<span class="n">${priceNum}</span>${priceUnit ? ` <span style="color:var(--t3)">${priceUnit}</span>` : ''}`
+        + ((!isNaN(chgNum) && chgNum !== 0 && chgDir)
+            ? ` <span style="color:${chgDir>0?'#c44b3c':'#6ba36b'}" title="World Bank Pink Sheet, month-on-month — rising prices raise import-cost stress">${chgDir>0?'▲':'▼'}${Math.abs(chgNum).toFixed(1)}%</span>`
+            : '')
+      : `<span style="color:var(--t3)">no live benchmark</span>`;
+    const restrict = (typeof commodityRestrictionBadge === 'function') ? commodityRestrictionBadge(cm.key) : '';
+    const meta = [
+      cm.flows != null ? `${cm.flows} cited flows` : '',
+      cm.topExp ? `${cm.topExp} #1` : '',
+      cm.obsPct != null ? `<span style="color:${cm.obsPct>=70?'#6ba36b':(cm.obsPct>=40?'#c9a957':'#c47a3c')}">${cm.obsPct}% observed</span>` : (isObserved ? 'observed · Comtrade' : 'modeled route'),
+      cm.vol ? `${cm.vol} traded` : '',
+    ].filter(Boolean).map(s => `<span>${s}</span>`).join('');
     return `
-    <div class="cmd-card" onclick="showCommodityDetail('${cm.key}')" style="--cmd-family-color:${fam.color}" role="button" tabindex="0" aria-label="View details for ${cm.key}" onkeydown="_kbdClick(event)">
-      <div class="cmd-card-topbar">${(typeof commodityRestrictionBadge === 'function') ? commodityRestrictionBadge(cm.key) : ''}${(!isNaN(chgNum) && chgNum !== 0 && chgDir) ? `<span class="fs-pricemove" style="color:${chgDir>0?'#c44b3c':'#6ba36b'}" title="World Bank Pink Sheet price move, month-on-month — rising prices raise import-cost stress">${chgDir>0?'▲':'▼'} ${Math.abs(chgNum).toFixed(1)}% MoM</span>` : ''}${alertPill}</div>
-      <div class="cmd-card-name-row">
-        <span class="cmd-card-name">${cm.key}</span>
-        <span class="cmd-card-cat">${cm.cat || ''}</span>
+    <div class="cmd-row" onclick="showCommodityDetail('${cm.key}')" role="button" tabindex="0" aria-label="View details for ${cm.key}" onkeydown="_kbdClick(event)">
+      <div>
+        <div class="cmd-row-name">${cm.key}</div>
+        <div class="cmd-row-cat"><i style="background:${fam.color}"></i>${fam.label || cm.cat || ''}</div>
       </div>
-      <div class="cmd-card-mid">
-        <div class="cmd-card-price-block">
-          <span class="cmd-card-price">${cm.vol || priceNum}</span>
-          <span class="cmd-card-chg" style="color:${(cm.obsPct||0)>=70?'#6ba36b':((cm.obsPct||0)>=40?'#c9a957':'#c47a3c')}">${cm.obsPct!=null?cm.obsPct+'% obs':chgDisp}</span>
-        </div>
-        <div class="cmd-card-unit">${cm.flows!=null?cm.flows+' cited flows · '+(cm.topExp||'')+' #1 · 2024 basis':(noteUnit || '—')}</div>
-      </div>
-      <div class="cmd-card-bot">
-        <div class="cmd-card-conc-score-block">
-          <span class="cmd-card-conc-score" style="color:${bandColor}">${score != null ? score : '—'}</span>
-          <span class="cmd-card-conc-score-lbl">Conc / 100</span>
-        </div>
-        <div class="cmd-card-conc-story">
-          <span class="cmd-card-conc-story-eyebrow">Concentration risk</span>
-          <span>${story}</span>
+      <div class="cmd-row-conc">
+        <div class="cmd-row-pct" style="color:${bandColor}">${score != null ? score : '—'}<small>conc</small></div>
+        <div class="cmd-row-concbody">
+          <div class="cmd-row-bar"><i style="width:${score != null ? Math.max(3, Math.min(100, score)) : 0}%;background:${bandColor}"></i></div>
+          <div class="cmd-row-story">${story}</div>
         </div>
       </div>
-      ${interp ? `<div class="cmd-card-interp">${interp}</div>` : ''}
-      <div class="cmd-card-prov">
-        <span class="cmd-card-prov-family"><i></i>${fam.label}</span>
-        ${provBadge}
+      <div class="cmd-row-price">
+        ${spark}
+        <div class="cmd-row-priceline">${priceLine}</div>
       </div>
+      <div class="cmd-row-meta">${meta}${restrict ? `<span class="cmd-row-badge">${restrict}</span>` : ''}${(score != null && score >= 70) ? `<span class="cmd-row-badge" style="color:#c44b3c">● concentration alert</span>` : ''}</div>
     </div>`;
   }).join('');
 }
@@ -38430,7 +38598,14 @@ function showCommodityDetail(key) {
   // $442 in the drilldown" reported by reviewers). Falls back to the legacy
   // baseline price + a 'baseline' badge when no live series is loaded.
   const live = (typeof commodityLivePrice === 'function') ? commodityLivePrice(key) : null;
-  const headerPrice = live ? live.price : (meta.price + ' <span style="font-size:9.5px;color:var(--accent);background:var(--accent)18;padding:1px 4px;border-radius:3px;margin-left:4px;letter-spacing:.04em;text-transform:uppercase;">baseline</span>');
+  // v79 — COMMODITY_META.price is not a price. Every entry duplicates `vol`
+  // (Wheat: price:"172.8 Mt", vol:"172.8 Mt"), so with no Pink Sheet series the
+  // header rendered a trade VOLUME in the price slot and badged it "baseline",
+  // which reads as a market quote. The ledger already says "no live benchmark"
+  // in this situation; the drilldown now matches instead of inventing a number.
+  const headerPrice = live
+    ? live.price
+    : '<span style="color:var(--t3);font-size:0.72em;letter-spacing:.04em;">No benchmark available</span>';
   const headerChg   = live ? live.chg : meta.chg;
   const headerChgDir = live ? live.chgDir : meta.chgDir;
   const headerNote  = live ? live.note : (meta.note + ' · baseline');
@@ -38767,35 +38942,31 @@ function showCommodityDetail(key) {
       Source
     </a>
   </div>
+  <!-- v79 FOOTER REBUILD. The bar carried four buttons that duplicated the main
+       navigation, and three numbers that were hardcoded and had drifted: the
+       tooltip claimed "all 34 pipelines" against a 35-source manifest, the atlas
+       stats were literals, and the version read v23 · Jun 2026 while the
+       methodology page reported v74 · 2026-07. A footer that states figures must
+       derive them; anything it cannot derive it should not assert. Quick Start,
+       Methodology and About live in the nav — only the tour, which nothing else
+       exposes, is kept as a control. -->
   <div class="bb-center">
-    <button class="bb-btn" onclick="openInstructions()" title="Quick Start menu — pick a path or take the 90-second tour">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-      Quick Start
-    </button>
     <button class="bb-btn" onclick="startTour()" title="Take the 90-second interactive walkthrough">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
       Take the tour
     </button>
-    <button class="bb-btn" onclick="showTab('methodology',document.querySelector('.subnav-btn[data-tab=&quot;about&quot;]'))">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
-      Methodology
-    </button>
-    <button class="bb-btn" onclick="showTab('about',document.querySelector('.nav-btn:nth-child(8)'))">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      About
-    </button>
   </div>
   <div class="bb-right">
-    <a class="bb-data" href="#" onclick="event.preventDefault();showTab('datastatus',document.querySelector('.subnav-btn[data-tab=&quot;livedata&quot;]'));" style="color:inherit;text-decoration:none;display:inline-flex;align-items:center;gap:5px;cursor:pointer;" title="Open Data Status — per-source health for all 34 pipelines">
+    <a class="bb-data" id="bb-status-link" href="#" onclick="event.preventDefault();showTab('datastatus',document.querySelector('.subnav-btn[data-tab=&quot;livedata&quot;]'));" style="color:inherit;text-decoration:none;display:inline-flex;align-items:center;gap:5px;cursor:pointer;" title="Open Data Status — per-source health">
       <span id="bb-status-dot" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#6ba36b;"></span>
-      <span id="bb-source-count">34 data pipelines</span> <span style="color:var(--t3);font-size:9.5px;">↗</span>
+      <span id="bb-source-count">data pipelines</span> <span style="color:var(--t3);font-size:9.5px;">↗</span>
     </a>
     <span class="bb-sep">·</span>
-    <a class="bb-data" href="#" onclick="event.preventDefault();showTab('methodology',document.querySelector('.subnav-btn[data-tab=&quot;about&quot;]'));" style="color:inherit;text-decoration:none;cursor:pointer;" title="46 commodities · 4,122 cited bilateral flows · 95.6% confirmed observed — see Methodology">
-      <span id="bb-atlas-stat">4,122 flows · 95.6% observed</span>
+    <a class="bb-data" href="#" onclick="event.preventDefault();showTab('methodology',document.querySelector('.subnav-btn[data-tab=&quot;about&quot;]'));" style="color:inherit;text-decoration:none;cursor:pointer;" title="Cited bilateral trade flows in the commodity atlas — see Methodology">
+      <span id="bb-atlas-stat">trade atlas</span>
     </a>
     <span class="bb-sep">·</span>
-    <span class="bb-year" title="Dataset vintage 2024 trade year · build June 2026">v23 · Jun 2026</span>
+    <span class="bb-year" id="bb-build-stamp" title="Last successful data refresh, read from the source manifest">—</span>
   </div>
 </div>
 

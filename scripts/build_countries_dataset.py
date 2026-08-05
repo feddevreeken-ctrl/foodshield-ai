@@ -274,11 +274,27 @@ def _component_meta(field, value, prov, method, source):
 
 def _fdrs_v2(cv):
     """v2 score from a length-9 component vector. Mirrors index.html fdrsV2()."""
-    base = sum(FDRS_V2_WEIGHTS[i] * (cv[i] if i < len(cv) and cv[i] is not None else 0)
-               for i in range(9))
-    c0 = cv[0] if len(cv) > 0 and cv[0] is not None else 0
-    c7 = cv[7] if len(cv) > 7 and cv[7] is not None else 0
-    amp = min(6 * (c0 / 100) * (c7 / 100), 6)
+    # v79 — mirrors the index.html fix: a missing component no longer reads as
+    # perfect resilience. We renormalise to the weight actually observed instead
+    # of substituting 0, and skip the amplifier when either of its two inputs is
+    # unobserved. A stored 0 stays a real value; only None is a gap.
+    def _obs(i):
+        v = cv[i] if i < len(cv) else None
+        return v if isinstance(v, (int, float)) and v == v else None
+
+    base = 0.0
+    w_obs = 0.0
+    for i in range(9):
+        v = _obs(i)
+        if v is not None:
+            base += FDRS_V2_WEIGHTS[i] * v
+            w_obs += FDRS_V2_WEIGHTS[i]
+    if w_obs <= 0:
+        return 0
+    if w_obs < 1:
+        base = base / w_obs
+    c0, c7 = _obs(0), _obs(7)
+    amp = min(6 * (c0 / 100) * (c7 / 100), 6) if (c0 is not None and c7 is not None) else 0
     # half-up rounding to match JS Math.round in index.html::fdrsV2 (was int(round(...)),
     # i.e. banker's rounding, which could disagree with the client by 1 on exact .5 values).
     return int(_clip(base + amp) + 0.5)
@@ -371,6 +387,23 @@ def main():
         # treats null exactly like 0 (counts 0), so scores are unchanged — but the
         # UI can now render "NO DATA · COUNTS 0" instead of a confident-looking 0.
         cv = cv[:7] + [ea_val, gb_val]
+
+        # v79 — WIRE THE LIVE FOOD-INFLATION FEED INTO THE COMPONENT IT NAMES.
+        # The overlay above updated only the display field `fi`, so c[3] stayed a
+        # hand-curated legacy number that ignored the live reading entirely:
+        # Egypt showed 60.5% inflation while scoring 38, Venezuela 38.1% while
+        # scoring 95, South Sudan 118.4% while scoring 45. The component is
+        # called food_infl; it should be a function of observed food inflation.
+        # Only a genuinely sourced reading may move the component; the 88
+        # countries still on the embedded baseline keep their curated c[3]
+        # (quality_flag "modeled") rather than having a legacy number laundered
+        # through a live-looking transform.
+        _fi_meta = row.get("fi") or {}
+        if _fi_meta.get("quality_flag") == "sourced":
+            _fi_score = _fi_to_component(_fi_meta.get("value"))
+            if _fi_score is not None:
+                cv[3] = _fi_score
+
         c_meta["value"] = cv
         c_meta["method"] = (
             "FDRS v2 structural component vector "
@@ -670,6 +703,34 @@ def _load_net_trade_overlay():
     return data if isinstance(data, dict) else {}
 
 
+    # v79 — piecewise-linear map from observed year-on-year food inflation (%)
+# to the 0-100 FDRS food-inflation component. Monotone by construction and
+# stated here rather than hidden in a curated table. Anchors chosen so that
+# ~2% reads as benign, double digits as real stress, and hyperinflation
+# saturates near 100 without a discontinuity.
+# The floor is 10, not 0: food-price risk is never actually zero, and observed
+# deflation in a crisis economy (Afghanistan -12.1%, Syria -12.4%) reflects
+# collapsed purchasing power, not a food system under no price pressure. A
+# score of 0 there would be a worse lie than the legacy number it replaces.
+_FI_ANCHORS = [(-10.0, 10.0), (0.0, 15.0), (5.0, 25.0), (15.0, 50.0),
+               (30.0, 70.0), (60.0, 85.0), (120.0, 95.0), (250.0, 100.0)]
+
+
+def _fi_to_component(pct):
+    """Observed food-inflation % -> 0-100 component score, or None if unusable."""
+    if not isinstance(pct, (int, float)) or pct != pct:
+        return None
+    if pct <= _FI_ANCHORS[0][0]:
+        return _FI_ANCHORS[0][1]
+    if pct >= _FI_ANCHORS[-1][0]:
+        return _FI_ANCHORS[-1][1]
+    for (x0, y0), (x1, y1) in zip(_FI_ANCHORS, _FI_ANCHORS[1:]):
+        if x0 <= pct <= x1:
+            span = (x1 - x0) or 1.0
+            return round(y0 + (y1 - y0) * (pct - x0) / span)
+    return None
+
+
 def _load_food_inflation_overlay():
     """Year-over-year food inflation % per ISO3, from live feeds.
 
@@ -688,44 +749,61 @@ def _load_food_inflation_overlay():
             return {}
         return obj.get("data", obj) if isinstance(obj, dict) else {}
 
+    # v79 — plausibility band. A higher-priority source must not win with a
+    # physically impossible reading: WFP reports -97.6% YoY food inflation for
+    # South Sudan (prices cannot fall 97.6%) while FAOSTAT reports +118.4% for
+    # the same country. Rejecting the bad value lets the lower-priority source
+    # stand, because sources are written lowest-priority-first. The upper bound
+    # stays generous — Argentina genuinely prints ~250%.
+    FI_MIN, FI_MAX = -50.0, 1000.0
+
+    def _plausible(v):
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return None
+        if f != f or f < FI_MIN or f > FI_MAX:   # NaN or out of band
+            return None
+        return f
+
     out = {}
     # 3. FAOSTAT (lowest priority — written first so higher sources overwrite)
     for iso, rec in _read("faostat_food.json").items():
         if not isinstance(rec, dict):
             continue
-        v = rec.get("food_cpi_yoy") or rec.get("food_inflation_yoy") or rec.get("yoy")
-        if v is not None:
-            try:
-                out[iso.upper()] = {"value": round(float(v), 1),
-                                    "source": "FAOSTAT Consumer Price Indices (food CPI, yoy)",
-                                    "as_of": rec.get("month") or rec.get("year")}
-            except (TypeError, ValueError):
-                pass
+        # v79 — refresh_faostat.py writes "food_cpi_yoy_pct"; this lookup asked
+        # for "food_cpi_yoy" and never matched, so all 162 FAOSTAT rows were
+        # silently dropped and only Eurostat's 30 reached the overlay. The
+        # legacy aliases stay as fallbacks.
+        v = (rec.get("food_cpi_yoy_pct") or rec.get("food_cpi_yoy")
+             or rec.get("food_inflation_yoy") or rec.get("yoy"))
+        f = _plausible(v)
+        if f is not None:
+            out[iso.upper()] = {"value": round(f, 1),
+                                "source": "FAOSTAT Consumer Price Indices (food CPI, yoy)",
+                                "as_of": rec.get("month") or rec.get("year")}
     # 2. Eurostat (EU/EEA member states)
     for iso, rec in _read("eurostat_food.json").items():
         if not isinstance(rec, dict):
             continue
-        v = rec.get("food_hicp_yoy_pct")
-        if v is not None:
-            try:
-                out[iso.upper()] = {"value": round(float(v), 1),
-                                    "source": "Eurostat food HICP (yoy %)",
-                                    "as_of": rec.get("month")}
-            except (TypeError, ValueError):
-                pass
+        f = _plausible(rec.get("food_hicp_yoy_pct"))
+        if f is not None:
+            out[iso.upper()] = {"value": round(f, 1),
+                                "source": "Eurostat food HICP (yoy %)",
+                                "as_of": rec.get("month")}
     # 1. WFP per-country (highest priority — broadest crisis-country coverage)
     for iso, rec in _read("wfp_country.json").items():
         if not isinstance(rec, dict):
             continue
-        v = (rec.get("food_inflation") or rec.get("food_inflation_yoy")
-             or rec.get("headline_food_inflation"))
-        if v is not None:
-            try:
-                out[iso.upper()] = {"value": round(float(v), 1),
-                                    "source": "WFP per-country food inflation",
-                                    "as_of": rec.get("month") or rec.get("as_of")}
-            except (TypeError, ValueError):
-                pass
+        # v79 — refresh_wfp_country.py writes "food_inflation_pct"; this asked
+        # for "food_inflation" and matched 0 of 172 rows (147 carry a value).
+        v = (rec.get("food_inflation_pct") or rec.get("food_inflation")
+             or rec.get("food_inflation_yoy") or rec.get("headline_food_inflation"))
+        f = _plausible(v)
+        if f is not None:
+            out[iso.upper()] = {"value": round(f, 1),
+                                "source": "WFP per-country food inflation",
+                                "as_of": rec.get("month") or rec.get("as_of")}
     return out
 
 

@@ -58,6 +58,7 @@ from _common import http_get, write_json
 URL = "https://microdata.worldbank.org/api/tables/data/fcv/wfso"
 PAGE_SIZE = 1000
 THROTTLE_SECONDS = 0.3   # be polite
+SERIES_KEEP = 3          # observed rows retained per indicator (see trim below)
 
 # Mapping from WFSO indicator_short → our shorthand key
 INDICATOR_KEYS = {
@@ -170,14 +171,31 @@ def main():
             elif row.get("type") == "Downside projection":
                 slot["projection"][f"year_{row['year']}_downside_crisis_pop"] = row["value"]
 
+        # Trim series to what the app actually reads. The full 1999-2031 history
+        # for 191 countries x 8 indicators made this the largest payload on the
+        # site (11 MB, parsed on every page load) while index.html only reads
+        # latest_value/latest_year (flattened above), the current-year crisis_pop
+        # row, and slot["projection"] (harvested above). Keep the most recent
+        # observed rows; projection rows are dropped because "projection" now
+        # carries them.
+        for ind_slot in slot["indicators"].values():
+            observed = [r for r in ind_slot.get("series", [])
+                        if r.get("type") in ("Actual", "Preliminary model estimate",
+                                             "Historical model estimate")]
+            ind_slot["series"] = observed[-SERIES_KEEP:]
+            ind_slot["series_trimmed"] = SERIES_KEEP
+
     write_json(
         "wb_wfso.json",
         by_country,
         source="World Bank — World Food Security Outlook (microdata.worldbank.org/api/tables/data/fcv/wfso)",
         notes=(
-            f"Quarterly food-security outlook with historical 1999–2025, preliminary 2026, "
-            f"and baseline+downside projections 2027–2031. Methodology: Andrée et al. (2020). "
-            f"Covered {len(by_country)} countries × up to 8 indicators × up to 33 years. "
+            f"Quarterly food-security outlook. Source covers 1999 onward; this file stores "
+            f"the {SERIES_KEEP} most recent observed rows per indicator plus flattened "
+            f"latest_* fields and the full baseline+downside projection block — the earlier "
+            f"history is dropped because no consumer reads it. "
+            f"Methodology: Andrée et al. (2020). "
+            f"Covered {len(by_country)} countries × up to 8 indicators. "
             f"Crisis-Affected Population numbers represent IPC/CH Phase 3+ populations "
             f"(3-year centered average, smoothed)."
         ),

@@ -104,6 +104,10 @@ EXPECTED_FILES = {
     'usgs_water.json':            ('soft',     'dict_or_empty'),
     # Composites — built from the above; must populate
     'countries.json':             ('critical', 'object'),
+    # v79 — fx_rates.json had no validator at all despite being a scored input
+    # (build_nowcast fx_shock + FDRS economic access). An unwatched scored feed
+    # is exactly how the FX signal sat dead at 0 for every country unnoticed.
+    'fx_rates.json':              ('critical', 'dict_nonempty'),
     'nowcast.json':               ('critical', 'dict_nonempty'),
     'daily_summary.json':         ('critical', 'object'),
     'source_manifest.json':       ('critical', 'object'),
@@ -158,6 +162,29 @@ HONESTY_BLOCKING = True
 MUST_HAVE_CRISIS_FEEDS = ["wfp_hungermap.json", "ipc.json", "wfp_country.json"]
 
 
+# v79 — {filename: (scored_field, minimum_non_null_share)}. Only list fields a
+# downstream builder actually SCORES, so this stays a signal-integrity gate and
+# not a general completeness nag. A collector that declares _meta.status != 'ok'
+# is allowed to fall below its floor; an undeclared collapse fails.
+# The field may be a dotted path into a nested object ("shock.depr_90d_pct").
+SCORED_FIELD_COVERAGE = {
+    'wfp_hungermap.json': ('fcs_pct', 0.50),                # -> nowcast wfp_pressure
+    'ipc.json':           ('phase3plus_pct', 0.50),         # -> nowcast ipc_pressure
+    'fx_rates.json':      ('shock.depr_90d_pct', 0.50),     # -> nowcast fx_shock (v79)
+    'inform_risk.json':   ('inform_risk', 0.50),            # -> nowcast inform_amp
+}
+
+
+def _dig(row, path):
+    """Follow a dotted path into nested dicts; return None if any hop is absent."""
+    cur = row
+    for part in path.split('.'):
+        if not isinstance(cur, dict):
+            return None
+        cur = cur.get(part)
+    return cur
+
+
 def validate_one(filename, spec):
     """Returns (ok: bool, message: str)."""
     criticality, shape = spec
@@ -200,6 +227,34 @@ def validate_one(filename, spec):
     elif shape == 'flexible':
         if data is None:
             return False, "data is null"
+
+    # v79 — SCORED-FIELD COVERAGE. Shape checks alone certified wfp_hungermap.json
+    # as healthy while every one of its fcs_pct values was null, which silently
+    # zeroed the nowcast's wfp_pressure signal for all 264 countries. A file can
+    # be perfectly shaped and carry no usable signal. For feeds whose output is
+    # actually scored, require a minimum share of non-null readings — unless the
+    # collector already declared itself degraded, in which case the honest
+    # declaration is accepted and reported rather than failed.
+    rule = SCORED_FIELD_COVERAGE.get(filename)
+    if rule and isinstance(data, dict) and data:
+        field, min_share = rule
+        # Keys starting with "_" are internal stores (e.g. fx_rates' _ccy_history),
+        # not country rows — they must not dilute the coverage share.
+        rows = [v for k, v in data.items()
+                if isinstance(v, dict) and not str(k).startswith('_')]
+        if rows:
+            present = sum(1 for v in rows if isinstance(_dig(v, field), (int, float)))
+            share = present / len(rows)
+            declared = (env.get('_meta') or {}).get('status')
+            if share < min_share:
+                if declared and declared != 'ok':
+                    return True, (f"{field} on {present}/{len(rows)} rows ({share:.0%} < "
+                                  f"{min_share:.0%}) — collector declared '{declared}', "
+                                  f"accepted as an honest degradation")
+                return False, (f"{field} present on only {present}/{len(rows)} rows "
+                               f"({share:.0%} < {min_share:.0%}) and _meta.status does not "
+                               f"declare a degradation — a scored field this sparse "
+                               f"contributes nothing yet reads as healthy")
 
     return True, "ok"
 

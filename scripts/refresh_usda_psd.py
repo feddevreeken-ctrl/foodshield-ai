@@ -532,6 +532,15 @@ def _parse_one_csv(reader, by_country):
         })
         existing_year = commodity_slot.get("_year_" + attr_key)
         if existing_year is None or year > existing_year:
+            # v79 — retain the year we are displacing as the previous-year
+            # observation. build_nowcast.py's "production shortfall" signal
+            # claimed to be a year-on-year anomaly but had no prior-year value
+            # to compare against, so it silently degraded into a cross-sectional
+            # import-dependence ratio duplicating FDRS component c[0].
+            # Keeping n-1 makes a real anomaly computable.
+            if existing_year is not None:
+                commodity_slot[attr_key + "_prev"] = commodity_slot[attr_key]
+                commodity_slot["_year_" + attr_key + "_prev"] = existing_year
             commodity_slot[attr_key] = round(value, 1)
             commodity_slot["_year_" + attr_key] = year
             # Track the overall latest year per commodity

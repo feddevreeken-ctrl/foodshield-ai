@@ -41,6 +41,27 @@ from datetime import datetime, timezone
 DATA = Path(__file__).resolve().parent.parent / "data"
 
 
+def _age_days(as_of):
+    """Days between an ISO date string (YYYY-MM-DD or full ISO) and now, or None.
+
+    v79 — used to gate time-sensitive signals whose collectors keep the latest
+    row available regardless of vintage.
+    """
+    if not isinstance(as_of, str) or not as_of.strip():
+        return None
+    txt = as_of.strip().replace("Z", "+00:00")
+    for parse in (datetime.fromisoformat,
+                  lambda s: datetime.strptime(s[:10], "%Y-%m-%d")):
+        try:
+            dt = parse(txt)
+        except (ValueError, TypeError):
+            continue
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - dt).days
+    return None
+
+
 def load(name):
     p = DATA / name
     if not p.exists():
@@ -69,6 +90,13 @@ def main():
     usgs    = load("usgs_water.json")["data"]
     estat   = load("eurostat_food.json")["data"]
     faostat = load("faostat_food.json")["data"]
+    # v79 — the FX signal was dead. refresh_fx.py has written a real 90-day
+    # depreciation for 156/157 countries since v20, but this file only ever read
+    # wfp_country.fx_90d_change_pct, which is null in all 172 WFP rows — so
+    # fx_shock came out 0.0 for all 264 countries in every build. Note the sign
+    # convention differs: fx_rates uses POSITIVE = depreciation (stated in its
+    # own _meta.notes), WFP used NEGATIVE = depreciation.
+    fx      = load("fx_rates.json")["data"]
     # v20.27 — additional sourced inputs used for INFORM amp + governance drag + PSD shortfall
     inform  = load("inform_risk.json")["data"]
     wgi     = load("wgi.json")["data"]
@@ -174,12 +202,42 @@ def main():
         # count (countries.json has no population, so this is not per-capita — a
         # disclosed simplification). Acute livelihood/market disruption; capped +4 so
         # it complements IPC/WFP rather than dominating.
-        idp_n = (idps.get(iso) or {}).get("idps") or 0
+        # v79 — FRESHNESS GATE. The collector keeps whatever the latest available
+        # row is, with no age limit, so pre-2020 snapshots were still scoring in
+        # 2026: Indonesia's 110,373 IDPs are dated 2018-12-30 (2,762 days stale)
+        # and were both adding a kick AND acting as the country's only core
+        # signal, which promoted it to "high" confidence. Full weight inside
+        # 18 months, linear decay to zero at 36, nothing after that — and a stale
+        # reading can never confer confidence (see has_idp below).
+        _idp_row = idps.get(iso) or {}
+        idp_n = _idp_row.get("idps") or 0
+        idp_age_days = _age_days(_idp_row.get("as_of"))
+        idp_weight = 1.0
+        if idp_age_days is None:
+            idp_weight = 0.0          # undated → unusable for a time-sensitive signal
+        elif idp_age_days > 1095:     # > 36 months
+            idp_weight = 0.0
+        elif idp_age_days > 548:      # 18-36 months → decay
+            idp_weight = max(0.0, 1.0 - (idp_age_days - 548) / (1095 - 548))
+        idp_stale = idp_weight < 1.0
         displacement_kick = (4 if idp_n >= 2_000_000 else 3 if idp_n >= 1_000_000
                              else 2 if idp_n >= 500_000 else 1 if idp_n >= 100_000 else 0)
+        displacement_kick = round(displacement_kick * idp_weight, 1)
 
-        # FX shock — currency dropped >10% vs USD in 90d
-        fx_pct = wc.get("fx_90d_change_pct")
+        # FX shock — currency dropped >10% vs USD in 90d.
+        # Primary source is fx_rates.json (positive depr_90d_pct = depreciation);
+        # WFP stays as a fallback under its own negative-is-depreciation sign.
+        # Both are normalised to fx_pct with NEGATIVE = depreciation so the
+        # published inputs.fx_90d_change_pct keeps its established meaning.
+        fx_pct = None
+        fx_src = None
+        depr = ((fx.get(iso) or {}).get("shock") or {}).get("depr_90d_pct")
+        if isinstance(depr, (int, float)):
+            fx_pct = -float(depr)
+            fx_src = "fx_rates"
+        elif isinstance(wc.get("fx_90d_change_pct"), (int, float)):
+            fx_pct = wc["fx_90d_change_pct"]
+            fx_src = "wfp"
         fx_shock = 0
         if isinstance(fx_pct, (int, float)) and fx_pct < -10:
             fx_shock = min(3, abs(fx_pct + 10) * 0.1)
@@ -257,31 +315,42 @@ def main():
         if isinstance(rol, (int, float)) and rol < -1.0:
             governance_drag = min(2, (abs(rol) - 1.0) * 1.5)
 
-        # v20.27 — USDA PSD production-shortfall kick. If wheat OR rice OR
-        # corn production for the latest year is ≥10% below the previous
-        # year's, that's a meaningful local supply shock.
-        # Note: we only have one year here from the bulk pull — proper
-        # baseline comparison needs the 5-yr table, so this stays a
-        # simple year-on-year proxy.
+        # USDA PSD production-shortfall kick — a TRUE year-on-year anomaly.
+        #
+        # v79 REWRITE. The old version measured (consumption - production) /
+        # consumption, i.e. the share of consumption that must be imported. That
+        # is a persistent structural fact, not an event, and FDRS already charges
+        # it as component c[0] at weight 0.23 — so 108 of 264 countries were
+        # billed twice for the same import dependence, inside a signal the
+        # methodology described as a fast-moving shock. Yemen scored the full +3
+        # every single build purely because it grows no rice.
+        # refresh_usda_psd.py now retains production_kt_prev, so we can score
+        # what the comment always claimed: a real drop against last marketing
+        # year. Only negative deviations count; growth is not a risk signal.
         psd_shortfall = 0
         psd_row = psd.get(iso) or {}
-        # Look at production_kt vs consumption_kt; if production < 60% of
-        # consumption AND the gap is widening, that's a sourcing crunch.
+        worst_drop_pct = 0.0
+        psd_drop_staple = None
         for staple in ("wheat", "rice", "corn"):
             sr = psd_row.get(staple) or {}
             prod = sr.get("production_kt")
-            cons = sr.get("consumption_kt")
-            if prod is not None and cons is not None and cons > 0:
-                gap_pct = (cons - prod) / cons * 100
-                # >60% gap (i.e. >60% of consumption is imported) AND
-                # production < 200kt absolute → small-producer stress signal
-                if gap_pct > 60 and prod < 200:
-                    psd_shortfall = max(psd_shortfall, 1)
-                if gap_pct > 80:
-                    psd_shortfall = max(psd_shortfall, 2)
-                if gap_pct > 95:
-                    psd_shortfall = max(psd_shortfall, 3)
-        psd_shortfall = min(3, psd_shortfall)
+            prev = sr.get("production_kt_prev")
+            if not isinstance(prod, (int, float)) or not isinstance(prev, (int, float)):
+                continue
+            # Ignore trivial crops: a 40kt -> 20kt hobby harvest is a -50% swing
+            # that says nothing about national food supply.
+            if prev < 100:
+                continue
+            drop_pct = (prev - prod) / prev * 100.0
+            if drop_pct > worst_drop_pct:
+                worst_drop_pct = drop_pct
+                psd_drop_staple = staple
+        if worst_drop_pct >= 35:
+            psd_shortfall = 3
+        elif worst_drop_pct >= 20:
+            psd_shortfall = 2
+        elif worst_drop_pct >= 10:
+            psd_shortfall = 1
 
         # v43 — crisis-cluster cap. ipc_pressure, fews_kick, displacement_kick,
         # inform_amp and conflict_kick all load onto the SAME underlying acute-crisis
@@ -289,7 +358,16 @@ def main():
         # unbounded they double-count one crisis. Cap their COMBINED contribution at +18
         # so the cluster can't dominate, while independent signals (weather, FX, price,
         # governance) still add on top. Disclosed in the methodology.
-        crisis_cluster  = ipc_pressure + fews_kick + displacement_kick + inform_amp + conflict_kick
+        # v79 — wfp_pressure belongs INSIDE the cluster. It is another reading of
+        # the same acute-crisis state (household food-consumption scores in the
+        # very countries IPC and FEWS already classify), but it was summed
+        # outside the cap, so up to +6 more could stack on top of the capped +18
+        # — 24 points from one crisis, which is exactly what the cap exists to
+        # prevent. Note the cap is currently non-binding on live data (0 of 264
+        # rows reach it; the largest cluster is Sudan at 14.2), so this changes
+        # no published number today — it closes the path before it opens.
+        crisis_cluster  = (ipc_pressure + fews_kick + displacement_kick
+                           + inform_amp + conflict_kick + wfp_pressure)
         cluster_overage = max(0, crisis_cluster - 18)
 
         adj = round(
@@ -314,7 +392,10 @@ def main():
         has_ipc = iso in ipc and (ipc.get(iso) or {}).get("phase3plus_pct") is not None
         has_wfp = iso in wfp and (wfp.get(iso) or {}).get("fcs_pct") is not None
         has_fews = isinstance(fews_cur, (int, float))   # v42 — FEWS is an authoritative crisis feed
-        has_idp = idp_n >= 100_000   # v43 — significant displacement is an authoritative crisis signal
+        # v43 — significant displacement is an authoritative crisis signal, but
+        # v79 requires it to be CURRENT: a 2018 snapshot says nothing about 2026,
+        # and must not be the sole reason a country reads "high" confidence.
+        has_idp = idp_n >= 100_000 and not idp_stale
         # v25 — US states have their own core feed (Feeding America food insecurity),
         # so a US- row with FA data is high-confidence on its own terms.
         has_us_core = iso.startswith("US-") and isinstance(fa_pct, (int, float))
@@ -371,10 +452,13 @@ def main():
                 "fews_projected_phase": fews_proj,
                 "fews_basis":           fews_basis,
                 "idps_total":           idp_n or None,
-                "idps_as_of":           (idps.get(iso) or {}).get("as_of"),
+                "idps_as_of":           _idp_row.get("as_of"),
+                "idps_age_days":        idp_age_days,
+                "idps_stale":           idp_stale if idp_n else None,
                 "ffpi_mom_pct":         (ffpi or {}).get("change_mom_pct"),
                 "active_reports_30d":   relief_n,
                 "fx_90d_change_pct":    fx_pct,
+                "fx_source":            fx_src,
                 "food_inflation_pct":   food_infl,
                 "food_inflation_source": food_infl_source,
                 "precip_anomaly_pct":   om_row.get("precip_anomaly_pct"),

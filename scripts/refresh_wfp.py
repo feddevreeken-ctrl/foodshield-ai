@@ -93,14 +93,34 @@ def main():
             out = _fetch_ipc_layer()
             used_url = URL_IPC_EWTOOL
 
+    # v79 — DECLARE THE DEGRADATION. fcs_pct is the only field of this feed the
+    # nowcast actually scores (wfp_pressure). When the public FCS endpoints are
+    # dead we fall back to the IPC layer, which writes fcs_pct=null for every
+    # country — so wfp_pressure was 0 for all 264 countries while the manifest
+    # still reported status "ok" and both validators passed on shape alone.
+    # A file whose only scored field is 100% null is not healthy; say so.
+    n_fcs = sum(1 for v in out.values()
+                if isinstance(v, dict) and isinstance(v.get("fcs_pct"), (int, float)))
+    n_ipc = sum(1 for v in out.values()
+                if isinstance(v, dict) and isinstance(v.get("ipc_phase3plus_pct"), (int, float)))
+    status = "ok" if n_fcs else "degraded_fallback"
+    print(f"[INFO] WFP coverage: fcs_pct {n_fcs}/{len(out)}, "
+          f"ipc_phase3plus_pct {n_ipc}/{len(out)} -> status={status}")
+
     write_json(
         "wfp_hungermap.json",
         out,
         source=f"WFP HungerMap LIVE ({used_url})",
+        status=status,
         notes=(
             "fcs_pct = % population with poor/borderline food consumption (from fcs fraction). "
             "ipc_phase3plus_pct = % in IPC Phase 3+. alerts = boolean flags from WFP HungerMap. "
-            f"Parsed {len(out)} countries."
+            f"Parsed {len(out)} countries; fcs_pct present on {n_fcs}, "
+            f"ipc_phase3plus_pct on {n_ipc}."
+            + ("" if n_fcs else
+               " DEGRADED: the public FCS endpoints are unavailable, so this build carries the "
+               "IPC layer only and the nowcast's wfp_pressure signal contributes 0 for every "
+               "country. Not fabricated — absent, and declared absent.")
         ),
     )
 
