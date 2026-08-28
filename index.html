@@ -20254,7 +20254,7 @@ function _simulateScenario(c, selected, severityById, paramsById) {
 
 // ════════════════════════════════════════════════════
 // FoodShield AI — Flat dark world map + Trade Flow Atlas
-// Leaflet, no raster basemap — FDRS choropleth on world.geojson,
+// Leaflet + Esri Dark Gray Canvas base, FDRS choropleth,
 // animated curved import/export arcs.
 // ════════════════════════════════════════════════════
 (function () {
@@ -20370,34 +20370,39 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     });
     G.map = map;
 
-    // Base — none. There is no raster basemap layer any more.
+    // Base — Esri Dark Gray Canvas, the matched pair Esri designed for dark
+    // data overlays: Base carries terrain, coastlines, ocean tone and sea names;
+    // Reference carries the city and capital labels.
     //
     // v79h: CARTO retired its keyless basemaps and began stamping every tile
-    // with an "API KEY REQUIRED" watermark, so the map read as broken. Swapped
-    // to Esri's Dark Gray Canvas.
-    // v79k: Esri's Dark Gray Base bakes country names INTO the base raster, and
-    // this choropleth is deliberately translucent at the low end of the ramp
-    // (fillOpacity starts at 0.18), so those baked names bled straight through
-    // every resilient country — Russia, Germany, Poland, the UK and Brazil each
-    // showed a dim tile label next to the real one.
-    //
-    // Rather than hunt for a third tile service, drop the raster entirely. This
-    // map is a choropleth of 193 countries drawn from world.geojson, which also
-    // carries Antarctica, Greenland, Iceland, New Zealand, Japan and the
-    // Philippines — so the basemap was contributing an ocean colour and little
-    // else. The ocean is now the container background (#14141a, set in CSS),
-    // which is very close to what CARTO's dark_nolabels rendered anyway.
-    //
-    // This also removes the last third-party tile dependency from the map, so a
-    // repeat of the CARTO rug-pull cannot break it again, and drops the per-view
-    // tile fetches entirely.
+    //   with an "API KEY REQUIRED" watermark, so the map read as broken.
+    // v79k: I reached for Reference/World_Boundaries_and_Places_Alternate to get
+    //   COUNTRY names, but it is drawn for LIGHT basemaps, so it needed a CSS
+    //   invert() — and those tiles are not fully transparent, so inverting them
+    //   punched opaque black holes through the choropleth. Fixing that, I then
+    //   over-corrected and removed the raster basemap altogether, which took the
+    //   terrain, the ocean tone, the capitals and all the zoom detail with it.
+    // v79l: basemap restored. The right layer for the labels was Esri's OWN dark
+    //   reference (Canvas/World_Dark_Gray_Reference) — already light-on-dark, so
+    //   no invert, no opaque regions, no holes. Country names come from the Base
+    //   plus the crisp overlay in buildCountryLabels(), which is drawn above the
+    //   choropleth so the name stays readable on dark-red countries where the
+    //   fill is nearly opaque.
+    L.tileLayer(
+      'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 16 }
+    ).addTo(map);
 
     // Custom pane for labels — sits ABOVE countries
     map.createPane('labels');
     map.getPane('labels').style.zIndex = 650;
     map.getPane('labels').style.pointerEvents = 'none';
-    // v79k — country names are drawn from the GeoJSON we already load, not from
-    // a raster label tile service. See buildCountryLabels() below for why.
+    // City / capital labels. Esri's dark reference is already light-on-dark, so
+    // it goes in untouched — no filter, which is what broke v79k.
+    L.tileLayer(
+      'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 16, pane: 'labels', opacity: 0.9 }
+    ).addTo(map);
 
     // Pane for flow arcs (above labels)
     map.createPane('flows');
@@ -20456,6 +20461,21 @@ function _simulateScenario(c, selected, severityById, paramsById) {
             'South Korea': ['south korea','korea, south','korea','republic of korea','s. korea'],
             'North Korea': ['north korea','korea, north',"democratic people's republic of korea",'dprk'],
             'Czech Republic': ['czechia','czech republic','czech rep.','the czech republic'],
+            // v79l — nine countries were failing this name join outright and so
+            // painted as "no data" black despite holding scores. The GeoJSON
+            // (Natural Earth via D3-graph-gallery) uses a different spelling to
+            // COUNTRIES[].name for each: Serbia (26), Bosnia & Herzegovina,
+            // Central African Rep., Timor-Leste, Guinea-Bissau, North Macedonia,
+            // Eswatini, Bahamas and Trinidad & Tobago.
+            'Serbia': ['republic of serbia','serbia'],
+            'Bosnia & Herzegovina': ['bosnia and herzegovina','bosnia & herzegovina','bosnia','bosnia-herzegovina'],
+            'Central African Rep.': ['central african republic','central african rep.','car'],
+            'Timor-Leste': ['east timor','timor-leste','timor leste'],
+            'Guinea-Bissau': ['guinea bissau','guinea-bissau'],
+            'North Macedonia': ['macedonia','north macedonia','the former yugoslav republic of macedonia'],
+            'Eswatini': ['swaziland','eswatini'],
+            'Bahamas': ['the bahamas','bahamas'],
+            'Trinidad & Tobago': ['trinidad and tobago','trinidad & tobago'],
             'Russia': ['russia','russian federation'],
             'China': ['china',"people's republic of china",'prc','china p.r.'],
             'Canada': ['canada'],
@@ -32823,7 +32843,7 @@ function renderMapLayers(){
             onchange="toggleCommodityFlowOverlay(this.value)" style="${st.flowsOn ? '' : 'display:none'}">
       <option value="">Choose a commodity…</option>
     </select>
-    <div class="mlp-foot">Disturbances: GDACS · ReliefWeb · WFP · IPC · FEWS. Export restrictions: cited (IFPRI). Trade flows: cited bilateral corridors. Country outlines: Natural Earth via D3-graph-gallery.</div>`;
+    <div class="mlp-foot">Disturbances: GDACS · ReliefWeb · WFP · IPC · FEWS. Export restrictions: cited (IFPRI). Trade flows: cited bilateral corridors. Basemap: Esri, HERE, Garmin, FAO, NOAA, USGS.</div>`;
   if (st.flowsOn && typeof populateCommodityFlowSelect === 'function') populateCommodityFlowSelect();
 }
 function mlToggleDist(ev){ ev.stopPropagation(); const st = window._mlState; st.distOn = !st.distOn; if (st.distOn) st.expanded = true; applyMapLayers(); renderMapLayers(); }
