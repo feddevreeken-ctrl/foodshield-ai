@@ -17050,7 +17050,7 @@ function showLiveStatusDialog() {
 // a JSON file back to the user-facing surface. Keyed by manifest source-key.
 const DATASTATUS_FEEDS = {
   wfp_hungermap: 'Global hunger snapshot · feeds country panel consumption % + alert flags',
-  wfp_country:   'Per-country FX 90d, food inflation, child stunting/wasting · feeds nowcast Δ',
+  wfp_country:   'Per-country FX 90d + child stunting/wasting, derived from fx_rates + World Bank · feeds nowcast Δ',
   ipc:           'IPC Phase 3+ classifications · feeds country panel + crisis flags',
   worldbank_wdi: 'Most-recent-value-per-indicator World Bank WDI · structural FDRS reference',
   worldbank_pink_sheet: 'Monthly commodity benchmarks · powers Live Data + commodity cards',
@@ -23979,7 +23979,11 @@ function openPanel(c, skipDrilldown) {
       }
       if (a.wfp_fcs_pct != null)            items.push(`<b>${a.wfp_fcs_pct}%</b> poor food consumption <span style="color:var(--t3)">(WFP FCS)</span>`);
       if (a.food_inflation_pct != null)     items.push(`<b>${Number(a.food_inflation_pct).toFixed(1)}%</b> ${a.food_inflation_label||'food inflation'} <span style="color:var(--t3)">(${a.food_inflation_source||'WB'})</span>`);
-      if (a.stunting_pct != null)           items.push(`<b>${a.stunting_pct}%</b> child stunting <span style="color:var(--t3)">(WFP)</span>`);
+      // v79j — attribution corrected. This used to read "(WFP)" because the value
+      // came from WFP HungerMap's per-country endpoint. WFP has closed that API,
+      // so wfp_country.json now derives stunting from World Bank SH.STA.STNT.ZS.
+      // The number changed source, so the credit next to it has to change too.
+      if (a.stunting_pct != null)           items.push(`<b>${a.stunting_pct}%</b> child stunting <span style="color:var(--t3)">(WB)</span>`);
       // ── v20 live-shock anchors (only shown when the signal fires) ────────
       const liveShocks = [];
       if (a.fx_currency_shock && a.fx_90d_change_pct != null) {

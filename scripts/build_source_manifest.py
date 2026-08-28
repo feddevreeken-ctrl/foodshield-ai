@@ -26,8 +26,12 @@ SOURCES = [
     {
         "key": "wfp_country",
         "file": "wfp_country.json",
-        "label": "WFP HungerMap per-country",
-        "cadence": "daily",
+        # v79j — no longer a WFP mirror. WFP closed the HungerMap v2 tree to
+        # anonymous clients, so this file is now derived from fx_rates.json +
+        # worldbank_bulk.json. The key and filename are kept so the six existing
+        # consumers stay untouched; the label is what readers actually see.
+        "label": "Per-country FX shock + child nutrition (derived)",
+        "cadence": "6h derived",
         "mode": "live",
     },
     {
