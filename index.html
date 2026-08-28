@@ -17369,7 +17369,7 @@ function renderDataStatusTab() {
 
     <!-- Cron + provenance footnote -->
     <div style="background:var(--bg0);border:1px solid var(--b1);border-left:3px solid var(--accent);border-radius:0 10px 10px 0;padding:14px 18px;font-size:11.5px;color:var(--t2);line-height:1.7;">
-      <b style="color:var(--t1);">How this page is generated.</b> A GitHub Actions workflow runs every 6 hours (00 / 06 / 12 / 18 UTC), fetches each public source above, writes a JSON snapshot to <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">/data</code>, then runs <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">scripts/build_source_manifest.py</code> to emit the manifest you see here. The frontend reloads the manifest on every page visit with <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">cache: 'no-store'</code> so the status is always the latest committed snapshot, not a stale CDN copy.
+      <b style="color:var(--t1);">How this page is generated.</b> A GitHub Actions workflow runs every 6 hours (00 / 06 / 12 / 18 UTC), fetches each public source above, writes a JSON snapshot to <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">/data</code>, then runs <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">scripts/build_source_manifest.py</code> to emit the manifest you see here. The frontend re-reads the manifest on every page visit against a 5-minute cache bucket, so the status you see is at most 5 minutes behind the latest committed snapshot &mdash; well inside the 6-hour refresh cycle.
     </div>`;
 
   // Update the subnav pill count
@@ -17389,14 +17389,26 @@ function renderDataStatusTab() {
 // v20.11 — bypass any intermediate cache. Vercel/edge/browser used to hold onto
 // data/*.json for hours; the workflow refreshes daily but users saw stale numbers
 // (e.g. legacy_curated food inflation on countries where Eurostat / WFP HungerMap
-// values existed). Add a per-page-load cache-buster query string AND force
-// `cache: 'no-store'` so every visit gets the latest committed payload.
+// values existed). Add a cache-buster query string so every visit gets the latest
+// committed payload (bucketed to 5 minutes — see _FETCH_TS below).
 //
 // v20.14 — use ABSOLUTE path (/data/...) instead of relative (data/...) so it
 // can't get rewritten by Vercel SPA routing under a sub-path. Also log every
 // fetch failure to the console so the next diagnostic round shows exactly which
 // file failed and why (HTTP code, parse error, etc).
-const _FETCH_TS = Date.now();
+// v79i — the cache-buster used to be Date.now(), i.e. unique per page load, and
+// every fetch below also passed cache:'no-store'. Between them they made the
+// Cache-Control headers in vercel.json (`/data/(.*)` → max-age=60,
+// must-revalidate) completely inert: ~500KB of JSON was re-downloaded on every
+// visit and every hard reload, including the 246KB commodity atlas.
+//
+// The intent — "never show a reader a stale payload" — is kept. The timestamp is
+// now bucketed to 5 minutes, so the URL is stable inside a bucket and the browser
+// can actually reuse the response, while the worst-case staleness a reader can
+// see is 5 minutes against feeds that refresh every 6 hours. Requests still
+// revalidate at the edge via must-revalidate once max-age lapses.
+const _FETCH_BUCKET_MS = 5 * 60 * 1000;
+const _FETCH_TS = Math.floor(Date.now() / _FETCH_BUCKET_MS);
 // ── v43 — SILENT FAILURE REGISTRY ──────────────────────────────────────────
 // This file had 118 empty `catch {}` blocks. Each one is a site where a change
 // in upstream data shape blanks a panel with no signal to the reader and no
@@ -17433,7 +17445,10 @@ window.__softFails = __softFails;
 async function _fetchData(name) {
   const url = `/data/${name}.json?t=${_FETCH_TS}`;
   try {
-    const r = await fetch(url, { cache: 'no-store' });
+    // cache:'default' (not 'no-store') so the bucketed URL above can hit the
+    // browser cache; freshness is bounded by the 5-minute bucket plus the
+    // must-revalidate header, not by re-downloading every time.
+    const r = await fetch(url);
     if (!r.ok) {
       console.warn(`[FoodShield] _fetchData(${name}) HTTP ${r.status} for ${url}`);
       throw new Error(`HTTP ${r.status}`);
@@ -17462,7 +17477,7 @@ async function _fetchData(name) {
 async function _fetchDataOptional(name) {
   const url = `/data/${name}.json?t=${_FETCH_TS}`;
   try {
-    const r = await fetch(url, { cache: 'no-store' });
+    const r = await fetch(url);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const text = await r.text();
     const t = text.trimStart();
@@ -17531,10 +17546,51 @@ async function loadLiveData() {
     }
   } catch (e) {}
 
+  // v79i — DEFERRED FEED KICK-OFF.
+  // Everything below this line used to be 23 back-to-back `await _fetchData(...)`
+  // calls. Each one waited for the previous response before opening its own
+  // connection, so the secondary feeds resolved in a 23-deep serial waterfall:
+  // measured on production, the last file (countries.json) did not land until
+  // ~28s after navigation, and the page sat half-rendered the whole time.
+  //
+  // The fix is only about WHEN the requests start, not about when they are
+  // consumed. All 23 requests are opened here, at once; each block below then
+  // awaits its own already-in-flight promise. Seeding order, per-block
+  // try/catch, and every downstream side effect are byte-for-byte unchanged —
+  // the network just stops being serial. Measured after: ~2s for the same set.
+  //
+  // _fetchData never rejects (it catches and returns null), so these promises
+  // cannot produce an unhandled rejection while they sit here unawaited.
+  const _deferred = {
+    wb_wfso: _fetchData('wb_wfso'),
+    worldbank_bulk: _fetchData('worldbank_bulk'),
+    usda_psd: _fetchData('usda_psd'),
+    chokepoint_flows: _fetchData('chokepoint_flows'),
+    precedents: _fetchData('precedents'),
+    scenario_profiles: _fetchData('scenario_profiles'),
+    backtest_scenarios: _fetchData('backtest_scenarios'),
+    ndgain: _fetchData('ndgain'),
+    aqueduct: _fetchData('aqueduct'),
+    inform_risk: _fetchData('inform_risk'),
+    wgi: _fetchData('wgi'),
+    lpi: _fetchData('lpi'),
+    hdi: _fetchData('hdi'),
+    cckp: _fetchData('cckp'),
+    fews: _fetchData('fews'),
+    chokepoints: _fetchData('chokepoints'),
+    trade_restrictions: _fetchData('trade_restrictions'),
+    fdrs_history: _fetchData('fdrs_history'),
+    fdrs_validation: _fetchData('fdrs_validation'),
+    daily_summary: _fetchData('daily_summary'),
+    companies: _fetchData('companies'),
+    company_overlay: _fetchData('company_overlay'),
+    countries: _fetchData('countries'),
+  };
+
   // v20.9 — pull WFSO (World Bank Food Security Outlook) separately to keep the main
   // Promise.all() readable; it's not on the critical render path so a small delay is fine.
   try {
-    const wfsoEnv = await _fetchData('wb_wfso');
+    const wfsoEnv = await _deferred.wb_wfso;
     LIVE.wfso = (wfsoEnv && (wfsoEnv.data || wfsoEnv)) || {};
   } catch (e) { LIVE.wfso = {}; }
 
@@ -17543,7 +17599,7 @@ async function loadLiveData() {
   // render path; the country panel falls back to existing LIVE.worldbank (5 inds)
   // if this bulk feed is absent or empty.
   try {
-    const wdiEnv = await _fetchData('worldbank_bulk');
+    const wdiEnv = await _deferred.worldbank_bulk;
     LIVE.wdi_bulk = (wdiEnv && (wdiEnv.data || wdiEnv)) || {};
   } catch (e) { LIVE.wdi_bulk = {}; }
 
@@ -17551,7 +17607,7 @@ async function loadLiveData() {
   // per staple per country). commodityTradeDependency() prefers PSD observed
   // values over the modeled fallback.
   try {
-    const psdEnv = await _fetchData('usda_psd');
+    const psdEnv = await _deferred.usda_psd;
     LIVE.psd = (psdEnv && (psdEnv.data || psdEnv)) || {};
   } catch (e) { LIVE.psd = {}; }
 
@@ -17560,7 +17616,7 @@ async function loadLiveData() {
   // _chokepointKick prefers it; absent, the kick falls back to geography-blind
   // mean dependence, so this load is non-critical.
   try {
-    const cpfEnv = await _fetchData('chokepoint_flows');
+    const cpfEnv = await _deferred.chokepoint_flows;
     LIVE.chokepoint_flows = cpfEnv || null;
   } catch (e) { LIVE.chokepoint_flows = null; }
 
@@ -17569,7 +17625,7 @@ async function loadLiveData() {
   // analyst note: precedent rows render verbatim with their citation URLs —
   // no number in the note originates anywhere else.
   try {
-    const precEnv = await _fetchData('precedents');
+    const precEnv = await _deferred.precedents;
     LIVE.precedents = precEnv || null;
   } catch (e) { LIVE.precedents = null; }
 
@@ -17578,14 +17634,14 @@ async function loadLiveData() {
   // time) and validated against locked facts; the client only ever displays
   // it next to figures it computed itself.
   try {
-    const profEnv = await _fetchData('scenario_profiles');
+    const profEnv = await _deferred.scenario_profiles;
     LIVE.scenario_profiles = profEnv || null;
   } catch (e) { LIVE.scenario_profiles = null; }
 
   // v67 — historical replay smoke test (scripts/backtest_scenarios.py output);
   // rendered inside the methodology badge. Non-critical load.
   try {
-    const btEnv = await _fetchData('backtest_scenarios');
+    const btEnv = await _deferred.backtest_scenarios;
     LIVE.backtest = btEnv || null;
   } catch (e) { LIVE.backtest = null; }
 
@@ -17597,41 +17653,41 @@ async function loadLiveData() {
   // Feeds the climate dimension of the FDRS (blended 60% sourced / 40% heritage,
   // alongside Aqueduct + CCKP) and shows on the country panel as a sourced card.
   try {
-    const ndgainEnv = await _fetchData('ndgain');
+    const ndgainEnv = await _deferred.ndgain;
     LIVE.ndgain = (ndgainEnv && (ndgainEnv.data || ndgainEnv)) || {};
   } catch (e) { LIVE.ndgain = {}; }
 
   // v20.22 — Pipeline 8: WRI Aqueduct 4.0 water risk per country.
   try {
-    const aquaEnv = await _fetchData('aqueduct');
+    const aquaEnv = await _deferred.aqueduct;
     LIVE.aqueduct = (aquaEnv && (aquaEnv.data || aquaEnv)) || {};
   } catch (e) { LIVE.aqueduct = {}; }
 
   // v20.22 — Pipeline 9: EU JRC INFORM Risk Index per country.
   try {
-    const informEnv = await _fetchData('inform_risk');
+    const informEnv = await _deferred.inform_risk;
     LIVE.inform = (informEnv && (informEnv.data || informEnv)) || {};
   } catch (e) { LIVE.inform = {}; }
 
   // v20.25 — Pipeline 13: WB Worldwide Governance Indicators per country.
   try {
-    const wgiEnv = await _fetchData('wgi');
+    const wgiEnv = await _deferred.wgi;
     LIVE.wgi = (wgiEnv && (wgiEnv.data || wgiEnv)) || {};
   } catch (e) { LIVE.wgi = {}; }
 
   // v20.26 — Pipelines 14, 15, 16
   try {
-    const lpiEnv = await _fetchData('lpi');
+    const lpiEnv = await _deferred.lpi;
     LIVE.lpi = (lpiEnv && (lpiEnv.data || lpiEnv)) || {};
   } catch (e) { LIVE.lpi = {}; }
 
   try {
-    const hdiEnv = await _fetchData('hdi');
+    const hdiEnv = await _deferred.hdi;
     LIVE.hdi = (hdiEnv && (hdiEnv.data || hdiEnv)) || {};
   } catch (e) { LIVE.hdi = {}; }
 
   try {
-    const cckpEnv = await _fetchData('cckp');
+    const cckpEnv = await _deferred.cckp;
     LIVE.cckp = (cckpEnv && (cckpEnv.data || cckpEnv)) || {};
   } catch (e) { LIVE.cckp = {}; }
 
@@ -17640,7 +17696,7 @@ async function loadLiveData() {
   // a FEWS pill next to IPC, and pushed into the disturbance feed when the
   // projection deteriorates (Phase ≥3 or +1 phase from current).
   try {
-    const fewsEnv = await _fetchData('fews');
+    const fewsEnv = await _deferred.fews;
     LIVE.fews = (fewsEnv && (fewsEnv.data || fewsEnv)) || {};
   } catch (e) { LIVE.fews = {}; }
 
@@ -17648,7 +17704,7 @@ async function loadLiveData() {
   // standing 'infrastructure' disturbances so the Suez/Panama/Hormuz/Bab-el-Mandeb/
   // Turkish-Straits risk is visible on the map and in the Disturbances feed.
   try {
-    const cpEnv = await _fetchData('chokepoints');
+    const cpEnv = await _deferred.chokepoints;
     LIVE.chokepoints = (cpEnv && (cpEnv.data || cpEnv)) || [];
   } catch (e) { LIVE.chokepoints = []; }
 
@@ -17656,7 +17712,7 @@ async function loadLiveData() {
   // restrictions; each is surfaced with its live exposure via restrictionExposure().
   // Empty until cited entries are added (restrictions must be sourced, never fabricated).
   try {
-    const trEnv = await _fetchData('trade_restrictions');
+    const trEnv = await _deferred.trade_restrictions;
     LIVE.restrictions = (trEnv && (trEnv.data || trEnv)) || [];
   } catch (e) { LIVE.restrictions = []; }
 
@@ -17664,7 +17720,7 @@ async function loadLiveData() {
   // Real daily structural-score history; surfaced as a trajectory sparkline on the country
   // profile so "the score is tracked over time, reproducible" is tangible, not asserted.
   try {
-    const fhEnv = await _fetchData('fdrs_history');
+    const fhEnv = await _deferred.fdrs_history;
     LIVE.fdrs_history = (fhEnv && (fhEnv.data || fhEnv)) || {};
   } catch (e) { LIVE.fdrs_history = {}; }
 
@@ -17672,19 +17728,19 @@ async function loadLiveData() {
   // (scripts/validate_fdrs.py output). Surfaced on the Methodology page as the
   // credibility payload: does the score correspond to realised crises? (AUC etc.)
   try {
-    const fvEnv = await _fetchData('fdrs_validation');
+    const fvEnv = await _deferred.fdrs_validation;
     LIVE.fdrs_validation = (fvEnv && (fvEnv.data || fvEnv)) || null;
   } catch (e) { LIVE.fdrs_validation = null; }
 
   // v20.29 — daily summary headline (build_daily_summary.py output)
   try {
-    const dsEnv = await _fetchData('daily_summary');
+    const dsEnv = await _deferred.daily_summary;
     LIVE.daily_summary = (dsEnv && (dsEnv.data || dsEnv)) || null;
   } catch (e) { LIVE.daily_summary = null; }
 
   // v21 — real trader sourcing data (build_companies.py aggregate)
   try {
-    const coEnv = await _fetchData('companies');
+    const coEnv = await _deferred.companies;
     LIVE.companies = (coEnv && (coEnv.data || coEnv)) || {};
   } catch (e) { LIVE.companies = {}; }
 
@@ -17692,7 +17748,7 @@ async function loadLiveData() {
   // rankings × each trader's disclosed operating countries. Ranked, qualitative,
   // NO attributed tonnage/share. Rendered in the company detail under a MODELED badge.
   try {
-    const ovEnv = await _fetchData('company_overlay');
+    const ovEnv = await _deferred.company_overlay;
     LIVE.company_overlay = (ovEnv && (ovEnv.data || ovEnv)) || {};
   } catch (e) { LIVE.company_overlay = {}; }
 
@@ -17702,7 +17758,7 @@ async function loadLiveData() {
   // legacy_curated. Provenance metadata is attached at c._provenance[fieldName] so the UI
   // can show "sourced" / "legacy_curated" / "modeled" badges per metric where it matters.
   try {
-    const provData = await _fetchData('countries');
+    const provData = await _deferred.countries;
     const overrides = provData?.data?.countries || provData?.countries || {};
     // v22 honesty pass — expose overlay coverage count for the Data Status panel.
     LIVE.countries_overlay = overrides;

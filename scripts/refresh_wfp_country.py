@@ -31,6 +31,7 @@ URL_TPL = "https://api.hungermapdata.org/v2/iso3/{iso3}/countryIso3Data.json"
 
 def main():
     out = {}
+    errors = []
     isos = sorted(COUNTRY_COORDS.keys())
     print(f"[INFO] fetching per-country HungerMap data for {len(isos)} ISO3 codes")
 
@@ -62,23 +63,55 @@ def main():
             if any(v not in (None, False) for v in row.values()):
                 out[iso] = row
         except Exception as e:
-            # Country-level endpoint missing for small/disputed territories is normal
+            # v79i — this used to be a bare `continue`. A per-country miss IS
+            # normal for small/disputed territories, but the same handler also
+            # swallowed a blanket upstream lockout: WFP now answers every
+            # /v2/iso3/{iso3}/ request with HTTP 403, so all 195 calls failed,
+            # the script wrote `{}` and still printed "[OK] wrote ... (2 bytes)".
+            # Count the failures and keep one sample error so the outcome can be
+            # told apart from a genuinely empty week.
+            errors.append(f"{iso}: {type(e).__name__}: {e}")
             continue
 
         if (i + 1) % 30 == 0:
             print(f"  [progress] {i+1}/{len(isos)} ({len(out)} written)")
             time.sleep(0.4)
 
+    # v79i — an all-countries-failed run is an upstream failure, not a result.
+    # Say so in _meta.status; build_source_manifest.py honours an explicit status
+    # over its own inference, so the Data Status table stops calling this an
+    # "empty payload" and names the actual cause.
+    total_failed = len(errors)
+    if not out and total_failed:
+        status = "upstream_blocked"
+        notes = (
+            "UPSTREAM BLOCKED: every one of "
+            f"{total_failed}/{len(isos)} per-country requests failed. WFP now "
+            "returns HTTP 403 for api.hungermapdata.org/v2/iso3/{iso3}/"
+            "countryIso3Data.json (the whole v2 tree, including /v2/adm0data.json, "
+            "is closed to anonymous clients). This is NOT a quiet week and NOT a "
+            "code fault — the endpoint needs credentials or a replacement source. "
+            f"First error: {errors[0][:160]}"
+        )
+    else:
+        status = None
+        notes = (
+            "Per-country FX (90d change vs USD), food + headline inflation, "
+            "child wasting/stunting. Flags: fx_currency_shock = local currency "
+            "fell >10% vs USD in 90d; inflation_shock = food inflation >15%. "
+            f"Covered {len(out)} of {len(COUNTRY_COORDS)} requested countries"
+            f"{f' ({total_failed} failed)' if total_failed else ''}."
+        )
+    if total_failed:
+        print(f"[WARN] {total_failed}/{len(isos)} per-country requests failed. "
+              f"First: {errors[0][:200]}")
+
     write_json(
         "wfp_country.json",
         out,
         source="WFP HungerMap per-country (api.hungermapdata.org/v2/iso3/{iso3}/countryIso3Data.json)",
-        notes=(
-            "Per-country FX (90d change vs USD), food + headline inflation, "
-            "child wasting/stunting. Flags: fx_currency_shock = local currency "
-            "fell >10% vs USD in 90d; inflation_shock = food inflation >15%. "
-            f"Covered {len(out)} of {len(COUNTRY_COORDS)} requested countries."
-        ),
+        notes=notes,
+        status=status,
     )
 
 

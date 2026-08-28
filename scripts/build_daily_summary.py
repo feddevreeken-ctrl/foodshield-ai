@@ -39,6 +39,21 @@ def load(name):
         return None
 
 
+def _feed_age_days(name):
+    """Age in whole days of a feed's _meta.generated_at, or None if unreadable."""
+    env = load(name) or {}
+    ts = ((env.get("_meta") or {}).get("generated_at")) if isinstance(env, dict) else None
+    if not ts:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - dt).days
+    except Exception:
+        return None
+
+
 def main():
     today = date.today().isoformat()
     nc      = (load("nowcast.json") or {}).get("data") or {}
@@ -50,6 +65,22 @@ def main():
     om      = (load("openmeteo.json") or {}).get("data") or {}
     flood   = (load("openmeteo_flood.json") or {}).get("data") or {}
     inform  = (load("inform_risk.json") or {}).get("data") or {}
+
+    # v79i — ONE country-name resolver for every bullet in this file.
+    # Each bullet used to resolve names on its own, against whichever feed it
+    # happened to have in hand, so the same summary could read "Top mover: SSD"
+    # in one line and "Top of list: South Sudan" in the next. inform_risk.json is
+    # the only feed that names ~all 191 countries; ipc.json and wfp_hungermap.json
+    # ship `country: null` on every row. Chain them, then fall back to the ISO
+    # code — never to None.
+    _hm = (load("wfp_hungermap.json") or {}).get("data") or {}
+
+    def name_of(iso):
+        for src in (inform, _hm, ipc, nc):
+            nm = (src.get(iso) or {}).get("country") if isinstance(src, dict) else None
+            if nm:
+                return nm
+        return iso
 
     bullets = []
     highlights = []
@@ -69,11 +100,7 @@ def main():
 
     if movers:
         top = movers[:3]
-        names_by_iso = {}
-        # Quick reverse-lookup for country names via WFP HungerMap if present
-        hm = (load("wfp_hungermap.json") or {}).get("data") or {}
-        for iso, _, _ in top:
-            names_by_iso[iso] = (hm.get(iso) or {}).get("country") or iso
+        names_by_iso = {iso: name_of(iso) for iso, _, _ in top}
         worst = top[0]
         bullets.append({
             "text": f"{len(movers)} countries on +8 or worse nowcast adjustment vs structural baseline today. Top mover: {names_by_iso.get(worst[0], worst[0])} at +{worst[1]}.",
@@ -89,11 +116,17 @@ def main():
             })
 
     # IPC Phase 3+ countries
+    # v79i — `.get("country", iso)` only falls back when the KEY is absent. Every
+    # row in ipc.json carries the key with an explicit null (the ew-tool IPC feed
+    # ships no country name), so the default never fired and the bullet rendered
+    # "Worst: None at 67%" on the live Disturbances tab. Resolve the name the same
+    # way the nowcast bullet above does, and fall back to the ISO code — never to
+    # None.
     high_ipc = []
     for iso, row in ipc.items():
         pct = (row or {}).get("phase3plus_pct") or 0
         if pct >= 25:
-            high_ipc.append((iso, pct, (row or {}).get("country", iso)))
+            high_ipc.append((iso, pct, name_of(iso)))
     high_ipc.sort(key=lambda x: -x[1])
     if high_ipc:
         worst = high_ipc[0]
@@ -124,8 +157,21 @@ def main():
     if drought_count >= 1: env_parts.append(f"{drought_count} drought-flagged")
     if flood_count >= 1: env_parts.append(f"{flood_count} flood-flagged")
     if env_parts:
+        # v79i — this bullet said "...countries today" unconditionally, while the
+        # weather feed behind it can be weeks old (Open-Meteo Weather has not
+        # refreshed since 2026-08-03 and the run still succeeds on last-good data).
+        # Asserting "today" over a stale snapshot is the one thing this summary is
+        # not allowed to do, so date the claim when the underlying feed is stale.
+        _om_age = _feed_age_days("openmeteo.json")
+        _suffix = (
+            " countries today."
+            if _om_age is not None and _om_age <= 2
+            else f" countries as of the last weather refresh ({_om_age}d ago)."
+            if _om_age is not None
+            else " countries (weather refresh date unknown)."
+        )
         bullets.append({
-            "text": "Active environmental signals: " + ", ".join(env_parts) + " countries today.",
+            "text": "Active environmental signals: " + ", ".join(env_parts) + _suffix,
             "source": "Open-Meteo + Open-Meteo Flood",
         })
 
@@ -141,7 +187,7 @@ def main():
         for iso, row in isinform.items():
             risk = (row or {}).get("inform_risk")
             if isinstance(risk, (int, float)) and risk >= 7.5:
-                ranked.append((iso, risk, (row or {}).get("country", iso)))
+                ranked.append((iso, risk, name_of(iso)))
         if ranked:
             ranked.sort(key=lambda x: -x[1])
             bullets.append({
@@ -152,7 +198,7 @@ def main():
     # Headline + subhead
     if movers:
         worst_iso = movers[0][0]
-        worst_name = (hm.get(worst_iso) or {}).get("country") or worst_iso
+        worst_name = name_of(worst_iso)
         headline = f"{len(movers)} countries with active nowcast pressure; {worst_name} leads."
     elif high_ipc:
         headline = f"{len(high_ipc)} countries in active IPC Phase 3+ crisis; quiet day on the nowcast layer."

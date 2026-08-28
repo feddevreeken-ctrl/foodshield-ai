@@ -457,6 +457,19 @@ def main():
         rows[spec["key"]]["stale"] = bool(_is_stale)
         if _is_stale:
             summary["stale_sources"] += 1
+            # v79i — a stale feed is not a healthy feed. Until now `stale` was
+            # computed and stored but never allowed to touch `status`, so a feed
+            # that had not refreshed in four weeks still rendered as
+            # "LIVE · Healthy" in the Data Status table and still counted toward
+            # the 32/34 healthy pill in the header. Open-Meteo Weather — cadence
+            # "daily", last successful run 2026-08-03 — was doing exactly that.
+            # Demote it to degraded and say why, so the age the row already
+            # displays and the status next to it stop contradicting each other.
+            if status == "ok":
+                status = "degraded"
+                reason = f"stale — no successful refresh in {_age}d (cadence: {spec['cadence']})"
+                rows[spec["key"]]["status"] = status
+                rows[spec["key"]]["reason"] = reason
         if status == "ok":
             summary["ok_sources"] += 1
             summary["healthy_sources"] += 1
