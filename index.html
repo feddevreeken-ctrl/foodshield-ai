@@ -2009,6 +2009,28 @@ body {
 
 .leaflet-container { background: #14141a !important; outline: none !important; }
 .leaflet-container, .leaflet-container * { font-family: 'Geist', sans-serif !important; }
+/* v79k — country name labels, drawn from the GeoJSON (see buildCountryLabels).
+   The halo is four offset shadows rather than -webkit-text-stroke: the stroke
+   thins the glyphs at this size, and these labels have to stay readable over
+   both the near-black ocean and the bright end of the choropleth ramp. */
+.map-country-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  color: #f2f2f4;
+  white-space: nowrap;
+  /* Anchored on the centroid with a zero-size icon box, so translate the text
+     back by half its own width/height to centre it on the country. */
+  transform: translate(-50%, -50%);
+  text-shadow:
+     0  1px 2px rgba(0,0,0,0.95),
+     0 -1px 2px rgba(0,0,0,0.95),
+     1px 0  2px rgba(0,0,0,0.95),
+    -1px 0  2px rgba(0,0,0,0.95);
+  pointer-events: none;
+  user-select: none;
+}
 .leaflet-control-attribution, .leaflet-control { display: none !important; }
 .leaflet-interactive { outline: none !important; cursor: pointer; transition: opacity 0.15s; }
 
@@ -20232,7 +20254,7 @@ function _simulateScenario(c, selected, severityById, paramsById) {
 
 // ════════════════════════════════════════════════════
 // FoodShield AI — Flat dark world map + Trade Flow Atlas
-// Leaflet + Esri Dark Gray Canvas base, FDRS choropleth,
+// Leaflet, no raster basemap — FDRS choropleth on world.geojson,
 // animated curved import/export arcs.
 // ════════════════════════════════════════════════════
 (function () {
@@ -20348,28 +20370,34 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     });
     G.map = map;
 
-    // Base — dark, no labels.
-    // v79h — CARTO retired keyless basemaps and now stamps every tile on the
-    // legacy no-key endpoint with an "API KEY REQUIRED" watermark, so the map
-    // read as broken. Esri's Dark Gray Canvas is keyless, dark, and serves the
-    // same role. Esri's terms require attribution — it is credited in the map
-    // layers panel footnote.
-    L.tileLayer(
-      'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-      { maxZoom: 16 }
-    ).addTo(map);
+    // Base — none. There is no raster basemap layer any more.
+    //
+    // v79h: CARTO retired its keyless basemaps and began stamping every tile
+    // with an "API KEY REQUIRED" watermark, so the map read as broken. Swapped
+    // to Esri's Dark Gray Canvas.
+    // v79k: Esri's Dark Gray Base bakes country names INTO the base raster, and
+    // this choropleth is deliberately translucent at the low end of the ramp
+    // (fillOpacity starts at 0.18), so those baked names bled straight through
+    // every resilient country — Russia, Germany, Poland, the UK and Brazil each
+    // showed a dim tile label next to the real one.
+    //
+    // Rather than hunt for a third tile service, drop the raster entirely. This
+    // map is a choropleth of 193 countries drawn from world.geojson, which also
+    // carries Antarctica, Greenland, Iceland, New Zealand, Japan and the
+    // Philippines — so the basemap was contributing an ocean colour and little
+    // else. The ocean is now the container background (#14141a, set in CSS),
+    // which is very close to what CARTO's dark_nolabels rendered anyway.
+    //
+    // This also removes the last third-party tile dependency from the map, so a
+    // repeat of the CARTO rug-pull cannot break it again, and drops the per-view
+    // tile fetches entirely.
 
     // Custom pane for labels — sits ABOVE countries
     map.createPane('labels');
     map.getPane('labels').style.zIndex = 650;
     map.getPane('labels').style.pointerEvents = 'none';
-    // Esri ships its place labels dark-on-transparent (drawn for light
-    // basemaps), so the pane is inverted in CSS to get light-on-dark text.
-    map.getPane('labels').style.filter = 'invert(1) brightness(1.3)';
-    L.tileLayer(
-      'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places_Alternate/MapServer/tile/{z}/{y}/{x}',
-      { maxZoom: 16, pane: 'labels', opacity: 0.85 }
-    ).addTo(map);
+    // v79k — country names are drawn from the GeoJSON we already load, not from
+    // a raster label tile service. See buildCountryLabels() below for why.
 
     // Pane for flow arcs (above labels)
     map.createPane('flows');
@@ -20575,6 +20603,8 @@ function _simulateScenario(c, selected, severityById, paramsById) {
           onEachFeature: onEachFeature,
         }).addTo(map);
 
+        buildCountryLabels();
+
         G.ready = true;
         // v68.3 — if scenario paint was armed before GeoJSON finished, the
         // polygons get painted through styleFeature; place the route marker now.
@@ -20602,9 +20632,172 @@ function _simulateScenario(c, selected, severityById, paramsById) {
         } catch (e) { console.warn('[FoodShield] post-ready disturbance re-render failed:', e); }
       })
       .catch(err => {
-        console.warn('[FoodShield] map geojson load failed across all 3 CDN mirrors:', err);
-        console.warn('[FoodShield] map polygons will be missing but the rest of the app still works.');
+        // v79k — this catch sits on the END of a .then() chain, so it fires for
+        // BOTH a genuine fetch failure and any error thrown while processing a
+        // payload that downloaded perfectly well. It reported the latter as
+        // "failed across all 3 CDN mirrors", which sent this session hunting a
+        // CDN outage while the real fault was a TypeError in the render path
+        // one line above. Distinguish them: if G.features is populated, the
+        // download plainly succeeded.
+        if (G.features && G.features.length) {
+          console.error('[FoodShield] map geojson downloaded fine '
+            + `(${G.features.length} features) but post-load rendering threw:`, err);
+        } else {
+          console.warn('[FoodShield] map geojson load failed across all 3 CDN mirrors:', err);
+          console.warn('[FoodShield] map polygons will be missing but the rest of the app still works.');
+        }
       });
+  }
+
+  // ── Country labels ─────────────────────────────────────────────────────────
+  // v79k — drawn here, from the same GeoJSON that draws the choropleth, rather
+  // than pulled from a raster label tile service.
+  //
+  // History: CARTO's dark_only_labels layer did this job until CARTO retired its
+  // keyless basemaps (v79h). The nearest Esri equivalent that carries COUNTRY
+  // names — Reference/World_Boundaries_and_Places_Alternate — is drawn
+  // dark-on-light for light basemaps, so it needed a CSS invert() to read on a
+  // dark map. Two things broke:
+  //   1. Those tiles are not fully transparent. Inverting them turned their
+  //      opaque regions into opaque BLACK, which punched holes straight through
+  //      the choropleth — Germany, Poland, Italy, Syria and Iraq rendered as
+  //      solid black despite having scores (17, 17, 22, 60, 52).
+  //   2. The layer carries its own boundaries and its own city + ocean labels,
+  //      so it double-drew every border and cluttered the map with places the
+  //      dashboard never refers to.
+  // Esri's matched dark reference layer (Canvas/World_Dark_Gray_Reference) is
+  // cities-only and has no country names, so there is no drop-in raster fix.
+  //
+  // Drawing them ourselves is strictly better here: the labels land on the same
+  // centroids the flow arcs already use (G.centroids, which honours
+  // CENTROID_OVERRIDES so France does not label in Spain), they can never
+  // occlude the data layer, they carry no borders, and they are country names
+  // only — which is what this map is about.
+  const _countryLabels = [];
+
+  function buildCountryLabels() {
+    if (!G.isoMap || !G.isoMap.size || !G.map) return;
+    if (typeof COUNTRIES === 'undefined') return;
+
+    for (const co of COUNTRIES) {
+      const f = G.isoMap.get(co.iso);
+      const ll = G.centroids.get(co.iso);
+      if (!f || !ll) continue;
+      const marker = L.marker(ll, {
+        pane: 'labels',
+        interactive: false,
+        keyboard: false,
+        icon: L.divIcon({
+          className: 'map-country-label',
+          html: co.name.toUpperCase(),
+          // Sized at render time by CSS; a zero-size box keeps the anchor on the
+          // centroid so the CSS transform can centre the text on it.
+          iconSize: [0, 0],
+        }),
+      });
+      _countryLabels.push({ marker, name: co.name, spanDeg: widestRingDeg(f), shown: false });
+    }
+    updateCountryLabels();
+    // NOTE: G.map, not `map`. These two functions live outside the closure that
+    // holds the map init's local `map` const, and `map` at this scope resolves
+    // to the <div id="map"> element via the implicit id-global — which silently
+    // has no .getZoom()/.on() and left every label built but never shown.
+    G.map.on('zoomend moveend', updateCountryLabels);
+  }
+
+  // Width of a country's WIDEST single ring, in degrees of longitude.
+  //
+  // The obvious version of this — L.geoJSON(f).getBounds() — is wrong for any
+  // country that crosses the antimeridian, because the bounding box then spans
+  // the whole globe. Fiji came out "1448px wide" at world zoom and outranked
+  // the United States. Measuring the widest individual ring instead gives
+  // Russia its real mainland width and Fiji its real island width.
+  function widestRingDeg(f) {
+    const g = f && f.geometry;
+    if (!g) return 0;
+    const polys = g.type === 'Polygon' ? [g.coordinates]
+                : g.type === 'MultiPolygon' ? g.coordinates
+                : [];
+    let widest = 0;
+    for (const poly of polys) {
+      const ring = poly && poly[0];
+      if (!ring || !ring.length) continue;
+      let lo = Infinity, hi = -Infinity;
+      for (const pt of ring) {
+        const lng = pt && pt[0];
+        if (typeof lng !== 'number') continue;
+        if (lng < lo) lo = lng;
+        if (lng > hi) hi = lng;
+      }
+      if (hi > lo && hi - lo > widest) widest = hi - lo;
+    }
+    return widest;
+  }
+
+  // Show a label only when its country is physically wide enough on screen to
+  // hold the text, then drop any that would collide with one already placed.
+  //
+  // The width test is self-tuning: at world zoom only the big landmasses
+  // qualify, and zooming in reveals the rest, with no hand-maintained list of
+  // "important" countries to drift out of date. Widest-first ordering means
+  // that when two labels compete for the same patch of screen, the bigger
+  // country keeps its label — which is the same call a cartographer makes.
+  function updateCountryLabels() {
+    if (!_countryLabels.length || !G.map) return;
+    const z = G.map.getZoom();
+    // Degrees of longitude per pixel at this zoom (Web Mercator, 256px tiles).
+    const degPerPx = 360 / (256 * Math.pow(2, z));
+
+    const ordered = _countryLabels.slice().sort((a, b) => b.spanDeg - a.spanDeg);
+
+    // Seed the collision set with the cards that float ON the map (the stats
+    // strip, the layers panel, the risk legend). They are painted above the
+    // label pane, so a label underneath one is not hidden — it is sliced in
+    // half. Argentina rendered as "GENTINA" behind the legend in the default
+    // view. Treating the cards as obstacles makes the existing declutter pass
+    // move on to the next candidate instead.
+    const placed = [];
+    try {
+      const mapRect = G.map.getContainer().getBoundingClientRect();
+      for (const id of ['map-stats', 'map-layers', 'map-legend', 'map-dist-legend']) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        const b = el.getBoundingClientRect();
+        if (!b.width || !b.height) continue;
+        // Card centre in the same layer-point space the labels use.
+        const centre = G.map.containerPointToLayerPoint([
+          b.left - mapRect.left + b.width / 2,
+          b.top - mapRect.top + b.height / 2,
+        ]);
+        placed.push({ x: centre.x, y: centre.y, halfW: b.width / 2, halfH: b.height / 2 });
+      }
+    } catch (e) { /* obstacles are an enhancement; never block labelling on them */ }
+    for (const rec of ordered) {
+      // ~6.2px per character at the label's font-size/letter-spacing, plus a
+      // margin so text never overhangs its own country.
+      const textPx = rec.name.length * 6.2;
+      let want = (rec.spanDeg / degPerPx) >= textPx + 10;
+
+      if (want) {
+        // Collision test in screen space against everything already placed.
+        const pt = G.map.latLngToLayerPoint(rec.marker.getLatLng());
+        const halfW = textPx / 2 + 4;
+        for (const p of placed) {
+          // p.halfH is set for the UI cards; label-vs-label uses a flat 11px.
+          const dy = (p.halfH || 0) + 6;
+          if (Math.abs(pt.x - p.x) < (halfW + p.halfW)
+              && Math.abs(pt.y - p.y) < (p.halfH ? dy : 11)) {
+            want = false;
+            break;
+          }
+        }
+        if (want) placed.push({ x: pt.x, y: pt.y, halfW });
+      }
+
+      if (want === rec.shown) continue;
+      if (want) rec.marker.addTo(G.map); else G.map.removeLayer(rec.marker);
+      rec.shown = want;
+    }
   }
 
   // ── Country styling ──
@@ -32630,7 +32823,7 @@ function renderMapLayers(){
             onchange="toggleCommodityFlowOverlay(this.value)" style="${st.flowsOn ? '' : 'display:none'}">
       <option value="">Choose a commodity…</option>
     </select>
-    <div class="mlp-foot">Disturbances: GDACS · ReliefWeb · WFP · IPC · FEWS. Export restrictions: cited (IFPRI). Trade flows: cited bilateral corridors. Basemap: Esri, HERE, Garmin, FAO, NOAA, USGS.</div>`;
+    <div class="mlp-foot">Disturbances: GDACS · ReliefWeb · WFP · IPC · FEWS. Export restrictions: cited (IFPRI). Trade flows: cited bilateral corridors. Country outlines: Natural Earth via D3-graph-gallery.</div>`;
   if (st.flowsOn && typeof populateCommodityFlowSelect === 'function') populateCommodityFlowSelect();
 }
 function mlToggleDist(ev){ ev.stopPropagation(); const st = window._mlState; st.distOn = !st.distOn; if (st.distOn) st.expanded = true; applyMapLayers(); renderMapLayers(); }
