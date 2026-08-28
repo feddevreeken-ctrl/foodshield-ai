@@ -20176,7 +20176,7 @@ function _simulateScenario(c, selected, severityById, paramsById) {
 
 // ════════════════════════════════════════════════════
 // FoodShield AI — Flat dark world map + Trade Flow Atlas
-// Leaflet + Carto Dark Matter base, FDRS choropleth,
+// Leaflet + Esri Dark Gray Canvas base, FDRS choropleth,
 // animated curved import/export arcs.
 // ════════════════════════════════════════════════════
 (function () {
@@ -20292,19 +20292,27 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     });
     G.map = map;
 
-    // Base — dark, no labels
+    // Base — dark, no labels.
+    // v79h — CARTO retired keyless basemaps and now stamps every tile on the
+    // legacy no-key endpoint with an "API KEY REQUIRED" watermark, so the map
+    // read as broken. Esri's Dark Gray Canvas is keyless, dark, and serves the
+    // same role. Esri's terms require attribution — it is credited in the map
+    // layers panel footnote.
     L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
-      { subdomains: 'abcd', maxZoom: 19 }
+      'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 16 }
     ).addTo(map);
 
     // Custom pane for labels — sits ABOVE countries
     map.createPane('labels');
     map.getPane('labels').style.zIndex = 650;
     map.getPane('labels').style.pointerEvents = 'none';
+    // Esri ships its place labels dark-on-transparent (drawn for light
+    // basemaps), so the pane is inverted in CSS to get light-on-dark text.
+    map.getPane('labels').style.filter = 'invert(1) brightness(1.3)';
     L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
-      { subdomains: 'abcd', maxZoom: 19, pane: 'labels', opacity: 0.85 }
+      'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places_Alternate/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 16, pane: 'labels', opacity: 0.85 }
     ).addTo(map);
 
     // Pane for flow arcs (above labels)
@@ -32562,7 +32570,7 @@ function renderMapLayers(){
             onchange="toggleCommodityFlowOverlay(this.value)" style="${st.flowsOn ? '' : 'display:none'}">
       <option value="">Choose a commodity…</option>
     </select>
-    <div class="mlp-foot">Disturbances: GDACS · ReliefWeb · WFP · IPC · FEWS. Export restrictions: cited (IFPRI). Trade flows: cited bilateral corridors.</div>`;
+    <div class="mlp-foot">Disturbances: GDACS · ReliefWeb · WFP · IPC · FEWS. Export restrictions: cited (IFPRI). Trade flows: cited bilateral corridors. Basemap: Esri, HERE, Garmin, FAO, NOAA, USGS.</div>`;
   if (st.flowsOn && typeof populateCommodityFlowSelect === 'function') populateCommodityFlowSelect();
 }
 function mlToggleDist(ev){ ev.stopPropagation(); const st = window._mlState; st.distOn = !st.distOn; if (st.distOn) st.expanded = true; applyMapLayers(); renderMapLayers(); }
