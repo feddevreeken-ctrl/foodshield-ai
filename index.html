@@ -94,6 +94,15 @@
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;500;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap"></noscript>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+<!-- v80 — MapLibre GL + the maplibre-gl-leaflet bridge. The basemap is now
+     vector tiles (OpenFreeMap dark, CARTO dark-matter as fallback) rendered by
+     MapLibre inside the existing Leaflet map, so every overlay in this file —
+     choropleth, flow arcs, disturbance markers, scenario paint — keeps working
+     against the Leaflet API it was written for. See the map module's "Base"
+     block for why the raster basemap had to go. -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css"/>
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js" integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous"></script>
 <!-- v20.34 — Chart.js is only needed once the user opens a country panel or
      the commodity/score tab. Removed the eager <script> tag from the critical
@@ -2007,30 +2016,129 @@ body {
 }
 .news-empty { padding: 28px 0; text-align: center; color: var(--t3); font-size: 12.5px; }
 
-/* Ocean. #262626 is CARTO dark_nolabels' own water colour, sampled from a
-   tile — the map is built around that tone and #14141a read as a flat void
-   once the raster base was gone. */
+/* Ocean. v80 — #262626 was CARTO's raster water colour, carried over after the
+   raster base was dropped. Against near-black land it was a value difference
+   only, and a dimmed or low-risk country sat close enough to it that coastlines
+   went soft. A cool slate separates sea from land by hue as well, without
+   touching any fill in the risk palette. Kept in sync with OCEAN_TONE in the
+   map module, which retones the vector basemap's water to match. */
 .leaflet-container { background: #262626 !important; outline: none !important; }
 .leaflet-container, .leaflet-container * { font-family: 'Geist', sans-serif !important; }
-/* v79k — country name labels, drawn from the GeoJSON (see buildCountryLabels).
+
+/* v80 — country name labels. Placement and zoom-gating come from Natural
+   Earth's own LABEL_X/LABEL_Y and MIN_LABEL fields (see buildCountryLabels),
+   so this is only the type treatment.
    The halo is four offset shadows rather than -webkit-text-stroke: the stroke
    thins the glyphs at this size, and these labels have to stay readable over
    both the near-black ocean and the bright end of the choropleth ramp. */
 .map-country-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
   line-height: 1;
-  color: #f2f2f4;
+  /* Atlas grey, not floodlit white. A country name is basemap furniture: it
+     should be readable and then get out of the way of the risk colour it sits
+     on. The previous #f2f2f4 at weight 600 with a hard black halo shouted over
+     the choropleth — every label read as loud as the data. */
+  color: #a9a7a2;
   white-space: nowrap;
-  /* Anchored on the centroid with a zero-size icon box, so translate the text
-     back by half its own width/height to centre it on the country. */
+  /* Anchored on the label point with a zero-size icon box, so translate the
+     text back by half its own width/height to centre it on that point. */
   transform: translate(-50%, -50%);
-  text-shadow:
-     0  1px 2px rgba(0,0,0,0.95),
-     0 -1px 2px rgba(0,0,0,0.95),
-     1px 0  2px rgba(0,0,0,0.95),
-    -1px 0  2px rgba(0,0,0,0.95);
+  /* A soft shadow rather than a hard halo: enough to hold the glyphs together
+     over the bright end of the ramp, not enough to draw a black outline round
+     every letter. */
+  text-shadow: 0 1px 2px rgba(0,0,0,0.60), 0 0 3px rgba(0,0,0,0.50);
+  pointer-events: none;
+  user-select: none;
+}
+/* One size, one weight, one colour for every country name. An earlier cut set
+   three tiers off Natural Earth's LABELRANK — the idea being a visual hierarchy
+   — but on a map where the DATA is the colour, varying the type just reads as
+   inconsistency: neighbouring countries appeared to be set in different fonts.
+   Importance still decides WHICH names get drawn (see updateCountryLabels);
+   it no longer decides how they look. */
+
+/* Continent names, world zooms only. Large, very widely tracked, very quiet —
+   they sit behind everything else as a sense of where you are, and are gone by
+   the time country names take over. English only: the raster label layer this
+   replaces served them from a multilingual source, so the old map read
+   "AFRIKA / أفريقيا" over Africa and "亚洲" over Asia. */
+.map-continent-label {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.34em;
+  line-height: 1.25;
+  /* #6a6e74 was invisible: a continent name lands on the choropleth, not on the
+     ocean, so it has to hold against a mid-green or a burnt orange. Lifted to a
+     light warm grey with a real shadow — still quieter than a country name,
+     but legible on every band of the ramp. */
+  color: #d7d3cb;
+  opacity: 0.72;
+  text-align: center;
+  white-space: pre;
+  transform: translate(-50%, -50%);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.85), 0 0 6px rgba(0,0,0,0.55);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Cities and capitals. Set in mixed case against the countries' all-caps, which
+   is how an atlas separates a settlement from the territory it sits in — you can
+   tell the two ranks apart without reading either. Capitals carry a ringed dot
+   and a slightly brighter type; everything else is a plain dot. Deliberately
+   quieter than the country names: these are orientation, not subject matter. */
+.map-city-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  color: #9d9a95;
+  white-space: nowrap;
+  /* Anchored at the dot, so the name runs to the right of the point rather than
+     being centred on it. */
+  transform: translate(0, -50%);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.75), 0 0 3px rgba(0,0,0,0.55);
+  pointer-events: none;
+  user-select: none;
+}
+.map-city-label i {
+  flex: none;
+  width: 3px;
+  height: 3px;
+  margin-left: -1.5px;
+  border-radius: 50%;
+  background: #9d9a95;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.6);
+}
+.map-city-label.is-capital { color: #c6c2bb; font-weight: 500; }
+.map-city-label.is-capital i {
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  background: transparent;
+  border: 1.5px solid #c6c2bb;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.6);
+}
+
+/* Ocean names. Italic, widely tracked and quiet, the way an atlas sets water —
+   so empty sea reads as labelled ocean rather than as a hole in the data.
+   The .leaflet-container * rule above forces Geist on everything inside the
+   map, hence the !important on the serif. */
+.map-ocean-label {
+  font-family: 'Instrument Serif', Georgia, serif !important;
+  font-style: italic;
+  font-size: 12.5px;
+  letter-spacing: 0.18em;
+  line-height: 1;
+  color: #6d7a86;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.45);
   pointer-events: none;
   user-select: none;
 }
@@ -20356,6 +20464,22 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     width: 0, height: 0,
   };
 
+  // v80 — map GROUND tones. The risk palette is untouched: the choropleth still
+  // paints mapRiskColor() at the same 0.18–0.96 alpha ramp it always did. What
+  // changes is only what sits UNDER it.
+  //
+  // Land keeps #090909, the value that ramp was tuned against, so every country
+  // reads exactly as it did before. Water moves off #262626 — a grey close
+  // enough to a dimmed land fill that a resilient country and the sea were hard
+  // to tell apart — onto a cool slate. Land against water is now a difference of
+  // hue as well as value, which is what makes the coastline legible without
+  // touching a single fill colour.
+  const LAND_TONE  = '#090909';
+  const OCEAN_TONE = '#262626';
+  // Political hairline. Drawn as a stroke on the choropleth itself, so it lands
+  // above the fill and below the labels, at every zoom, with no second geometry.
+  const BORDER_LINE = '#7d8894';
+
   function init() {
     const container = document.getElementById('map');
     if (!container || typeof L === 'undefined') return;
@@ -20374,37 +20498,166 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     });
     G.map = map;
 
-    // Base — no raster basemap.
+    // Base — vector tiles, rendered by MapLibre GL inside the Leaflet map.
     //
-    // The map was built against CARTO's dark_nolabels / dark_only_labels pair:
-    // an unlabelled dark base, with labels as a separate transparent layer ABOVE
-    // the choropleth. CARTO now stamps "API KEY REQUIRED" on every keyless tile,
-    // and no other provider still ships that split — every keyless dark base
-    // bakes its country names INTO the base raster, where a choropleth that
-    // starts at fillOpacity 0.18 leaves them ghosting through.
+    // History. This map was built against CARTO's dark_nolabels/dark_only_labels
+    // RASTER pair: an unlabelled dark base, with labels as a separate transparent
+    // layer above the choropleth. CARTO retired keyless raster (it now stamps
+    // "API KEY REQUIRED" on every tile), so v79k rebuilt the ground from vector
+    // parts and borrowed Esri's Canvas/World_Dark_Gray_Reference for labels.
+    // That borrow was the single worst thing on the map:
+    //   · it labels CITIES this dashboard never refers to — Stockholm, Warsaw,
+    //     Dubai, Mumbai — in its own typeface, beside our country names, so the
+    //     map carried two competing label systems;
+    //   · it carries its own coastline, generalised differently to our polygons,
+    //     so every shoreline drew twice, offset, as a pale double line.
     //
-    // So the base is rebuilt from parts instead of substituted:
-    //   ocean   -> the container background, set to CARTO's own #262626
-    //   land    -> world.geojson, which covers every landmass including
-    //              Antarctica, Greenland, Iceland and the island states
-    //   places  -> Esri's dark-canvas reference (cities and capitals only, no
-    //              country names, no borders, already light-on-dark so it needs
-    //              no filter — the filter is what punched black holes in v79k)
-    //   country -> drawn in buildCountryLabels() below, above the choropleth so
-    //   names      the name stays readable on near-opaque high-risk countries
+    // v80 uses the stack worldmonitor.app documents for exactly this job:
+    // MapLibre GL over keyless community vector tiles. OpenFreeMap's dark style
+    // is primary, CARTO's dark-matter GL style is the fallback. Neither needs an
+    // API key, neither watermarks, and vector means the ground stays crisp at
+    // every zoom instead of blurring between raster levels.
     //
-    // Net effect: no watermark, no ghosted duplicate labels, no third-party
-    // dependency for the land itself, and coastlines that stay crisp at every
-    // zoom because they are vector rather than raster.
+    // Crucially, a vector style is EDITABLE. Every symbol layer is stripped on
+    // load, so the basemap contributes land, water, coastline and boundaries
+    // only — and this map has exactly one label system again: its own
+    // (buildCountryLabels, below).
+    //
+    // maplibre-gl-leaflet mounts it as an ordinary Leaflet layer in the tile
+    // pane, so the choropleth, flow arcs, disturbance markers, custom panes and
+    // scenario paint that the rest of this file is built on are untouched.
 
     // Custom pane for labels — sits ABOVE countries
     map.createPane('labels');
     map.getPane('labels').style.zIndex = 650;
     map.getPane('labels').style.pointerEvents = 'none';
-    L.tileLayer(
-      'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
-      { maxZoom: 16, pane: 'labels', opacity: 0.95 }
-    ).addTo(map);
+
+    const GL_STYLES = [
+      'https://tiles.openfreemap.org/styles/dark',
+      'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+    ];
+    let _glLayer = null, _glStyleIdx = -1, _glFellBack = false;
+
+    function _mountGlBase(idx) {
+      if (idx >= GL_STYLES.length) return false;
+      if (typeof maplibregl === 'undefined' || typeof L.maplibreGL !== 'function') return false;
+      try {
+        _glStyleIdx = idx;
+        _glLayer = L.maplibreGL({
+          style: GL_STYLES[idx],
+          attributionControl: false,
+          interactive: false,
+        }).addTo(map);
+        const gl = _glLayer.getMaplibreMap();
+        const strip = () => {
+          // One label system only. Symbol layers are place names, POIs and road
+          // shields; removing them leaves fills, lines and the coastline.
+          try {
+            (gl.getStyle().layers || []).forEach(l => {
+              if (l.type === 'symbol') { try { gl.removeLayer(l.id); } catch (e) {} }
+            });
+          } catch (e) {}
+          // Retone the ground. OpenFreeMap's dark style paints land rgb(12,12,12)
+          // and water rgb(27,27,29) — water LIGHTER than land, which is the wrong
+          // way round under a warm choropleth: the sea comes forward and the
+          // continents sink. Land takes LAND_TONE (the value the choropleth's
+          // alpha ramp was tuned against, so no fill shifts) and water takes the
+          // cool slate that separates it.
+          const tone = { 'background': LAND_TONE, 'water': OCEAN_TONE, 'waterway': OCEAN_TONE };
+          for (const id in tone) {
+            try {
+              const lyr = gl.getLayer(id);
+              if (!lyr) continue;
+              gl.setPaintProperty(id, lyr.type === 'line' ? 'line-color' : lyr.type + '-color', tone[id]);
+            } catch (e) {}
+          }
+        };
+        if (gl.isStyleLoaded && gl.isStyleLoaded()) strip();
+        gl.on('styledata', strip);
+        gl.on('error', () => {
+          // One fallback hop only — tile errors fire continuously otherwise.
+          if (_glFellBack || _glStyleIdx + 1 >= GL_STYLES.length) return;
+          _glFellBack = true;
+          console.warn('[FoodShield] basemap style failed, falling back to CARTO dark-matter');
+          try { map.removeLayer(_glLayer); } catch (e) {}
+          _mountGlBase(_glStyleIdx + 1);
+        });
+        return true;
+      } catch (e) {
+        console.warn('[FoodShield] MapLibre basemap failed to mount:', e);
+        return false;
+      }
+    }
+    // If MapLibre is unavailable (blocked CDN, no WebGL), G.glBase stays false
+    // and the GeoJSON land underlay below draws the ground on its own — the
+    // map degrades to the v79k look rather than to an empty void.
+    G.glBase = _mountGlBase(0);
+
+    // v80 — continent names at world zoom, replacing the multilingual ones the
+    // retired raster label layer used to draw. They hand the map over to the
+    // country labels as soon as the view is regional enough to carry them.
+    const CONTINENT_LABELS = [
+      { name: 'NORTH\nAMERICA', ll: [46, -100] },
+      { name: 'SOUTH\nAMERICA', ll: [-14, -60] },
+      { name: 'EUROPE',         ll: [51, 22] },
+      { name: 'AFRICA',         ll: [2, 21] },
+      { name: 'ASIA',           ll: [46, 95] },
+      { name: 'OCEANIA',        ll: [-11, 152] },
+    ];
+    const _continentMarkers = CONTINENT_LABELS.map(o => L.marker(o.ll, {
+      pane: 'labels',
+      interactive: false,
+      keyboard: false,
+      icon: L.divIcon({
+        className: 'map-continent-label',
+        html: o.name.replace(/\n/g, '<br>'),
+        iconSize: [0, 0],
+      }),
+    }));
+    let _continentShown = false;
+    const updateContinentLabels = () => {
+      const want = map.getZoom() <= 2.9;
+      if (want === _continentShown) return;
+      _continentMarkers.forEach(m => { if (want) m.addTo(map); else map.removeLayer(m); });
+      _continentShown = want;
+    };
+    updateContinentLabels();
+    map.on('zoomend', updateContinentLabels);
+    // updateCountryLabels() treats continent names as obstacles, and it runs on
+    // 'moveend' as well as 'zoomend' — 'moveend' fires FIRST, so without this
+    // handle it would read last zoom's continent boxes and let a country name
+    // land on one. Expose it so the country pass can refresh them itself.
+    G.updateContinentLabels = updateContinentLabels;
+
+    // v80 — ocean names, set the way an atlas sets water (and the way
+    // worldmonitor.app's basemap does): italic, widely tracked, quiet. Empty sea
+    // then reads as labelled ocean rather than as a hole where the data stopped.
+    // Static, because oceans do not move, and shown only at world zooms — past
+    // z4.5 the viewport is regional and an ocean name is noise.
+    const OCEAN_LABELS = [
+      { name: 'North Atlantic Ocean', ll: [31, -44] },
+      { name: 'South Atlantic Ocean', ll: [-26, -17] },
+      { name: 'North Pacific Ocean',  ll: [27, -158] },
+      { name: 'South Pacific Ocean',  ll: [-26, -125] },
+      { name: 'Indian Ocean',         ll: [-19, 79] },
+      { name: 'Arctic Ocean',         ll: [76, 8] },
+      { name: 'Southern Ocean',       ll: [-59, 95] },
+    ];
+    const _oceanMarkers = OCEAN_LABELS.map(o => L.marker(o.ll, {
+      pane: 'labels',
+      interactive: false,
+      keyboard: false,
+      icon: L.divIcon({ className: 'map-ocean-label', html: o.name, iconSize: [0, 0] }),
+    }));
+    let _oceanShown = false;
+    const updateOceanLabels = () => {
+      const want = map.getZoom() <= 4.5;
+      if (want === _oceanShown) return;
+      _oceanMarkers.forEach(m => { if (want) m.addTo(map); else map.removeLayer(m); });
+      _oceanShown = want;
+    };
+    updateOceanLabels();
+    map.on('zoomend', updateOceanLabels);
 
     // Pane for flow arcs (above labels)
     map.createPane('flows');
@@ -20427,7 +20680,27 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     //      rate limiting for anonymous fetches from popular paths)
     // If all three fail, the rest of the app still works — country panels,
     // companies tab, disturbances, etc. don't depend on the map polygons.
+    // v80 — Natural Earth 1:50m admin-0, replacing the 1:110m file this map
+    // shipped with. Three things improve at once:
+    //   coastlines  1:110m is a world-overview generalisation; Norway, Chile,
+    //               Greece and the Indonesian archipelago were blobs by zoom 4.
+    //               1:50m holds its shape to this map's maxZoom of 6.
+    //   the join    the 110m file carries names only, so every country reached
+    //               its score through a hand-maintained alias table (see the
+    //               v79l note below — nine countries had silently fallen out).
+    //               This file carries ISO_A3/ADM0_A3, which lookupFeature()
+    //               already prefers: 216 of its 242 features resolve on ISO
+    //               alone, and the 26 that don't are micro-territories,
+    //               W. Sahara and Antarctica.
+    //   labels      it ships LABEL_X/LABEL_Y — cartographer-placed label
+    //               anchors, already mainland-correct for France, Chile,
+    //               Norway and Russia — plus MIN_LABEL zoom thresholds and
+    //               LABELRANK importance. buildCountryLabels() uses all three.
+    // ~1.2MB over the wire from jsDelivr, measured at ~260ms cold.
+    // The 110m file stays as the last resort: coarse, but the map draws.
     const _geoUrls = [
+      'https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_50m_admin_0_countries.geojson',
+      'https://cdn.statically.io/gh/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson',
       'https://cdn.jsdelivr.net/gh/holtzy/D3-graph-gallery@master/DATA/world.geojson',
       'https://cdn.statically.io/gh/holtzy/D3-graph-gallery/master/DATA/world.geojson',
       'https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson',
@@ -20450,8 +20723,13 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     _tryGeo(_geoUrls)
       .then(data => {
         G.features = data.features;
+        // v80 — Natural Earth names its fields NAME/ADMIN; the old 110m file
+        // used `name`. Normalise once here so G.nameMap, the hover tooltip and
+        // every downstream consumer keep reading a single property.
         G.features.forEach(f => {
-          const name = (f.properties.name || '').toLowerCase();
+          const pr = f.properties || (f.properties = {});
+          if (!pr.name) pr.name = pr.NAME || pr.ADMIN || pr.NAME_LONG || '';
+          const name = (pr.name || '').toLowerCase();
           if (name) G.nameMap.set(name, f);
         });
         // Cross-reference COUNTRIES (has ISO) with name-keyed features
@@ -20600,7 +20878,43 @@ function _simulateScenario(c, selected, severityById, paramsById) {
             ARG: [-38.42, -63.62], // central Argentina
             ZAF: [-30.56, 22.94],  // central South Africa
           };
+          // v80 — ISO-first join. Natural Earth carries ISO_A3/ADM0_A3, so the
+          // alias table above is now only a fallback: for features whose ISO is
+          // '-99' (Natural Earth's marker for disputed/aggregated sovereigns)
+          // and for the 110m file, which has no ISO at all.
+          const _byIso = new Map();
+          G.features.forEach(f => {
+            const pr = f.properties || {};
+            const iso = String(pr.ISO_A3_EH || pr.ISO_A3 || pr.ADM0_A3 || '').toUpperCase();
+            if (!iso || iso === '-99') return;
+            if (!_byIso.has(iso)) _byIso.set(iso, f);
+          });
+          // Natural Earth's own label anchor, returned in Leaflet [lat, lng].
+          // These are placed by cartographers, which is strictly better than any
+          // centroid: France's lands in the Loire rather than in the Atlantic,
+          // where d3.geoCentroid() puts it once French Guiana and Réunion are in
+          // the geometry. Where NE has an anchor, CENTROID_OVERRIDES is moot.
+          const _neAnchor = (f) => {
+            const pr = f && f.properties;
+            if (!pr) return null;
+            const x = Number(pr.LABEL_X), y = Number(pr.LABEL_Y);
+            return (isFinite(x) && isFinite(y)) ? [y, x] : null;
+          };
+
           COUNTRIES.forEach(co => {
+            const isoF = _byIso.get(String(co.iso || '').toUpperCase());
+            if (isoF) {
+              G.isoMap.set(co.iso, isoF);
+              const anchor = _neAnchor(isoF);
+              if (anchor) {
+                G.centroids.set(co.iso, anchor);
+              } else if (CENTROID_OVERRIDES[co.iso]) {
+                G.centroids.set(co.iso, CENTROID_OVERRIDES[co.iso]);
+              } else {
+                try { const c = d3.geoCentroid(isoF); G.centroids.set(co.iso, [c[1], c[0]]); } catch (e) {}
+              }
+              return;
+            }
             const aliases = (NAME_ALIASES[co.name] || []).concat([co.name.toLowerCase()]);
             for (const n of aliases) {
               if (G.nameMap.has(n)) {
@@ -20620,19 +20934,22 @@ function _simulateScenario(c, selected, severityById, paramsById) {
           });
         }
 
-        // Land underlay. The choropleth is translucent by design — fillOpacity
-        // runs from 0.18 at the resilient end up to 0.96 at the severe end — so
-        // whatever sits beneath it tints every low-risk country. CARTO's
-        // dark_nolabels put near-black LAND there (#090909, sampled from a tile)
-        // while its water was #262626, and the ramp was tuned against that.
-        // With no raster base, the container background stood in for both, so
-        // resilient countries were being tinted with the OCEAN colour and the
-        // whole map read washed out. Painting the same polygons once in flat
-        // CARTO land-black underneath restores the intended ground.
-        L.geoJSON(data, {
-          interactive: false,
-          style: { fillColor: '#090909', fillOpacity: 1, weight: 0, color: '#090909' },
-        }).addTo(map);
+        // Land underlay — v80: only when the MapLibre basemap did not mount.
+        //
+        // The choropleth is translucent by design (fillOpacity 0.18 at the
+        // resilient end), so whatever sits beneath it tints every low-risk
+        // country. The vector basemap normally supplies that ground; drawing a
+        // second flat land layer on top of it would only double the coastline,
+        // which is one of the faults this version removes. But if MapLibre is
+        // blocked or WebGL is unavailable, something has to be down there — so
+        // these are the same polygons, painted once in LAND_TONE, exactly as
+        // v79k did it, and the ramp lands where it was tuned to land.
+        if (!G.glBase) {
+          L.geoJSON(data, {
+            interactive: false,
+            style: { fillColor: LAND_TONE, fillOpacity: 1, weight: 0, color: LAND_TONE },
+          }).addTo(map);
+        }
 
         G.countryLayer = L.geoJSON(data, {
           style: styleFeature,
@@ -20640,6 +20957,7 @@ function _simulateScenario(c, selected, severityById, paramsById) {
         }).addTo(map);
 
         buildCountryLabels();
+        buildCityLabels();
 
         G.ready = true;
         // v68.3 — if scenario paint was armed before GeoJSON finished, the
@@ -20711,6 +21029,37 @@ function _simulateScenario(c, selected, severityById, paramsById) {
   // only — which is what this map is about.
   const _countryLabels = [];
 
+  // Text width in px for a label, measured off the real stylesheet.
+  //
+  // Two earlier versions got this wrong and both showed up as overlapping names.
+  // The first assumed 6.2px per character — off by ~30% between "CHAD" and
+  // "UNITED KINGDOM". The second used canvas measureText with a hand-written
+  // font string, which quietly disagreed with the CSS: a canvas context does not
+  // apply letter-spacing, and it falls back to a default face when the web font
+  // isn't available to it, so every box came out narrower than the label
+  // actually rendered and neighbours were allowed to touch — FRANCE ran into
+  // SWITZERLAND, MONACO into SAN MARINO.
+  //
+  // Measuring a hidden element that carries the SAME class as the label is the
+  // only version that cannot drift: font, weight, tracking and any future change
+  // to .map-country-label are included by construction.
+  const _measureEls = {};
+  function _labelWidthPx(text, className) {
+    let el = _measureEls[className];
+    if (!el) {
+      el = document.createElement('div');
+      el.className = className;
+      el.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden;'
+        + 'white-space:nowrap;transform:none;pointer-events:none;';
+      document.body.appendChild(el);
+      _measureEls[className] = el;
+    }
+    el.textContent = text;
+    // getBoundingClientRect keeps the sub-pixel width; offsetWidth rounds down,
+    // which is the wrong direction for a collision box.
+    return el.getBoundingClientRect().width;
+  }
+
   function buildCountryLabels() {
     if (!G.isoMap || !G.isoMap.size || !G.map) return;
     if (typeof COUNTRIES === 'undefined') return;
@@ -20719,26 +21068,125 @@ function _simulateScenario(c, selected, severityById, paramsById) {
       const f = G.isoMap.get(co.iso);
       const ll = G.centroids.get(co.iso);
       if (!f || !ll) continue;
+      const pr = f.properties || {};
+
+      // Natural Earth's own cartographic metadata drives the whole label system:
+      //   LABELRANK  how important the country is on a world map (1 = most)
+      //   MIN_LABEL  the zoom at which NE's own cartographers start drawing it
+      // Both are hand-tuned per country. The previous version had neither, so it
+      // guessed importance from polygon width and set every label at one size.
+      // LABELRANK is Natural Earth's own judgement of how important a country
+      // is on a world map (1 = most). It decides label PRIORITY only — which
+      // names survive when the view is crowded — never how a label looks.
+      const rank    = Number(pr.LABELRANK);
+      const text    = co.name.toUpperCase();
+
       const marker = L.marker(ll, {
         pane: 'labels',
         interactive: false,
         keyboard: false,
         icon: L.divIcon({
           className: 'map-country-label',
-          html: co.name.toUpperCase(),
+          html: text,
           // Sized at render time by CSS; a zero-size box keeps the anchor on the
-          // centroid so the CSS transform can centre the text on it.
+          // label point so the CSS transform can centre the text on it.
           iconSize: [0, 0],
         }),
       });
-      _countryLabels.push({ marker, name: co.name, spanDeg: widestRingDeg(f), shown: false });
+      _countryLabels.push({
+        marker,
+        name: co.name,
+        spanDeg: widestRingDeg(f),
+        rank: isFinite(rank) ? rank : 6,
+        textPx: _labelWidthPx(text, 'map-country-label'),
+        halfH: 7,
+        shown: false,
+      });
     }
     updateCountryLabels();
-    // NOTE: G.map, not `map`. These two functions live outside the closure that
+    // NOTE: G.map, not `map`. These functions live outside the closure that
     // holds the map init's local `map` const, and `map` at this scope resolves
     // to the <div id="map"> element via the implicit id-global — which silently
     // has no .getZoom()/.on() and left every label built but never shown.
     G.map.on('zoomend moveend', updateCountryLabels);
+  }
+
+  // ── City / capital labels ──────────────────────────────────────────────────
+  // v80 — the vector basemap has place names of its own, but they are useless
+  // here: the basemap renders BELOW the choropleth (tile pane 200, overlay pane
+  // 400), so every one of them is painted over by the country fills. Stripping
+  // them and drawing our own is what lets a city name sit ON TOP of a country's
+  // risk colour, in this dashboard's type, decluttered against the country names
+  // rather than fighting them.
+  //
+  // Natural Earth's populated-places file carries what the ranking needs:
+  //   adm0cap    1 for a national capital
+  //   scalerank  how early a place earns a label on a world map (0 = earliest)
+  //   pop_max    metro population, for tie-breaks
+  // 1,251 places at 1:50m, which is the right density for a map that stops at
+  // zoom 6 — the 1:10m file is 7,342 places and 4.8MB for detail this map never
+  // reaches. Loaded after the countries are on screen, and entirely optional:
+  // if it fails, the map is exactly as it was a moment earlier.
+  const _cityLabels = [];
+
+  function buildCityLabels() {
+    if (!G.map) return;
+    const urls = [
+      'https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_50m_populated_places_simple.geojson',
+      'https://cdn.statically.io/gh/nvkelso/natural-earth-vector/master/geojson/ne_50m_populated_places_simple.geojson',
+    ];
+    (async () => {
+      let data = null;
+      for (const url of urls) {
+        try {
+          const r = await fetch(url);
+          if (!r.ok) continue;
+          const j = await r.json();
+          if (j && Array.isArray(j.features)) { data = j; break; }
+        } catch (e) { /* next mirror */ }
+      }
+      if (!data) {
+        console.warn('[FoodShield] city labels unavailable; country labels are unaffected');
+        return;
+      }
+
+      for (const f of data.features) {
+        const pr = f.properties || {};
+        const co = f.geometry && f.geometry.coordinates;
+        const name = pr.name || pr.nameascii;
+        if (!name || !co || co.length < 2) continue;
+        const isCap = Number(pr.adm0cap) === 1;
+        const marker = L.marker([co[1], co[0]], {
+          pane: 'labels',
+          interactive: false,
+          keyboard: false,
+          icon: L.divIcon({
+            className: 'map-city-label' + (isCap ? ' is-capital' : ''),
+            html: '<i></i>' + _escCity(name),
+            iconSize: [0, 0],
+          }),
+        });
+        _cityLabels.push({
+          marker,
+          isCap,
+          iso: String(pr.adm0_a3 || pr.sov_a3 || '').toUpperCase(),
+          scalerank: isFinite(Number(pr.scalerank)) ? Number(pr.scalerank) : 10,
+          pop: Number(pr.pop_max) || 0,
+          // +10 for the dot and its gap, which the collision box has to include.
+          textPx: _labelWidthPx(name, 'map-city-label') + 10,
+          shown: false,
+        });
+      }
+      // Capitals first, then the places a world map labels earliest, then size.
+      _cityLabels.sort((a, b) =>
+        (Number(b.isCap) - Number(a.isCap)) || (a.scalerank - b.scalerank) || (b.pop - a.pop));
+      updateCountryLabels();
+    })();
+  }
+
+  function _escCity(t) {
+    return String(t).replace(/[&<>"]/g, ch =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
   }
 
   // Width of a country's WIDEST single ring, in degrees of longitude.
@@ -20770,28 +21218,36 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     return widest;
   }
 
-  // Show a label only when its country is physically wide enough on screen to
-  // hold the text, then drop any that would collide with one already placed.
+  // Decide which labels are on screen at this zoom.
   //
-  // The width test is self-tuning: at world zoom only the big landmasses
-  // qualify, and zooming in reveals the rest, with no hand-maintained list of
-  // "important" countries to drift out of date. Widest-first ordering means
-  // that when two labels compete for the same patch of screen, the bigger
-  // country keeps its label — which is the same call a cartographer makes.
+  // Three gates, in order of authority:
+  //   1. NE's MIN_LABEL — a cartographer's judgement of when a country is worth
+  //      naming. Relaxed by 0.4 zoom levels because this map fills a browser
+  //      viewport rather than a 256px tile, so it shows more world per zoom step.
+  //   2. Does the name physically fit inside the country at this scale.
+  //   3. Does it collide with a label already placed, or with one of the cards
+  //      floating on the map.
+  // Ordering is LABELRANK first, widest country second, so when two labels want
+  // the same patch of screen the more important country keeps its name — the
+  // same call a cartographer makes.
   function updateCountryLabels() {
     if (!_countryLabels.length || !G.map) return;
+    if (typeof G.updateContinentLabels === 'function') G.updateContinentLabels();
     const z = G.map.getZoom();
     // Degrees of longitude per pixel at this zoom (Web Mercator, 256px tiles).
     const degPerPx = 360 / (256 * Math.pow(2, z));
+    let bounds = null;
+    try { bounds = G.map.getBounds().pad(0.08); } catch (e) {}
 
-    const ordered = _countryLabels.slice().sort((a, b) => b.spanDeg - a.spanDeg);
+    const ordered = _countryLabels.slice().sort((a, b) =>
+      (a.rank - b.rank) || (b.spanDeg - a.spanDeg));
 
     // Seed the collision set with the cards that float ON the map (the stats
     // strip, the layers panel, the risk legend). They are painted above the
     // label pane, so a label underneath one is not hidden — it is sliced in
     // half. Argentina rendered as "GENTINA" behind the legend in the default
-    // view. Treating the cards as obstacles makes the existing declutter pass
-    // move on to the next candidate instead.
+    // view. Treating the cards as obstacles makes the declutter pass move on
+    // to the next candidate instead.
     const placed = [];
     try {
       const mapRect = G.map.getContainer().getBoundingClientRect();
@@ -20805,29 +21261,167 @@ function _simulateScenario(c, selected, severityById, paramsById) {
           b.left - mapRect.left + b.width / 2,
           b.top - mapRect.top + b.height / 2,
         ]);
-        placed.push({ x: centre.x, y: centre.y, halfW: b.width / 2, halfH: b.height / 2 });
+        // +5px so a label doesn't sit flush against a card edge and read clipped.
+        placed.push({ x: centre.x, y: centre.y, halfW: b.width / 2 + 5, halfH: b.height / 2 + 5 });
       }
+      // Continent names are drawn in the same pane and are shown at world
+      // zooms, exactly where country labels are scarcest and most likely to
+      // land on top of them. Treat them as obstacles too.
+      document.querySelectorAll('#map .map-continent-label').forEach(el => {
+        const b = el.getBoundingClientRect();
+        if (!b.width || !b.height) return;
+        const centre = G.map.containerPointToLayerPoint([
+          b.left - mapRect.left + b.width / 2,
+          b.top - mapRect.top + b.height / 2,
+        ]);
+        placed.push({ x: centre.x, y: centre.y, halfW: b.width / 2 + 8, halfH: b.height / 2 + 8 });
+      });
     } catch (e) { /* obstacles are an enhancement; never block labelling on them */ }
+
+    // How many country names this zoom can carry.
+    //
+    // Collision alone is not a budget: at world zoom the Caribbean, the Gulf and
+    // the Pacific have plenty of free pixels, so BERMUDA, US VIRGIN ISLANDS,
+    // SEYCHELLES, PALAU and GUAM all cleared the test and the world view came
+    // out with 96 names on it. A world map names the world; an atlas plate names
+    // everything. So the count grows with zoom — roughly doubling per level —
+    // and the LABELRANK ordering decides who is inside the budget. Micro-states
+    // still arrive, just at the zoom where the map is actually about them.
+    // Below this zoom the continent names carry the view on their own and no
+    // country name is drawn — the same handover the old map made. Two label
+    // systems fighting over a whole-world view is what made it look busy; one
+    // scale of place name at a time is what makes an atlas readable.
+    const CONTINENT_HANDOVER_Z = 2.9;
+    const budget = z <= CONTINENT_HANDOVER_Z
+      ? 0
+      : Math.max(8, Math.min(260, Math.round(9 * Math.pow(2.3, z - 2))));
+    let used = 0;
+
     for (const rec of ordered) {
-      // ~6.2px per character at the label's font-size/letter-spacing, plus a
-      // margin so text never overhangs its own country.
-      const textPx = rec.name.length * 6.2;
-      let want = (rec.spanDeg / degPerPx) >= textPx + 10;
+      const ll = rec.marker.getLatLng();
+      let want = true;
+
+      // Off-screen labels can't collide with anything and cost nothing to skip.
+      if (bounds && !bounds.contains(ll)) want = false;
+
+      // No "is this country big enough" test. An earlier cut of this gated on
+      // polygon width, which is unanswerable for the countries that most need a
+      // name: Monaco, San Marino, Andorra, Luxembourg and Gibraltar are smaller
+      // than the word for them at every zoom this map reaches, so a fit test
+      // silently deleted them for good. Real atlases label them anyway and let
+      // the type overhang. Screen space, not country size, is the constraint —
+      // so collision alone decides, and zooming in reveals the rest naturally
+      // as the crowding eases. Ordering (LABELRANK, then widest) settles who
+      // wins a contested patch, which is the call a cartographer makes.
+
+      let dx = 0, dy = 0;
+      if (want) {
+        const pt = G.map.latLngToLayerPoint(ll);
+        const halfW = rec.textPx / 2 + 6;
+        // Natural Earth's LABEL_X/LABEL_Y is a good anchor, not a law. When it
+        // lands on something already placed, a cartographer nudges the name a
+        // few millimetres rather than deleting the country — so try a short
+        // ladder of vertical offsets before giving up. This is what stops
+        // OCEANIA from erasing AUSTRALIA, and it is why zooming in now fills
+        // Europe in instead of leaving holes where two names nearly touched.
+        const hits = (x, y) => {
+          for (const p of placed) {
+            const minY = (p.halfH || rec.halfH) + rec.halfH + 2;
+            if (Math.abs(x - p.x) < (halfW + p.halfW) && Math.abs(y - p.y) < minY) return true;
+          }
+          return false;
+        };
+        // The nudge has to stay ON the country. A flat ±50px ladder moved
+        // Slovenia's name into Austria and Lebanon's into the sea, which is
+        // worse than not labelling at all — so the slack is scaled to how big
+        // the country actually is on screen, and micro-states (under ~6px of
+        // it) don't move at all.
+        //
+        // Searching both axes, nearest offset first, is what fixed most of the
+        // remaining bad placements: a name blocked by its neighbour to the north
+        // has nowhere to go on a vertical-only ladder, but usually has room a few
+        // pixels east or west, still well inside its own borders.
+        const slack = Math.min(26, (rec.spanDeg / degPerPx) * 0.35);
+        const a = slack, h = slack * 0.8;
+        const ladder = slack < 6
+          ? [[0, 0]]
+          : [[0, 0], [0, -a / 2], [0, a / 2], [-h, 0], [h, 0],
+             [0, -a], [0, a], [-h, -a / 2], [h, -a / 2], [-h, a / 2], [h, a / 2]];
+        let ok = false;
+        for (const [ox, oy] of ladder) {
+          if (!hits(pt.x + ox, pt.y + oy)) { dx = ox; dy = oy; ok = true; break; }
+        }
+        if (!ok) want = false;
+        if (want && used >= budget) want = false;
+        if (want) { placed.push({ x: pt.x + dx, y: pt.y + dy, halfW, halfH: rec.halfH }); used++; }
+      }
 
       if (want) {
-        // Collision test in screen space against everything already placed.
-        const pt = G.map.latLngToLayerPoint(rec.marker.getLatLng());
-        const halfW = textPx / 2 + 4;
+        rec.marker.addTo(G.map);
+        // Leaflet positions the icon box; the offset rides on top of it so the
+        // marker's own latlng (used by everything else) is never moved.
+        if (rec.marker._icon) {
+          rec.marker._icon.style.marginTop = dy + 'px';
+          rec.marker._icon.style.marginLeft = dx + 'px';
+        }
+      } else if (rec.shown) {
+        G.map.removeLayer(rec.marker);
+      }
+      rec.shown = want;
+    }
+
+    // Cities last, against the same `placed` set the countries just filled in.
+    // Order matters: a country name never loses its spot to a city, because by
+    // the time this runs every country that earned a label already holds one.
+    updateCityLabels(z, bounds, placed);
+  }
+
+  // Cities appear once the view is regional. Below that the map is about
+  // continents and countries, and a scatter of dots adds nothing you can act on.
+  const CITY_MIN_Z = 3.8;
+
+  function updateCityLabels(z, bounds, placed) {
+    if (!_cityLabels.length || !G.map) return;
+
+    // Same shape of budget as the countries use: roughly doubling per zoom
+    // level, so the map fills in as you approach a country instead of dumping
+    // 1,251 place names the moment the threshold is crossed.
+    const budget = z < CITY_MIN_Z
+      ? 0
+      : Math.min(150, Math.round(7 * Math.pow(2.2, z - CITY_MIN_Z)));
+    let used = 0;
+
+    // A selected country is the thing the reader is looking at, so its own
+    // cities are shown whatever the zoom budget says — the click is the request.
+    // US states select as 'US-XX'; the populated-places file only knows 'USA'.
+    let selIso = G.selectedISO || '';
+    if (selIso.startsWith('US-')) selIso = 'USA';
+    const SELECTED_CITY_CAP = 12;
+    let selUsed = 0;
+
+    for (const rec of _cityLabels) {
+      const ll = rec.marker.getLatLng();
+      const selected = !!selIso && rec.iso === selIso && selUsed < SELECTED_CITY_CAP;
+      let want = selected || used < budget;
+      if (want && bounds && !bounds.contains(ll)) want = false;
+
+      if (want) {
+        const pt = G.map.latLngToLayerPoint(ll);
+        // The dot sits on the point and the name runs right of it, so the box is
+        // offset rather than centred.
+        const halfW = rec.textPx / 2 + 3;
+        const cx = pt.x + rec.textPx / 2;
         for (const p of placed) {
-          // p.halfH is set for the UI cards; label-vs-label uses a flat 11px.
-          const dy = (p.halfH || 0) + 6;
-          if (Math.abs(pt.x - p.x) < (halfW + p.halfW)
-              && Math.abs(pt.y - p.y) < (p.halfH ? dy : 11)) {
+          const minY = (p.halfH || 6) + 6 + 2;
+          if (Math.abs(cx - p.x) < (halfW + p.halfW) && Math.abs(pt.y - p.y) < minY) {
             want = false;
             break;
           }
         }
-        if (want) placed.push({ x: pt.x, y: pt.y, halfW });
+        if (want) {
+          placed.push({ x: cx, y: pt.y, halfW, halfH: 6 });
+          if (selected) selUsed++; else used++;
+        }
       }
 
       if (want === rec.shown) continue;
@@ -20839,7 +21433,13 @@ function _simulateScenario(c, selected, severityById, paramsById) {
   // ── Country styling ──
   function styleFeature(f) {
     const c = lookupCountry(f);
-    if (!c) return { fillColor:'#1a1a20', color:'#000', weight:0.4, fillOpacity:0.9 };
+    // v80 — borders. These were '#000' on a near-black ground, i.e. invisible:
+    // unscored land was one undifferentiated mass and the choropleth's own
+    // countries were separated only where two fills happened to differ. A pale
+    // hairline at low opacity draws the political map underneath the data, which
+    // is what makes worldmonitor's basemap read as a map rather than a heatmap.
+    // Fill colours are untouched — this is the stroke only.
+    if (!c) return { fillColor:'#1a1a20', color: BORDER_LINE, opacity: 0.42, weight:0.5, fillOpacity:0.9 };
 
     // v68.3 — while scenario paint is active, Leaflet resetStyle()/render()
     // resolve through the delta overlay instead of the baseline risk palette.
@@ -20860,7 +21460,7 @@ function _simulateScenario(c, selected, severityById, paramsById) {
       if (af.commodity === 'rice' && c.r < 30) dimmed = true;
       if (af.commodity === 'maize' && c.m < 30) dimmed = true;
       if (af.commodity === 'fertilizer' && c.c[2] < 40) dimmed = true;
-      if (dimmed) return { fillColor:'#16161c', color:'#000', weight:0.3, fillOpacity:0.85 };
+      if (dimmed) return { fillColor:'#16161c', color: BORDER_LINE, opacity: 0.28, weight:0.4, fillOpacity:0.85 };
     }
 
     // FDRS → opacity (vulnerable countries pop, resilient ones recede)
@@ -20871,8 +21471,9 @@ function _simulateScenario(c, selected, severityById, paramsById) {
       // used only for polygon fills, so the gold/burnt-orange bands read
       // distinct at country zoom on the dark theme.
       fillColor: mapRiskColor(c.fdrs),
-      color: '#000',
-      weight: 0.45,
+      color: BORDER_LINE,
+      opacity: 0.42,
+      weight: 0.5,
       fillOpacity,
     };
   }
@@ -20961,12 +21562,19 @@ function _simulateScenario(c, selected, severityById, paramsById) {
         } catch (e) {}
       }
     });
+    // flyToBounds fires moveend and the label pass runs off that — but only if
+    // the view actually changes. Selecting a country already in view doesn't
+    // move the map, so ask for the refresh directly.
+    if (typeof updateCountryLabels === 'function') updateCountryLabels();
   }
   function deselectCountry() {
     G.selectedISO = null;
     G.selectedLayer = null;
     clearFlows();
     if (G.countryLayer) G.countryLayer.resetStyle();
+    // Drop the selected country's forced city labels straight away rather than
+    // leaving them until the next pan.
+    if (typeof updateCountryLabels === 'function') updateCountryLabels();
   }
   function rotateToCountry(iso) { selectCountry(iso); }
 
