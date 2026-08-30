@@ -2185,6 +2185,41 @@ body {
   margin: 0 6px;
 }
 
+/* ── Map navigation cluster ──
+   Bottom-right, mirroring the legend's bottom-left anchor. When the country
+   side panel slides over the right of the map (#tab-global.sp-open) the
+   cluster steps left of it rather than hiding underneath. */
+#map-nav {
+  position: absolute;
+  bottom: 26px; right: 18px;
+  z-index: 900;
+  display: flex; flex-direction: column;
+  background: var(--glass);
+  border: 1px solid var(--b1);
+  border-radius: 6px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  overflow: hidden;
+  transition: right .34s cubic-bezier(.22,.7,.2,1);
+}
+#tab-global.sp-open #map-nav { right: 390px; }
+.mapnav-btn {
+  appearance: none; -webkit-appearance: none;
+  width: 32px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: 0;
+  color: var(--t2);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.mapnav-btn + .mapnav-btn { border-top: 1px solid var(--b1); }
+.mapnav-btn svg { width: 15px; height: 15px; }
+.mapnav-btn.mapnav-reset svg { width: 14px; height: 14px; }
+.mapnav-btn:hover { background: var(--bg3); color: var(--t1); }
+.mapnav-btn:focus-visible { outline: 1px solid var(--accent-dim); outline-offset: -2px; color: var(--t1); }
+.mapnav-btn[disabled] { opacity: .3; cursor: default; }
+.mapnav-btn[disabled]:hover { background: transparent; color: var(--t2); }
+
 /* Legend */
 /* v68 — cartographic ramp legend: a continuous scale bar, band names under
    their segments, breakpoint values on a tick row. Small, quiet, standard. */
@@ -2228,6 +2263,41 @@ body {
   text-align: center;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* The legend bands double as the map's risk filter — the same filter the
+   Filters dropdown drives, reached from the thing that already names the
+   bands. Reset the button chrome so a <button> band is pixel-identical to the
+   <div> it replaced; only the hover/active affordance is new. */
+.legend-ramp button.legend-item {
+  appearance: none; -webkit-appearance: none;
+  background: none; border: 0; padding: 0; margin: 0;
+  font: inherit; color: inherit; text-align: inherit;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.legend-ramp button.legend-item:hover .legend-label,
+.legend-ramp button.legend-item:focus-visible .legend-label { color: var(--t1); }
+.legend-ramp button.legend-item:hover .legend-swatch { filter: brightness(1.25); }
+.legend-ramp button.legend-item:focus-visible { outline: 1px solid var(--accent-dim); outline-offset: 2px; }
+.legend-ramp button.legend-item[aria-pressed="true"] .legend-label {
+  color: var(--t1); font-weight: 600;
+}
+.legend-ramp button.legend-item[aria-pressed="true"] .legend-swatch {
+  box-shadow: 0 0 0 1px var(--t1) inset;
+}
+/* Dim the bands that are filtered out, so the legend reports the map's state. */
+#map-legend.legend-filtered .legend-ramp button.legend-item:not([aria-pressed="true"]) { opacity: .42; }
+.legend-title-right { display: inline-flex; align-items: center; gap: 10px; }
+.legend-clear {
+  appearance: none; -webkit-appearance: none;
+  background: none; border: 0; padding: 0; margin: 0;
+  font-family: 'Geist Mono', monospace; font-size: 8px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--accent-dim); cursor: pointer;
+  white-space: nowrap;
+  display: none;
+}
+.legend-clear:hover { color: var(--t1); }
+#map-legend.legend-filtered .legend-clear { display: inline-block; }
+
 .legend-item { display: inline-flex; align-items: center; gap: 5px; }
 .legend-swatch { width: 14px; height: 4px; border-radius: 2px; flex-shrink: 0; }
 .legend-label { font-size: 10px; color: var(--t1); }
@@ -9584,8 +9654,13 @@ input[type="email"]:focus {
     box-shadow: -2px 0 24px rgba(0,0,0,.5);
   }
 
-  /* In-map overlays shrink to fit a phone */
-  #map-legend { left: 10px; bottom: 14px; min-width: 0; max-width: calc(100vw - 20px); padding: 10px 11px; }
+  /* In-map overlays shrink to fit a phone. The legend stops short of the nav
+     cluster's column instead of sliding underneath it. */
+  #map-legend { left: 10px; bottom: 14px; min-width: 0; max-width: calc(100vw - 66px); padding: 10px 11px; }
+  #map-nav { right: 10px; bottom: 14px; }
+  /* The country panel is a full-screen slide-over here, so there is no strip of
+     map left to step aside into — the cluster is covered either way. */
+  #tab-global.sp-open #map-nav { right: 10px; }
   .legend-range { padding-left: 8px; }
   #map-region-zoom { transform: scale(.9); transform-origin: top left; }
   #map-stats, #map-standfirst { font-size: 11px; }
@@ -10047,16 +10122,43 @@ body::before {
            choropleth pattern, not a toolbar of chips and not a card. -->
       <div id="map-legend" role="region" aria-label="Food Disruption Risk Score legend">
         <div class="legend-title"><abbr class="ac" title="Food Disruption Risk Score — 0–100 composite measuring how exposed a country is to food shocks (imports, climate, conflict, logistics, prices).">Food disruption risk</abbr>
-          <span class="legend-nd legend-item"><span class="legend-swatch legend-nodata"></span><span class="legend-label">No data</span></span>
+          <span class="legend-title-right">
+            <span class="legend-nd legend-item"><span class="legend-swatch legend-nodata"></span><span class="legend-label">No data</span></span>
+            <button type="button" class="legend-clear" onclick="clearLegendRiskFilter()">Clear&nbsp;✕</button>
+          </span>
         </div>
+        <!-- Each band is a button that filters the map to that risk tier — the
+             same activeFilters.risk the Filters dropdown sets, kept in sync
+             both ways. Click a pressed band to clear it. -->
         <div class="legend-ramp">
-          <div class="legend-item" title="Resilient · 0–25"><span class="legend-swatch" style="background:#5fa85f"></span><span class="legend-label">Resilient</span></div>
-          <div class="legend-item" title="Exposed · 26–50"><span class="legend-swatch" style="background:#e0b94a"></span><span class="legend-label">Exposed</span></div>
-          <div class="legend-item" title="Dependent · 51–75"><span class="legend-swatch" style="background:#e07a2e"></span><span class="legend-label">Dependent</span></div>
-          <div class="legend-item" title="Vulnerable · 76–88"><span class="legend-swatch" style="background:#d23a2a"></span><span class="legend-label">Vulnerable</span></div>
-          <div class="legend-item" title="Severe · 89–100"><span class="legend-swatch" style="background:#b5342a"></span><span class="legend-label">Severe</span></div>
+          <button type="button" class="legend-item" data-risk="Resilient" aria-pressed="false" title="Show only Resilient countries · 0–25"><span class="legend-swatch" style="background:#5fa85f"></span><span class="legend-label">Resilient</span></button>
+          <button type="button" class="legend-item" data-risk="Exposed" aria-pressed="false" title="Show only Exposed countries · 26–50"><span class="legend-swatch" style="background:#e0b94a"></span><span class="legend-label">Exposed</span></button>
+          <button type="button" class="legend-item" data-risk="Dependent" aria-pressed="false" title="Show only Dependent countries · 51–75"><span class="legend-swatch" style="background:#e07a2e"></span><span class="legend-label">Dependent</span></button>
+          <button type="button" class="legend-item" data-risk="Vulnerable" aria-pressed="false" title="Show only Vulnerable countries · 76–88"><span class="legend-swatch" style="background:#d23a2a"></span><span class="legend-label">Vulnerable</span></button>
+          <button type="button" class="legend-item" data-risk="Severe" aria-pressed="false" title="Show only Severe countries · 89–100"><span class="legend-swatch" style="background:#b5342a"></span><span class="legend-label">Severe</span></button>
         </div>
         <div class="legend-scale"><span>0</span><span>25</span><span>50</span><span>75</span><span>88</span><span>100</span></div>
+      </div>
+
+      <!-- Map navigation. Leaflet's own zoomControl is off (it does not match
+           the dashboard chrome) and .leaflet-control is display:none, so until
+           now the map had no on-screen navigation at all: zoom was scroll-wheel
+           only, and once panned there was no way back to the world view short of
+           a reload. globeZoom()/globeRecenter() already existed but nothing in
+           the document called them. -->
+      <div id="map-nav" role="group" aria-label="Map navigation">
+        <button class="mapnav-btn" id="mapnav-in" type="button" onclick="globeZoom(2)"
+                aria-label="Zoom in" title="Zoom in">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg>
+        </button>
+        <button class="mapnav-btn" id="mapnav-out" type="button" onclick="globeZoom(0.5)"
+                aria-label="Zoom out" title="Zoom out">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 12h12"/></svg>
+        </button>
+        <button class="mapnav-btn mapnav-reset" id="mapnav-reset" type="button" onclick="globeRecenter()"
+                aria-label="Reset to world view" title="Reset to world view">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.2 2.4 3.3 5.3 3.3 8.5S14.2 18.1 12 20.5c-2.2-2.4-3.3-5.3-3.3-8.5S9.8 5.9 12 3.5z"/></svg>
+        </button>
       </div>
 
       </div><!-- /#map-canvas -->
@@ -20356,6 +20458,11 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     width: 0, height: 0,
   };
 
+  // The one world copy this map ever draws. Latitude stops at ±84 because the
+  // Web Mercator projection runs to infinity at the poles and there is no data
+  // past the Arctic/Antarctic coastlines anyway.
+  const WORLD_BOUNDS = [[-84, -180], [84, 180]];
+
   function init() {
     const container = document.getElementById('map');
     if (!container || typeof L === 'undefined') return;
@@ -20371,8 +20478,21 @@ function _simulateScenario(c, selected, severityById, paramsById) {
       zoomSnap: 0.25,
       zoomDelta: 0.5,
       preferCanvas: false,
+      // The map draws exactly one world copy, so panning past its edges only
+      // ever reveals empty container background — and with no on-map controls
+      // there used to be no way back except a page reload. Fence the viewport
+      // to the world, with enough give that a flick still feels elastic.
+      maxBounds: L.latLngBounds(WORLD_BOUNDS).pad(0.06),
+      maxBoundsViscosity: 0.85,
     });
     G.map = map;
+
+    // Keep the on-map zoom buttons in step with the map's limits.
+    const _navState = () => {
+      try { if (typeof updateMapNavState === 'function') updateMapNavState(); } catch (e) {}
+    };
+    map.on('zoomend', _navState);
+    _navState();
 
     // Base — no raster basemap.
     //
@@ -20403,7 +20523,15 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     map.getPane('labels').style.pointerEvents = 'none';
     L.tileLayer(
       'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
-      { maxZoom: 16, pane: 'labels', opacity: 0.95 }
+      {
+        maxZoom: 16, pane: 'labels', opacity: 0.95,
+        // The choropleth is a single world copy; without noWrap the raster
+        // place labels tiled on forever past ±180, so panning east of Kamchatka
+        // showed a second Europe's worth of city names floating over blank
+        // background. bounds stops the request for tiles above/below the data.
+        noWrap: true,
+        bounds: L.latLngBounds(WORLD_BOUNDS),
+      }
     ).addTo(map);
 
     // Pane for flow arcs (above labels)
@@ -20449,6 +20577,7 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     };
     _tryGeo(_geoUrls)
       .then(data => {
+        unwrapAntimeridian(data.features);
         G.features = data.features;
         G.features.forEach(f => {
           const name = (f.properties.name || '').toLowerCase();
@@ -20741,13 +20870,88 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     G.map.on('zoomend moveend', updateCountryLabels);
   }
 
+  // ── Antimeridian repair ────────────────────────────────────────────────────
+  //
+  // Natural Earth clips at ±180, so a country that straddles the antimeridian
+  // arrives as a ring whose longitudes jump from 179.9 to −179.9. Leaflet
+  // projects each vertex independently and joins them with a straight screen
+  // line, so that one-degree hop is drawn as a segment right across the map.
+  // Three features in the world set do this — Fiji, Russia (Chukotka) and
+  // Antarctica — and each painted a full-width horizontal band of its own risk
+  // colour over every country beneath it: a gold stripe through South America
+  // and the Pacific at Fiji's latitude, a thick green one across the Arctic at
+  // Chukotka's.
+  //
+  // The repair is to unwrap the ring instead of clipping it: walk the vertices
+  // and, whenever consecutive longitudes differ by more than 180°, carry a
+  // ±360° offset forward so the ring stays continuous (Chukotka runs on to
+  // 190°E rather than teleporting to 170°W). A ring that ends up wholly beyond
+  // the far edge is shifted back by one world width so it lands on the copy
+  // being drawn. Rings that never cross are untouched, which is all but three
+  // of them.
+  //
+  // This also fixes widestRingDeg() below. That was written to stop Fiji from
+  // outranking the United States for a label at world zoom, but it measures
+  // min/max longitude within a ring — which for a ring that crosses is still
+  // the full 360°, so Fiji went on winning. Once the ring is continuous the
+  // measurement is its real 3° width and the label ordering is honest.
+  function unwrapAntimeridian(features) {
+    if (!Array.isArray(features)) return 0;
+    let repaired = 0;
+
+    const fixRing = (ring) => {
+      if (!Array.isArray(ring) || ring.length < 2) return false;
+      let offset = 0, prev = null, changed = false;
+      for (const pt of ring) {
+        if (!pt || typeof pt[0] !== 'number') { prev = null; continue; }
+        if (prev !== null) {
+          const step = pt[0] + offset - prev;
+          if (step > 180) offset -= 360;
+          else if (step < -180) offset += 360;
+        }
+        if (offset !== 0) { pt[0] += offset; changed = true; }
+        prev = pt[0];
+      }
+      if (!changed) return false;
+      // Re-seat a ring that unwrapped clean off the far side of the world.
+      let lo = Infinity, hi = -Infinity;
+      for (const pt of ring) {
+        if (!pt || typeof pt[0] !== 'number') continue;
+        if (pt[0] < lo) lo = pt[0];
+        if (pt[0] > hi) hi = pt[0];
+      }
+      const mid = (lo + hi) / 2;
+      const shift = mid > 180 ? -360 : mid < -180 ? 360 : 0;
+      if (shift) for (const pt of ring) { if (pt && typeof pt[0] === 'number') pt[0] += shift; }
+      return true;
+    };
+
+    for (const f of features) {
+      const g = f && f.geometry;
+      if (!g) continue;
+      const polys = g.type === 'Polygon' ? [g.coordinates]
+                  : g.type === 'MultiPolygon' ? g.coordinates
+                  : [];
+      let touched = false;
+      for (const poly of polys) {
+        if (!Array.isArray(poly)) continue;
+        for (const ring of poly) { if (fixRing(ring)) touched = true; }
+      }
+      if (touched) repaired++;
+    }
+    if (repaired) {
+      console.info(`[FoodShield] map: unwrapped ${repaired} antimeridian-crossing feature(s)`);
+    }
+    return repaired;
+  }
+
   // Width of a country's WIDEST single ring, in degrees of longitude.
   //
   // The obvious version of this — L.geoJSON(f).getBounds() — is wrong for any
   // country that crosses the antimeridian, because the bounding box then spans
-  // the whole globe. Fiji came out "1448px wide" at world zoom and outranked
-  // the United States. Measuring the widest individual ring instead gives
-  // Russia its real mainland width and Fiji its real island width.
+  // the whole globe. Measuring the widest individual ring instead gives Russia
+  // its real mainland width and Fiji its real island width — but only once
+  // unwrapAntimeridian() above has made each ring continuous.
   function widestRingDeg(f) {
     const g = f && f.geometry;
     if (!g) return 0;
@@ -20795,7 +20999,7 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     const placed = [];
     try {
       const mapRect = G.map.getContainer().getBoundingClientRect();
-      for (const id of ['map-stats', 'map-layers', 'map-legend', 'map-dist-legend']) {
+      for (const id of ['map-stats', 'map-layers', 'map-legend', 'map-dist-legend', 'map-nav']) {
         const el = document.getElementById(id);
         if (!el) continue;
         const b = el.getBoundingClientRect();
@@ -20928,12 +21132,26 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     el.style.display = 'block';
     moveTooltip(ev);
   }
+  // The tooltip is position:fixed and was pinned at cursor +14/+14 with no
+  // regard for where the cursor was. Hovering a country near the right edge of
+  // the map (Japan, New Zealand) or along the bottom (Argentina, South Africa)
+  // pushed it off-screen, so the score it exists to show was unreadable exactly
+  // where the map is most crowded. Flip it to the other side of the cursor when
+  // it would overflow, the way a native tooltip does.
   function moveTooltip(ev) {
     if (!tipEl) return;
-    const x = (ev.clientX || 0) + 14;
-    const y = (ev.clientY || 0) + 14;
-    tipEl.style.left = x + 'px';
-    tipEl.style.top  = y + 'px';
+    const pad = 10, gap = 14;
+    const cx = ev.clientX || 0, cy = ev.clientY || 0;
+    const w = tipEl.offsetWidth || 200;
+    const h = tipEl.offsetHeight || 70;
+    const vw = window.innerWidth || document.documentElement.clientWidth;
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    let x = cx + gap;
+    let y = cy + gap;
+    if (x + w + pad > vw) x = cx - gap - w;   // flip to the left of the cursor
+    if (y + h + pad > vh) y = cy - gap - h;   // flip above the cursor
+    tipEl.style.left = Math.max(pad, x) + 'px';
+    tipEl.style.top  = Math.max(pad, y) + 'px';
   }
   function hideTooltip() { if (tipEl) tipEl.style.display = 'none'; }
 
@@ -22275,7 +22493,47 @@ function applyFilters() {
     badge.style.display = n>0 ? 'inline-block' : 'none';
     badge.textContent = n;
   }
+  syncLegendRiskFilter();
   if (window.Globe) Globe.render();
+}
+
+// ── Legend as a risk filter ───────────────────────
+// The 5-band legend is permanently on screen and already names exactly the
+// tiers the Filters dropdown offers, so it is the natural place to ask "show
+// me only the Severe ones". Clicking a band sets activeFilters.risk through
+// the same <select> the dropdown drives, so the two controls can never
+// disagree and clearFilters() keeps working untouched.
+//
+// Delegated from #map-legend rather than bound per button: scenario paint mode
+// swaps this element's innerHTML wholesale and restores it from an HTML
+// snapshot (_scnApplyScenarioPaintChrome), which would drop per-node listeners.
+// The painted legend carries no [data-risk], so clicks there fall through.
+document.addEventListener('click', e => {
+  const band = e.target.closest && e.target.closest('#map-legend .legend-ramp [data-risk]');
+  if (!band) return;
+  const sel = document.getElementById('filter-risk');
+  if (!sel) return;
+  const risk = band.getAttribute('data-risk');
+  sel.value = (sel.value === risk) ? '' : risk;   // clicking the live band clears it
+  applyFilters();
+});
+
+function clearLegendRiskFilter() {
+  const sel = document.getElementById('filter-risk');
+  if (!sel) return;
+  sel.value = '';
+  applyFilters();
+}
+
+// Reflect activeFilters.risk back onto the legend, whichever control set it.
+function syncLegendRiskFilter() {
+  const legend = document.getElementById('map-legend');
+  if (!legend) return;
+  const active = (typeof activeFilters !== 'undefined' && activeFilters.risk) || '';
+  legend.classList.toggle('legend-filtered', !!active);
+  legend.querySelectorAll('.legend-ramp [data-risk]').forEach(b => {
+    b.setAttribute('aria-pressed', b.getAttribute('data-risk') === active ? 'true' : 'false');
+  });
 }
 
 function toggleFilterPanel(e){
@@ -22305,8 +22563,23 @@ function globeZoom(factor) {
 function globeRecenter() {
   if (!window.Globe || !Globe.state.map) return;
   Globe.state.map.flyTo([22, 10], 2.4, { duration: 0.8 });
+  // Deselecting while the country brief stayed open left the panel describing a
+  // country the map no longer highlights. "Reset view" means reset the view.
+  if (typeof closePanelIfOpen === 'function') closePanelIfOpen();
   Globe.deselectCountry();
   resetTradeFlowsButton();
+}
+
+// Grey out a zoom button once the map is against that limit, so the control
+// reports the map's state instead of silently no-opping.
+function updateMapNavState() {
+  const m = window.Globe && Globe.state && Globe.state.map;
+  if (!m) return;
+  const z = m.getZoom();
+  const inBtn  = document.getElementById('mapnav-in');
+  const outBtn = document.getElementById('mapnav-out');
+  if (inBtn)  inBtn.disabled  = z >= m.getMaxZoom() - 1e-6;
+  if (outBtn) outBtn.disabled = z <= m.getMinZoom() + 1e-6;
 }
 
 // Trade Flow CTA
@@ -23859,6 +24132,10 @@ function openPanel(c, skipDrilldown) {
   const sp = document.getElementById('sidepanel');
   const wasHidden = sp.classList.contains('hidden');
   sp.classList.remove('hidden');
+  // The panel is an overlay, not a flex sibling, so the map keeps its full
+  // width underneath it. Anything anchored to the map's right edge (the nav
+  // cluster) has to be told to step aside. closePanel() clears this.
+  try { document.getElementById('tab-global')?.classList.add('sp-open'); } catch (e) {}
 
   // v22.22 — auto-collapse the global right-rail (legend + filters + stats)
   // when a country panel opens, so the country brief gets full horizontal
@@ -24650,6 +24927,7 @@ function openPanel(c, skipDrilldown) {
 
 function closePanel() {
   document.getElementById('sidepanel').classList.add('hidden');
+  try { document.getElementById('tab-global')?.classList.remove('sp-open'); } catch (e) {}
   // v21.x — clear TFA "Clear routes" link on panel close (legacy legend/hide
   // button no longer in DOM).
   const clearLink = document.getElementById('tfa-clear-link');
