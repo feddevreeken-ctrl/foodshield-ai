@@ -66,6 +66,58 @@ def _fetch_ewtool():
     return out
 
 
+def _merge_palestine(out):
+    """Aggregate Gaza (PSG) and the West Bank (PSW) into a single PSE row.
+
+    The upstream feed keys the two Palestinian territories separately. Every
+    consumer in this repo — build_nowcast, the country panel, the map — looks up
+    PSE, the ISO3 code Palestine actually carries in countries.json. The result
+    was that the worst food-security reading on the map (Gaza, 67% of the
+    population in Phase 3+, the highest SHARE of any population tracked) reached
+    nothing: PSE resolved to no IPC data at all, its nowcast confidence read
+    "none", and the -1.0 no-signal adjustment LOWERED Palestine's score.
+
+    Aggregated by population, reconstructing each territory's population from
+    its own share and headcount, so the combined percentage is a true weighted
+    figure rather than a mean of two percentages over unequal populations.
+    Counts are summed. The worst (lowest) analysis date and the more severe
+    period label are carried forward so the vintage stays honest.
+    """
+    parts = [(k, out[k]) for k in ("PSG", "PSW") if isinstance(out.get(k), dict)]
+    if not parts:
+        return out
+    tot_pop = 0.0
+    tot_p3 = 0
+    tot_p4 = 0
+    tot_p5 = 0
+    for _k, row in parts:
+        pct = row.get("phase3plus_pct")
+        cnt = row.get("phase3plus_count")
+        if isinstance(pct, (int, float)) and pct > 0 and isinstance(cnt, (int, float)):
+            tot_pop += cnt / (pct / 100.0)
+        tot_p3 += int(cnt or 0)
+        tot_p4 += int(row.get("phase4_count") or 0)
+        tot_p5 += int(row.get("phase5_count") or 0)
+    if tot_pop <= 0:
+        return out
+    worst = max(parts, key=lambda kv: kv[1].get("phase3plus_pct") or 0)[1]
+    out["PSE"] = {
+        "phase3plus_pct": round(tot_p3 / tot_pop * 100.0, 1),
+        "phase3plus_count": tot_p3,
+        "phase4_count": tot_p4,
+        "phase5_count": tot_p5,
+        "period": worst.get("period"),
+        "analysis_date": worst.get("analysis_date"),
+        "country": "Palestine (Gaza + West Bank)",
+        "source_via": worst.get("source_via"),
+        "data_source": worst.get("data_source"),
+        "_aggregated_from": [k for k, _ in parts],
+    }
+    print(f"  [ipc] PSE synthesised from {'+'.join(k for k, _ in parts)}: "
+          f"{out['PSE']['phase3plus_pct']}% of {int(tot_pop):,}")
+    return out
+
+
 def main():
     out = {}
     try:
@@ -86,12 +138,16 @@ def main():
                 out = {}
                 source_label = "IPC sources unavailable"
 
+    out = _merge_palestine(out)
+
     write_json(
         "ipc.json",
         out,
         source=source_label,
         notes=(
             "Phase 3 = Crisis, Phase 4 = Emergency, Phase 5 = Catastrophe/Famine. "
+            "PSE is synthesised: the feed keys Gaza (PSG) and the West Bank (PSW) "
+            "separately, and every consumer here looks up PSE. "
             f"Covered {len(out)} countries."
         ),
     )
