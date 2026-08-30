@@ -2012,66 +2012,130 @@ body {
    once the raster base was gone. */
 .leaflet-container { background: #262626 !important; outline: none !important; }
 .leaflet-container, .leaflet-container * { font-family: 'Geist', sans-serif !important; }
-/* Country name labels, drawn from the GeoJSON (see buildCountryLabels).
-   These sit on top of the data layer, so the whole job is to stay legible over
-   both the near-black ocean and the bright end of the choropleth ramp WITHOUT
-   competing with the risk colour underneath — the colour is the reading, the
-   name is only the key to it.
+/* ══════════════════════════════════════════════
+   MAP LABEL LAYER — country names, then capitals / regional capitals / cities
+   ══════════════════════════════════════════════
+   The layer sits on top of the choropleth, so the whole job is to stay legible
+   over both the near-black ocean and the bright end of the risk ramp WITHOUT
+   competing with the colour underneath: the colour is the reading, the name is
+   only the key to it.
 
-   The casing is four stacked shadows at zero offset, tight to loose. v79k used
-   four OFFSET shadows at 2px blur, which is what made the old labels look
-   grubby: an offset blur is a drop shadow, so each word carried a lopsided
-   grey smear on its bottom-right and nothing on the diagonals, and on the near
-   black ocean that smear read as dirt. Concentric zero-offset blurs give an
-   even casing that hugs the glyph — dense at 1px so the letterform keeps a
-   hard edge over a bright fill, falling off by 6px so the word still lifts off
-   a busy one. A hard 1px ring (the obvious alternative) is worse at this size:
-   it thickens every stem and the labels read a weight heavier than they are.
+   Type. Title case, not caps. Uppercase with wide tracking is a legitimate
+   reference-map convention for countries, but at this size on this ground it
+   read as shouting, and it forces every name ~35% wider — which is why so few
+   of them used to fit their own country. Title case at a normal-ish tracking
+   is the modern web-map convention (Google, Mapbox Streets, MapLibre's default
+   styles) and is what the rest of this dashboard's body text already does.
+   Country names keep a little extra letter-spacing to read as a distinct
+   register from the place names below them.
+
+   Casing (the halo). Four stacked shadows at ZERO offset, tight to loose. The
+   original used four OFFSET shadows at 2px blur, which is what made the old
+   labels look grubby: an offset blur is a drop shadow, so each word carried a
+   lopsided grey smear on its bottom-right and nothing on the diagonals, and on
+   the near-black ocean that smear read as dirt. Concentric zero-offset blurs
+   give an even casing that hugs the glyph — dense at 1px so the letterform
+   keeps a hard edge over a bright fill, falling off by 6px so the word still
+   lifts off a busy one. A hard 1px ring is worse at this size: it thickens
+   every stem and the labels read a weight heavier than they are.
    -webkit-text-stroke is out for the same reason, from the inside. */
-.map-country-label {
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.11em;
-  /* letter-spacing puts a space after the LAST letter too, so the glyphs sit
-     one space left of centre inside their own box. An equal indent on the
-     other side puts the word back on its centroid. Keep the two in step when
-     changing either — including in the tier rules below. */
-  text-indent: 0.11em;
+.map-country-label,
+.map-place-label {
   line-height: 1;
-  color: #cfd3dc;
   white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
   text-shadow:
     0 0 1px rgba(5,5,8,0.98),
     0 0 2px rgba(5,5,8,0.92),
     0 0 3px rgba(5,5,8,0.80),
     0 0 6px rgba(0,0,0,0.50);
-  pointer-events: none;
-  user-select: none;
 }
-/* Centring the name on its centroid.
+
+/* ── Country names ── */
+.map-country-label {
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  /* letter-spacing puts a space after the LAST letter too, so the glyphs sit
+     one space left of centre inside their own box. An equal indent on the
+     other side puts the word back on its anchor. Keep the two in step when
+     changing either — including in the tier rules below. */
+  text-indent: 0.06em;
+  /* Deliberately a step quieter than the capitals below. A country name is an
+     AREA label: it names the ground the reader is already looking at, so it
+     should sit back and let the risk fill and the point labels carry the
+     foreground. The extra letter-spacing does the same job — it is the
+     conventional signal that a name belongs to a region rather than a dot. */
+  color: #c8ccd6;
+}
+/* Centring the name on its anchor.
    This has to happen on an INNER element. The marker div itself carries a
    zero-size icon box positioned by Leaflet through an inline `transform`, so
    the obvious `transform: translate(-50%,-50%)` on .map-country-label — which
    is what used to be here — could never work twice over: an inline style beats
    a stylesheet rule, and a percentage translate of a 0×0 box is zero anyway.
-   The result was that every country name hung off the RIGHT of its own
-   centroid by half its width, which is most of why the labels looked badly
-   placed — ETHIOPIA sat in Somalia, RUSSIA well east of the point it is drawn
-   for. The inner span keeps Leaflet's positioning untouched and does the
-   centring itself; the type styles above are all inherited, so the ruler in
-   measureLabelPx() still measures exactly this text. */
+   The result was that every name hung off the RIGHT of the point it was drawn
+   for by half its width. The inner span keeps Leaflet's positioning untouched
+   and does the centring itself; the type styles above are all inherited, so
+   the ruler in measureLabelPx() measures exactly this text. */
 .map-country-label > span {
   position: absolute;
   left: 0; top: 0;
   transform: translate(-50%, -50%);
 }
-/* Three size tiers, picked in updateCountryLabels() from how much room the
-   country actually has on screen, with the colour tracking the size so the
-   hierarchy holds in weight as well as scale. One flat size for Russia and for
-   Yemen is most of what makes a label layer read as stamped on rather than
-   drawn. */
-.map-country-label.lbl-lg { font-size: 11.5px; letter-spacing: 0.13em; text-indent: 0.13em; color: #dfe3ea; }
-.map-country-label.lbl-sm { font-size: 8px;    letter-spacing: 0.09em; text-indent: 0.09em; color: #bfc4ce; }
+/* Three size tiers, picked in updateMapLabels() from how much room the country
+   actually has on screen, with colour tracking size so the hierarchy holds in
+   weight as well as scale. One flat size for Russia and for Yemen is most of
+   what makes a label layer read as stamped on rather than drawn. */
+.map-country-label.lbl-lg { font-size: 12.5px; letter-spacing: 0.085em; text-indent: 0.085em; color: #dadee7; }
+.map-country-label.lbl-sm { font-size: 9px;    letter-spacing: 0.045em; text-indent: 0.045em; color: #b4b9c4; }
+
+/* ── Place names: capitals, regional capitals, cities ──
+   Point features, so they get the standard treatment: a dot exactly on the
+   coordinate and the name set beside it, never centred over it — a name
+   centred on a city sits on the thing it names. Both children are positioned
+   against the zero-size marker box, so Leaflet's anchor stays the coordinate
+   itself. Sizes step down by rank, and the dot shrinks with them, so the three
+   classes are separable at a glance without needing a legend. */
+.map-place-label > .mpl-dot {
+  position: absolute;
+  left: 0; top: 0;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(5,5,8,0.85), 0 0 3px rgba(0,0,0,0.6);
+}
+.map-place-label > .mpl-name {
+  position: absolute;
+  left: 7px; top: 0;
+  transform: translateY(-50%);
+}
+.map-place-label.mpl-capital > .mpl-dot {
+  width: 5px; height: 5px;
+  background: #e8ebf2;
+}
+.map-place-label.mpl-capital > .mpl-name {
+  font-size: 10.5px; font-weight: 500; letter-spacing: 0.01em; color: #e2e5ec;
+}
+.map-place-label.mpl-region > .mpl-dot {
+  width: 4px; height: 4px;
+  background: #aeb4c2;
+}
+.map-place-label.mpl-region > .mpl-name {
+  font-size: 9.5px; font-weight: 400; letter-spacing: 0.01em; color: #c4c9d4;
+}
+.map-place-label.mpl-city > .mpl-dot {
+  width: 3px; height: 3px;
+  background: #8d94a4;
+}
+.map-place-label.mpl-city > .mpl-name {
+  font-size: 9px; font-weight: 400; letter-spacing: 0.01em; color: #aeb4c2;
+}
+/* The ruler measures the NAME, so when it wears a place class it has to carry
+   that class's type itself — it has no .mpl-name child to inherit from. */
+.map-place-label.map-label-ruler.mpl-capital { font-size: 10.5px; font-weight: 500; letter-spacing: 0.01em; }
+.map-place-label.map-label-ruler.mpl-region  { font-size: 9.5px;  font-weight: 400; letter-spacing: 0.01em; }
+.map-place-label.map-label-ruler.mpl-city    { font-size: 9px;    font-weight: 400; letter-spacing: 0.01em; }
 
 .leaflet-control-attribution, .leaflet-control { display: none !important; }
 .leaflet-interactive { outline: none !important; cursor: pointer; transition: opacity 0.15s; }
@@ -17667,7 +17731,7 @@ async function loadLiveData() {
   // v41 — fetched INSIDE the main Promise.all below (it used to be awaited
   // serially here, which put the single largest download ahead of every other
   // feed). The seed block right after the Promise.all consumes it.
-  const [cfEnv, nc, wfp, ipc, wb, ffpi, rw, ct, fa, wfpc, om, omf, aq, usgs, estat, faostat, pink, manifest, cnews, cinterp, cnotes] = await Promise.all([
+  const [cfEnv, nc, wfp, ipc, wb, ffpi, rw, ct, fa, wfpc, om, omf, aq, usgs, estat, faostat, pink, manifest, cnews, cinterp, cnotes, places] = await Promise.all([
     _fetchData('commodity_flows'),
     _fetchData('nowcast'), _fetchData('wfp_hungermap'), _fetchData('ipc'),
     _fetchData('worldbank_wdi'), _fetchData('fao_ffpi'), _fetchData('reliefweb_alerts'),
@@ -17687,6 +17751,11 @@ async function loadLiveData() {
     // file: only written when a provider is configured, so its absence must not
     // count as a failed source.
     _fetchDataOptional('commodity_article_notes'),
+    // Map label gazetteer (capitals / regional capitals / cities). Optional and
+    // NOT a live feed: it is static Natural Earth reference data built by
+    // scripts/build_places.py, so it must not count toward source health. Its
+    // absence costs the map its zoom-tiered place labels and nothing else.
+    _fetchDataOptional('places'),
   ]);
   // v41 — the trade-atlas fetch has now resolved (success or failure). Mark it so
   // the copilot can tell "still loading" apart from "loaded, no cited flows" and
@@ -17695,6 +17764,23 @@ async function loadLiveData() {
   try {
     if (cfEnv && cfEnv.commodities) window.__BEEF_DATA__ = cfEnv;
   } catch (e) {}
+  // Hand the gazetteer to the map. Globe.init() may not have run yet on a very
+  // fast data load, so retry briefly rather than dropping the layer.
+  try {
+    const rows = (places && Array.isArray(places.data)) ? places.data : null;
+    if (rows && rows.length) {
+      LIVE.places = rows;
+      let tries = 0;
+      const hand = () => {
+        if (window.Globe && Globe.state && Globe.state.map && Globe.setPlaces) {
+          Globe.setPlaces(rows);
+        } else if (tries++ < 20) {
+          setTimeout(hand, 250);
+        }
+      };
+      hand();
+    }
+  } catch (e) { console.warn('[FoodShield] place labels unavailable:', e); }
   try {
     if (window.__BEEF_DATA__ && window.__BEEF_DATA__.commodities) {
       LIVE.commodity_flows = LIVE.commodity_flows || {};
@@ -20532,6 +20618,18 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     map.on('zoomend', _navState);
     _navState();
 
+    // Re-run the declutter pass on every view change. Bound here rather than in
+    // buildCountryLabels() because the place-label layer arrives on its own
+    // schedule (data/places.json) and must keep working even if the country
+    // polygons never load.
+    //
+    // NOTE: this used to read `map` from inside a function defined OUTSIDE this
+    // closure, where `map` silently resolved to the <div id="map"> element via
+    // the implicit id-global — which has no .on(), so every label was built and
+    // never shown. Bind on the local `map` here, at init, where it is the real
+    // Leaflet instance.
+    map.on('zoomend moveend', updateMapLabels);
+
     // Base — no raster basemap.
     //
     // The map was built against CARTO's dark_nolabels / dark_only_labels pair:
@@ -20882,9 +20980,9 @@ function _simulateScenario(c, selected, severityById, paramsById) {
   // at the base size and scaled by `scale` for the other two, so one measuring
   // pass covers all three.
   const LABEL_TIERS = [
-    { cls: 'lbl-lg', scale: 11.5 / 9.5, halfH: 8 },
-    { cls: '',       scale: 1,          halfH: 7 },
-    { cls: 'lbl-sm', scale: 8 / 9.5,    halfH: 6 },
+    { cls: 'lbl-lg', scale: 12.5 / 10.5, halfH: 9 },
+    { cls: '',       scale: 1,           halfH: 8 },
+    { cls: 'lbl-sm', scale: 9 / 10.5,    halfH: 7 },
   ];
 
   function escapeLabel(s) {
@@ -20900,21 +20998,25 @@ function _simulateScenario(c, selected, severityById, paramsById) {
   // hanging well outside their own borders. Measuring the same DOM the labels
   // are drawn in gets the real number, letter-spacing and font metrics included.
   let _measureEl = null;
-  function measureLabelPx(text) {
+  function measureLabelPx(text, cls) {
     if (!G.map) return text.length * 6;
     if (!_measureEl) {
-      // Carries .map-country-label so the metrics are the real ones, plus a
-      // marker class: without it every `.map-country-label` query also returns
-      // this ruler holding whatever text it measured last (LUXEMBOURG, as it
-      // happens), which reads as a phantom label that is on the map but never
-      // drawn.
+      // Wears the real label class so the metrics are the real ones, plus a
+      // .map-label-ruler marker: without it every label-class query also
+      // returns this ruler holding whatever text it measured last (Luxembourg,
+      // as it happened), which reads as a phantom label on the map that is
+      // never actually drawn.
       _measureEl = document.createElement('div');
-      _measureEl.className = 'map-country-label map-label-ruler';
       _measureEl.setAttribute('aria-hidden', 'true');
       _measureEl.style.cssText =
         'position:absolute;left:-9999px;top:0;visibility:hidden;transform:none;';
       G.map.getContainer().appendChild(_measureEl);
     }
+    // Country names and each class of place label have their own type, so the
+    // ruler wears whichever one it is measuring.
+    _measureEl.className = cls
+      ? 'map-place-label map-label-ruler ' + cls
+      : 'map-country-label map-label-ruler';
     _measureEl.textContent = text;
     return _measureEl.offsetWidth;
   }
@@ -20925,9 +21027,12 @@ function _simulateScenario(c, selected, severityById, paramsById) {
 
     for (const co of COUNTRIES) {
       const f = G.isoMap.get(co.iso);
-      const ll = G.centroids.get(co.iso);
-      if (!f || !ll) continue;
-      const text = co.name.toUpperCase();
+      if (!f) continue;
+      // The label goes at the pole of inaccessibility, not the centroid the
+      // arcs use — see labelAnchor(). Centroid only as a last resort.
+      const ll = labelAnchor(f) || G.centroids.get(co.iso);
+      if (!ll) continue;
+      const text = co.name;
       const marker = L.marker(ll, {
         pane: 'labels',
         interactive: false,
@@ -20936,9 +21041,9 @@ function _simulateScenario(c, selected, severityById, paramsById) {
           className: 'map-country-label',
           // The inner span is what gets centred on the anchor — see the
           // .map-country-label > span rule. Escaped because several names
-          // carry an ampersand (BOSNIA & HERZEGOVINA, TRINIDAD & TOBAGO).
+          // carry an ampersand (Bosnia & Herzegovina, Trinidad & Tobago).
           html: '<span>' + escapeLabel(text) + '</span>',
-          // A zero-size box keeps Leaflet's anchor exactly on the centroid.
+          // A zero-size box keeps Leaflet's anchor exactly on the point.
           iconSize: [0, 0],
         }),
       });
@@ -20952,7 +21057,7 @@ function _simulateScenario(c, selected, severityById, paramsById) {
         shown: false, tier: null,
       });
     }
-    updateCountryLabels();
+    updateMapLabels();
 
     // Widths measured before the web font arrives are the fallback font's.
     // Re-measure once Geist is in and re-run the pass, or every label keeps a
@@ -20961,16 +21066,72 @@ function _simulateScenario(c, selected, severityById, paramsById) {
       if (document.fonts && document.fonts.ready) {
         document.fonts.ready.then(() => {
           _countryLabels.forEach(rec => { rec.basePx = measureLabelPx(rec.text); });
-          updateCountryLabels();
+          _placeLabels.forEach(rec => { rec.basePx = measureLabelPx(rec.text, rec.cls); });
+          updateMapLabels();
         }).catch(() => {});
       }
     } catch (e) {}
 
-    // NOTE: G.map, not `map`. These two functions live outside the closure that
-    // holds the map init's local `map` const, and `map` at this scope resolves
-    // to the <div id="map"> element via the implicit id-global — which silently
-    // has no .getZoom()/.on() and left every label built but never shown.
-    G.map.on('zoomend moveend', updateCountryLabels);
+  }
+
+  // ── Place labels: capitals, regional capitals, cities ──────────────────────
+  //
+  // The zoom-tiered second half of the label layer, and the thing a hand-rolled
+  // country-name layer structurally could not do: at world zoom you get country
+  // names, and zooming in brings in national capitals, then regional (admin-1)
+  // capitals, then ordinary cities — the progressive disclosure a general
+  // reference map does. Fed by data/places.json (Natural Earth 50m populated
+  // places; see scripts/build_places.py for why it is a build artefact rather
+  // than a runtime gazetteer call).
+  //
+  // The zoom each place earns is Natural Earth's own `min_zoom` — a
+  // cartographer's judgement of when a place is worth drawing — floored by kind
+  // so that no city can outrank a national capital, and so the country-name
+  // layer has the world view to itself.
+  const _placeLabels = [];
+  const PLACE_KINDS = {
+    capital: { cls: 'mpl-capital', floor: 3.5, halfH: 6, rank: 0 },
+    region:  { cls: 'mpl-region',  floor: 4.5, halfH: 5, rank: 1 },
+    city:    { cls: 'mpl-city',    floor: 5.0, halfH: 5, rank: 2 },
+  };
+  // Room to the right of the dot for the name, plus the dot's own half-width.
+  const PLACE_TEXT_OFFSET = 7;
+  const PLACE_DOT_HALF = 3;
+
+  function buildPlaceLabels(rows) {
+    if (!G.map || !Array.isArray(rows) || !rows.length) return;
+    if (_placeLabels.length) return;   // gazetteer arrives once
+
+    for (const p of rows) {
+      const spec = PLACE_KINDS[p && p.k];
+      if (!spec || !p.n || typeof p.y !== 'number' || typeof p.x !== 'number') continue;
+      const marker = L.marker([p.y, p.x], {
+        pane: 'labels',
+        interactive: false,
+        keyboard: false,
+        icon: L.divIcon({
+          className: 'map-place-label ' + spec.cls,
+          // Dot exactly on the coordinate; name set beside it, the standard
+          // point-feature treatment. Both are absolutely positioned against
+          // this zero-size box so Leaflet's anchor stays the coordinate.
+          html: '<i class="mpl-dot"></i><span class="mpl-name">'
+              + escapeLabel(p.n) + '</span>',
+          iconSize: [0, 0],
+        }),
+      });
+      _placeLabels.push({
+        marker, text: p.n, kind: p.k, cls: spec.cls, spec,
+        gate: Math.max(Number(p.z) || 5, spec.floor),
+        basePx: measureLabelPx(p.n, spec.cls),
+        shown: false,
+      });
+    }
+
+    // Draw order: capitals, then regional capitals, then cities; within a kind
+    // the place Natural Earth would draw earliest. build_places.py already
+    // sorts this way, but the renderer must not depend on the file's order.
+    _placeLabels.sort((a, b) => (a.spec.rank - b.spec.rank) || (a.gate - b.gate));
+    updateMapLabels();
   }
 
   // ── Antimeridian repair ────────────────────────────────────────────────────
@@ -21046,6 +21207,152 @@ function _simulateScenario(c, selected, severityById, paramsById) {
       console.info(`[FoodShield] map: unwrapped ${repaired} antimeridian-crossing feature(s)`);
     }
     return repaired;
+  }
+
+  // ── Where a country's name belongs ─────────────────────────────────────────
+  //
+  // Not the centroid. The centroid is the average of a shape, which for any
+  // country that is not roughly convex is a point the country does not contain:
+  // Norway's is out in the Baltic over Sweden, Croatia's is in Bosnia,
+  // Vietnam's is in Laos, Indonesia's and the Philippines' are at sea. Drawing
+  // the name there is most of what made the label layer look misplaced, and no
+  // amount of hand-added CENTROID_OVERRIDES fixes the general case.
+  //
+  // Every serious map instead uses the pole of inaccessibility — the point
+  // inside the polygon furthest from any edge, i.e. the centre of the largest
+  // circle that fits. That is the most visually "inside" point there is, and it
+  // is what MapLibre and Mapbox place polygon labels at (via Mapbox's polylabel
+  // algorithm, implemented below: quadtree subdivision with a best-first queue,
+  // pruning any cell whose best possible distance cannot beat the incumbent).
+  //
+  // Two adaptations for this map:
+  //   - It runs on the country's LARGEST polygon only, so France labels in
+  //     mainland France rather than being dragged by French Guiana, and the
+  //     United States in the contiguous states rather than mid-Pacific. That
+  //     makes the CENTROID_OVERRIDES table unnecessary for labelling (it is
+  //     left alone — the flow arcs and disturbance pins still use it).
+  //   - It works in Web Mercator y, not raw latitude, because "furthest from
+  //     the edge" has to mean furthest ON SCREEN. In raw degrees a high-latitude
+  //     country is measured in a space the projection stretches vertically, and
+  //     the anchor drifts south of where it looks right.
+  const MERC_LAT_LIMIT = 85.05;
+  function mercY(lat) {
+    const p = Math.max(-MERC_LAT_LIMIT, Math.min(MERC_LAT_LIMIT, lat)) * Math.PI / 180;
+    return Math.log(Math.tan(Math.PI / 4 + p / 2)) * 180 / Math.PI;
+  }
+  function invMercY(y) {
+    return (2 * Math.atan(Math.exp(y * Math.PI / 180)) - Math.PI / 2) * 180 / Math.PI;
+  }
+
+  // Squared distance from a point to a segment.
+  function _segDistSq(px, py, ax, ay, bx, by) {
+    let x = ax, y = ay, dx = bx - ax, dy = by - ay;
+    if (dx !== 0 || dy !== 0) {
+      const t = ((px - x) * dx + (py - y) * dy) / (dx * dx + dy * dy);
+      if (t > 1) { x = bx; y = by; }
+      else if (t > 0) { x += dx * t; y += dy * t; }
+    }
+    return (px - x) * (px - x) + (py - y) * (py - y);
+  }
+
+  // Signed distance from a point to a polygon: positive inside, negative out.
+  function _pointToPolyDist(x, y, rings) {
+    let inside = false, minSq = Infinity;
+    for (const ring of rings) {
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const a = ring[i], b = ring[j];
+        if ((a[1] > y) !== (b[1] > y) &&
+            (x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0])) inside = !inside;
+        const d = _segDistSq(x, y, a[0], a[1], b[0], b[1]);
+        if (d < minSq) minSq = d;
+      }
+    }
+    if (minSq === Infinity) return -Infinity;
+    return (inside ? 1 : -1) * Math.sqrt(minSq);
+  }
+
+  function _cell(x, y, h, rings) {
+    const d = _pointToPolyDist(x, y, rings);
+    return { x, y, h, d, max: d + h * Math.SQRT2 };
+  }
+
+  // Pole of inaccessibility of one polygon (array of rings in [x, mercY] space).
+  function poleOfInaccessibility(rings) {
+    const outer = rings[0];
+    if (!outer || outer.length < 3) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const p of outer) {
+      if (p[0] < minX) minX = p[0];
+      if (p[0] > maxX) maxX = p[0];
+      if (p[1] < minY) minY = p[1];
+      if (p[1] > maxY) maxY = p[1];
+    }
+    const w = maxX - minX, hgt = maxY - minY;
+    const cellSize = Math.min(w, hgt);
+    if (!(cellSize > 0)) return [minX, minY];
+
+    // Best-first, so the queue drains toward the answer instead of exploring
+    // the whole bbox. A sorted array is enough at this scale (a few hundred
+    // cells per country, ~200 countries, once at load).
+    const queue = [];
+    const push = (c) => {
+      let lo = 0, hi = queue.length;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (queue[mid].max > c.max) lo = mid + 1; else hi = mid; }
+      queue.splice(lo, 0, c);
+    };
+
+    let h = cellSize / 2;
+    for (let x = minX; x < maxX; x += cellSize) {
+      for (let y = minY; y < maxY; y += cellSize) push(_cell(x + h, y + h, h, rings));
+    }
+    let best = _cell(minX + w / 2, minY + hgt / 2, 0, rings);
+    const precision = Math.max(w, hgt) / 400;
+    let guard = 12000;   // hard stop; a pathological ring must not hang the map
+    while (queue.length && guard-- > 0) {
+      const cell = queue.shift();
+      if (cell.d > best.d) best = cell;
+      if (cell.max - best.d <= precision) continue;
+      h = cell.h / 2;
+      push(_cell(cell.x - h, cell.y - h, h, rings));
+      push(_cell(cell.x + h, cell.y - h, h, rings));
+      push(_cell(cell.x - h, cell.y + h, h, rings));
+      push(_cell(cell.x + h, cell.y + h, h, rings));
+    }
+    return [best.x, best.y];
+  }
+
+  // [lat, lng] where a feature's name should be drawn.
+  function labelAnchor(f) {
+    const g = f && f.geometry;
+    if (!g) return null;
+    const polys = g.type === 'Polygon' ? [g.coordinates]
+                : g.type === 'MultiPolygon' ? g.coordinates
+                : [];
+    if (!polys.length) return null;
+
+    // Largest polygon by bbox area in projected space — the landmass a reader
+    // thinks of as the country.
+    let biggest = null, bestArea = -1;
+    for (const poly of polys) {
+      const ring = poly && poly[0];
+      if (!ring || ring.length < 3) continue;
+      let lo = Infinity, hi = -Infinity, blo = Infinity, bhi = -Infinity;
+      for (const p of ring) {
+        if (p[0] < lo) lo = p[0];
+        if (p[0] > hi) hi = p[0];
+        const my = mercY(p[1]);
+        if (my < blo) blo = my;
+        if (my > bhi) bhi = my;
+      }
+      const area = (hi - lo) * (bhi - blo);
+      if (area > bestArea) { bestArea = area; biggest = poly; }
+    }
+    if (!biggest) return null;
+
+    const projected = biggest.map(ring => ring.map(p => [p[0], mercY(p[1])]));
+    const pt = poleOfInaccessibility(projected);
+    if (!pt) return null;
+    return [invMercY(pt[1]), pt[0]];
   }
 
   // How much horizontal room a label really has: the width of the country
@@ -21137,8 +21444,12 @@ function _simulateScenario(c, selected, severityById, paramsById) {
   // "important" countries to drift out of date. Widest-first ordering means
   // that when two labels compete for the same patch of screen, the bigger
   // country keeps its label — which is the same call a cartographer makes.
-  function updateCountryLabels() {
-    if (!_countryLabels.length || !G.map) return;
+  // One declutter pass over the whole label layer — country names first, then
+  // places. Both share a single `placed` set, so a capital can never be drawn
+  // on top of a country name and vice versa. Running them as two independent
+  // passes (the obvious split) is exactly how map labels end up overlapping.
+  function updateMapLabels() {
+    if (!G.map || (!_countryLabels.length && !_placeLabels.length)) return;
     const z = G.map.getZoom();
     // Degrees of longitude per pixel at this zoom (Web Mercator, 256px tiles).
     const degPerPx = 360 / (256 * Math.pow(2, z));
@@ -21240,6 +21551,36 @@ function _simulateScenario(c, selected, severityById, paramsById) {
           rec.tier = tier.cls;
         }
       }
+    }
+
+    // ── Places, into the same collision set the country names just filled ──
+    for (const rec of _placeLabels) {
+      // Natural Earth's own minimum zoom for this place, floored by kind.
+      let want = z >= rec.gate && view.contains(rec.marker.getLatLng());
+
+      if (want) {
+        // The name sits to the RIGHT of the dot, so the box is not centred on
+        // the coordinate the way a country name is: it runs from just left of
+        // the dot to the end of the text.
+        const pt = G.map.latLngToLayerPoint(rec.marker.getLatLng());
+        const left  = pt.x - PLACE_DOT_HALF - 2;
+        const right = pt.x + PLACE_TEXT_OFFSET + rec.basePx + 3;
+        const cx = (left + right) / 2;
+        const halfW = (right - left) / 2;
+        const halfH = rec.spec.halfH;
+        for (const p of placed) {
+          if (Math.abs(cx - p.x) < (halfW + p.halfW)
+              && Math.abs(pt.y - p.y) < (halfH + p.halfH)) {
+            want = false;
+            break;
+          }
+        }
+        if (want) placed.push({ x: cx, y: pt.y, halfW, halfH });
+      }
+
+      if (want === rec.shown) continue;
+      if (want) rec.marker.addTo(G.map); else G.map.removeLayer(rec.marker);
+      rec.shown = want;
     }
   }
 
@@ -21952,6 +22293,9 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     drawScenarioSeveredCorridors, clearScenarioSeveredCorridors,
     showDisturbances, clearDisturbances,
     drawImpactArcs, clearImpactArcs,
+    // Zoom-tiered capitals / regional capitals / cities. Handed the gazetteer
+    // by loadLiveData(); the map works without it, just country names only.
+    setPlaces: buildPlaceLabels,
     // v21.x TFA hover/focus sync
     hoverFlow: _tfaHoverFlow,
     focusFlow,

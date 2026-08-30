@@ -13,6 +13,7 @@ Auto-generated JSON snapshots used by the frontend.
 | `fao_ffpi.json` | FAO Food Price Index monthly series | daily fetch / monthly upstream |
 | `worldbank_pink_sheet.json` | World Bank commodity benchmark prices | daily fetch / monthly upstream |
 | `worldbank_wdi.json` | reference macro and food-security indicators | daily fetch / annual upstream |
+| `places.json` | map label gazetteer — capitals, regional capitals and cities for the Global Map's zoom-tiered labels (Natural Earth 50m, public domain). Static reference data: built by `scripts/build_places.py`, deliberately NOT in `run_all.py`, rebuild only on a new Natural Earth edition. | on Natural Earth release |
 
 ## Food-security and crisis feeds
 
