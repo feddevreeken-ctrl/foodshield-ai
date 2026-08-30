@@ -2012,28 +2012,66 @@ body {
    once the raster base was gone. */
 .leaflet-container { background: #262626 !important; outline: none !important; }
 .leaflet-container, .leaflet-container * { font-family: 'Geist', sans-serif !important; }
-/* v79k — country name labels, drawn from the GeoJSON (see buildCountryLabels).
-   The halo is four offset shadows rather than -webkit-text-stroke: the stroke
-   thins the glyphs at this size, and these labels have to stay readable over
-   both the near-black ocean and the bright end of the choropleth ramp. */
+/* Country name labels, drawn from the GeoJSON (see buildCountryLabels).
+   These sit on top of the data layer, so the whole job is to stay legible over
+   both the near-black ocean and the bright end of the choropleth ramp WITHOUT
+   competing with the risk colour underneath — the colour is the reading, the
+   name is only the key to it.
+
+   The casing is four stacked shadows at zero offset, tight to loose. v79k used
+   four OFFSET shadows at 2px blur, which is what made the old labels look
+   grubby: an offset blur is a drop shadow, so each word carried a lopsided
+   grey smear on its bottom-right and nothing on the diagonals, and on the near
+   black ocean that smear read as dirt. Concentric zero-offset blurs give an
+   even casing that hugs the glyph — dense at 1px so the letterform keeps a
+   hard edge over a bright fill, falling off by 6px so the word still lifts off
+   a busy one. A hard 1px ring (the obvious alternative) is worse at this size:
+   it thickens every stem and the labels read a weight heavier than they are.
+   -webkit-text-stroke is out for the same reason, from the inside. */
 .map-country-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  /* letter-spacing puts a space after the LAST letter too, so the glyphs sit
+     one space left of centre inside their own box. An equal indent on the
+     other side puts the word back on its centroid. Keep the two in step when
+     changing either — including in the tier rules below. */
+  text-indent: 0.11em;
   line-height: 1;
-  color: #f2f2f4;
+  color: #cfd3dc;
   white-space: nowrap;
-  /* Anchored on the centroid with a zero-size icon box, so translate the text
-     back by half its own width/height to centre it on the country. */
-  transform: translate(-50%, -50%);
   text-shadow:
-     0  1px 2px rgba(0,0,0,0.95),
-     0 -1px 2px rgba(0,0,0,0.95),
-     1px 0  2px rgba(0,0,0,0.95),
-    -1px 0  2px rgba(0,0,0,0.95);
+    0 0 1px rgba(5,5,8,0.98),
+    0 0 2px rgba(5,5,8,0.92),
+    0 0 3px rgba(5,5,8,0.80),
+    0 0 6px rgba(0,0,0,0.50);
   pointer-events: none;
   user-select: none;
 }
+/* Centring the name on its centroid.
+   This has to happen on an INNER element. The marker div itself carries a
+   zero-size icon box positioned by Leaflet through an inline `transform`, so
+   the obvious `transform: translate(-50%,-50%)` on .map-country-label — which
+   is what used to be here — could never work twice over: an inline style beats
+   a stylesheet rule, and a percentage translate of a 0×0 box is zero anyway.
+   The result was that every country name hung off the RIGHT of its own
+   centroid by half its width, which is most of why the labels looked badly
+   placed — ETHIOPIA sat in Somalia, RUSSIA well east of the point it is drawn
+   for. The inner span keeps Leaflet's positioning untouched and does the
+   centring itself; the type styles above are all inherited, so the ruler in
+   measureLabelPx() still measures exactly this text. */
+.map-country-label > span {
+  position: absolute;
+  left: 0; top: 0;
+  transform: translate(-50%, -50%);
+}
+/* Three size tiers, picked in updateCountryLabels() from how much room the
+   country actually has on screen, with the colour tracking the size so the
+   hierarchy holds in weight as well as scale. One flat size for Russia and for
+   Yemen is most of what makes a label layer read as stamped on rather than
+   drawn. */
+.map-country-label.lbl-lg { font-size: 11.5px; letter-spacing: 0.13em; text-indent: 0.13em; color: #dfe3ea; }
+.map-country-label.lbl-sm { font-size: 8px;    letter-spacing: 0.09em; text-indent: 0.09em; color: #bfc4ce; }
 
 .leaflet-control-attribution, .leaflet-control { display: none !important; }
 .leaflet-interactive { outline: none !important; cursor: pointer; transition: opacity 0.15s; }
@@ -20840,6 +20878,47 @@ function _simulateScenario(c, selected, severityById, paramsById) {
   // only — which is what this map is about.
   const _countryLabels = [];
 
+  // The three tiers of .map-country-label, base size first. Widths are measured
+  // at the base size and scaled by `scale` for the other two, so one measuring
+  // pass covers all three.
+  const LABEL_TIERS = [
+    { cls: 'lbl-lg', scale: 11.5 / 9.5, halfH: 8 },
+    { cls: '',       scale: 1,          halfH: 7 },
+    { cls: 'lbl-sm', scale: 8 / 9.5,    halfH: 6 },
+  ];
+
+  function escapeLabel(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // Measure a label's real rendered width instead of guessing it.
+  //
+  // The old estimate was `name.length * 6.2`, which is wrong twice over: it is
+  // blind to letter-spacing and to the fact that "ILL" and "WMM" are nothing
+  // like the same width. It ran short of the truth, so the fit test passed for
+  // names that did not actually fit and the map drew SAUDI ARABIA and ETHIOPIA
+  // hanging well outside their own borders. Measuring the same DOM the labels
+  // are drawn in gets the real number, letter-spacing and font metrics included.
+  let _measureEl = null;
+  function measureLabelPx(text) {
+    if (!G.map) return text.length * 6;
+    if (!_measureEl) {
+      // Carries .map-country-label so the metrics are the real ones, plus a
+      // marker class: without it every `.map-country-label` query also returns
+      // this ruler holding whatever text it measured last (LUXEMBOURG, as it
+      // happens), which reads as a phantom label that is on the map but never
+      // drawn.
+      _measureEl = document.createElement('div');
+      _measureEl.className = 'map-country-label map-label-ruler';
+      _measureEl.setAttribute('aria-hidden', 'true');
+      _measureEl.style.cssText =
+        'position:absolute;left:-9999px;top:0;visibility:hidden;transform:none;';
+      G.map.getContainer().appendChild(_measureEl);
+    }
+    _measureEl.textContent = text;
+    return _measureEl.offsetWidth;
+  }
+
   function buildCountryLabels() {
     if (!G.isoMap || !G.isoMap.size || !G.map) return;
     if (typeof COUNTRIES === 'undefined') return;
@@ -20848,21 +20927,45 @@ function _simulateScenario(c, selected, severityById, paramsById) {
       const f = G.isoMap.get(co.iso);
       const ll = G.centroids.get(co.iso);
       if (!f || !ll) continue;
+      const text = co.name.toUpperCase();
       const marker = L.marker(ll, {
         pane: 'labels',
         interactive: false,
         keyboard: false,
         icon: L.divIcon({
           className: 'map-country-label',
-          html: co.name.toUpperCase(),
-          // Sized at render time by CSS; a zero-size box keeps the anchor on the
-          // centroid so the CSS transform can centre the text on it.
+          // The inner span is what gets centred on the anchor — see the
+          // .map-country-label > span rule. Escaped because several names
+          // carry an ampersand (BOSNIA & HERZEGOVINA, TRINIDAD & TOBAGO).
+          html: '<span>' + escapeLabel(text) + '</span>',
+          // A zero-size box keeps Leaflet's anchor exactly on the centroid.
           iconSize: [0, 0],
         }),
       });
-      _countryLabels.push({ marker, name: co.name, spanDeg: widestRingDeg(f), shown: false });
+      _countryLabels.push({
+        marker, name: co.name, text,
+        // Ordering weight: biggest country wins a contested patch of screen.
+        spanDeg: widestRingDeg(f),
+        // Anchor budget: the room the label actually has where it sits.
+        fitDeg: widthAtLatDeg(f, ll[0], ll[1]) || widestRingDeg(f),
+        basePx: measureLabelPx(text),
+        shown: false, tier: null,
+      });
     }
     updateCountryLabels();
+
+    // Widths measured before the web font arrives are the fallback font's.
+    // Re-measure once Geist is in and re-run the pass, or every label keeps a
+    // fit decision made against the wrong metrics.
+    try {
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => {
+          _countryLabels.forEach(rec => { rec.basePx = measureLabelPx(rec.text); });
+          updateCountryLabels();
+        }).catch(() => {});
+      }
+    } catch (e) {}
+
     // NOTE: G.map, not `map`. These two functions live outside the closure that
     // holds the map init's local `map` const, and `map` at this scope resolves
     // to the <div id="map"> element via the implicit id-global — which silently
@@ -20945,6 +21048,58 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     return repaired;
   }
 
+  // How much horizontal room a label really has: the width of the country
+  // measured ON THE PARALLEL ITS LABEL SITS ON, in degrees of longitude.
+  //
+  // The fit test used to compare the text against widestRingDeg() — the
+  // country's widest point anywhere. For a compact country the two agree, but
+  // for anything long or bent they are not remotely the same number, and the
+  // difference is exactly the labels that looked wrong: Ethiopia is 14.8° at
+  // its widest and 9.5° across the parallel its name sits on, so ETHIOPIA was
+  // cleared to draw and spilled into Somalia. Chile is 8.7° at its widest and
+  // about 1.5° at its centroid, so CHILE was cleared to draw across Argentina
+  // and the Pacific. Norway's widest point is up in Finnmark, nowhere near the
+  // label. Scan-converting the polygon at the label's own latitude gives the
+  // span it can honestly fill.
+  //
+  // Standard even-odd scanline: collect every edge crossing of the parallel,
+  // sort them, and consecutive pairs bound the inside intervals. The interval
+  // containing the label's longitude is its budget. Holes fall out for free.
+  // If the label's longitude lands outside every interval — which happens for
+  // the hand-set CENTROID_OVERRIDES — take the widest interval on that
+  // parallel instead of failing the country outright.
+  function widthAtLatDeg(f, lat, lng) {
+    const g = f && f.geometry;
+    if (!g) return 0;
+    const polys = g.type === 'Polygon' ? [g.coordinates]
+                : g.type === 'MultiPolygon' ? g.coordinates
+                : [];
+    const xs = [];
+    for (const poly of polys) {
+      if (!Array.isArray(poly)) continue;
+      for (const ring of poly) {
+        if (!Array.isArray(ring) || ring.length < 2) continue;
+        for (let i = 0, n = ring.length; i < n; i++) {
+          const a = ring[i], b = ring[(i + 1) % n];
+          if (!a || !b || typeof a[1] !== 'number' || typeof b[1] !== 'number') continue;
+          // Half-open test, so a vertex exactly on the parallel counts once.
+          if ((a[1] > lat) === (b[1] > lat)) continue;
+          const t = (lat - a[1]) / (b[1] - a[1]);
+          xs.push(a[0] + t * (b[0] - a[0]));
+        }
+      }
+    }
+    if (xs.length < 2) return 0;
+    xs.sort((p, q) => p - q);
+    let widest = 0;
+    for (let i = 0; i + 1 < xs.length; i += 2) {
+      const w = xs[i + 1] - xs[i];
+      if (lng >= xs[i] && lng <= xs[i + 1]) return w;
+      if (w > widest) widest = w;
+    }
+    return widest;
+  }
+
   // Width of a country's WIDEST single ring, in degrees of longitude.
   //
   // The obvious version of this — L.geoJSON(f).getBounds() — is wrong for any
@@ -20990,6 +21145,13 @@ function _simulateScenario(c, selected, severityById, paramsById) {
 
     const ordered = _countryLabels.slice().sort((a, b) => b.spanDeg - a.spanDeg);
 
+    // Only consider what is on screen (plus a margin, so a label is already
+    // placed by the time a pan reveals it). Without this the pass keeps every
+    // qualifying label in the DOM at every zoom — 100+ markers at zoom 4, most
+    // of them off screen — and, worse, lets an off-screen name win a collision
+    // against a visible one.
+    const view = G.map.getBounds().pad(0.25);
+
     // Seed the collision set with the cards that float ON the map (the stats
     // strip, the layers panel, the risk legend). They are painted above the
     // label pane, so a label underneath one is not hidden — it is sliced in
@@ -21013,30 +21175,71 @@ function _simulateScenario(c, selected, severityById, paramsById) {
       }
     } catch (e) { /* obstacles are an enhancement; never block labelling on them */ }
     for (const rec of ordered) {
-      // ~6.2px per character at the label's font-size/letter-spacing, plus a
-      // margin so text never overhangs its own country.
-      const textPx = rec.name.length * 6.2;
-      let want = (rec.spanDeg / degPerPx) >= textPx + 10;
+      if (!view.contains(rec.marker.getLatLng())) {
+        if (rec.shown) { G.map.removeLayer(rec.marker); rec.shown = false; rec.tier = null; }
+        continue;
+      }
+
+      // How wide the country is on screen right now, across the parallel the
+      // label sits on.
+      const availPx = rec.fitDeg / degPerPx;
+
+      // Take the largest tier the country can carry. A country with room to
+      // spare gets the large tier; one that only just clears gets the small
+      // one. That size hierarchy is what makes the layer read as drawn rather
+      // than stamped: Russia and Yemen should not be labelled at one size.
+      //
+      // "Can carry" is coverage, not containment: how much of the name does
+      // the country sit under? Strict containment is the wrong bar — at world
+      // zoom MEXICO is simply wider than Mexico, and every real map either
+      // drops the name or lets it overhang a little. Asking the country to
+      // underlie three quarters of the word keeps the name anchored on its own
+      // landmass while tolerating the ends running into the sea; the small
+      // tier, which exists for exactly the tight cases, asks for half.
+      // Anything that cannot clear even that is genuinely unlabellable at this
+      // zoom and waits for the next one.
+      let tier = null, textPx = 0;
+      for (const t of LABEL_TIERS) {
+        const w = rec.basePx * t.scale;
+        // The large tier is reserved for countries that dwarf their own name,
+        // rather than handed to anything that merely fits.
+        const need = t.cls === 'lbl-lg' ? w * 1.5
+                   : t.cls === 'lbl-sm' ? w * 0.55
+                   : w * 0.75;
+        if (availPx >= need) { tier = t; textPx = w; break; }
+      }
+      let want = !!tier;
 
       if (want) {
         // Collision test in screen space against everything already placed.
         const pt = G.map.latLngToLayerPoint(rec.marker.getLatLng());
         const halfW = textPx / 2 + 4;
+        const halfH = tier.halfH;
         for (const p of placed) {
-          // p.halfH is set for the UI cards; label-vs-label uses a flat 11px.
-          const dy = (p.halfH || 0) + 6;
           if (Math.abs(pt.x - p.x) < (halfW + p.halfW)
-              && Math.abs(pt.y - p.y) < (p.halfH ? dy : 11)) {
+              && Math.abs(pt.y - p.y) < (halfH + p.halfH)) {
             want = false;
             break;
           }
         }
-        if (want) placed.push({ x: pt.x, y: pt.y, halfW });
+        if (want) placed.push({ x: pt.x, y: pt.y, halfW, halfH });
       }
 
-      if (want === rec.shown) continue;
-      if (want) rec.marker.addTo(G.map); else G.map.removeLayer(rec.marker);
-      rec.shown = want;
+      if (!want) {
+        if (rec.shown) { G.map.removeLayer(rec.marker); rec.shown = false; rec.tier = null; }
+        continue;
+      }
+      if (!rec.shown) { rec.marker.addTo(G.map); rec.shown = true; rec.tier = null; }
+      if (rec.tier !== tier.cls) {
+        // divIcon className is baked in at creation, so retier via the element,
+        // which only exists once the marker is on the map.
+        const el = rec.marker.getElement();
+        if (el) {
+          el.classList.remove('lbl-lg', 'lbl-sm');
+          if (tier.cls) el.classList.add(tier.cls);
+          rec.tier = tier.cls;
+        }
+      }
     }
   }
 
