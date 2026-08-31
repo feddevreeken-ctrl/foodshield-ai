@@ -478,6 +478,41 @@ def main():
         print("[WARN] imports_kt or exports_kt count is ZERO — frontend will fall back to "
               "heuristic dependency. Check ATTR_KEYS labels vs current PSD CSV header.")
 
+    # v84 — FLAG STALE MARKETING YEARS.
+    #
+    # 55 rows ship marketing years 1975-2022 while the file's own latest is
+    # MY2026, and every one of them carried quality_flag "sourced". The pattern
+    # is not random and it is not a parser bug: 11 rows at 1990 are the EU-15
+    # and 30 at 1998 are the 2004/2007 accession states. PSD folds EU member
+    # states into its `EU` aggregate and stops reporting them individually, so
+    # no refresh will ever bring them forward — Poland's wheat will sit at its
+    # 1998 balance (9,537 kt against ~12-13 Mt today) for as long as this runs.
+    #
+    # Presenting a 1998 balance with the same badge as a 2026 one is the
+    # dishonesty; the row itself is fine as history. Anything more than two
+    # marketing years behind the file's own latest is demoted to "stale" and
+    # given an explicit note, so consumers can gate on the flag instead of
+    # having to know the EU accession timeline.
+    _years = [v.get("year") for c in by_country.values() for v in c.values()
+              if isinstance(v, dict) and isinstance(v.get("year"), int)]
+    _latest_my = max(_years) if _years else None
+    _stale = 0
+    if _latest_my:
+        for iso, coms in by_country.items():
+            for com, rec in coms.items():
+                if not isinstance(rec, dict) or not isinstance(rec.get("year"), int):
+                    continue
+                if rec["year"] < _latest_my - 2:
+                    rec["quality_flag"] = "stale"
+                    rec["stale_reason"] = (
+                        f"USDA PSD last reported {iso} {com} for MY{rec['year']}; the current "
+                        f"file is MY{_latest_my}. EU member states are folded into the `EU` "
+                        "aggregate and are not reported individually, so this will not refresh."
+                    )
+                    _stale += 1
+    print(f"[INFO] PSD staleness gate: {_stale} rows older than MY{(_latest_my or 0) - 2} "
+          f"demoted from 'sourced' to 'stale'")
+
     write_json(
         "usda_psd.json",
         by_country,
@@ -489,7 +524,10 @@ def main():
             f"corn, soybeans. {len(by_country)} countries covered; "
             f"imports captured for {n_imp}, exports for {n_exp}. "
             f"Source refreshes monthly on WASDE release day; cron pulls every 6h but "
-            f"upstream data rarely changes between WASDE windows."
+            f"upstream data rarely changes between WASDE windows. "
+            f"Rows more than two marketing years behind the file's latest carry "
+            f"quality_flag 'stale' with a reason — mostly EU member states, which PSD "
+            f"folds into its EU aggregate and stops reporting individually."
         ),
     )
 

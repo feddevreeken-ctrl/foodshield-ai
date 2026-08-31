@@ -19392,6 +19392,15 @@ function _psdImportDependence(c, scalarField) {
   const iso = c && c.iso;
   const row = (com && iso && typeof LIVE !== 'undefined' && LIVE.psd)
     ? ((LIVE.psd[iso] || {})[com] || null) : null;
+  // v84 — a marketing year from 1998 is not a supply balance for today. The
+  // refresher now stamps quality_flag "stale" on rows more than two marketing
+  // years behind its own latest (mostly EU member states, which PSD folds into
+  // its EU aggregate and stops reporting individually). Skip them rather than
+  // scoring Poland's wheat off a 27-year-old balance.
+  if (row && row.quality_flag === 'stale') {
+    return { dep: null, basis: 'stale',
+             detail: row.stale_reason || `USDA PSD row is MY${row.year}, too old to use` };
+  }
   const imp = row && row.imports_kt, con = row && row.consumption_kt;
   if (imp != null && con > 0) {
     return {

@@ -202,7 +202,21 @@ def _fetch_ipcphase(token=None):
     sample_iso = None
     for iso3, (iso2, slug) in FEWS_COUNTRIES.items():
         for scen in SCENARIOS:
-            params = {"country_code": iso2, "scenario": scen, "page_size": 500}
+            # v84 — `fnid` instead of `country_code`.
+            #
+            # country_code returns a country's ENTIRE subnational history:
+            # Burkina Faso alone is 13,390 rows / 13 MB, and that was being
+            # fetched for 35 countries x 3 scenarios every cycle. fnid=<ISO2>
+            # returns the 44 NATIONAL rows in 36 KB — about 300x less traffic,
+            # measured at 2.0s against a request that had been timing out.
+            #
+            # It also exposes `reporting_date`, which the country_code response
+            # buries and this parser never captured — the reason fews.json is
+            # full of null periods. And it reaches countries the previous query
+            # missed: Burkina Faso and Ethiopia, both FEWS Phase 4 and both
+            # absent from IPC's own feed, now resolve.
+            params = {"fnid": iso2, "scenario": scen, "fields": "simple",
+                      "format": "json", "page_size": 500}
             if token:
                 params["jwt"] = token  # belt + braces
             try:
@@ -246,6 +260,27 @@ def _fetch_ipcphase(token=None):
         c = Counter(status_codes)
         print(f"[FEWS] HTTP status distribution: {dict(c)}")
     print(f"[FEWS] total rows fetched: {total_results} across {len(FEWS_COUNTRIES)} countries × {len(SCENARIOS)} scenarios")
+
+    # v84 — PARTIAL-RUN GUARD.
+    #
+    # A run that loses DNS or gets throttled halfway through still "succeeds":
+    # every failed request is caught and logged, and the function returns
+    # whatever it managed to collect. That partial result then overwrites a
+    # complete file. It happened while developing this change — 15 of 105
+    # requests landed, and the payload went from 30 countries to a handful
+    # without anything failing.
+    #
+    # safe_run() preserves last-good data only when a step RAISES, so a partial
+    # run has to raise to be caught. Two-thirds of the expected requests is the
+    # line: below that the result is not a refresh, it is a truncation.
+    expected = len(FEWS_COUNTRIES) * len(SCENARIOS)
+    ok_calls = sum(1 for c in status_codes if c == 200)
+    if expected and ok_calls < expected * 0.66:
+        raise RuntimeError(
+            f"FEWS refresh incomplete: only {ok_calls}/{expected} requests returned 200 "
+            f"({total_results} rows). Refusing to overwrite the existing file with a "
+            f"partial pull — safe_run() will preserve the last good payload."
+        )
     return out
 
 
@@ -279,9 +314,16 @@ def _summarize_country(rows):
             continue
         if phase < 1 or phase > 5:
             continue
-        start = r.get("start_date") or r.get("period_date_start") or r.get("period_date")
-        end = r.get("end_date") or r.get("period_date_end") or r.get("period_date")
-        by_type[ptype].append({"phase": phase, "start": start, "end": end})
+        # v84 — `reporting_date` is the field the fnid response actually carries,
+        # and it was in none of the fallbacks below, which is why every
+        # current_period in fews.json has been null. It is the analysis month, so
+        # it stands in for both ends when no explicit range is published.
+        start = (r.get("start_date") or r.get("period_date_start")
+                 or r.get("period_date") or r.get("reporting_date"))
+        end = (r.get("end_date") or r.get("period_date_end")
+               or r.get("period_date") or r.get("reporting_date"))
+        by_type[ptype].append({"phase": phase, "start": start, "end": end,
+                               "reporting_date": r.get("reporting_date")})
     out = {}
     for ptype, lst in by_type.items():
         if not lst:
@@ -291,6 +333,7 @@ def _summarize_country(rows):
             "phase": worst["phase"],
             "period_label": _period_label(worst["start"], worst["end"]),
             "end": worst["end"],
+            "reporting_date": worst.get("reporting_date"),
         }
     return out
 
