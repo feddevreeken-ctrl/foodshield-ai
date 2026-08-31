@@ -24,10 +24,23 @@ WHY THIS SOURCE
 METHOD
   Ordinary least-squares slope of the index over the most recent 10 years,
   expressed as average annual % change against the window's mean level, then
-  mapped to a 0-100 fragility score where FALLING production is worse:
-      -3%/yr or worse -> 100      (production collapsing)
-       0%/yr          -> 50       (flat)
-      +3%/yr or better -> 0       (production growing strongly)
+  mapped to a 0-100 fragility score.
+
+  The mapping is ASYMMETRIC and saturates at -5%/yr:
+      -5%/yr or worse -> 100      (production genuinely collapsing)
+      -1%/yr          ->  20
+       0%/yr or better ->   0     (flat or growing is not a production problem)
+
+  The first cut of this was symmetric and saturated at +/-3%/yr, which anchored
+  FLAT production at 50 — mid-fragility — and blew up ordinary drift into large
+  scores. Most countries sit inside +/-1%/yr, so it was amplifying noise: Germany
+  at -0.75%/yr scored 63 while Sudan at +0.45%/yr scored 43, i.e. Germany read as
+  the more fragile food producer. Wrong on its face.
+
+  Flat output in a mature, diversified agricultural economy is not fragility;
+  only sustained DECLINE is. Hence one-sided, and a wider band so that a real
+  collapse still has room to separate from a wobble.
+
   A slope is used rather than first-vs-last because a single bad harvest year
   at either end would otherwise set the trend for a decade.
 
@@ -72,12 +85,17 @@ def _slope_pct_per_year(points):
     return (num / den) / my * 100.0
 
 
+DECLINE_SATURATION = 5.0   # %/yr fall that reads as total production collapse
+
+
 def _to_score(pct_per_year):
-    """Falling production -> high fragility. +/-3%/yr saturates."""
+    """Falling production -> high fragility. Flat or growing -> 0. See module docstring."""
     if pct_per_year is None:
         return None
-    clamped = max(-3.0, min(3.0, pct_per_year))
-    return int(round(50.0 - (clamped / 3.0) * 50.0))
+    if pct_per_year >= 0:
+        return 0
+    decline = min(DECLINE_SATURATION, -pct_per_year)
+    return int(round(decline / DECLINE_SATURATION * 100.0))
 
 
 def main():
@@ -148,8 +166,8 @@ def main():
             "source_url": "https://www.fao.org/faostat/en/#data/QI",
             "method": (f"OLS slope of the gross food production index over {window[0][0]}-{latest}, "
                        "expressed as average annual % change against the window mean, then mapped "
-                       "to 0-100 fragility where falling production scores high (-3%/yr -> 100, "
-                       "flat -> 50, +3%/yr -> 0)."),
+                       "to 0-100 fragility where only sustained DECLINE scores high "
+                       "(-5%/yr -> 100, -1%/yr -> 20, flat or growing -> 0)."),
             "quality_flag": "sourced" if pct is not None else "partial",
         }
 

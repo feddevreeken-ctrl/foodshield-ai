@@ -512,13 +512,35 @@ def main():
                 _frac = [x / _tot for x in _sh]          # renormalise over observed
                 _hhi = sum(f * f for f in _frac)          # 1/n .. 1.0
                 _n = len(_frac)
-                # Plain HHI on a 0-100 scale. An earlier cut of this multiplied
-                # by import dependency, which is wrong twice over: it double
-                # counts c[0] (weight 0.23, already dependency) and it collapses
-                # a diversified importer and a concentrated self-sufficient
-                # producer onto the same number. The nine components are meant
-                # to be separable; concentration is concentration.
-                cv[1] = _blend_sourced(heritage_cv[1], _hhi * 100.0)
+                # HHI, DAMPED by how much the country actually imports.
+                #
+                # I got this wrong twice and the second way was worse. First cut
+                # multiplied HHI by import dependency outright, which zeroes the
+                # component for a self-sufficient country and does double-count
+                # c[0]. So I removed the weighting entirely — and that put France
+                # at 43 and the UK at 50 on "supplier concentration" purely
+                # because they buy their small cereal imports from a handful of
+                # EU neighbours. Concentrated INTRA-EU single-market trade is not
+                # exposure to a global supply shock, and the repo already knew:
+                # audit_provenance.py::_semantic_caveats flags exactly this false
+                # positive, exporters scoring high on raw concentration.
+                #
+                # The honest reading is that concentration is a risk CHANNEL
+                # whose magnitude scales with the volume actually at risk. So it
+                # is damped rather than multiplied: the 0.4 floor keeps real
+                # signal for a low-dependency country whose few suppliers still
+                # matter, while a country importing most of what it eats from one
+                # partner carries the full weight. Not the same as double
+                # counting c[0], which measures the volume itself.
+                _dep_for_conc = None
+                _dep_pre = import_dep.get(iso)
+                if _dep_pre and _dep_pre.get("import_dependency_pct") is not None:
+                    try:
+                        _dep_for_conc = max(0.0, min(100.0, float(_dep_pre["import_dependency_pct"]))) / 100.0
+                    except (TypeError, ValueError):
+                        _dep_for_conc = None
+                _damp = 1.0 if _dep_for_conc is None else (0.4 + 0.6 * _dep_for_conc)
+                cv[1] = _blend_sourced(heritage_cv[1], _hhi * 100.0 * _damp)
                 row["supplier_conc"] = {
                     "value": cv[1],
                     "source": _sup_meta.get("source"),
@@ -528,13 +550,16 @@ def main():
                                "shares), renormalised over the observed top-5 partners and "
                                "expressed 0-100. Chosen over top-3 share because top-3 cannot "
                                "separate 60/20/10 from 34/33/33 — both read 90, and they are "
-                               "very different exposures."),
+                               "very different exposures. Damped by cereal import dependency "
+                               "(factor 0.4-1.0) so that concentrated intra-EU trade in a country "
+                               "that imports little does not read as global supply exposure."),
                     "quality_flag": "sourced",
                     "sub_provenance": {
                         "status": "sourced",
                         "hhi": round(_hhi, 4),
                         "partners_observed": _n,
                         "basis": "top5_renormalised",
+                        "dependency_damping": round(_damp, 3),
                         "supplier_basis": _sup_meta.get("_supplier_basis"),
                     },
                 }
