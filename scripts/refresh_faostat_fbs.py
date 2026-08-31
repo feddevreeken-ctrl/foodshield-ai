@@ -349,6 +349,10 @@ def _write_import_dependency(dep_raw):
         dep = max(0.0, min(100.0, imports / supply * 100.0))
         out[iso3] = {
             "import_dependency_pct": round(dep, 1),
+            # The unclamped ratio, so a re-exporting entrepot is visible as one
+            # rather than silently pinned at the 100% ceiling. Rotterdam and
+            # Antwerp move far more grain than their countries eat.
+            "import_dependency_raw_pct": round(imports / supply * 100.0, 1),
             "imports_kt": round(imports, 1),
             "domestic_supply_kt": round(supply, 1),
             "cereals": sorted(slot.get("_items") or []),

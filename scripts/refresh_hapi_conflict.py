@@ -73,10 +73,11 @@ OUTPUT: data/hapi_conflict.json
               "quality_flag": "sourced"} } }
 """
 import base64
+import json
 import math
 from datetime import date, timedelta
 
-from _common import http_get, write_json
+from _common import DATA_DIR, http_get, write_json
 
 ENDPOINT = "https://hapi.humdata.org/api/v2/coordination-context/conflict-events"
 SOURCE_URL = "https://hapi.humdata.org/api/v2/coordination-context/conflict-events"
@@ -146,6 +147,83 @@ def _fetch_level(admin_level, start_date):
     )
 
 
+# v86 — WHICH EVENT TYPES COUNT AS CONFLICT.
+#
+# HAPI splits rows three ways: political_violence, civilian_targeting and
+# demonstration. Summing all three inflated exactly the countries where the
+# violence is not a food-supply problem: Brazil came out at intensity 87.8 on
+# 3,246 fatalities and Ecuador at 81.2, both driven by criminal-group and
+# protest activity, which put them near Sudan on a food-security conflict
+# component. That is not what this component is for.
+#
+# political_violence and civilian_targeting BOTH stay: civilian targeting is
+# precisely the mechanism that empties farmland in Nigeria, Sudan and the Sahel,
+# and excluding it would blind the component to the thing it most needs to see.
+# demonstration is excluded — protests and riots are political signal, not armed
+# disruption of food production or movement. The count is still reported
+# separately so nothing is hidden.
+CONFLICT_EVENT_TYPES = ("political_violence", "civilian_targeting")
+
+# v86 — POPULATION-NORMALISED INTENSITY.
+#
+# A raw fatality count is not comparable across countries. Over the same 90 days
+# Brazil recorded 3,246 conflict fatalities and Sudan 2,261 — so on absolute
+# counts Brazil scored 87.8 against Sudan's 83.9, i.e. Brazil read as the more
+# conflict-disrupted food system. Per head of population the picture inverts:
+# Sudan ~45 per million against Brazil ~15, and Ukraine ~322.
+#
+# The absolute score is kept and published; the per-capita score is the one the
+# risk component should use, and the app prefers it.
+POP_INDICATOR = "SP.POP.TOTL"
+
+
+POP_API = ("https://api.worldbank.org/v2/country/all/indicator/SP.POP.TOTL"
+           "?format=json&mrnev=1&per_page=400")
+
+
+def _load_population():
+    """{iso3: population}, from the on-disk bulk file plus a live top-up.
+
+    The bulk file covers 203 of the 242 countries HAPI returns, and the 39 it
+    misses are exactly the wrong ones: Sudan, Mali, CAR, Burundi, Benin and
+    Eritrea among them. Falling back to the absolute fatality count for those
+    would put them on a different scale from every other country — a hybrid
+    ranking that is not comparable anywhere. One keyless World Bank call closes
+    the gap, and if it fails the per-capita field is simply null rather than
+    silently mixed.
+    """
+    out = {}
+    p = DATA_DIR / "worldbank_bulk.json"
+    if p.exists():
+        try:
+            obj = json.loads(p.read_text())
+            data = obj.get("data", obj) if isinstance(obj, dict) else {}
+            for iso, row in data.items():
+                if not isinstance(row, dict):
+                    continue
+                rec = row.get(POP_INDICATOR)
+                val = rec.get("value") if isinstance(rec, dict) else None
+                if isinstance(val, (int, float)) and val > 0:
+                    out[iso.upper()] = float(val)
+        except Exception as e:
+            print(f"  [warn] population from bulk file failed: {e}")
+    before = len(out)
+    try:
+        r = http_get(POP_API, timeout=90, retries=2, patient=True)
+        payload = r.json()
+        rows = payload[1] if isinstance(payload, list) and len(payload) > 1 else []
+        for row in rows or []:
+            iso = ((row.get("countryiso3code") or "") or "").strip().upper()
+            val = row.get("value")
+            if len(iso) == 3 and isinstance(val, (int, float)) and val > 0:
+                out.setdefault(iso, float(val))
+        print(f"  [pop] bulk file {before} + World Bank API top-up -> {len(out)}")
+    except Exception as e:
+        print(f"  [warn] population API top-up failed ({e}); "
+              f"per-capita intensity will be null for the {before}-country gap")
+    return out
+
+
 def _aggregate(rows):
     """Sum rows to {iso3: {...}}. Rows are (area, event_type, month) tuples."""
     out = {}
@@ -153,8 +231,14 @@ def _aggregate(rows):
         iso3 = (row.get("location_code") or "").strip().upper()
         if len(iso3) != 3 or not iso3.isalpha():
             continue
-        c = out.setdefault(iso3, {"events": 0, "fatalities": 0, "months": set()})
+        c = out.setdefault(iso3, {"events": 0, "fatalities": 0, "months": set(),
+                                  "demo_events": 0, "demo_fatalities": 0})
+        etype = (row.get("event_type") or "").strip().lower()
         # Trap 3: demonstration rows carry fatalities=None, not 0.
+        if etype not in CONFLICT_EVENT_TYPES:
+            c["demo_events"] += row.get("events") or 0
+            c["demo_fatalities"] += row.get("fatalities") or 0
+            continue
         c["events"] += row.get("events") or 0
         c["fatalities"] += row.get("fatalities") or 0
         start = (row.get("reference_period_start") or "")[:10]
@@ -168,6 +252,8 @@ def main():
     today = date.today()
     start_date = (today - timedelta(days=WINDOW_DAYS)).isoformat()
 
+    population = _load_population()
+    print(f"  [pop] population for {len(population)} countries")
     by_level = {}
     try:
         for level in ADMIN_LEVELS:
@@ -210,13 +296,26 @@ def main():
             if not months:
                 continue
             fatalities = int(c["fatalities"])
+            pop = population.get(iso3)
+            per_m = (fatalities / (pop / 1_000_000.0)) if pop else None
+            # 33 * log10(1 + per-million) — Ukraine ~322/M saturates near 100,
+            # Sudan ~45/M lands mid-50s, Brazil ~15/M around 40.
+            intensity_pc = (round(min(100.0, 33.0 * math.log10(1 + per_m)), 2)
+                            if per_m is not None else None)
             out[iso3] = {
                 "events_90d": int(c["events"]),
                 "fatalities_90d": fatalities,
                 "intensity_score": round(min(100.0, 25.0 * math.log10(1 + fatalities)), 2),
+                "fatalities_per_million_90d": round(per_m, 2) if per_m is not None else None,
+                "intensity_score_pc": intensity_pc,
+                "population": int(pop) if pop else None,
                 "window_start": months[0][0],
                 "window_end": months[-1][1],
                 "months_covered": len(months),
+                # Reported, never scored — see CONFLICT_EVENT_TYPES.
+                "demonstration_events_90d": int(c.get("demo_events") or 0),
+                "demonstration_fatalities_90d": int(c.get("demo_fatalities") or 0),
+                "counted_event_types": list(CONFLICT_EVENT_TYPES),
                 "is_live": True,
                 "source": "ACLED via HDX HAPI",
                 "source_url": SOURCE_URL,

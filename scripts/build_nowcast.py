@@ -156,7 +156,31 @@ def main():
         all_iso = {iso for iso in all_iso if iso in canonical_iso}
     out = {}
     for iso in all_iso:
-        ipc_p3   = (ipc.get(iso) or {}).get("phase3plus_pct") or 0
+        # v86 — use the percentage that is comparable ACROSS countries.
+        #
+        # The feed's phase3plus_pct is a share of the population the IPC analysis
+        # covered, which for ten countries is a fraction of the country: Uganda
+        # publishes 24% of an assessed 1.47M (0.7% of Uganda), Ukraine 32% of
+        # 6.26M (5.1%), Tanzania 5% of 10.1M (0.7%). Read as national prevalence
+        # those numbers put countries into crisis pressure they are not in, and
+        # they are not comparable with Somalia's 31%, which really is ~all of
+        # Somalia.
+        #
+        # Where the analysis covers most of the country the published figure is
+        # used unchanged. Where it plainly does not (<60% coverage), the counted
+        # caseload over national population is the honest comparable number.
+        # This UNDERSTATES a country whose crisis regions alone were analysed —
+        # Sudan drops from 67% to 10.8% — so the acute signal for those countries
+        # has to come from FEWS phase, conflict intensity and displacement, which
+        # it does. The alternative is worse: letting a narrow assessment outrank
+        # a national one purely because it was narrow.
+        _ipc_row = ipc.get(iso) or {}
+        _cov = _ipc_row.get("analysis_coverage_ratio")
+        if isinstance(_cov, (int, float)) and _cov < 0.6 and \
+                _ipc_row.get("national_phase3plus_pct") is not None:
+            ipc_p3 = _ipc_row.get("national_phase3plus_pct") or 0
+        else:
+            ipc_p3 = _ipc_row.get("phase3plus_pct") or 0
         wfp_fcs  = (wfp.get(iso) or {}).get("fcs_pct") or 0
         # v23 — ACLED only counts as a LIVE nowcast signal when the feed is actually
         # live (is_live=true). On a 12-month-lagged access tier it's a STRUCTURAL
@@ -166,8 +190,13 @@ def main():
         # if it ever reports itself live. Same is_live contract either way.
         _hapi_row = hapi_cf.get(iso) or {}
         _acled_row = acled.get(iso) or {}
-        if _hapi_row.get("is_live") and _hapi_row.get("intensity_score") is not None:
-            conflict = _hapi_row.get("intensity_score") or 0
+        if _hapi_row.get("is_live") and (
+                _hapi_row.get("intensity_score_pc") is not None
+                or _hapi_row.get("intensity_score") is not None):
+            # Per-capita where known — see the note in refresh_hapi_conflict.py.
+            conflict = (_hapi_row.get("intensity_score_pc")
+                        if _hapi_row.get("intensity_score_pc") is not None
+                        else _hapi_row.get("intensity_score")) or 0
         else:
             conflict = (_acled_row.get("intensity_score") or 0) if _acled_row.get("is_live") else 0
         relief_n = len(rw_by_iso.get(iso, []))

@@ -21,7 +21,9 @@ Output: data/ipc.json
     }
   }
 """
-from _common import http_get, write_json, env
+import json
+
+from _common import DATA_DIR, http_get, write_json, env
 
 # v35 (Jun 2026) — HungerMap migrated public IPC to the ew-tool API; the v2 path
 # still answers but with older analyses. Primary = ew-tool, fallbacks = v2 + official.
@@ -118,6 +120,85 @@ def _merge_palestine(out):
     return out
 
 
+def _annotate_coverage(out):
+    """Record what each IPC percentage is actually a percentage OF.
+
+    v86 — the feed publishes `phase3plus_pct` against the population the IPC
+    analysis COVERED, which is frequently a subset of the country. Nothing said
+    so, and the nowcast read it as national prevalence. The distortion is large
+    and it runs both ways:
+
+        Uganda   24% of an assessed 1.47M  ->  0.7% of the country
+        Ukraine  32% of an assessed 6.26M  ->  5.1%
+        Sudan    67% of an assessed 8.3M   -> 10.8%
+        Tanzania  5% of an assessed 10.1M  ->  0.7%
+
+    Ten countries are affected. This does not decide which number is right —
+    for a country with a partial analysis the national figure UNDERSTATES,
+    because the uncounted areas are not known to be fine. It records both, plus
+    the coverage ratio, so a consumer can choose knowingly instead of assuming.
+
+    Population comes from the World Bank bulk file already on disk.
+    """
+    pop = {}
+    p = DATA_DIR / "worldbank_bulk.json"
+    if p.exists():
+        try:
+            obj = json.loads(p.read_text())
+            data = obj.get("data", obj) if isinstance(obj, dict) else {}
+            for iso, row in data.items():
+                rec = (row or {}).get("SP.POP.TOTL") if isinstance(row, dict) else None
+                v = rec.get("value") if isinstance(rec, dict) else None
+                if isinstance(v, (int, float)) and v > 0:
+                    pop[iso.upper()] = float(v)
+        except Exception as e:
+            print(f"  [warn] IPC coverage annotation: population unreadable ({e})")
+    # Top up from the conflict feed, which already resolves population for 260
+    # countries via a World Bank API call. Sudan in particular is absent from the
+    # bulk file, and Sudan is the country this annotation matters most for.
+    hp = DATA_DIR / "hapi_conflict.json"
+    if hp.exists():
+        try:
+            obj = json.loads(hp.read_text())
+            data = obj.get("data", obj) if isinstance(obj, dict) else {}
+            for iso, row in data.items():
+                v = (row or {}).get("population") if isinstance(row, dict) else None
+                if isinstance(v, (int, float)) and v > 0:
+                    pop.setdefault(iso.upper(), float(v))
+        except Exception:
+            pass
+
+    flagged = 0
+    for iso, row in out.items():
+        if not isinstance(row, dict):
+            continue
+        pct = row.get("phase3plus_pct")
+        cnt = row.get("phase3plus_count")
+        if not isinstance(pct, (int, float)) or not isinstance(cnt, (int, float)) or pct <= 0:
+            continue
+        assessed = cnt / (pct / 100.0)
+        row["assessed_population"] = int(round(assessed))
+        national = pop.get(iso)
+        if not national:
+            continue
+        row["national_population"] = int(national)
+        row["analysis_coverage_ratio"] = round(min(1.0, assessed / national), 3)
+        row["national_phase3plus_pct"] = round(cnt / national * 100.0, 1)
+        if assessed / national < 0.6:
+            row["coverage_note"] = (
+                f"phase3plus_pct is {pct}% of the {int(round(assessed)):,} people the IPC "
+                f"analysis covered, not of {iso}'s {int(national):,} population. "
+                f"National prevalence of the counted caseload is "
+                f"{row['national_phase3plus_pct']}%. Areas outside the analysis are "
+                f"unassessed, NOT known to be food-secure."
+            )
+            flagged += 1
+    if flagged:
+        print(f"  [ipc] {flagged} countries carry a subnational analysis denominator "
+              f"— coverage annotated")
+    return out
+
+
 def main():
     out = {}
     try:
@@ -139,6 +220,7 @@ def main():
                 source_label = "IPC sources unavailable"
 
     out = _merge_palestine(out)
+    out = _annotate_coverage(out)
 
     write_json(
         "ipc.json",

@@ -18223,8 +18223,18 @@ async function loadLiveData() {
       const conflictParts = [];
       const _hcf = (typeof LIVE !== 'undefined' && LIVE.hapi_conflict)
         ? LIVE.hapi_conflict[c.iso] : null;
-      if (_hcf && _hcf.is_live && _hcf.intensity_score != null) {
-        conflictParts.push({ v: Math.max(0, Math.min(100, _hcf.intensity_score)), w: 0.35 });
+      // v86 — per-capita where available. A raw fatality count is not comparable
+      // across countries: over the same 90 days Brazil recorded 3,246 conflict
+      // deaths and Sudan 2,261, so on absolute counts Brazil outranked Sudan as
+      // a conflict-disrupted food system. Per million people Sudan is ~44 and
+      // Brazil ~15. The absolute score stays in the payload; the component uses
+      // the comparable one and falls back only where population is unknown
+      // (29 territories, none of them conflict-affected).
+      const _hcfScore = (_hcf && _hcf.intensity_score_pc != null)
+        ? _hcf.intensity_score_pc
+        : (_hcf ? _hcf.intensity_score : null);
+      if (_hcf && _hcf.is_live && _hcfScore != null) {
+        conflictParts.push({ v: Math.max(0, Math.min(100, _hcfScore)), w: 0.35 });
       }
       if (inf.inform_risk != null) {
         conflictParts.push({ v: inf.inform_risk * 10, w: 0.30 });  // 0-10 → 0-100

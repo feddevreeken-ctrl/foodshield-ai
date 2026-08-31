@@ -224,8 +224,24 @@ def main():
             fdrs[iso] = f
 
     # IPC phase3+ % per ISO
-    ipc_pct = {iso: d.get("phase3plus_pct") for iso, d in ipc.items()
-               if isinstance(d, dict) and isinstance(d.get("phase3plus_pct"), (int, float))}
+    # v86 — the ground truth must use the same denominator the score does.
+    #
+    # ipc.json's phase3plus_pct is a share of the population the IPC analysis
+    # COVERED, and for ten countries that is a fraction of the country (Uganda
+    # 24% of an assessed 1.47M = 0.7% of Uganda). build_nowcast.py now uses the
+    # national figure wherever coverage is under 60%. If this validator kept
+    # scoring against the uncorrected percentage it would be measuring the model
+    # against a target the model deliberately no longer tracks, and would report
+    # the correction as a regression.
+    def _truth_pct(d):
+        cov = d.get("analysis_coverage_ratio")
+        nat = d.get("national_phase3plus_pct")
+        if isinstance(cov, (int, float)) and cov < 0.6 and isinstance(nat, (int, float)):
+            return nat
+        return d.get("phase3plus_pct")
+
+    ipc_pct = {iso: _truth_pct(d) for iso, d in ipc.items()
+               if isinstance(d, dict) and isinstance(_truth_pct(d), (int, float))}
     fews_phase = {iso: d.get("current_phase") for iso, d in fews.items()
                   if isinstance(d, dict) and isinstance(d.get("current_phase"), (int, float))}
 
