@@ -220,6 +220,33 @@ def compute_economic_access(iso, fx, wdi, hdi):
     val = round(sum(v * w for _, v, w in present) / wsum, 1)
     prov = {k: ("sourced" if v is not None else "heritage") for k, v, _ in subs}
     prov["_n_sourced"] = len(present)
+
+    # v85 — CARRY THE REAL VINTAGE OF EACH INPUT.
+    #
+    # _component_meta() stamps as_of "2024" unconditionally, so this component
+    # published a 2024 badge on every country regardless of what it was actually
+    # computed from. Afghanistan's reserves reading is 2020 — pre-Taliban,
+    # pre-asset-freeze — and Iran's is 1982. Both rendered as 2024 data. The
+    # honest as_of for a blend is the OLDEST input it depends on, so record every
+    # contributing year and expose the minimum.
+    used = {k for k, v, _ in present}
+    years = {}
+    if "reserves" in used:
+        y = (wdi.get(iso, {}).get(WDI_RESERVES, {}) or {}).get("year")
+        if y: years["reserves"] = int(y)
+    if "debt" in used:
+        y = (wdi.get(iso, {}).get(WDI_DEBT_SVC, {}) or {}).get("year")
+        if y: years["debt"] = int(y)
+    if "income" in used:
+        y = (hdi.get(iso, {}).get("gnipc", {}) or {}).get("year")
+        if y: years["income"] = int(y)
+    if "fx" in used:
+        y = (fx_row.get("structural") or {}).get("year")
+        if y: years["fx"] = int(y)
+    if years:
+        prov["_input_years"] = years
+        prov["_as_of"] = str(min(years.values()))
+        prov["_as_of_newest"] = str(max(years.values()))
     return val, prov
 
 
@@ -236,9 +263,21 @@ EU27_MEMBERS = {
 PSD_MIN_YEAR = 2015   # v34 — records older than this are relics, not current stocks
 
 
+# v85 — GRAINS ONLY. Soybeans is an oilseed: PSD's "consumption" for it is
+# domestic CRUSH, not food use, and carryover behaves nothing like a food
+# reserve. Including it did not just add noise, it inverted two major producers:
+# Argentina came out at stocks-to-use 0.409 -> 0 fragility (reading as an AMPLE
+# grain reserve) purely on soybean carryover, against 0.256 -> 41 on grains
+# alone; Brazil went the other way, 0.263 -> 39 with soy masking a genuinely
+# thin 0.107 -> 84 cereal position. A component called Grain Reserve Buffer
+# should be grains.
+GRAIN_BUFFER_COMMODITIES = ("wheat", "rice", "corn")
+
+
 def compute_grain_buffer(iso, psd):
     """Grain Reserve Buffer fragility 0–100 from USDA PSD stocks-to-use. Spec §3.1.
-    stocks-to-use = ending stocks / consumption across tracked staples; LOW s/u = fragile.
+    stocks-to-use = ending stocks / consumption across wheat, rice and corn;
+    LOW s/u = fragile. Soybeans is deliberately excluded — see the note above.
     v34: ignores pre-2015 relic rows; EU members fall back to the EU-27 bloc aggregate
     (single market, shared CAP storage) and are flagged 'partial' (bloc-level value).
     """
@@ -246,6 +285,8 @@ def compute_grain_buffer(iso, psd):
         tot_stocks = tot_cons = 0.0
         for cmd, rec in (crow or {}).items():
             if not isinstance(rec, dict):
+                continue
+            if cmd not in GRAIN_BUFFER_COMMODITIES:
                 continue
             yr = rec.get("year")
             if yr is not None and yr < PSD_MIN_YEAR:
@@ -438,8 +479,14 @@ def main():
         # countries still on the embedded baseline keep their curated c[3]
         # (quality_flag "modeled") rather than having a legacy number laundered
         # through a live-looking transform.
+        # v85 — `partial` (a partial-year FAOSTAT comparison) still moves the
+        # component. It is a real measurement of the best available window; the
+        # field carries the partial badge so a reader can weigh it. Blocking it
+        # would be worse than using it: c[3] would silently freeze at whatever
+        # the last fully-sourced run wrote and never move again, which is stale
+        # data wearing no staleness marker at all.
         _fi_meta = row.get("fi") or {}
-        if _fi_meta.get("quality_flag") == "sourced":
+        if _fi_meta.get("quality_flag") in ("sourced", "partial"):
             _fi_score = _fi_to_component(_fi_meta.get("value"))
             if _fi_score is not None:
                 cv[3] = _fi_score
@@ -610,16 +657,36 @@ def main():
                 "econ_access", ea_val, ea_prov,
                 "Economic Access fragility: blend of FX 12m depreciation, reserves-in-months "
                 "(convex cliff), debt-service %% of exports, and GNI per capita (log). "
-                "No CPI (price stress stays in Food Inflation).",
+                "No CPI (price stress stays in Food Inflation). as_of is the OLDEST "
+                "contributing input, not the run date.",
                 "WDI (reserves, debt-service) + UNDP HDI (income) + FX pipeline")
+            # Override the hardcoded "2024" with the real oldest input year.
+            if isinstance(ea_prov, dict) and ea_prov.get("_as_of"):
+                row["econ_access"]["as_of"] = ea_prov["_as_of"]
             if isinstance(ea_prov, dict) and ea_prov.get("_n_sourced", 0) >= 3:
                 ea_sourced += 1
         if gb_val is not None:
             row["grain_buffer"] = _component_meta(
                 "grain_buffer", gb_val, gb_prov,
                 "Grain Reserve Buffer fragility: 100 = thin stocks-to-use (ending stocks / "
-                "consumption across staples), 0 = ample cushion. Source: USDA PSD.",
+                "consumption across WHEAT, RICE and CORN), 0 = ample cushion. Soybeans is "
+                "excluded — it is an oilseed whose PSD consumption is domestic crush, and "
+                "including it inverted Argentina (ample) and Brazil (thin). Source: USDA PSD.",
                 "USDA PSD ending stocks / consumption")
+            # Real marketing year rather than the hardcoded "2024".
+            # EU members carry no own PSD rows — they fall back to the EU27
+            # bloc aggregate, so read the vintage from whichever row set was
+            # actually used rather than leaving the hardcoded 2024 in place.
+            def _gb_vintages(src):
+                return [r.get("year") for r in (src or {}).values()
+                        if isinstance(r, dict) and r.get("year")
+                        and r.get("year") >= PSD_MIN_YEAR]
+            # An EU member's own rows are pre-accession relics with no year that
+            # clears PSD_MIN_YEAR, so an empty result — not an empty dict — is
+            # what signals the bloc fallback compute_grain_buffer() already took.
+            _gb_years = _gb_vintages(psd.get(iso)) or _gb_vintages(psd.get("EU27"))
+            if _gb_years:
+                row["grain_buffer"]["as_of"] = f"MY{min(_gb_years)}"
             gb_sourced += 1
 
         # Recompute the structural score under v2 from the length-9 vector.
@@ -1045,9 +1112,25 @@ def _load_food_inflation_overlay():
              or rec.get("food_inflation_yoy") or rec.get("yoy"))
         f = _plausible(v)
         if f is not None:
-            out[iso.upper()] = {"value": round(f, 1),
-                                "source": "FAOSTAT Consumer Price Indices (food CPI, yoy)",
-                                "as_of": rec.get("month") or rec.get("year")}
+            # v85 — carry a REAL as_of, and say when the comparison is partial.
+            #
+            # 158 of 162 FAOSTAT rows have year_latest 2026 with only 3 months in
+            # it, so "year-on-year" is a 3-month average against a full prior
+            # year — a seasonality artefact, not a price signal. Every one of
+            # those rows was published with as_of null and quality_flag
+            # "sourced". India is the clearest case: 2.33% here against ~5.5%
+            # reported by MOSPI for the same period.
+            _months = rec.get("months_in_latest_year")
+            _yr = rec.get("year_latest") or rec.get("year")
+            _partial = isinstance(_months, int) and 0 < _months < 12
+            out[iso.upper()] = {
+                "value": round(f, 1),
+                "source": "FAOSTAT Consumer Price Indices (food CPI, yoy)",
+                "as_of": (f"{_yr} ({_months}m)" if (_yr and _partial)
+                          else (rec.get("month") or _yr)),
+                "partial_year": _partial,
+                "months_in_year": _months,
+            }
     # 2. Eurostat (EU/EEA member states)
     for iso, rec in _read("eurostat_food.json").items():
         if not isinstance(rec, dict):
@@ -1159,18 +1242,34 @@ def _fbs_field_meta(field, payload):
 
 
 def _fi_field_meta(payload):
-    """Sourced food-inflation envelope for the `fi` field."""
+    """Sourced food-inflation envelope for the `fi` field.
+
+    v85 — a partial-year comparison is not a clean year-on-year reading and must
+    not wear the same badge as one. Where the underlying FAOSTAT row covers only
+    part of the latest year, the field is demoted to `partial` and says so, so a
+    reader can tell India's 3-month-average 2.3% from a real 12-month figure.
+    """
+    partial = bool(payload.get("partial_year"))
+    months = payload.get("months_in_year")
+    method = "Year-over-year food price inflation (%), latest available month."
+    note = ("Sourced from live World Bank RTFP / WFP / Eurostat / FAOSTAT food-price "
+            "feeds, replacing the legacy embedded baseline. Updated on each "
+            "data-refresh cycle.")
+    if partial:
+        method = (f"Year-over-year food price inflation (%), but the latest year carries only "
+                  f"{months} month(s) of data, so this compares a {months}-month average "
+                  f"against a full prior year — a partial-year comparison, not a clean YoY.")
+        note = ("PARTIAL YEAR. The upstream FAOSTAT series has not yet published a full year, "
+                "so this figure carries a seasonality artefact and will move as months land. "
+                "Treat the direction, not the level, as the signal.")
     return {
         "value": payload["value"],
         "source": payload.get("source") or "Live food-inflation feed",
         "source_url": None,
         "as_of": payload.get("as_of"),
-        "method": "Year-over-year food price inflation (%), latest available month.",
-        "quality_flag": "sourced",
-        "note": (
-            "Sourced from live WFP / Eurostat / FAOSTAT food-price feeds, replacing "
-            "the legacy embedded baseline. Updated on each data-refresh cycle."
-        ),
+        "method": method,
+        "quality_flag": "partial" if partial else "sourced",
+        "note": note,
     }
 
 
