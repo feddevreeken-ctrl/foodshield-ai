@@ -82,6 +82,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from refresh_usda_psd import FAS_TO_ISO3, NAME_TO_ISO3  # noqa: E402
 
 ONI_URL = "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
+# Indian Ocean Dipole (HadISST1.1 DMI). ENSO and the IOD covary, and for several
+# of the countries this dashboard most wants to score the IOD does the work that
+# gets credited to ENSO -- partialling it out collapses Australia's apparent
+# ENSO-wheat correlation from about -0.49 to -0.08 (Yuan & Yamagata 2015).
+# So every ENSO coefficient is refit with SON DMI alongside it and flagged for
+# whether it survives. A coefficient that does not survive is not reported.
+DMI_URL = "https://psl.noaa.gov/gcos_wgsp/Timeseries/Data/dmi.had.long.data"
 PSD_URLS = [
     ("grains_pulses", "https://apps.fas.usda.gov/psdonline/downloads/psd_grains_pulses_csv.zip"),
     ("oilseeds", "https://apps.fas.usda.gov/psdonline/downloads/psd_oilseeds_csv.zip"),
@@ -157,6 +164,33 @@ def load_oni() -> dict[int, float]:
     return djf
 
 
+def load_dmi() -> dict[int, float]:
+    """SON-mean Dipole Mode Index by year -- the IOD's peak season.
+
+    Keyed by the SON year itself. Callers must align it to the ENSO event: the
+    dipole co-occurring with a DJF-Y event is SON of Y-1.
+    """
+    raw = _cached("dmi.had.long.data", DMI_URL).decode("utf-8", "replace")
+    out: dict[int, float] = {}
+    for line in raw.splitlines():
+        parts = line.split()
+        if len(parts) != 13:
+            continue  # header (2 fields) and the trailing metadata block
+        try:
+            year = int(parts[0])
+            months = [float(v) for v in parts[1:]]
+        except ValueError:
+            continue
+        if not (1800 < year < 2100):
+            continue
+        son = [m for m in months[8:11] if m > -900]  # Sep, Oct, Nov; -9999 = missing
+        if len(son) == 3:
+            out[year] = sum(son) / 3.0
+    if len(out) < 100:
+        raise RuntimeError(f"DMI parse yielded only {len(out)} years -- feed shape changed")
+    return out
+
+
 def load_psd_panel() -> dict:
     """iso3 -> commodity -> year -> {yield, production, area}."""
     panel: dict = {}
@@ -222,13 +256,30 @@ def detrend(years: list[int], vals: list[float]) -> tuple[list[int], list[float]
     return out_y, out_a
 
 
-def fit(anom_years: list[int], anom: list[float], djf: dict[int, float], shift: int):
-    """OLS: anomaly ~ b0 + b_nino*max(ONI,0) + b_nina*min(ONI,0), ONI at DJF(t+shift)."""
-    x, y = [], []
+def fit(anom_years: list[int], anom: list[float], djf: dict[int, float], shift: int,
+        dmi: dict[int, float] | None = None):
+    """OLS: anomaly ~ b0 + b_nino*max(ONI,0) + b_nina*min(ONI,0) [+ b_iod*DMI].
+
+    When `dmi` is supplied the two ENSO slopes are estimated CONDITIONAL on the
+    Indian Ocean Dipole, and p_joint becomes the test of whether ENSO explains
+    anything the IOD does not already explain.
+    """
+    x, y, d = [], [], []
     for yr, a in zip(anom_years, anom):
         o = djf.get(yr + shift)
         if o is None:
             continue
+        if dmi is not None:
+            # The IOD contemporaneous with an ENSO event peaking in DJF of year
+            # Y peaked in SON of Y-1: the 2015-16 El Nino pairs with the strong
+            # positive IOD of SON 2015, not SON 2016. Indexing DMI on the DJF
+            # year instead grabs the following spring's dipole -- the decaying
+            # phase, ~9 months late -- which reads as noise and lets a
+            # confounded ENSO coefficient through the control unchallenged.
+            dv = dmi.get(yr + shift - 1)
+            if dv is None:
+                continue
+            d.append(dv)
         x.append(o)
         y.append(a)
     n = len(x)
@@ -236,12 +287,16 @@ def fit(anom_years: list[int], anom: list[float], djf: dict[int, float], shift: 
         return None
     o = np.array(x)
     Y = np.array(y)
-    X = np.column_stack([np.ones(n), np.maximum(o, 0.0), np.minimum(o, 0.0)])
-    if np.linalg.matrix_rank(X) < 3:
+    cols = [np.ones(n), np.maximum(o, 0.0), np.minimum(o, 0.0)]
+    if dmi is not None:
+        cols.append(np.array(d))
+    X = np.column_stack(cols)
+    k = X.shape[1]
+    if np.linalg.matrix_rank(X) < k:
         return None
     beta, *_ = np.linalg.lstsq(X, Y, rcond=None)
     resid = Y - X @ beta
-    dof = n - 3
+    dof = n - k
     if dof <= 0:
         return None
     sigma2 = float(resid @ resid) / dof
@@ -250,11 +305,21 @@ def fit(anom_years: list[int], anom: list[float], djf: dict[int, float], shift: 
     except np.linalg.LinAlgError:
         return None
     se = np.sqrt(np.diag(cov))
+    rss = float(resid @ resid)
     tot = float(((Y - Y.mean()) ** 2).sum())
-    r2 = 1.0 - float(resid @ resid) / tot if tot > 0 else 0.0
-    # joint F-test on the two ENSO slopes -- the honest overall test, since
+    r2 = 1.0 - rss / tot if tot > 0 else 0.0
+    # Joint F-test on the two ENSO slopes -- the honest overall test, since
     # reporting only the better of two t-stats would understate the p-value.
-    f_stat = ((tot - float(resid @ resid)) / 2.0) / sigma2 if sigma2 > 0 else 0.0
+    # With a DMI column present the restricted model keeps the DMI, so this
+    # tests ENSO's INCREMENTAL contribution rather than ENSO plus whatever the
+    # Indian Ocean was doing at the same time.
+    if dmi is not None:
+        Xr = np.column_stack([np.ones(n), np.array(d)])
+        br, *_ = np.linalg.lstsq(Xr, Y, rcond=None)
+        rss_r = float(((Y - Xr @ br) ** 2).sum())
+    else:
+        rss_r = tot
+    f_stat = ((rss_r - rss) / 2.0) / sigma2 if sigma2 > 0 else 0.0
     p_joint = float(stats.f.sf(f_stat, 2, dof)) if f_stat > 0 else 1.0
     return {
         "n": n,
@@ -263,17 +328,22 @@ def fit(anom_years: list[int], anom: list[float], djf: dict[int, float], shift: 
         "b_nina": float(beta[2]), "se_nina": float(se[2]),
         "p_nina": float(2 * stats.t.sf(abs(beta[2] / se[2]), dof)) if se[2] > 0 else 1.0,
         "r2": r2, "p_joint": p_joint,
+        "b_iod": float(beta[3]) if dmi is not None else None,
+        "p_iod": (float(2 * stats.t.sf(abs(beta[3] / se[3]), dof))
+                  if dmi is not None and se[3] > 0 else None),
     }
 
 
 def main() -> int:
     djf = load_oni()
+    dmi = load_dmi()
     panel = load_psd_panel()
     print(f"[INFO] ONI DJF seasons: {len(djf)} ({min(djf)}-{max(djf)})")
+    print(f"[INFO] DMI SON years:   {len(dmi)} ({min(dmi)}-{max(dmi)})")
     print(f"[INFO] PSD countries: {len(panel)}")
 
     results: dict = {}
-    n_fit = n_sig = n_thin = n_flat = 0
+    n_fit = n_sig = n_thin = n_flat = n_naive_sig = n_lost_to_iod = 0
 
     for iso3 in sorted(panel):
         for commodity in sorted(panel[iso3]):
@@ -306,32 +376,61 @@ def main() -> int:
             best = min(cands, key=lambda r: r["p_joint"])
             # Bonferroni over the two alignments actually tested.
             p_adj = min(1.0, best["p_joint"] * len(cands))
+            naive_sig = p_adj < P_GATE
+            if naive_sig:
+                n_naive_sig += 1
+
+            # Refit at the SAME alignment with the IOD alongside. This is the
+            # estimate we actually publish: ENSO's contribution net of the
+            # Indian Ocean, which for several countries is most of the apparent
+            # effect. Alignment is not re-selected here, so the Bonferroni
+            # factor stays at 2.
+            adj = fit(ay, anom, djf, best["djf_shift"], dmi=dmi)
+            p_adj_iod = min(1.0, adj["p_joint"] * len(cands)) if adj else 1.0
 
             recent = [series[y] for y in sorted(series)[-10:] if series[y].get("prod")]
             mean_prod = float(np.mean([r["prod"] for r in recent])) if recent else 0.0
 
+            signal = bool(p_adj_iod < P_GATE)
             entry = {
                 "n_years": best["n"],
                 "year_from": min(ay), "year_to": max(ay),
                 "alignment": best["alignment"],
-                "r2": round(best["r2"], 4),
-                "p_joint": round(best["p_joint"], 5),
-                "p_adj": round(p_adj, 5),
                 "mean_production_kt": round(mean_prod, 1),
-                "signal": bool(p_adj < P_GATE),
+                "signal": signal,
+                # Naive = ENSO alone. Published = ENSO net of the IOD. Both are
+                # carried so the shrinkage is visible rather than silent.
+                "naive": {
+                    "yield_pct_per_oni_nino": round(best["b_nino"] * 100, 3),
+                    "yield_pct_per_oni_nina": round(best["b_nina"] * 100, 3),
+                    "r2": round(best["r2"], 4),
+                    "p_adj": round(p_adj, 5),
+                    "signal": bool(naive_sig),
+                },
             }
-            if entry["signal"]:
+            if signal and adj:
                 n_sig += 1
                 entry.update({
-                    "yield_pct_per_oni_nino": round(best["b_nino"] * 100, 3),
-                    "se_nino_pct": round(best["se_nino"] * 100, 3),
-                    "p_nino": round(best["p_nino"], 5),
-                    "yield_pct_per_oni_nina": round(best["b_nina"] * 100, 3),
-                    "se_nina_pct": round(best["se_nina"] * 100, 3),
-                    "p_nina": round(best["p_nina"], 5),
+                    "yield_pct_per_oni_nino": round(adj["b_nino"] * 100, 3),
+                    "se_nino_pct": round(adj["se_nino"] * 100, 3),
+                    "p_nino": round(adj["p_nino"], 5),
+                    "yield_pct_per_oni_nina": round(adj["b_nina"] * 100, 3),
+                    "se_nina_pct": round(adj["se_nina"] * 100, 3),
+                    "p_nina": round(adj["p_nina"], 5),
+                    "iod_pct_per_dmi": round(adj["b_iod"] * 100, 3),
+                    "p_iod": round(adj["p_iod"], 5),
+                    "r2": round(adj["r2"], 4),
+                    "p_adj": round(p_adj_iod, 5),
                 })
             else:
-                entry["note"] = "no detectable ENSO signal at p_adj<0.10 -- not modelled"
+                entry["p_adj"] = round(p_adj_iod, 5)
+                if naive_sig:
+                    n_lost_to_iod += 1
+                    entry["note"] = (
+                        "ENSO alone looked significant, but the effect does not survive "
+                        "controlling for the Indian Ocean Dipole -- not modelled")
+                else:
+                    entry["note"] = "no detectable ENSO signal at p_adj<0.10 -- not modelled"
             results.setdefault(iso3, {})[commodity] = entry
 
     payload = {
@@ -365,7 +464,10 @@ def main() -> int:
                 "outcome; it does not determine any single country-season."
             ),
             "counts": {
-                "pairs_fitted": n_fit, "pairs_with_signal": n_sig,
+                "pairs_fitted": n_fit,
+                "pairs_signal_enso_alone": n_naive_sig,
+                "pairs_with_signal": n_sig,
+                "pairs_lost_to_iod_control": n_lost_to_iod,
                 "pairs_too_thin": n_thin, "pairs_with_filled_runs_dropped": n_flat,
             },
         },
@@ -376,8 +478,9 @@ def main() -> int:
     with open(out, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=1, sort_keys=True, ensure_ascii=False)
         f.write("\n")
-    print(f"[OK] fitted {n_fit} pairs, {n_sig} with signal ({100*n_sig/max(n_fit,1):.0f}%), "
-          f"{n_thin} too thin, {n_flat} had filled runs dropped")
+    print(f"[OK] fitted {n_fit} pairs | ENSO alone significant: {n_naive_sig} | "
+          f"survives IOD control: {n_sig} | lost to IOD: {n_lost_to_iod}")
+    print(f"[OK] {n_thin} too thin, {n_flat} had filled runs dropped")
     print(f"[OK] wrote {out}")
     return 0
 
