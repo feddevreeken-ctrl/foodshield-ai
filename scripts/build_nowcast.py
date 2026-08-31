@@ -83,6 +83,13 @@ def main():
     fews    = load("fews.json")["data"]   # v42 — FEWS NET forward projection (crisis gap-fill + deterioration)
     idps    = load("hapi_idps.json")["data"]   # v43 — HDX HAPI internal displacement (new source)
     acled   = load("acled.json")["data"]
+    # v83 — ACLED via HDX HAPI, which unlike the direct API is not embargoed:
+    # a rolling 90-day window that reaches the in-progress month, for 242
+    # countries. The `acled.json` feed above is a 12-month-lagged access tier
+    # and is explicitly NOT live (its own _meta says so), which is why
+    # acled_conflict_live_countries has been 0 for every build and a war
+    # starting today could not move the score.
+    hapi_cf = load("hapi_conflict.json")["data"]
     ffpi    = load("fao_ffpi.json")["data"]
     rw      = load("reliefweb_alerts.json")["data"]
     om      = load("openmeteo.json")["data"]
@@ -139,7 +146,7 @@ def main():
         print(f"  [warn] countries.json profile set unavailable ({e}) — falling back to feed union only")
         canonical_iso = set()
 
-    feed_iso = (set(wfp) | set(ipc) | set(fews) | set(idps) | set(acled) | set(om) | set(wfp_c)
+    feed_iso = (set(wfp) | set(ipc) | set(fews) | set(idps) | set(acled) | set(hapi_cf) | set(om) | set(wfp_c)
                 | set(estat) | set(faostat) | set(inform) | set(wgi) | set(psd)
                 | set(usgs) | set(feeding))   # v25 — include US-state feeds so US- rows exist
     # Compute over feeds ∪ profiles so profiles with no feed still get a (zero) row;
@@ -155,8 +162,14 @@ def main():
         # live (is_live=true). On a 12-month-lagged access tier it's a STRUCTURAL
         # baseline (already in the FDRS conflict component), so it must NOT add to the
         # live nowcast delta — that would present year-old conflict as a live disturbance.
+        # Prefer the live HAPI window; fall back to the lagged ACLED tier only
+        # if it ever reports itself live. Same is_live contract either way.
+        _hapi_row = hapi_cf.get(iso) or {}
         _acled_row = acled.get(iso) or {}
-        conflict = (_acled_row.get("intensity_score") or 0) if _acled_row.get("is_live") else 0
+        if _hapi_row.get("is_live") and _hapi_row.get("intensity_score") is not None:
+            conflict = _hapi_row.get("intensity_score") or 0
+        else:
+            conflict = (_acled_row.get("intensity_score") or 0) if _acled_row.get("is_live") else 0
         relief_n = len(rw_by_iso.get(iso, []))
         wc       = wfp_c.get(iso) or {}
         om_row   = om.get(iso) or {}

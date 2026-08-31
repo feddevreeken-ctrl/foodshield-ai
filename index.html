@@ -15908,6 +15908,10 @@ const LIVE = {
   // v20.22 — Pipeline 8: WRI Aqueduct 4.0 water risk (5 indicators per country).
   // Format: {iso3: {water_stress: {score, cat, label}, drought_risk: {...}, ...}}
   aqueduct: null,
+  asap: null,
+  hapi_conflict: null,
+  rtfp: null,
+  portwatch: null,
   // v20.22 — Pipeline 9: EU JRC INFORM Risk Index.
   // Format: {iso3: {inform_risk, hazard_exposure, vulnerability, lack_coping_capacity, rank, ...}}
   inform: null,
@@ -17213,6 +17217,10 @@ const DATASTATUS_FEEDS = {
   cckp:          'World Bank Climate Change Knowledge Portal · observed temperature + precipitation, feeds the structural climate component',
   ndgain:        'ND-GAIN climate vulnerability + readiness · structural FDRS climate',
   aqueduct:      'WRI Aqueduct 4.0 water-stress, drought, flood risk · structural FDRS climate',
+  asap:          'JRC ASAP monthly agricultural-stress hotspots · current-season FDRS climate (81 monitored countries)',
+  hapi_conflict: 'ACLED via HDX HAPI · rolling 90-day conflict events and fatalities · live FDRS conflict + nowcast',
+  rtfp:          'World Bank Real-Time Food Prices via HDX · market-level food inflation, monthly (37 countries)',
+  portwatch:     'IMF PortWatch · daily transits through 28 maritime chokepoints, with year-on-year comparison',
   inform_risk:   'EU JRC INFORM Risk Index · structural FDRS amplifier',
   usda_psd:      'USDA PSD observed production/imports/exports for staples · commodity panel',
   faostat_fbs:   'FAOSTAT Food Balance Sheets · caloric shares of wheat/rice/maize per country',
@@ -17706,6 +17714,11 @@ async function loadLiveData() {
     backtest_scenarios: _fetchData('backtest_scenarios'),
     ndgain: _fetchData('ndgain'),
     aqueduct: _fetchData('aqueduct'),
+    // v83 — the current-tense feeds.
+    asap: _fetchData('asap'),
+    hapi_conflict: _fetchData('hapi_conflict'),
+    rtfp: _fetchData('rtfp'),
+    portwatch: _fetchData('portwatch'),
     inform_risk: _fetchData('inform_risk'),
     wgi: _fetchData('wgi'),
     lpi: _fetchData('lpi'),
@@ -17797,6 +17810,26 @@ async function loadLiveData() {
     const aquaEnv = await _deferred.aqueduct;
     LIVE.aqueduct = (aquaEnv && (aquaEnv.data || aquaEnv)) || {};
   } catch (e) { LIVE.aqueduct = {}; }
+
+  // v83 — current-season / live feeds. Each is independent: a failure leaves an
+  // empty object, the component blends renormalise over what is present, and
+  // nothing falls back to a fabricated zero.
+  try {
+    const asapEnv = await _deferred.asap;
+    LIVE.asap = (asapEnv && (asapEnv.data || asapEnv)) || {};
+  } catch (e) { LIVE.asap = {}; }
+  try {
+    const hcfEnv = await _deferred.hapi_conflict;
+    LIVE.hapi_conflict = (hcfEnv && (hcfEnv.data || hcfEnv)) || {};
+  } catch (e) { LIVE.hapi_conflict = {}; }
+  try {
+    const rtfpEnv = await _deferred.rtfp;
+    LIVE.rtfp = (rtfpEnv && (rtfpEnv.data || rtfpEnv)) || {};
+  } catch (e) { LIVE.rtfp = {}; }
+  try {
+    const pwEnv = await _deferred.portwatch;
+    LIVE.portwatch = (pwEnv && (pwEnv.data || pwEnv)) || {};
+  } catch (e) { LIVE.portwatch = {}; }
 
   // v20.22 — Pipeline 9: EU JRC INFORM Risk Index per country.
   try {
@@ -18141,6 +18174,18 @@ async function loadLiveData() {
       if (aqu.flood_risk?.score != null) {
         climateParts.push({ v: Math.min(100, aqu.flood_risk.score * 20), w: 0.15 });
       }
+      // v83 — the first CURRENT-SEASON term in this component. Everything above
+      // is structural: Aqueduct is 1979-2019 baseline hydrology, CCKP is
+      // 1991-2020 normals, ND-GAIN is annual. None of them knows whether crops
+      // are stressed right now. JRC ASAP is a monthly expert assessment of
+      // agricultural stress for the 81 food-insecure countries it monitors.
+      // Absence means ASAP does not watch that country — never that it is calm —
+      // so this contributes weight only where a real assessment exists, and the
+      // renormalisation below handles the rest.
+      const _asap = (typeof LIVE !== 'undefined' && LIVE.asap) ? LIVE.asap[c.iso] : null;
+      if (_asap && _asap.stress_score != null) {
+        climateParts.push({ v: Math.max(0, Math.min(100, _asap.stress_score)), w: 0.20 });
+      }
       // v25 — CCKP (Data360 observed series) emits `warming_c` (observed °C rise,
       // recent decade vs 1991-2000 baseline). Replaces the old `proj_temp_change_c`.
       // ~+0.5°C → 25, +1°C → 50, +2°C → 100.
@@ -18159,20 +18204,38 @@ async function loadLiveData() {
       const wgi = LIVE.wgi?.[c.iso] || {};
       const lpi = LIVE.lpi?.[c.iso] || {};
       let conflictScore = null;
+      // v83 — "Conflict / Logistics" now contains conflict.
+      //
+      // It used to be INFORM risk 0.45 + WGI rule-of-law 0.25 + LPI 0.20 +
+      // INFORM coping 0.10 — four slow annual indices, none of which can move
+      // when a war starts. ACLED sat in the repo contributing to nothing,
+      // because the free direct tier is embargoed 12 months and honestly
+      // reported itself `is_live: false`.
+      //
+      // ACLED via HDX HAPI is not embargoed: a rolling 90-day fatality window
+      // reaching the in-progress month, 242 countries, no credentials. That
+      // takes the largest single weight, because it is the only input here that
+      // reflects this month rather than last year.
+      //
+      // INFORM's `lack_coping_capacity` is also GONE: it is a constituent
+      // dimension of INFORM Risk, so carrying both at 0.45 + 0.10 double-counted
+      // the same underlying assessment.
       const conflictParts = [];
+      const _hcf = (typeof LIVE !== 'undefined' && LIVE.hapi_conflict)
+        ? LIVE.hapi_conflict[c.iso] : null;
+      if (_hcf && _hcf.is_live && _hcf.intensity_score != null) {
+        conflictParts.push({ v: Math.max(0, Math.min(100, _hcf.intensity_score)), w: 0.35 });
+      }
       if (inf.inform_risk != null) {
-        conflictParts.push({ v: inf.inform_risk * 10, w: 0.45 });  // 0-10 → 0-100
+        conflictParts.push({ v: inf.inform_risk * 10, w: 0.30 });  // 0-10 → 0-100
       }
       if (wgi.rule_of_law?.value != null) {
         // -2.5 → 100 (worst), +2.5 → 0 (best). Linear remap.
-        conflictParts.push({ v: Math.max(0, Math.min(100, (2.5 - wgi.rule_of_law.value) * 20)), w: 0.25 });
+        conflictParts.push({ v: Math.max(0, Math.min(100, (2.5 - wgi.rule_of_law.value) * 20)), w: 0.20 });
       }
       if (lpi.overall?.value != null) {
         // 1 → 100, 5 → 0
-        conflictParts.push({ v: Math.max(0, Math.min(100, (5 - lpi.overall.value) * 25)), w: 0.20 });
-      }
-      if (inf.lack_coping_capacity != null) {
-        conflictParts.push({ v: inf.lack_coping_capacity * 10, w: 0.10 });
+        conflictParts.push({ v: Math.max(0, Math.min(100, (5 - lpi.overall.value) * 25)), w: 0.15 });
       }
       if (conflictParts.length >= 2) {
         const sumW = conflictParts.reduce((s, p) => s + p.w, 0);

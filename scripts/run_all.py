@@ -55,7 +55,12 @@ import honesty_remediation as _trade_honesty_remediation
 import refresh_usda_psd
 import refresh_ndgain
 import refresh_aqueduct
+import refresh_asap
+import refresh_faostat_prodindex
+import refresh_hapi_conflict
 import refresh_inform
+import refresh_portwatch
+import refresh_rtfp
 import refresh_wgi
 import refresh_lpi
 import refresh_hdi
@@ -103,6 +108,16 @@ STEPS = [
     ("USDA PSD",               refresh_usda_psd.main,           "usda_psd.json"),
     ("ND-GAIN climate",        refresh_ndgain.main,             "ndgain.json"),
     ("WRI Aqueduct water",     refresh_aqueduct.main,           "aqueduct.json"),
+    # v83 — the three feeds that give this dashboard a PRESENT tense. Until now
+    # the climate component was baseline hydrology (1979-2019) plus 1991-2020
+    # normals, the conflict component was annual indices with ACLED contributing
+    # to nothing, and food inflation compared 3 months of this year against all
+    # of last. None of them could move if something happened this week.
+    ("JRC ASAP crop stress",   refresh_asap.main,               "asap.json"),
+    ("FAOSTAT prod index",     refresh_faostat_prodindex.main,  "faostat_prod_index.json"),
+    ("HAPI conflict events",   refresh_hapi_conflict.main,      "hapi_conflict.json"),
+    ("WB RTFP food prices",    refresh_rtfp.main,               "rtfp.json"),
+    ("IMF PortWatch straits",  refresh_portwatch.main,          "portwatch.json"),
     ("INFORM risk index",      refresh_inform.main,             "inform_risk.json"),
     ("WB WGI governance",      refresh_wgi.main,                "wgi.json"),
     ("WB LPI logistics",       refresh_lpi.main,                "lpi.json"),

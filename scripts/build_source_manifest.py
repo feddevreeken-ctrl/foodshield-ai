@@ -181,6 +181,53 @@ SOURCES = [
         "cadence": "6h fetch / 3-5yr upstream",
         "mode": "reference",
     },
+    # v83 — the feeds that give the score a present tense, plus the two that
+    # replace hand-authored FDRS components. Registered here so Data Status can
+    # date them: an audit found the trade atlas had been running as an
+    # unregistered static snapshot for twelve weeks precisely because nothing
+    # outside the manifest can be freshness-checked.
+    {
+        "key": "asap",
+        "file": "asap.json",
+        "label": "JRC ASAP crop-stress hotspots",
+        "cadence": "daily fetch / monthly upstream",
+        "mode": "live",
+    },
+    {
+        "key": "hapi_conflict",
+        "file": "hapi_conflict.json",
+        "label": "ACLED conflict events (HDX HAPI)",
+        "cadence": "daily fetch / weekly upstream",
+        "mode": "live",
+    },
+    {
+        "key": "rtfp",
+        "file": "rtfp.json",
+        "label": "World Bank Real-Time Food Prices",
+        "cadence": "daily fetch / weekly upstream",
+        "mode": "live",
+    },
+    {
+        "key": "portwatch",
+        "file": "portwatch.json",
+        "label": "IMF PortWatch chokepoint transits",
+        "cadence": "daily fetch / daily upstream (~7d lag)",
+        "mode": "live",
+    },
+    {
+        "key": "faostat_import_dep",
+        "file": "faostat_import_dep.json",
+        "label": "FAOSTAT cereal import dependency",
+        "cadence": "daily fetch / annual upstream",
+        "mode": "reference",
+    },
+    {
+        "key": "faostat_prod_index",
+        "file": "faostat_prod_index.json",
+        "label": "FAOSTAT gross food production index",
+        "cadence": "daily fetch / annual upstream",
+        "mode": "reference",
+    },
     {
         "key": "inform_risk",
         "file": "inform_risk.json",

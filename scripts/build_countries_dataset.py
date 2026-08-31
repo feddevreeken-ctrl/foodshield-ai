@@ -48,6 +48,15 @@ STRUCTURAL_FIELDS = [
     # auditability. The frontend reads c.c[7]/c.c[8]; these mirror them with provenance.
     "econ_access",
     "grain_buffer",
+    # v83 — c[0] and c[1] are sourced now, so their provenance has to survive to
+    # the client. Without this the two heaviest components in the score would
+    # still render with no badge, no source and no vintage, which is the exact
+    # complaint the audit raised about them.
+    "import_dep",
+    "supplier_conc",
+    "prod_trend",
+    # Pinned so the sourced/heritage blend cannot ratchet across nightly rebuilds.
+    "c_heritage",
 ]
 
 # FDRS v2 weight vector (Option B, 9 components — see FDRS_V2_IMPLEMENTATION_SPEC §2).
@@ -306,6 +315,8 @@ def main():
     caloric_shares = _load_fbs_overlay()
     net_trade = _load_net_trade_overlay()
     food_inflation = _load_food_inflation_overlay()
+    import_dep = _load_import_dependency()
+    prod_trend = _load_prod_trend()
 
     countries = {}
     for iso, fields in legacy_rows.items():
@@ -388,6 +399,35 @@ def main():
         # UI can now render "NO DATA · COUNTS 0" instead of a confident-looking 0.
         cv = cv[:7] + [ea_val, gb_val]
 
+        # v83 — PIN THE HERITAGE BASELINE.
+        #
+        # This builder reads its own previous output: `c_meta = row.get("c")`
+        # above comes from data/countries.json, which the last run wrote. That
+        # makes any blend non-idempotent — blending 0.4*previous + 0.6*sourced
+        # every night would ratchet each component toward the sourced value and
+        # silently converge on it within about a week, so the published weights
+        # would drift without a single line of code changing. Exactly the class
+        # of silent drift this audit was cleaning up.
+        #
+        # So the ORIGINAL curated vector is captured once and carried forward
+        # untouched. Every subsequent blend reads from it, never from the last
+        # output, and re-running the builder any number of times is a no-op.
+        _heritage_meta = row.get("c_heritage")
+        if isinstance(_heritage_meta, dict) and isinstance(_heritage_meta.get("value"), list):
+            heritage_cv = list(_heritage_meta["value"])
+        else:
+            heritage_cv = list(cv)
+        row["c_heritage"] = {
+            "value": heritage_cv,
+            "source": LEGACY_SOURCE,
+            "as_of": "2026-05",
+            "method": ("The original hand-authored 9-component vector, pinned so that "
+                       "sourced-vs-heritage blending stays idempotent across nightly rebuilds. "
+                       "This is an AUTHORING date, not a data vintage — that is the whole "
+                       "reason these components are being replaced."),
+            "quality_flag": "heritage",
+        }
+
         # v79 — WIRE THE LIVE FOOD-INFLATION FEED INTO THE COMPONENT IT NAMES.
         # The overlay above updated only the display field `fi`, so c[3] stayed a
         # hand-curated legacy number that ignored the live reading entirely:
@@ -403,6 +443,129 @@ def main():
             _fi_score = _fi_to_component(_fi_meta.get("value"))
             if _fi_score is not None:
                 cv[3] = _fi_score
+
+        # v83 — SAME TREATMENT FOR c[0], THE HEAVIEST COMPONENT IN THE SCORE.
+        #
+        # import_dep carries weight 0.23 and, for all 214 countries, was a
+        # hand-authored literal: no source, no data year, stamped as_of
+        # "2026-05" (an authoring date). It also drives the import-dependency x
+        # economic-access amplifier, so it moves the headline non-linearly.
+        # An audit put it plainly: nothing measurable determined half of
+        # Nigeria's and DR Congo's score, so nothing measurable could move it.
+        #
+        # FAOSTAT's cereal import dependency ratio is the standard published
+        # measure and comes from a bulk file this pipeline already downloads.
+        # Same guard as c[3]: only a genuinely sourced reading may move the
+        # component; everyone else keeps the curated baseline rather than having
+        # a legacy number laundered through a live-looking transform.
+        # v83 — c[1] supplier_conc, weight 0.16, likewise hand-authored for all
+        # 214 countries. Unlike c[0] this needed no new source: supPct has been
+        # sourced from UN Comtrade for 180 countries all along and simply never
+        # reached the component it describes.
+        #
+        # Metric is HHI (sum of squared shares) rather than top-3 share, because
+        # top-3 cannot separate 60/20/10 from 34/33/33 — both give 90, and they
+        # are very different exposures. HHI is then multiplied by import
+        # dependency: concentrated suppliers only matter to the extent a country
+        # actually depends on imports, which is the same reasoning
+        # audit_provenance.py already applies when it flags exporters scored
+        # high on raw concentration.
+        #
+        # Shares are truncated to the top 5 upstream, which biases HHI upward,
+        # so they are renormalised over the observed set and the basis is
+        # recorded rather than silently mixed.
+        # v83 — c[2] prod_trend, weight 0.11, the last of the three
+        # hand-authored components. FAOSTAT's gross food production index gives
+        # a real slope per country; a null trend stays null rather than becoming
+        # a flattering 0.
+        _pt_rec = prod_trend.get(iso)
+        if _pt_rec and _pt_rec.get("prod_trend_score") is not None:
+            try:
+                cv[2] = _blend_sourced(heritage_cv[2], float(_pt_rec["prod_trend_score"]))
+                row["prod_trend"] = {
+                    "value": cv[2],
+                    "source": _pt_rec.get("source"),
+                    "source_url": _pt_rec.get("source_url"),
+                    "as_of": str(_pt_rec.get("year_latest") or ""),
+                    "method": _pt_rec.get("method"),
+                    "quality_flag": "sourced",
+                    "sub_provenance": {
+                        "status": "sourced",
+                        "trend_pct_per_year": _pt_rec.get("trend_pct_per_year"),
+                        "window": f"{_pt_rec.get('year_from')}-{_pt_rec.get('year_latest')}",
+                        "points": _pt_rec.get("points"),
+                    },
+                }
+            except (TypeError, ValueError):
+                pass
+
+        _sup_meta = row.get("supPct") or {}
+        _sup_shares = _sup_meta.get("value")
+        if (_sup_meta.get("quality_flag") == "sourced"
+                and isinstance(_sup_shares, list) and _sup_shares):
+            try:
+                _sh = [float(x) for x in _sup_shares if x is not None and float(x) > 0]
+            except (TypeError, ValueError):
+                _sh = []
+            _tot = sum(_sh)
+            if _sh and _tot > 0:
+                _frac = [x / _tot for x in _sh]          # renormalise over observed
+                _hhi = sum(f * f for f in _frac)          # 1/n .. 1.0
+                _n = len(_frac)
+                # Plain HHI on a 0-100 scale. An earlier cut of this multiplied
+                # by import dependency, which is wrong twice over: it double
+                # counts c[0] (weight 0.23, already dependency) and it collapses
+                # a diversified importer and a concentrated self-sufficient
+                # producer onto the same number. The nine components are meant
+                # to be separable; concentration is concentration.
+                cv[1] = _blend_sourced(heritage_cv[1], _hhi * 100.0)
+                row["supplier_conc"] = {
+                    "value": cv[1],
+                    "source": _sup_meta.get("source"),
+                    "source_url": _sup_meta.get("source_url"),
+                    "as_of": _sup_meta.get("as_of"),
+                    "method": ("Herfindahl-Hirschman index of import shares (sum of squared "
+                               "shares), renormalised over the observed top-5 partners and "
+                               "expressed 0-100. Chosen over top-3 share because top-3 cannot "
+                               "separate 60/20/10 from 34/33/33 — both read 90, and they are "
+                               "very different exposures."),
+                    "quality_flag": "sourced",
+                    "sub_provenance": {
+                        "status": "sourced",
+                        "hhi": round(_hhi, 4),
+                        "partners_observed": _n,
+                        "basis": "top5_renormalised",
+                        "supplier_basis": _sup_meta.get("_supplier_basis"),
+                    },
+                }
+            
+        _dep_rec = import_dep.get(iso)
+        if _dep_rec and _dep_rec.get("import_dependency_pct") is not None:
+            try:
+                cv[0] = _blend_sourced(heritage_cv[0], float(_dep_rec["import_dependency_pct"]))
+            except (TypeError, ValueError):
+                _dep_rec = None
+            if _dep_rec:
+                # Built by hand rather than through _component_meta(), which
+                # stamps as_of "2024" unconditionally for every field it touches
+                # — the defect that had Afghanistan's 2020 reserves and Iran's
+                # 1982 reserves both presenting as 2024 data. This carries the
+                # real FBS reference year.
+                row["import_dep"] = {
+                    "value": cv[0],
+                    "source": _dep_rec.get("source"),
+                    "source_url": _dep_rec.get("source_url"),
+                    "as_of": str(_dep_rec.get("year") or ""),
+                    "method": _dep_rec.get("method"),
+                    "quality_flag": "sourced",
+                    "sub_provenance": {
+                        "status": "sourced",
+                        "basis": "faostat_fbs_cereal_balance",
+                        "imports_kt": _dep_rec.get("imports_kt"),
+                        "domestic_supply_kt": _dep_rec.get("domestic_supply_kt"),
+                        "cereals": _dep_rec.get("cereals"),
+                    },
+                }
 
         c_meta["value"] = cv
         c_meta["method"] = (
@@ -731,13 +894,91 @@ def _fi_to_component(pct):
     return None
 
 
+def _load_import_dependency():
+    """Cereal import dependency per ISO3, written by refresh_faostat_fbs.py."""
+    p = DATA_DIR / "faostat_import_dep.json"
+    if not p.exists():
+        return {}
+    try:
+        obj = json.loads(p.read_text())
+    except Exception:
+        return {}
+    data = obj.get("data", obj) if isinstance(obj, dict) else {}
+    return {k.upper(): v for k, v in data.items() if isinstance(v, dict)}
+
+
+SOURCED_BLEND = 0.6
+
+
+def _blend_sourced(heritage, sourced):
+    """Blend a newly-sourced component with the curated baseline it replaces.
+
+    v83 — this is the pattern index.html already uses for the climate and
+    conflict components (`c._cOriginal[i] * 0.4 + sourcedScore * 0.6`), applied
+    to the three components that had no source at all.
+
+    Why blend rather than replace outright. The measured values are correct and
+    the provenance win is real, but they measure a NARROWER construct than the
+    literals did. FAO's cereal import dependency ratio asks "how much of the
+    grain you eat comes from abroad"; the hand-authored number it replaces was
+    carrying an unstated blend of that plus humanitarian context. Swapping one
+    for the other wholesale moved Nigeria from rank 37 to 130 and lifted Cuba,
+    Jamaica and Kiribati into the top ten — all of which is DEFENSIBLE on a pure
+    supply-disruption reading (Jamaica really does import ~100% of its cereals
+    from a concentrated set of partners, Nigeria really does grow its own), but
+    it silently redefines what the published headline means, in one release,
+    without saying so.
+
+    At 0.6 the measurement dominates and the direction of travel is toward
+    sourced data, which is the stated goal; the remaining 0.4 keeps the
+    published ranking continuous while that transition is documented. Acute
+    crisis is not lost either way — it enters through the nowcast (IPC, FEWS,
+    and as of v83 live conflict), which is where a current emergency belongs
+    rather than inside a structural component.
+    """
+    try:
+        s_val = max(0.0, min(100.0, float(sourced)))
+    except (TypeError, ValueError):
+        return heritage
+    if heritage is None:
+        return int(round(s_val))
+    try:
+        h_val = float(heritage)
+    except (TypeError, ValueError):
+        return int(round(s_val))
+    return int(round(h_val * (1.0 - SOURCED_BLEND) + s_val * SOURCED_BLEND))
+
+
+def _load_prod_trend():
+    """Food production trend per ISO3, written by refresh_faostat_prodindex.py."""
+    p = DATA_DIR / "faostat_prod_index.json"
+    if not p.exists():
+        return {}
+    try:
+        obj = json.loads(p.read_text())
+    except Exception:
+        return {}
+    data = obj.get("data", obj) if isinstance(obj, dict) else {}
+    return {k.upper(): v for k, v in data.items() if isinstance(v, dict)}
+
+
 def _load_food_inflation_overlay():
     """Year-over-year food inflation % per ISO3, from live feeds.
 
-    Source priority (highest wins): WFP per-country > Eurostat food HICP >
-    FAOSTAT food CPI. Returns {iso3: {"value": float, "source": str,
-    "as_of": str|None}}. Only countries with a real number are included;
-    everyone else keeps their legacy_curated `fi`.
+    Source priority (highest wins): World Bank RTFP > WFP per-country >
+    Eurostat food HICP > FAOSTAT food CPI. Returns {iso3: {"value": float,
+    "source": str, "as_of": str|None}}. Only countries with a real number are
+    included; everyone else keeps their legacy_curated `fi`.
+
+    v83 — RTFP added at the top, and it matters most for the countries this
+    dashboard is about. The FAOSTAT rung underneath it is measured badly: 158 of
+    162 countries carry year_latest 2026 with only 3 months in it, so its
+    "year-on-year" is a 3-month average against a full prior year — a
+    seasonality artefact, not a price signal — and 146 of its 176 rows carry no
+    as_of at all. RTFP is market-level, monthly, updated weekly, and every row
+    is stamped with a real date. It covers 37 countries, which is exactly the
+    crisis set the FAOSTAT artefact distorted worst: Ethiopia, Sudan, Somalia,
+    South Sudan, Chad, Haiti, Afghanistan, Yemen's neighbours.
     """
     def _read(name):
         p = DATA_DIR / name
@@ -791,7 +1032,7 @@ def _load_food_inflation_overlay():
             out[iso.upper()] = {"value": round(f, 1),
                                 "source": "Eurostat food HICP (yoy %)",
                                 "as_of": rec.get("month")}
-    # 1. WFP per-country (highest priority — broadest crisis-country coverage)
+    # 1b. WFP per-country (broad crisis-country coverage)
     for iso, rec in _read("wfp_country.json").items():
         if not isinstance(rec, dict):
             continue
@@ -804,6 +1045,20 @@ def _load_food_inflation_overlay():
             out[iso.upper()] = {"value": round(f, 1),
                                 "source": "WFP per-country food inflation",
                                 "as_of": rec.get("month") or rec.get("as_of")}
+    # 1a. World Bank RTFP (highest priority — market-observed, real per-country
+    # as_of, weekly refresh). Written last so it wins.
+    for iso, rec in _read("rtfp.json").items():
+        if not isinstance(rec, dict):
+            continue
+        f = _plausible(rec.get("food_inflation_pct"))
+        if f is not None:
+            out[iso.upper()] = {
+                "value": round(f, 1),
+                "source": "World Bank Real-Time Food Prices (RTFP) via HDX",
+                "as_of": rec.get("as_of"),
+                "markets": rec.get("markets"),
+                "confidence": rec.get("confidence"),
+            }
     return out
 
 

@@ -67,7 +67,11 @@ COVERAGE_FLOORS = {
     "hdi": 190,
     "wgi": 200,
     "inform_risk": 185,
-    "aqueduct": 180,
+    "aqueduct": 155,  # v83: was 180, calibrated against a BUGGY file. The old
+    # collector never filtered UNIT_MEASURE, so RANK and RISK_CAT rows counted
+    # as countries and inflated coverage to 188 while corrupting the scores
+    # themselves. Real SCORE coverage is 164 (BWS 164 / DRR 138 / RFR 164).
+    # Lowering a floor to match a bug fix, not to hide a regression.,
     "cckp": 230,
     "lpi": 175,
     "worldbank_wdi": 240,

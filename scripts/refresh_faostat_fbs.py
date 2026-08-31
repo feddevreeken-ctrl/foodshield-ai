@@ -74,6 +74,23 @@ ITEMS = {
 }
 ELEMENT_KCAL = 664   # Food supply (kcal/capita/day)
 
+# v83 — the same zip also carries the supply balance, so cereal import
+# dependency comes out of a download we were already paying for.
+#
+# Why this exists: FDRS component c[0] `import_dep` carries weight 0.23 — the
+# single largest — and for all 214 countries it was a hand-authored literal with
+# no source and no data year, stamped `as_of: "2026-05"`, which is an authoring
+# date. It also feeds the import-dependency x economic-access amplifier, so it
+# is the highest-leverage unsourced number on the site.
+#
+# Definition: FAO's own cereal import dependency ratio — imports as a share of
+# domestic supply, across the three cereals this file already parses. Cereals
+# rather than all food because summing tonnages across food groups mixes water
+# content and means nothing; the cereal ratio is the standard published measure.
+ELEMENT_IMPORTS = 5611   # Import quantity (1000 t)
+ELEMENT_SUPPLY  = 5301   # Domestic supply quantity (1000 t)
+CEREAL_ITEMS = {2511: "wheat", 2807: "rice", 2514: "maize"}
+
 # FAO Country Code → ISO3 mapping.
 # CANONICAL: pulled May 2026 from FAOSTAT /definitions/domain/FBS/area
 # 174 real countries with ISO3 codes (excludes FAO regional aggregates and
@@ -216,12 +233,33 @@ def main():
 
     # Collect raw kcal per (iso3, item_code) using the latest non-empty year per row
     raw_data = {}   # iso3 → {item_key: kcal, '_year': int, '_country': str}
+    dep_raw = {}    # iso3 → {'imports': kt, 'supply': kt, '_year': int, '_items': set}
     rows_seen = 0
     for row in reader:
         rows_seen += 1
-        if _int(row.get("Element Code")) != ELEMENT_KCAL:
-            continue
+        _elem = _int(row.get("Element Code"))
         ic = _int(row.get("Item Code"))
+        # Supply-balance pass for cereal import dependency, alongside the kcal pass.
+        if _elem in (ELEMENT_IMPORTS, ELEMENT_SUPPLY) and ic in CEREAL_ITEMS:
+            _an = (row.get("Area") or "").strip()
+            _iso = NAME_TO_ISO3.get(_an) or FAO_AREA_TO_ISO3.get(_int(row.get("Area Code")))
+            if _iso:
+                for yc in year_cols:
+                    v = _num(row.get(yc))
+                    if v is not None:
+                        _yr = int(yc[1:])
+                        _slot = dep_raw.setdefault(_iso, {"imports": 0.0, "supply": 0.0,
+                                                          "_year": None, "_items": set()})
+                        if _elem == ELEMENT_IMPORTS:
+                            _slot["imports"] += max(0.0, v)
+                        else:
+                            _slot["supply"] += max(0.0, v)
+                        _slot["_items"].add(CEREAL_ITEMS[ic])
+                        if _slot["_year"] is None or _yr > _slot["_year"]:
+                            _slot["_year"] = _yr
+                        break
+        if _elem != ELEMENT_KCAL:
+            continue
         if ic not in ITEMS:
             continue
         item_key = ITEMS[ic]
@@ -294,6 +332,53 @@ def main():
             "Most-recent populated year per country (typically 2022 in the current FBS vintage)."
         ),
     )
+
+    _write_import_dependency(dep_raw)
+
+
+def _write_import_dependency(dep_raw):
+    """Cereal import dependency per ISO3, from the FBS supply balance."""
+    out = {}
+    for iso3, slot in dep_raw.items():
+        imports, supply = slot.get("imports") or 0.0, slot.get("supply") or 0.0
+        if supply <= 0:
+            continue
+        # Re-exporting entrepots (Singapore, Netherlands) can post imports above
+        # domestic supply. Clamp at 100: the component asks how exposed a country
+        # is to an import cut-off, and "more than totally" is not a thing.
+        dep = max(0.0, min(100.0, imports / supply * 100.0))
+        out[iso3] = {
+            "import_dependency_pct": round(dep, 1),
+            "imports_kt": round(imports, 1),
+            "domestic_supply_kt": round(supply, 1),
+            "cereals": sorted(slot.get("_items") or []),
+            "year": slot.get("_year"),
+            "source": "FAOSTAT Food Balance Sheets (cereal import dependency ratio)",
+            "source_url": "https://www.fao.org/faostat/en/#data/FBS",
+            "method": ("Sum of import quantity (element 5611) divided by sum of domestic "
+                       "supply quantity (element 5301) across wheat, rice and maize, "
+                       "expressed 0-100. FAO's cereal import dependency ratio."),
+            "quality_flag": "sourced",
+        }
+    print(f"[INFO] Cereal import dependency for {len(out)} countries")
+    for ref in ("EGY", "NGA", "COD", "SOM", "USA", "FRA", "JPN"):
+        if ref in out:
+            r = out[ref]
+            print(f"  [ref] {ref}: {r['import_dependency_pct']}% "
+                  f"({r['imports_kt']:,.0f} / {r['domestic_supply_kt']:,.0f} kt, {r['year']})")
+    write_json(
+        "faostat_import_dep.json", out,
+        source="FAOSTAT Food Balance Sheets bulk download",
+        notes=(
+            "Cereal import dependency ratio: cereal imports as a share of cereal "
+            "domestic supply, per FAO's own definition, across wheat, rice and maize. "
+            "Replaces the hand-authored FDRS c[0] literal, which carried weight 0.23 "
+            "with no source and no data year. Clamped to 0-100 — re-exporting "
+            "entrepots can post imports above domestic supply. "
+            f"Covered {len(out)} countries."
+        ),
+    )
+    return out
 
 
 def _num(v):
