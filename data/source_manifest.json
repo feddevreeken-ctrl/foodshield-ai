@@ -1,21 +1,21 @@
 {
   "_meta": {
-    "generated_at": "2026-08-31T12:12:07.121429+00:00",
+    "generated_at": "2026-08-31T20:56:00.655026+00:00",
     "source": "FoodShield source manifest",
     "notes": "Derived from the current data/ snapshots. Status categories: ok, manual, degraded, setup_required, failed.",
     "version": "v23"
   },
   "data": {
     "summary": {
-      "total_sources": 40,
-      "ok_sources": 35,
-      "manual_sources": 4,
+      "total_sources": 42,
+      "ok_sources": 36,
+      "manual_sources": 5,
       "degraded_sources": 1,
       "setup_required_sources": 0,
       "failed_sources": 0,
-      "healthy_sources": 39,
+      "healthy_sources": 41,
       "stale_sources": 0,
-      "loaded_at": "2026-08-31T12:08:57.640452+00:00",
+      "loaded_at": "2026-08-31T20:55:43.972130+00:00",
       "headline_status": "attention"
     },
     "sources": {
@@ -59,7 +59,7 @@
         "generated_at": "2026-08-30T20:09:23.352647+00:00",
         "count": 57,
         "source": "WFP HungerMap LIVE re-publishing IPC/CH (ew-tool-api .../ew/v1/ipc/food/insecurity/global/recent)",
-        "notes": "Phase 3 = Crisis, Phase 4 = Emergency, Phase 5 = Catastrophe/Famine. Covered 56 countries. PSE is synthesised: the feed keys Gaza (PSG) and the West Bank (PSW) separately, and every consumer here looks up PSE.",
+        "notes": "Phase 3 = Crisis, Phase 4 = Emergency, Phase 5 = Catastrophe/Famine. Covered 56 countries. PSE is synthesised: the feed keys Gaza (PSG) and the West Bank (PSW) separately, and every consumer here looks up PSE. Rows now carry assessed_population, analysis_coverage_ratio and national_phase3plus_pct: the published percentage is of the population the IPC analysis covered, which for ten countries is a subset of the country.",
         "latest_period": null,
         "age_days": 1,
         "stale": false
@@ -236,12 +236,12 @@
         "reason": "healthy",
         "cadence": "daily",
         "mode": "live",
-        "generated_at": "2026-08-30T21:00:17.285198+00:00",
+        "generated_at": "2026-08-31T13:36:13.290717+00:00",
         "count": 17,
         "source": "USGS Water Services (waterservices.usgs.gov/nwis/iv)",
         "notes": "Instantaneous gage height + 7d discharge change for 17 major US river gages. flow_anomaly: low=<-25% drop (drought signal), high=>+50% rise (flood signal).",
         "latest_period": null,
-        "age_days": 1,
+        "age_days": 0,
         "stale": false
       },
       "openaq": {
@@ -326,12 +326,12 @@
         "reason": "healthy",
         "cadence": "6h fetch / monthly upstream (WASDE)",
         "mode": "trade",
-        "generated_at": "2026-08-30T21:02:57.249515+00:00",
+        "generated_at": "2026-08-31T12:21:56.664113+00:00",
         "count": 152,
         "source": "USDA PSD bulk (apps.fas.usda.gov/psdonline/downloads/)",
-        "notes": "Observed production / imports / exports / consumption / stocks per country per staple per marketing year. Latest marketing year per (country, commodity, attribute). Values in 1000 metric tonnes. Commodities: wheat, rice (milled), corn, soybeans. 152 countries covered; imports captured for 152, exports for 152. Source refreshes monthly on WASDE release day; cron pulls every 6h but upstream data rarely changes between WASDE windows.",
+        "notes": "Observed production / imports / exports / consumption / stocks per country per staple per marketing year. Latest marketing year per (country, commodity, attribute). Values in 1000 metric tonnes. Commodities: wheat, rice (milled), corn, soybeans. 152 countries covered; imports captured for 152, exports for 152. Source refreshes monthly on WASDE release day; cron pulls every 6h but upstream data rarely changes between WASDE windows. Rows more than two marketing years behind the file's latest carry quality_flag 'stale' with a reason — mostly EU member states, which PSD folds into its EU aggregate and stops reporting individually.",
         "latest_period": null,
-        "age_days": 1,
+        "age_days": 0,
         "stale": false
       },
       "ndgain": {
@@ -364,6 +364,21 @@
         "age_days": 1,
         "stale": false
       },
+      "gdacs": {
+        "label": "GDACS hazard alerts (drought/flood/cyclone)",
+        "file": "gdacs.json",
+        "status": "ok",
+        "reason": "healthy",
+        "cadence": "daily fetch / continuous upstream",
+        "mode": "live",
+        "generated_at": "2026-08-31T20:55:43.972130+00:00",
+        "count": 16,
+        "source": "GDACS (Global Disaster Alert and Coordination System, JRC/UN)",
+        "notes": "Live hazard events from the keyless GDACS event API, one row per event. Included: DR (Drought), FL (Flood), TC (Tropical Cyclone) — the hazard classes that move food security directly, through lost production (drought), drowned crops and cut feeder roads (flood), and flattened pre-harvest crops and closed ports (tropical cyclone). Omitted: EQ (Earthquake), WF (Wildfire), VO (Volcano) — earthquake is available behind FOODSHIELD_GDACS_TYPES but is off by default because its food impact runs through logistics already covered by LPI and the trade layers, and it is frequent enough to swamp the map; wildfire measures burned forest hectares, a poor cropland proxy, and remains a genuine coverage gap left by the dead NASA FIRMS feed. Alert levels Orange and Red only — GDACS Green means no significant impact expected and outnumbers the rest ~15:1. Window: events whose end date falls within the last 90 days, or which have not ended. is_current is derived here from the event dates (end date not more than 7 days past, or still in the future), NOT from GDACS's own iscurrent flag, which means 'in the live homepage feed' and reads false for droughts that are running today; their flag is preserved as gdacs_iscurrent. severity_score (0-100) is a rendering weight derived from the GDACS alert band, the only cross-hazard-comparable figure in the feed; the raw severity_value carries incompatible units per type (km2 for drought, magnitude for quake, km/h for cyclone, hectares for fire, and nothing at all for flood) and must never be compared across types. population_affected is null on every row: GDACS publishes no consistent affected-population figure in this API — the Sendai records mix 'out of contact' and 'rescued' counts into the 'affected' tag and the RSS population field mixes deaths, displaced and shaking-intensity exposure — so no number is published rather than an invented one. Counts: DR=5, FL=6, TC=5. 8 current.",
+        "latest_period": null,
+        "age_days": 0,
+        "stale": false
+      },
       "asap": {
         "label": "JRC ASAP crop-stress hotspots",
         "file": "asap.json",
@@ -386,12 +401,12 @@
         "reason": "healthy",
         "cadence": "daily fetch / weekly upstream",
         "mode": "live",
-        "generated_at": "2026-08-30T21:36:33.637510+00:00",
+        "generated_at": "2026-08-31T13:18:45.528410+00:00",
         "count": 242,
         "source": "ACLED via HDX HAPI",
-        "notes": "Rolling 90-day conflict events and fatalities per country, from ACLED via the OCHA HDX HAPI conflict-events endpoint (start_date=2026-06-01). Buckets are calendar-monthly and the newest month is IN PROGRESS, so its counts will rise on the next refresh; the window is the calendar months overlapping the last 90 days, not an exact 90-day slice. Admin levels partition the world — admin2 24 countries, admin0 218 countries, total 242 — and per country only the finest level with rows is counted, never summed across levels. intensity_score = min(100, 25*log10(1+fatalities_90d)); 100 at 10,000 fatalities/90d. is_live=true: this is a current-quarter observation, not an annual index. ATTRIBUTION REQUIRED: Armed Conflict Location & Event Data Project (ACLED); acleddata.com, redistributed by OCHA HDX under ACLED terms.",
+        "notes": "Rolling 90-day conflict events and fatalities per country, from ACLED via the OCHA HDX HAPI conflict-events endpoint (start_date=2026-06-02). Buckets are calendar-monthly and the newest month is IN PROGRESS, so its counts will rise on the next refresh; the window is the calendar months overlapping the last 90 days, not an exact 90-day slice. Admin levels partition the world — admin2 24 countries, admin0 218 countries, total 242 — and per country only the finest level with rows is counted, never summed across levels. intensity_score = min(100, 25*log10(1+fatalities_90d)); 100 at 10,000 fatalities/90d. is_live=true: this is a current-quarter observation, not an annual index. ATTRIBUTION REQUIRED: Armed Conflict Location & Event Data Project (ACLED); acleddata.com, redistributed by OCHA HDX under ACLED terms.",
         "latest_period": null,
-        "age_days": 1,
+        "age_days": 0,
         "stale": false
       },
       "rtfp": {
@@ -431,7 +446,7 @@
         "reason": "healthy",
         "cadence": "daily fetch / annual upstream",
         "mode": "reference",
-        "generated_at": "2026-08-31T12:05:19.540283+00:00",
+        "generated_at": "2026-08-31T13:19:34.790738+00:00",
         "count": 177,
         "source": "FAOSTAT Food Balance Sheets bulk download",
         "notes": "Cereal import dependency ratio: cereal imports as a share of cereal domestic supply, per FAO's own definition, across wheat, rice and maize. Replaces the hand-authored FDRS c[0] literal, which carried weight 0.23 with no source and no data year. Clamped to 0-100 — re-exporting entrepots can post imports above domestic supply. Covered 177 countries.",
@@ -446,7 +461,7 @@
         "reason": "healthy",
         "cadence": "daily fetch / annual upstream",
         "mode": "reference",
-        "generated_at": "2026-08-31T12:08:57.640452+00:00",
+        "generated_at": "2026-08-31T13:04:16.808286+00:00",
         "count": 185,
         "source": "FAOSTAT Production Indices bulk download",
         "notes": "Per-country food production trend from FAOSTAT's Gross Production Index (Food, 2014-2016 = 100). Replaces the hand-authored FDRS c[2] literal, which carried weight 0.11 with no source and no data year. Falling production scores high. Countries with fewer than 5 index points in the window carry a null score and quality_flag 'partial' — never 0. Covered 185 countries, 185 scored.",
@@ -602,6 +617,21 @@
         "notes": null,
         "latest_period": null,
         "age_days": null,
+        "stale": false
+      },
+      "commodity_flows": {
+        "label": "Trade Flow Atlas — curated bilateral corridors (static snapshot)",
+        "file": "commodity_flows.json",
+        "status": "manual",
+        "reason": "static atlas snapshot, rebuilt by hand — cut 2026-06-04",
+        "cadence": "manual / rebuilt by hand",
+        "mode": "manual",
+        "generated_at": "2026-06-04T22:54:52.561Z",
+        "count": 4122,
+        "source": "RaboResearch World Beef Map 2025 + USDA FAS PSD + ABIEC + ITC + UN Comtrade (Beefmap dataset)",
+        "notes": null,
+        "latest_period": null,
+        "age_days": 88,
         "stale": false
       },
       "commodity_news": {

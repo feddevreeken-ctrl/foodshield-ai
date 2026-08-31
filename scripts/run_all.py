@@ -57,6 +57,7 @@ import refresh_ndgain
 import refresh_aqueduct
 import refresh_asap
 import refresh_faostat_prodindex
+import refresh_gdacs
 import refresh_hapi_conflict
 import refresh_inform
 import refresh_portwatch
@@ -114,6 +115,7 @@ STEPS = [
     # to nothing, and food inflation compared 3 months of this year against all
     # of last. None of them could move if something happened this week.
     ("JRC ASAP crop stress",   refresh_asap.main,               "asap.json"),
+    ("GDACS hazard events",    refresh_gdacs.main,              "gdacs.json"),
     ("FAOSTAT prod index",     refresh_faostat_prodindex.main,  "faostat_prod_index.json"),
     ("HAPI conflict events",   refresh_hapi_conflict.main,      "hapi_conflict.json"),
     ("WB RTFP food prices",    refresh_rtfp.main,               "rtfp.json"),

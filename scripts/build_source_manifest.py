@@ -187,6 +187,13 @@ SOURCES = [
     # unregistered static snapshot for twelve weeks precisely because nothing
     # outside the manifest can be freshness-checked.
     {
+        "key": "gdacs",
+        "file": "gdacs.json",
+        "label": "GDACS hazard alerts (drought/flood/cyclone)",
+        "cadence": "daily fetch / continuous upstream",
+        "mode": "live",
+    },
+    {
         "key": "asap",
         "file": "asap.json",
         "label": "JRC ASAP crop-stress hotspots",

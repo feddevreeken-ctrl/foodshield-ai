@@ -399,14 +399,27 @@ def _row(feature, today, unmapped, no_country):
     return key, row
 
 
-def _previous_row_count():
-    """How many rows the last good data/gdacs.json carried, or 0."""
+def _previous_row_count(types=None):
+    """Rows in the last good data/gdacs.json, counting only `types` if given.
+
+    Scoping matters. The guard below compares this run against the previous
+    file, and the two must be like for like: an earlier build of this collector
+    also pulled EQ, WF and VO, so a correctly-scoped DR/FL/TC run of 16 events
+    was measured against 44 and refused to publish. Comparing only the event
+    types actually requested makes the comparison mean what it says.
+    """
     try:
         obj = json.loads((DATA_DIR / OUTPUT).read_text())
     except Exception:
         return 0
     payload = obj.get("data") if isinstance(obj, dict) else None
-    return len(payload) if isinstance(payload, dict) else 0
+    if not isinstance(payload, dict):
+        return 0
+    if not types:
+        return len(payload)
+    wanted = set(types)
+    return sum(1 for r in payload.values()
+               if isinstance(r, dict) and r.get("event_type") in wanted)
 
 
 def _guard_completeness(out, per_type):
@@ -439,7 +452,7 @@ def _guard_completeness(out, per_type):
             f"(floor is {MIN_TOTAL_EVENTS}) — refusing to publish a thin file"
         )
 
-    previous = _previous_row_count()
+    previous = _previous_row_count(per_type.keys())
     if previous >= 10 and len(out) < previous * MIN_FRACTION_OF_PREVIOUS:
         raise RuntimeError(
             f"GDACS returned {len(out)} events against {previous} in the "
