@@ -175,14 +175,47 @@ def audit():
                 f"displayed {disp:.0f} but ACLED 90d conflict intensity is {intensity} "
                 f"({hc.get('fatalities_90d')} fatalities, "
                 f"{hc.get('fatalities_per_million_90d')}/million)")
-        ipc_pct = _num((ipc.get(iso) or {}).get("phase3plus_pct"))
+        # Use the SAME prevalence definition the model uses. ipc.json's
+        # phase3plus_pct is a share of the population the analysis covered; for
+        # ten countries that is a fraction of the country, and comparing the
+        # score against an inflated denominator manufactures a contradiction.
+        # Ukraine's published 32% is 32% of an assessed 6.26M, i.e. 5.1% of
+        # Ukraine — a score of 34 is not in conflict with that.
+        _ipc_row = ipc.get(iso) or {}
+        _cov = _num(_ipc_row.get("analysis_coverage_ratio"))
+        if _cov is not None and _cov < 0.6 and _ipc_row.get("national_phase3plus_pct") is not None:
+            ipc_pct = _num(_ipc_row.get("national_phase3plus_pct"))
+        else:
+            ipc_pct = _num(_ipc_row.get("phase3plus_pct"))
         if ipc_pct is not None and ipc_pct >= 30 and disp < 50:
             add(iso, "P0", "outcome-contradiction",
-                f"displayed {disp:.0f} but IPC has {ipc_pct}% of the population in Phase 3+")
+                f"displayed {disp:.0f} but {ipc_pct}% of the national population is in IPC Phase 3+")
+
+        # FEWS `current_phase` is the WORST admin area in the country, not a
+        # national prevalence, so a single Phase 4 district makes the whole
+        # country Phase 4. On its own that is not a contradiction with a
+        # mid-range national score — it is a different measurement. Only a
+        # famine classification, or a Phase 4 that a high national IPC
+        # prevalence corroborates, is a genuine P0.
         fews_phase = _num((fews.get(iso) or {}).get("current_phase"))
-        if fews_phase is not None and fews_phase >= 4 and disp < 50:
-            add(iso, "P0", "outcome-contradiction",
-                f"displayed {disp:.0f} but FEWS NET classifies {iso} at Phase {int(fews_phase)}")
+        if fews_phase is not None and disp < 50:
+            corroborated = ipc_pct is not None and ipc_pct >= 20
+            if fews_phase >= 5 or (fews_phase >= 4 and corroborated):
+                add(iso, "P0", "outcome-contradiction",
+                    f"displayed {disp:.0f} but FEWS classifies {iso} at Phase {int(fews_phase)}"
+                    + (f" with {ipc_pct}% nationally in IPC Phase 3+" if corroborated else ""))
+            elif fews_phase >= 4:
+                add(iso, "P1", "fews-worst-area",
+                    f"displayed {disp:.0f}; FEWS worst-area phase is {int(fews_phase)} but national "
+                    f"IPC prevalence is {ipc_pct if ipc_pct is not None else 'unknown'}% — "
+                    f"a localised emergency, not a national one")
+
+        # Absolute caseload is its own dimension: the largest Phase 3+ headcount
+        # on earth should not sit mid-table because the denominator is large.
+        _cnt = _num(_ipc_row.get("phase3plus_count"))
+        if _cnt is not None and _cnt >= 10_000_000 and disp < 50:
+            add(iso, "P1", "caseload-vs-score",
+                f"displayed {disp:.0f} with {_cnt:,.0f} people in IPC Phase 3+")
 
         # --- 9. food inflation cross-check against RTFP where both exist ---
         fi_v = _num((row.get("fi") or {}).get("value"))

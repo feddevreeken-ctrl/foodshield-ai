@@ -37,6 +37,7 @@ Formula (extended May 2026, expanded May 2026 v20.27):
     - relief_present     (-2)    — active humanitarian response damps shock
 """
 import json
+import math
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -207,6 +208,27 @@ def main():
         usg_row  = usgs.get(iso) or {}
 
         ipc_pressure  = min(12, ipc_p3 * 0.12)
+
+        # v89 — ABSOLUTE CASELOAD, alongside prevalence.
+        #
+        # ipc_pressure is a function of the SHARE of a population in Phase 3+,
+        # which quietly makes a large country's emergency invisible. Nigeria has
+        # the largest Phase 3+ caseload on earth — 36.3 MILLION people — at 15.3%
+        # prevalence, and scored 45, below Somalia at 80 on 6.0M and South Sudan
+        # at 93 on 7.8M. A dashboard that ranks the world's biggest food
+        # emergency 40 places down because the denominator is big is measuring
+        # the wrong thing.
+        #
+        # Prevalence and headcount are genuinely different dimensions of the same
+        # crisis and both belong: prevalence says how deeply a society is
+        # affected, headcount says how many people need feeding. Log-scaled
+        # because the difference between 1M and 5M matters far more than between
+        # 30M and 34M, and capped at 5 so it cannot swamp prevalence. It sits
+        # INSIDE the crisis-cluster cap below, so it cannot double-count the same
+        # emergency that ipc_pressure and fews_kick already register.
+        _ipc_count = (_ipc_row.get("phase3plus_count")
+                      if isinstance(_ipc_row.get("phase3plus_count"), (int, float)) else 0)
+        caseload_kick = min(5.0, 2.5 * math.log10(1 + _ipc_count / 1_000_000.0)) if _ipc_count > 0 else 0
         wfp_pressure  = min(6, max(0, (wfp_fcs - 30) * 0.15))
         conflict_kick = min(5, conflict * 0.05)
         relief_damp   = -2 if relief_n >= 3 else (-1 if relief_n >= 1 else 0)
@@ -426,12 +448,12 @@ def main():
         # prevent. Note the cap is currently non-binding on live data (0 of 264
         # rows reach it; the largest cluster is Sudan at 14.2), so this changes
         # no published number today — it closes the path before it opens.
-        crisis_cluster  = (ipc_pressure + fews_kick + displacement_kick
+        crisis_cluster  = (ipc_pressure + caseload_kick + fews_kick + displacement_kick
                            + inform_amp + conflict_kick + wfp_pressure)
         cluster_overage = max(0, crisis_cluster - 18)
 
         adj = round(
-            ipc_pressure + fews_kick + wfp_pressure + displacement_kick + conflict_kick + global_food_kick
+            ipc_pressure + caseload_kick + fews_kick + wfp_pressure + displacement_kick + conflict_kick + global_food_kick
             + fx_shock + inflation_shock + weather_kick + flood_kick
             + aq_kick + us_water_kick + us_fi_kick
             + inform_amp + governance_drag + psd_shortfall
@@ -487,6 +509,7 @@ def main():
                 "ipc_pressure":    round(ipc_pressure, 1),
                 "wfp_pressure":    round(wfp_pressure, 1),
                 "conflict_kick":   round(conflict_kick, 1),
+                "caseload_kick":   round(caseload_kick, 1),
                 "fews_kick":       round(fews_kick, 1),
                 "displacement_kick": displacement_kick,
                 "global_food_kick": global_food_kick,
