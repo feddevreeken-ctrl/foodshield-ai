@@ -107,6 +107,37 @@ DISPLAY_NAMES = {
 }
 
 
+# Citation hygiene — August 2026 link sweep. Twelve URLs cited across
+# data/companies/*.json now return 404, 502 or fail DNS, leaving 21 claims
+# pointing a reader at nothing. Where the page genuinely existed and the company
+# merely reorganized its site, we repoint at the dated Internet Archive capture
+# of the exact page that was cited, so the reader still sees what the claim was
+# built on rather than a different page that happens to agree. Three further
+# dead Yara URLs are deliberately absent: they have no capture at all and the
+# assertions they carried turned out to be false, so those claims were corrected
+# in yara.json instead of relinked. Re-run the sweep before trusting this map.
+DEAD_CITATIONS = {
+    "https://www.yara.com/this-is-yara/our-organization/":
+        "https://web.archive.org/web/20260410200951/https://www.yara.com/this-is-yara/our-organization/",
+    "https://www.viterra.ca/en/What-We-Do/Processing/Becancour":
+        "https://web.archive.org/web/20250319001751/https://www.viterra.ca/en/What-We-Do/Processing/Becancour",
+    "https://www.ofi.com/products-and-ingredients/nuts/cashews.html":
+        "https://web.archive.org/web/20250809192552/https://www.ofi.com/products-and-ingredients/nuts/cashews.html",
+    "https://www.ofi.com/products-and-ingredients/coffee/central-and-south-america.html":
+        "https://web.archive.org/web/20250718133607/https://www.ofi.com/products-and-ingredients/coffee/central-and-south-america.html",
+    "https://www.ofi.com/content/dam/olamofi/products-and-ingredients/cocoa/cocoa-pdfs/cocoa-compass-impact-report-final.pdf":
+        "https://web.archive.org/web/20250117073338/https://www.ofi.com/content/dam/olamofi/products-and-ingredients/cocoa/cocoa-pdfs/cocoa-compass-impact-report-final.pdf",
+    "https://betterricebetterlife.olamagri.com/":
+        "https://web.archive.org/web/20251204234104/https://betterricebetterlife.olamagri.com/",
+    "https://www.tysonsustainability.com/people/consumers/ingredient-sourcing":
+        "https://web.archive.org/web/20230609015755/https://tysonsustainability.com/people/consumers/ingredient-sourcing",
+    "https://jbs.com.br/en/press/releases-en/jbs-acquires-european-company-to-expand-its-global-plant-based-food-platform/":
+        "https://web.archive.org/web/20221129194221/https://jbs.com.br/en/press/releases-en/jbs-acquires-european-company-to-expand-its-global-plant-based-food-platform/",
+    "https://au.cofcointernational.com/":
+        "https://web.archive.org/web/20200721201432/https://au.cofcointernational.com/",
+}
+
+
 def _normalize_one(company_json):
     """Convert per-company schema → flatter frontend schema."""
     meta = company_json.get("_meta", {}) or {}
@@ -148,6 +179,13 @@ def _normalize_one(company_json):
             domains[domain] = domains.get(domain, 0) + 1
     primary = sorted(domains.items(), key=lambda x: -x[1])
     primary_citation = primary[0][0] if primary else None
+
+    # Relink dead citations only AFTER primary_citation is computed, so a company
+    # is never described to the reader as sourced from "web.archive.org".
+    for cl in claims:
+        replacement = DEAD_CITATIONS.get(cl.get("citation_url"))
+        if replacement:
+            cl["citation_url"] = replacement
 
     # research_status from per-company _meta — the ONLY signal that earns the
     # "sourced" badge (matches data/companies/README.md rule). Files that are

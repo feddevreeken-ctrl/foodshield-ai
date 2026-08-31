@@ -308,6 +308,18 @@ SOURCES = [
     # agriculture RSS. Both keyless. mode='live' because it refreshes every cron,
     # but note the payload is third-party CLAIMS with links, not measured data —
     # the count below is HEADLINES, not countries or commodities.
+    # v84 — the trade atlas itself. The v83 note above says an unregistered
+    # snapshot is one nobody can date, and commodity_flows.json was still exactly
+    # that: 4,122 corridors, cut in June, invisible to every freshness check.
+    # It is rebuilt by hand, not on cron, so it registers as manual — the point of
+    # listing it is that its age becomes visible, not that it looks live.
+    {
+        "key": "commodity_flows",
+        "file": "commodity_flows.json",
+        "label": "Trade Flow Atlas — curated bilateral corridors (static snapshot)",
+        "cadence": "manual / rebuilt by hand",
+        "mode": "manual",
+    },
     {
         "key": "commodity_news",
         "file": "commodity_news.json",
@@ -341,6 +353,13 @@ def payload_count(key, payload):
     # Data Status page counts stories here, not commodities.
     if key == "commodity_news":
         return len(payload.get("items") or [])
+    # The atlas's unit is the corridor, not the commodity: a bare key count would
+    # publish "46" on the Data Status page for a file that ships 4,000+ flows.
+    if key == "commodity_flows":
+        return sum(
+            len((v or {}).get("flows") or [])
+            for v in (payload.get("commodities") or {}).values()
+        )
     # Ignore internal underscore-prefixed keys (e.g. fx_rates' _ccy_history rolling
     # store) so they don't inflate the per-source country count on the Data Status page.
     return len([k for k in payload if not str(k).startswith("_")])
@@ -390,6 +409,13 @@ def infer_status(spec, envelope, count, period):
 
     if envelope is None:
         return "failed", "missing file"
+
+    # v84 — the trade atlas is a hand-rebuilt snapshot, not a cron feed. Report it
+    # as manual so it isn't counted as a live pipeline, and put the cut date in the
+    # reason: registering a snapshot is pointless if the page still can't see its age.
+    if spec["key"] == "commodity_flows":
+        cut = str(meta.get("generated_at") or "")[:10]
+        return "manual", f"static atlas snapshot, rebuilt by hand{f' — cut {cut}' if cut else ''}"
 
     # v43 — an EXPLICIT _meta.status from the refresh script wins over the
     # note-sniffing below. Inferring state by string-matching prose is how
@@ -479,6 +505,11 @@ def main():
         envelope = read_envelope(DATA_DIR / spec["file"])
         meta = (envelope or {}).get("_meta") or {}
         payload = (envelope or {}).get("data")
+        # commodity_flows.json predates the {_meta, data} envelope and keeps its
+        # payload at the top level. Without this it reads as an empty file and gets
+        # demoted to "empty payload" the moment it is finally registered.
+        if payload is None and envelope is not None and "commodities" in envelope:
+            payload = envelope
         count = payload_count(spec["key"], payload)
         period = infer_period(spec["key"], payload)
         status, reason = infer_status(spec, envelope, count, period)

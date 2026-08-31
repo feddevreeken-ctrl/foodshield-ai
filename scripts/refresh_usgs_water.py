@@ -61,6 +61,11 @@ def main():
                 "period": "P7D",
             }, timeout=20, retries=2)
             ts = (r.json().get("value") or {}).get("timeSeries") or []
+            # v87 — carry the gauge's real coordinates. Without them index.html
+            # fell back to `co.lat || 39` and stacked every USGS event on a
+            # single pin at 39,-98 in Kansas, including gauges on the Ohio.
+            _gl = (((ts[0].get("sourceInfo") or {}).get("geoLocation") or {})
+                   .get("geogLocation") or {}) if ts else {}
             gage_latest = None
             disch_latest = None
             disch_first = None
@@ -95,6 +100,8 @@ def main():
                 "discharge_cfs_latest": disch_latest,
                 "discharge_7d_change_pct": change_pct,
                 "flow_anomaly": anomaly,
+                "lat": _gl.get("latitude"),
+                "lng": _gl.get("longitude"),
             }
         except Exception as e:
             print(f"  [warn] USGS {state}/{site} skipped: {e}")

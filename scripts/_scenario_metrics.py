@@ -34,6 +34,16 @@ NEGATIVE FIXTURES MATTER MOST:
   those is wrong in the exact direction it is already suspected of being
   wrong. Scoring only on crisis episodes would hide it.
 
+NOT WIRED IN (as of 2026-08-31):
+  Nothing imports this module. data/backtest_scenarios.json is produced by
+  scripts/backtest_scenarios.py, which computes its own ranks and never calls
+  anything here, so the figures the Scenario panel publishes carry NO
+  permutation null and NO negative fixtures. Three of the five precedents in
+  data/precedents.json — india_rice_2023, indonesia_palm_2022, gfpc_2007_08 —
+  are exactly the negative and base-rate cases this docstring argues matter
+  most, and none of them is scored anywhere. Read what follows as a
+  specification, not as a description of what the published panel did.
+
 Pure stdlib — no numpy, so it runs wherever the rest of the pipeline does.
 """
 import random

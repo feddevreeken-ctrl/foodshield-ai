@@ -39,11 +39,17 @@ WHAT EACH CHECK DEFENDS AGAINST
   7. Crisis-feed honesty ........ the no-false-calm rule: if the core crisis
                                   feeds are empty, the nowcast must NOT present
                                   affected countries as high-confidence calm.
+  9. UI self-description ........ the copy drifting away from the data it
+                                  describes: "35 public sources" over a 34-
+                                  source manifest, "185 countries" over a
+                                  184-country atlas. Nothing else in the repo
+                                  reads index.html at all.
 
 All thresholds live in the CONFIG block below so they are easy to tune as the
 data improves. Hard FAILs trip exit 1; WARNs are loud but non-fatal.
 """
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -547,6 +553,259 @@ def check_crisis_honesty(rep):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Check 9 — UI self-description gate (index.html literals vs the data files)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Element ids the frontend rehydrates from live data when the panel opens. Their
+# markup literal is only a pre-render fallback, so a mismatch there is a WARN —
+# unless the JS that rewrites the id has gone (checked below), which makes the
+# literal the shipped number again and the mismatch a FAIL.
+UI_HYDRATED_IDS = {
+    "instr-stat-countries":   "sovereign_countries",
+    "instr-stat-commodities": "commodities",
+    "instr-stat-flows":       "flows",
+    "instr-stat-pipelines":   "total_sources",
+    "about-source-count":     "total_sources",
+    "about-source-auto":      "ok_sources",
+}
+
+# Prose claims: (truth key, regex whose group 1 is the claimed numeral).
+# These are deliberately narrow. The site is full of legitimate prose numerals
+# — "46 countries" (company disclosures), "~35 crisis countries", "170+
+# countries", "23 public sources" (the licence list correctly counting itself)
+# — and a gate that fails on those gets switched off within a week. Each
+# pattern therefore carries enough surrounding words to pin it to a claim the
+# site is making ABOUT ITSELF, and nothing else.
+UI_CLAIM_PATTERNS = [
+    ("total_sources",       r"(\d[\d,]*)\s+public\s+data\s+sources"),
+    ("total_sources",       r"(\d[\d,]*)\s+(?:public|open-data|data)\s+pipelines"),
+    ("total_sources",       r"(\d[\d,]*)\s+public\s+sources\s+[—-]\s+\d"),
+    ("ok_sources",          r"(\d[\d,]*)\s+refreshed\s+automatically"),
+    ("ok_sources",          r"public\s+sources\s+[—-]\s+(\d[\d,]*)\s+of\s+them"),
+    ("commodities",         r"(\d[\d,]*)\s+commodities\s+are\s+now\s+covered"),
+    ("flows",               r"(\d[\d,]*)\s+(?:cited|curated)\s+(?:bilateral\s+)?flows"),
+    ("observed_pct",        r"(\d+(?:\.\d+)?)\s*%\s+of\s+them\s+confirmed\s+observed"),
+    ("sovereign_countries", r"(\d[\d,]*)\s+countries\s*(?:\+|and)\s*50\s+US\s+states"),
+    ("atlas_countries",     r"flows\s+across\s+(\d[\d,]*)\s+countries"),
+]
+
+# The methodology hero's catch-branch fallback object: the four numbers that
+# ship whenever the live computation throws, so they have to be true as well.
+UI_FALLBACK_RE = (r"commodities:\s*(\d+),\s*flows:\s*(\d+),\s*obsPct:\s*(\d+),"
+                  r"\s*countries:\s*(\d+)")
+
+_UI_TAG_RE = re.compile(r"<[^<>]{0,400}>")
+
+
+def _ui_truths(rep, idx):
+    """What the site's self-describing numerals SHOULD say, computed from data/.
+
+    Returns {truth key: (value, provenance)}. A key we cannot compute is simply
+    absent and its claims are skipped — this gate never asserts against a guess.
+    """
+    truths = {}
+
+    env, err = _load("source_manifest.json")
+    if err:
+        rep.warn("ui-claims", f"source_manifest.json: {err} — source counts unchecked")
+    else:
+        summary = (env.get("data") or {}).get("summary") or {}
+        for key in ("total_sources", "ok_sources"):
+            if isinstance(summary.get(key), int):
+                truths[key] = (summary[key], f"source_manifest.summary.{key}")
+
+    # commodity_flows.json is in neither validate_data's EXPECTED_FILES nor the
+    # schema-shape scan, so the 46 / 4,122 / observed-% claims the app makes
+    # about the trade atlas are checked HERE or nowhere.
+    cf, cferr = _load("commodity_flows.json")
+    commodities = (cf or {}).get("commodities")
+    if cferr:
+        rep.fail("ui-claims", f"commodity_flows.json: {cferr} — the atlas claims "
+                              f"(commodities / flows / observed %) are unverifiable")
+    elif not isinstance(commodities, dict):
+        rep.fail("ui-claims", "commodity_flows.json: 'commodities' is not a dict — "
+                              "the atlas claims are unverifiable")
+    else:
+        n_com = n_flow = n_obs = 0
+        isos = set()
+        for body in commodities.values():
+            flows = (body or {}).get("flows")
+            if not isinstance(flows, list):
+                continue
+            n_com += 1
+            for f in flows:
+                if not isinstance(f, dict):
+                    continue
+                n_flow += 1
+                if f.get("kind") == "observed":
+                    n_obs += 1
+                isos.add(f.get("from"))
+                isos.add(f.get("to"))
+        isos.discard("EU")      # the UI drops the EU aggregate before counting
+        isos.discard(None)
+        truths["commodities"] = (n_com, "commodity_flows entries carrying a flows[]")
+        truths["flows"] = (n_flow, "commodity_flows flow rows")
+        truths["atlas_countries"] = (len(isos),
+                                     "distinct commodity_flows endpoints (EU dropped)")
+        if n_flow:
+            # Count-based, matching the methodology tab's own obs/flows —
+            # deliberately NOT the flow-WEIGHTED share the atlas footer quotes.
+            truths["observed_pct"] = (100.0 * n_obs / n_flow,
+                                      f"{n_obs}/{n_flow} flows with kind=observed")
+
+    # Sovereign count. Read the UI's own exclusion list out of index.html rather
+    # than restating it here, so this gate can never disagree with the frontend
+    # about what counts as a country.
+    m = re.search(r"const\s+NON_UN_TERRITORIES\s*=\s*new\s+Set\(\[(.*?)\]\)", idx, re.S)
+    cenv, cerr = _load("countries.json")
+    if not m:
+        rep.warn("ui-claims", "NON_UN_TERRITORIES not found in index.html — "
+                              "sovereign country count unchecked")
+    elif cerr:
+        rep.warn("ui-claims", f"countries.json: {cerr} — sovereign count unchecked")
+    else:
+        terr = set(re.findall(r"'([A-Z]{3})'", m.group(1)))
+        rows = ((cenv.get("data") or {}).get("countries")) or {}
+        sov = {str(k).strip().upper() for k in rows
+               if not str(k).strip().upper().startswith("US-")} - terr
+        truths["sovereign_countries"] = (
+            len(sov), f"countries.json minus US states minus {len(terr)} "
+                      f"non-UN territories")
+    return truths
+
+
+def check_ui_claims(rep):
+    """Every numeral the site uses to describe ITSELF must equal the data file
+    that governs it.
+
+    Nothing else in this repo compares a literal in index.html against the JSON
+    behind it, and every drift the 2026-08 audit turned up lived exactly there:
+    "35 public data sources — 30 of them" against a 34/29 manifest, "185
+    countries" against a 184-country atlas, a footer observed-% that disagreed
+    with the methodology tab, a version card two releases late. The literals are
+    what crawlers, social previews and the first paint show, so they are claims,
+    not decoration.
+    """
+    path = DATA_DIR.parent / "index.html"
+    if not path.exists():
+        rep.fail("ui-claims", f"{path} not found — UI claims unchecked")
+        return
+    idx = path.read_text(encoding="utf-8")
+    lines = idx.split("\n")
+
+    truths = _ui_truths(rep, idx)
+    if not truths:
+        rep.fail("ui-claims", "no truth value computable — UI claims unchecked")
+        return
+
+    # The in-app changelog quotes historical figures on purpose ("1,500 → 3,991
+    # cited flows"). Skip its span: a release note is a record, not a claim.
+    skip = set()
+    start = next((i for i, l in enumerate(lines, 1)
+                  if l.startswith("const UPDATES_LOG")), None)
+    if start:
+        end = next((i for i in range(start, len(lines) + 1)
+                    if lines[i - 1].rstrip() == "];"), None)
+        if end:
+            skip = set(range(start, end + 1))
+
+    bad = []
+
+    def _num(txt):
+        return float(txt.replace(",", ""))
+
+    def _agrees(key, literal, truth_val):
+        if key == "observed_pct":
+            # Compare at the precision the copy actually claims: "95.6%" is
+            # checked to a tenth, "96%" only to the point.
+            nd = len(literal.split(".")[1]) if "." in literal else 0
+            return round(float(literal), nd) == round(truth_val, nd)
+        return _num(literal) == float(truth_val)
+
+    def _report(lineno, literal, key, truth_val, prov, hydrated_id=None):
+        bad.append(lineno)
+        msg = f"index.html:{lineno} says '{literal}' for {key} — data says {truth_val} ({prov})"
+        if hydrated_id:
+            rep.warn("ui-claims", f"{msg} [pre-render fallback for #{hydrated_id}, "
+                                  f"rewritten at runtime — stale, not shipped]")
+        else:
+            rep.fail("ui-claims", msg)
+
+    checked = 0
+
+    # Hydrated stat literals first, so the prose pass below can skip a numeral
+    # already judged here instead of reporting it twice under two verdicts.
+    hydrated_lits = set()
+    for eid, key in sorted(UI_HYDRATED_IDS.items()):
+        if key not in truths:
+            continue
+        hits = [(i, m) for i, l in enumerate(lines, 1)
+                for m in [re.search(r'id="%s"[^>]*>([\d,]+)<' % re.escape(eid), l)] if m]
+        if not hits:
+            continue
+        # If nothing else in the file mentions the id, no JS rewrites it any
+        # more and the fallback IS the shipped number: judge it as prose.
+        hydrated = len(re.findall(re.escape(eid), idx)) > len(hits)
+        for lineno, m in hits:
+            hydrated_lits.add((lineno, m.group(1)))
+            checked += 1
+            val, prov = truths[key]
+            if not _agrees(key, m.group(1), val):
+                _report(lineno, m.group(1), key, val, prov,
+                        hydrated_id=eid if hydrated else None)
+
+    seen = set()
+    for lineno, raw in enumerate(lines, 1):
+        if lineno in skip:
+            continue
+        head = raw.lstrip()
+        if head.startswith("//") or head.startswith("*"):
+            continue  # code comments are notes to us, not claims to the reader
+        # Scan the raw line (meta/og description text lives INSIDE a tag) and
+        # the tag-stripped line (prose wraps its numerals in <b>), deduping the
+        # overlap so a JSON-LD line isn't reported twice.
+        for text in (raw, re.sub(r"\s+", " ", _UI_TAG_RE.sub(" ", raw))):
+            for key, pat in UI_CLAIM_PATTERNS:
+                if key not in truths:
+                    continue
+                for m in re.finditer(pat, text, re.I):
+                    literal = m.group(1)
+                    if "→" in text[max(0, m.start(1) - 30):m.start(1)]:
+                        continue  # "1,500 → 3,991": a before/after, not a claim
+                    if (lineno, literal) in hydrated_lits:
+                        continue
+                    if (lineno, key, literal) in seen:
+                        continue
+                    seen.add((lineno, key, literal))
+                    checked += 1
+                    val, prov = truths[key]
+                    if not _agrees(key, literal, val):
+                        _report(lineno, literal, key, val, prov)
+
+    fb = re.search(UI_FALLBACK_RE, idx)
+    if fb:
+        lineno = idx[:fb.start()].count("\n") + 1
+        for grp, key in ((1, "commodities"), (2, "flows"),
+                         (3, "observed_pct"), (4, "atlas_countries")):
+            if key not in truths:
+                continue
+            checked += 1
+            val, prov = truths[key]
+            if not _agrees(key, fb.group(grp), val):
+                _report(lineno, fb.group(grp), key, val, prov)
+
+    if checked == 0:
+        # A gate that silently matches nothing is worse than no gate: it reports
+        # PASS forever while the copy drifts. Losing every anchor is a failure.
+        rep.fail("ui-claims", "matched ZERO self-describing numerals — the markup "
+                              "moved and this check has gone blind; re-anchor "
+                              "UI_CLAIM_PATTERNS against index.html")
+    elif not bad:
+        rep.pass_("ui-claims", f"{checked} self-describing numeral(s) agree with "
+                               f"{len(truths)} value(s) computed from data/")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Driver
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -581,6 +840,7 @@ def main():
         ("6. US-state semantic test",         check_us_states),
         ("7. Crisis-feed honesty",            check_crisis_honesty),
         ("8. Formula integrity (FDRS/scenarios)", check_formula_integrity),
+        ("9. UI self-description claims",     check_ui_claims),
     ]
 
     for title, fn in checks:
