@@ -275,17 +275,17 @@ def main():
     try:
         text = _download_csv_text()
     except Exception as e:
-        write_json("asap.json", {}, source="JRC ASAP",
-                   notes=f"ASAP hotspots_ts.zip fetch failed: {e}")
-        raise
+        # v90 — DO NOT write an empty payload before failing. safe_run()
+        # preserves the last good file only when a step RAISES; writing {}
+        # first destroys that payload and the preservation has nothing left
+        # to restore. The exception alone carries the diagnosis.
+        raise RuntimeError(f"ASAP hotspots_ts.zip fetch failed: {e}") from e
 
     rows = list(csv.DictReader(io.StringIO(text), delimiter=";"))
     if not rows or "hs_code" not in (rows[0] or {}):
-        write_json("asap.json", {}, source="JRC ASAP",
-                   notes=("ASAP CSV parsed to no usable rows — check the delimiter "
-                          f"(must be ';') and the header. Columns seen: "
-                          f"{list(rows[0].keys()) if rows else 'none'}"))
-        raise RuntimeError("ASAP CSV parsed to no usable rows")
+        raise RuntimeError(
+            "ASAP CSV parsed to no usable rows — check the delimiter (must be ';') "
+            f"and the header. Columns seen: {list(rows[0].keys()) if rows else 'none'}")
 
     alias_hits, unmapped = [], set()
     latest = {}          # iso3 -> row dict of the most recent assessment

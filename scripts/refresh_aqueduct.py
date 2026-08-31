@@ -111,9 +111,13 @@ def main():
             print(f"  [warn] {ind} failed: {e}")
 
     if not per_indicator:
-        write_json("aqueduct.json", {}, source="WRI Aqueduct 4.0",
-                   notes="WB Data360 mirror fetch failed: " + "; ".join(failures))
-        return
+        # v90 — RAISE, do not write an empty payload and return. Writing {} here
+        # destroyed the last good aqueduct.json and then returned success, so
+        # safe_run() had nothing to preserve and the pipeline reported a clean
+        # run while the water-stress component silently went to NO DATA for
+        # every country. A total upstream failure must fail loudly.
+        raise RuntimeError("WB Data360 mirror fetch failed for every indicator: "
+                           + "; ".join(failures))
 
     out = {}
     for key, scores in per_indicator.items():

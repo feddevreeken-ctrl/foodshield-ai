@@ -108,9 +108,11 @@ def main():
                         and "Elements" not in n and "Flags" not in n
                         and "ItemCodes" not in n)
     except Exception as e:
-        write_json("faostat_prod_index.json", {}, source="FAOSTAT Production Indices",
-                   notes=f"bulk download failed: {e}")
-        raise
+        # v90 — DO NOT write an empty payload before failing. safe_run()
+        # preserves the last good file only when a step RAISES; writing {}
+        # first destroys that payload and the preservation has nothing left
+        # to restore. The exception alone carries the diagnosis.
+        raise RuntimeError(f"FAOSTAT Production Indices bulk download failed: {e}") from e
 
     series = {}   # iso3 -> {year: value}
     rows_seen = 0

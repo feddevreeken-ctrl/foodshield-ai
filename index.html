@@ -22962,7 +22962,9 @@ function updatePageTitle() {
   if (s.commodity) {
     const com = s.commodity.charAt(0).toUpperCase() + s.commodity.slice(1);
     title = s.country ? `${s.commodity ? com + ' · ' : ''}${title}` : `${com} dependency · FoodShield AI`;
-    desc = `${com} sourcing exposure across 34 public-data pipelines · FoodShield AI`;
+    // v90 — was a hardcoded 34 against a manifest now at 42. This one is
+    // crawler- and social-preview-facing, so it is worth deriving too.
+    desc = `${com} sourcing exposure across ${(LIVE?.manifest?.summary?.total_sources) || 42} public-data pipelines · FoodShield AI`;
   }
   document.title = title;
   let md = document.querySelector('meta[name="description"]');
@@ -32768,7 +32770,11 @@ const TOUR_STEPS = [
   {
     selector: '#map-wrap',
     title: 'The world food-risk map',
-    body: 'Every country is colour-coded by its <em>Food Disruption Risk Score</em> — green is resilient, red is severe. The score blends ${(LIVE?.manifest?.summary?.total_sources) || 40} data pipelines (imports, climate, conflict, logistics, prices) into one number you can scan in seconds.',
+    // v90 — this was a SINGLE-quoted string, so the interpolation shipped to
+    // users as the literal text "${(LIVE?.manifest?.summary?.total_sources) || 40}".
+    // An automated patch swapped a hardcoded 34 for an expression without
+    // checking the quote style of the string it was editing.
+    body: `Every country is colour-coded by its <em>Food Disruption Risk Score</em> — green is resilient, red is severe. The score blends ${(LIVE?.manifest?.summary?.total_sources) || 42} data pipelines (imports, climate, conflict, logistics, prices) into one number you can scan in seconds.`,
     before: () => { try { showTab('global'); } catch(e){} closePanelIfOpen(); return 300; },
   },
   {
@@ -35699,7 +35705,7 @@ function renderMethodologyTab() {
           {src:'FAO FFPI + WB Pink Sheet',yr:'monthly',used:'Global food price index + commodity benchmarks (wheat, rice, corn, palm oil, fertilizer)',url:'https://www.fao.org/worldfoodsituation/foodpricesindex'},
           {src:'ACLED (Armed Conflict Location & Event Data)',yr:'live when licensed',used:'Conflict fatality + event counts. Feeds the nowcast conflict signal ONLY when the feed is live (is_live); on a lagged/degraded tier it is already captured in the structural conflict component and contributes 0 to the live delta (no double-count)',url:'https://acleddata.com'},
           {src:'ReliefWeb',yr:'live',used:'Humanitarian situation reports tagged Food & Nutrition theme',url:'https://reliefweb.int'},
-          {src:'GDACS',yr:'live',used:'Natural-disaster alerts on the Disturbances tab (in-browser fetch) — shown for situational context only, NOT a scoring input (does not affect FDRS or the nowcast)',url:'https://www.gdacs.org'},
+          {src:'GDACS',yr:'live',used:'Drought, flood and tropical-cyclone alerts on the Disturbances tab, collected server-side by scripts/refresh_gdacs.py into data/gdacs.json — shown for situational context only, NOT a scoring input (does not affect FDRS or the nowcast)',url:'https://www.gdacs.org'},
           {src:'Google News RSS + publisher feeds',yr:'live · 6h',used:'Commodity-news headlines on the Commodities tab, tagged by exposed country/commodity. Stores headline + link + publisher + timestamp only — no article text, and the redirect link is never resolved (headline aggregation, not reproduction). Situational context, NOT a scoring input.',url:'https://news.google.com/'},
           {src:'UN Comtrade Plus (public preview)',yr:'2024',used:'Bilateral staples trade flows — observed wheat/rice/corn/soy by importer × exporter',url:'https://comtradeplus.un.org'},
           {src:'Open-Meteo Weather + Flood',yr:'live',used:'Precipitation + temperature anomalies, river discharge in flood-exposed basins',url:'https://open-meteo.com'},
@@ -36150,10 +36156,41 @@ async function loadDisturbanceData() {
       return d.toISOString().slice(0, 10);
     })();
     const gdacsUrl = `https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?alertlevel=Red,Orange&eventlist=DR,FL,TC,EQ,VO&limit=30&fromdate=${_gdacsFromDate}`;
-    const res = await Promise.race([
-      fetch(gdacsUrl),
-      new Promise((_,r) => setTimeout(()=>r(new Error('timeout')), 10000)) // v39.2 — was 6s; cold-load races needed more headroom
-    ]);
+    // v90 — PREFER THE COMMITTED SNAPSHOT.
+    //
+    // scripts/refresh_gdacs.py has been writing data/gdacs.json since v88, and
+    // nothing read it: this block still called gdacs.org from the browser on
+    // every page load. That left ~19% of the disturbance layer as an
+    // unmonitored third-party request with no freshness check, no manifest
+    // entry and a console.warn for a failure mode — and it pulled EQ and VO,
+    // which the collector deliberately drops because an earthquake is a hazard
+    // but not a food-system hazard.
+    //
+    // The snapshot is adapted into the GeoJSON shape the loop below already
+    // expects, so nothing downstream changes. The live call remains as the
+    // fallback for the case where the file is missing or empty.
+    const _localGdacs = await (async () => {
+      try {
+        const env = await _fetchData('gdacs');
+        const d = (env && (env.data || env)) || null;
+        return (d && Object.keys(d).length) ? d : null;
+      } catch (e) { return null; }
+    })();
+    const res = _localGdacs
+      ? { ok: true, json: async () => ({
+          features: Object.entries(_localGdacs).map(([id, r]) => ({
+            properties: {
+              eventid: id, eventtype: r.event_type, alertlevel: r.alert_level,
+              iso3: r.iso3, countryname: r.country, eventname: r.title,
+              fromdate: r.from_date, url: r.url,
+            },
+            geometry: { coordinates: [r.lng, r.lat] },
+          })),
+        }) }
+      : await Promise.race([
+          fetch(gdacsUrl),
+          new Promise((_,r) => setTimeout(()=>r(new Error('timeout')), 10000)) // v39.2 — was 6s; cold-load races needed more headroom
+        ]);
     if (res.ok) {
       const json = await res.json();
       const features = json.features || [];
@@ -38146,14 +38183,24 @@ function initCompaniesTab() {
   // "Viterra to leave export market in Russia".
   const _isDefunct = (name) => {
     try {
-      const rec = (LIVE.companies || {})[name];
-      return !!rec && /historical|pre_merger|defunct|acquired/i.test(String(rec.research_status || ''));
+      // v90 — match on the BASE name too. COMMODITY_COMPANIES renames acquired
+      // firms in place ("Viterra (Bunge)", "Glencore Agriculture" -> the same),
+      // and the parenthetical meant the lookup missed LIVE.companies['Viterra']
+      // entirely, so the entity this gate exists to suppress walked straight
+      // past it into the modeled trader tail.
+      const cands = [name, String(name || '').replace(/\s*\([^)]*\)\s*$/, '').trim()];
+      return cands.some(n => {
+        const rec = (LIVE.companies || {})[n];
+        return !!rec && /historical|pre_merger|defunct|acquired/i.test(String(rec.research_status || ''));
+      });
     } catch (e) { return false; }
   };
   const inIndex = (n) => _companyIndex[n] && _companyIndex[n].length;
   const majorsPresent = MAJORS.filter(n => inIndex(n) && !_isDefunct(n));
   const rest = Object.keys(_companyIndex)
-    .filter(c => c && !c.startsWith('(non-food') && !majorsPresent.includes(c))
+    // v90 — the tail was NOT gated, so a firm suppressed from MAJORS reappeared
+    // a few rows lower as a live modeled trader.
+    .filter(c => c && !c.startsWith('(non-food') && !majorsPresent.includes(c) && !_isDefunct(c))
     .map(c => ({ c, score: companyExposureScore(_companyIndex[c] || []) }))
     .sort((a,b) => b.score - a.score)
     .map(x => x.c);
