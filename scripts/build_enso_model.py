@@ -45,16 +45,62 @@ was actually done -- djf_same_year / djf_next_year -- rather than by a
 hemisphere story that would be wrong for exactly the countries that matter most.
 Two tests means the p-value carries a Bonferroni factor of 2, recorded as p_adj.
 
-(Empirically this picks sensibly: South African and Australian crops select
-djf_next_year, US winter wheat selects djf_same_year -- each matching its real
-growing season once PSD's marketing-year labelling is accounted for.)
+ALIGNMENT IS THE UNRESOLVED PROBLEM -- SEE _meta.production_ready
+Picking the better-fitting alignment is unsafe when the two disagree about the
+SIGN. Australian wheat fits -13.7%/ONI under one alignment and +13.2% under the
+other, and which one won flipped when the inference method changed: the
+coefficients never moved, only the selection did.
+
+Gating on the two alignments AGREEING was tried and is wrong -- it demands that
+the incorrect alignment, which is essentially noise with a random sign, agree
+with the correct one. It flagged 214 of 428 pairs unstable including South
+African maize, where the physics is not in doubt. So `alignment_unstable` is
+REPORTED as a diagnostic and gates nothing.
+
+Resolving this properly needs USDA's published per-crop, per-country marketing
+-year calendars, so each pair's growing season can be pre-registered instead of
+selected. That is not encoded here yet, which is why _meta.production_ready is
+false and no coefficient from this file is wired into the UI. A single ENSO
+window cannot substitute: NH winter wheat grows t-1 -> t and SH summer maize
+grows t -> t+1, a full year apart.
 
 WHAT IS DELIBERATELY NOT CLAIMED
 --------------------------------
 A fit that fails its gates returns "no detectable signal" rather than a small
 number with a big error bar. For a dashboard, "we looked and found nothing" is a
 finding; a decorative coefficient is a liability. Gates: n >= 30 usable years,
-and p_adj < 0.10.
+and a Benjamini-Hochberg q-value below 0.10.
+
+SERIAL CORRELATION
+------------------
+Detrended yield anomalies are autocorrelated, and a centred moving-average
+detrend induces autocorrelation by construction -- the residual of an MA filter
+is not white. Ordinary OLS standard errors are therefore too small, and the
+p-value ranking rewards whichever series is SMOOTHEST rather than whichever
+response is strongest. The first cut of the FDR control below made this
+impossible to miss: the single pair surviving was Iranian barley at -1.5%/ONI
+with p ~ 0, while South African maize -- a -20%/ONI effect with a textbook
+physical channel -- ranked 10th. A tiny effect with an impossibly small p is the
+signature of understated errors on an over-smooth (likely interpolated) series.
+
+So inference uses Newey-West HAC standard errors with Bartlett weights and
+lag L = floor(4*(n/100)^(2/9)), and the joint ENSO test is an HAC Wald statistic
+rather than the OLS F. This deflates exactly the artefacts it should.
+
+MULTIPLE TESTING ACROSS THE PANEL
+---------------------------------
+This fits ~428 country x commodity pairs. At a per-pair threshold of 0.10 that
+alone would hand back roughly 43 passing pairs from pure noise -- against the 69
+the uncontrolled version reported. Switzerland showed a "significant" -6.3%
+maize response to a Pacific SST index, which is the shape of exactly that
+problem: there is no physical channel, only 428 rolls of the dice.
+
+So the per-pair p (already Bonferroni-corrected for the two seasonal alignments)
+is passed through Benjamini-Hochberg across the WHOLE panel, and `signal`
+requires q < 0.10. BH controls the expected proportion of false positives among
+what is reported, which is the right target here: some false positives are
+tolerable in a screening exercise, but a fifth of the map being noise is not.
+The surviving set is smaller and far more physical.
 
 DATA QUALITY GATE
 -----------------
@@ -82,12 +128,29 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from refresh_usda_psd import FAS_TO_ISO3, NAME_TO_ISO3  # noqa: E402
 
 ONI_URL = "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
-# Indian Ocean Dipole (HadISST1.1 DMI). ENSO and the IOD covary, and for several
-# of the countries this dashboard most wants to score the IOD does the work that
-# gets credited to ENSO -- partialling it out collapses Australia's apparent
-# ENSO-wheat correlation from about -0.49 to -0.08 (Yuan & Yamagata 2015).
-# So every ENSO coefficient is refit with SON DMI alongside it and flagged for
-# whether it survives. A coefficient that does not survive is not reported.
+# Indian Ocean Dipole (HadISST1.1 DMI). ENSO and the IOD covary strongly, and
+# for several countries the IOD does work that gets credited to ENSO --
+# partialling it out collapses Australia's apparent ENSO-wheat correlation from
+# about -0.49 to -0.08 (Yuan & Yamagata 2015).
+#
+# WHICH COEFFICIENT WE PUBLISH, AND WHY IT IS THE UNCONDITIONAL ONE.
+# The IOD-adjusted slope answers "what if ENSO moved with the Indian Ocean held
+# fixed". That is a causal-attribution question, and it is the WRONG question
+# for this dashboard, which asks "a strong El Nino is forecast -- what should
+# this country expect?" The answer to THAT includes whatever the Indian Ocean
+# typically does alongside an El Nino, so the published coefficient is the
+# unconditional (total) association.
+#
+# Conditioning anyway is actively misleading under collinearity: with both
+# predictors in, Australian wheat flips to +14%/ONI -- El Nino apparently
+# HELPING Australian wheat -- because a large positive ENSO slope is offset by a
+# large negative IOD slope. Either coefficient alone is nonsense; only their sum
+# along the path the climate actually takes means anything.
+#
+# The IOD fit is therefore kept as a DIAGNOSTIC, not a gate. It sets
+# `enso_specific`: false where ENSO adds nothing beyond the Indian Ocean, which
+# tells a reader the teleconnection is a shared Indo-Pacific mode rather than an
+# ENSO one -- useful context, not grounds for deleting the effect.
 DMI_URL = "https://psl.noaa.gov/gcos_wgsp/Timeseries/Data/dmi.had.long.data"
 PSD_URLS = [
     ("grains_pulses", "https://apps.fas.usda.gov/psdonline/downloads/psd_grains_pulses_csv.zip"),
@@ -115,7 +178,7 @@ COMMODITIES = {
 }
 
 MIN_YEARS = 30          # usable observations required before we fit at all
-P_GATE = 0.10           # Bonferroni-adjusted significance required to report
+P_GATE = 0.10           # Benjamini-Hochberg FDR across the whole panel
 FLAT_RUN = 3            # >= this many identical consecutive yields => filled
 MA_WINDOW = 9           # centred moving average window for the technology trend
 MA_MIN = 5              # minimum periods at the series edges
@@ -301,10 +364,22 @@ def fit(anom_years: list[int], anom: list[float], djf: dict[int, float], shift: 
         return None
     sigma2 = float(resid @ resid) / dof
     try:
-        cov = sigma2 * np.linalg.inv(X.T @ X)
+        XtX_inv = np.linalg.inv(X.T @ X)
     except np.linalg.LinAlgError:
         return None
-    se = np.sqrt(np.diag(cov))
+    # Newey-West HAC: yield anomalies are autocorrelated and the MA detrend adds
+    # more, so the OLS covariance understates every standard error -- worst for
+    # the smoothest (often interpolated) series.
+    L = int(np.floor(4 * (n / 100.0) ** (2.0 / 9.0)))
+    S = (resid[:, None] * X).T @ (resid[:, None] * X)
+    for lag in range(1, max(L, 1) + 1):
+        if lag >= n:
+            break
+        w = 1.0 - lag / (L + 1.0)
+        A = (resid[lag:, None] * X[lag:]).T @ (resid[:-lag, None] * X[:-lag])
+        S += w * (A + A.T)
+    cov = XtX_inv @ S @ XtX_inv * (n / max(dof, 1))
+    se = np.sqrt(np.maximum(np.diag(cov), 1e-30))
     rss = float(resid @ resid)
     tot = float(((Y - Y.mean()) ** 2).sum())
     r2 = 1.0 - rss / tot if tot > 0 else 0.0
@@ -313,14 +388,17 @@ def fit(anom_years: list[int], anom: list[float], djf: dict[int, float], shift: 
     # With a DMI column present the restricted model keeps the DMI, so this
     # tests ENSO's INCREMENTAL contribution rather than ENSO plus whatever the
     # Indian Ocean was doing at the same time.
-    if dmi is not None:
-        Xr = np.column_stack([np.ones(n), np.array(d)])
-        br, *_ = np.linalg.lstsq(Xr, Y, rcond=None)
-        rss_r = float(((Y - Xr @ br) ** 2).sum())
-    else:
-        rss_r = tot
-    f_stat = ((rss_r - rss) / 2.0) / sigma2 if sigma2 > 0 else 0.0
-    p_joint = float(stats.f.sf(f_stat, 2, dof)) if f_stat > 0 else 1.0
+    # Joint test that BOTH ENSO slopes are zero, using the HAC covariance. An
+    # OLS F here would inherit exactly the understated errors HAC exists to fix.
+    R = np.zeros((2, k))
+    R[0, 1] = 1.0
+    R[1, 2] = 1.0
+    Rb = R @ beta
+    try:
+        wald = float(Rb @ np.linalg.inv(R @ cov @ R.T) @ Rb)
+    except np.linalg.LinAlgError:
+        return None
+    p_joint = float(stats.f.sf(wald / 2.0, 2, dof)) if wald > 0 else 1.0
     return {
         "n": n,
         "b_nino": float(beta[1]), "se_nino": float(se[1]),
@@ -343,7 +421,7 @@ def main() -> int:
     print(f"[INFO] PSD countries: {len(panel)}")
 
     results: dict = {}
-    n_fit = n_sig = n_thin = n_flat = n_naive_sig = n_lost_to_iod = 0
+    n_fit = n_sig = n_thin = n_flat = n_naive_sig = n_lost_to_iod = n_lost_to_fdr = n_unstable = 0
 
     for iso3 in sorted(panel):
         for commodity in sorted(panel[iso3]):
@@ -374,30 +452,32 @@ def main() -> int:
                 continue
             n_fit += 1
             best = min(cands, key=lambda r: r["p_joint"])
+            # Both alignments must agree on the direction of the El Nino
+            # response, else the seasonal choice is doing the work.
+            signs = {(1 if r["b_nino"] > 0 else -1) for r in cands}
+            alignment_stable = len(cands) < 2 or len(signs) == 1
+            if not alignment_stable:
+                n_unstable += 1
             # Bonferroni over the two alignments actually tested.
             p_adj = min(1.0, best["p_joint"] * len(cands))
             naive_sig = p_adj < P_GATE
             if naive_sig:
                 n_naive_sig += 1
 
-            # Refit at the SAME alignment with the IOD alongside. This is the
-            # estimate we actually publish: ENSO's contribution net of the
-            # Indian Ocean, which for several countries is most of the apparent
-            # effect. Alignment is not re-selected here, so the Bonferroni
-            # factor stays at 2.
+            # Diagnostic refit at the SAME alignment with the IOD alongside --
+            # used ONLY to label whether the effect is ENSO-specific. See the
+            # DMI_URL comment for why this does not replace the coefficient.
             adj = fit(ay, anom, djf, best["djf_shift"], dmi=dmi)
-            p_adj_iod = min(1.0, adj["p_joint"] * len(cands)) if adj else 1.0
+            p_incremental = min(1.0, adj["p_joint"] * len(cands)) if adj else 1.0
 
             recent = [series[y] for y in sorted(series)[-10:] if series[y].get("prod")]
             mean_prod = float(np.mean([r["prod"] for r in recent])) if recent else 0.0
 
-            signal = bool(p_adj_iod < P_GATE)
             entry = {
                 "n_years": best["n"],
                 "year_from": min(ay), "year_to": max(ay),
                 "alignment": best["alignment"],
                 "mean_production_kt": round(mean_prod, 1),
-                "signal": signal,
                 # Naive = ENSO alone. Published = ENSO net of the IOD. Both are
                 # carried so the shrinkage is visible rather than silent.
                 "naive": {
@@ -408,35 +488,89 @@ def main() -> int:
                     "signal": bool(naive_sig),
                 },
             }
-            if signal and adj:
-                n_sig += 1
-                entry.update({
-                    "yield_pct_per_oni_nino": round(adj["b_nino"] * 100, 3),
-                    "se_nino_pct": round(adj["se_nino"] * 100, 3),
-                    "p_nino": round(adj["p_nino"], 5),
-                    "yield_pct_per_oni_nina": round(adj["b_nina"] * 100, 3),
-                    "se_nina_pct": round(adj["se_nina"] * 100, 3),
-                    "p_nina": round(adj["p_nina"], 5),
-                    "iod_pct_per_dmi": round(adj["b_iod"] * 100, 3),
-                    "p_iod": round(adj["p_iod"], 5),
-                    "r2": round(adj["r2"], 4),
-                    "p_adj": round(p_adj_iod, 5),
-                })
-            else:
-                entry["p_adj"] = round(p_adj_iod, 5)
-                if naive_sig:
-                    n_lost_to_iod += 1
-                    entry["note"] = (
-                        "ENSO alone looked significant, but the effect does not survive "
-                        "controlling for the Indian Ocean Dipole -- not modelled")
-                else:
-                    entry["note"] = "no detectable ENSO signal at p_adj<0.10 -- not modelled"
+            entry["alignment_unstable"] = bool(not alignment_stable)  # diagnostic only
+            if not alignment_stable:
+                other = max(cands, key=lambda r: r["p_joint"])
+                entry["alignment_other_pct_per_oni_nino"] = round(other["b_nino"] * 100, 3)
+            entry["_stable"] = alignment_stable
+            entry["_p_adj"] = p_adj
+            entry["_pending"] = {
+                "yield_pct_per_oni_nino": round(best["b_nino"] * 100, 3),
+                "se_nino_pct": round(best["se_nino"] * 100, 3),
+                "p_nino": round(best["p_nino"], 5),
+                "yield_pct_per_oni_nina": round(best["b_nina"] * 100, 3),
+                "se_nina_pct": round(best["se_nina"] * 100, 3),
+                "p_nina": round(best["p_nina"], 5),
+                "r2": round(best["r2"], 4),
+            }
+            # Shared Indo-Pacific mode vs an ENSO-specific one.
+            entry["enso_specific"] = bool(p_incremental < P_GATE)
+            entry["p_incremental_over_iod"] = round(p_incremental, 5)
+            if adj:
+                entry["iod_pct_per_dmi"] = round(adj["b_iod"] * 100, 3)
             results.setdefault(iso3, {})[commodity] = entry
+
+    # ---- Benjamini-Hochberg across every pair fitted, then finalise ----
+    flat = [(e["_p_adj"], iso, com)
+            for iso, cs in results.items() for com, e in cs.items()]
+    flat.sort()
+    m = len(flat)
+    q_of: dict[tuple[str, str], float] = {}
+    running = 1.0
+    for rank in range(m, 0, -1):                      # step-up, enforcing monotonicity
+        pv, iso, com = flat[rank - 1]
+        running = min(running, pv * m / rank)
+        q_of[(iso, com)] = running
+
+    for iso, cs in results.items():
+        for com, e in cs.items():
+            q = q_of[(iso, com)]
+            pending = e.pop("_pending")
+            pv = e.pop("_p_adj")
+            stable = e.pop("_stable")
+            e["p_adj"] = round(pv, 5)
+            e["q_value"] = round(q, 5)
+            e["signal"] = bool(q < P_GATE)
+            e.pop("naive", None)
+            if e["signal"]:
+                n_sig += 1
+                e.update(pending)
+                if not stable:
+                    e.setdefault("note", "")
+                    e["note"] = (
+                        "CAUTION: the two seasonal alignments disagree on the SIGN of "
+                        f"the El Nino response ({pending['yield_pct_per_oni_nino']:+.1f}% "
+                        f"vs {e['alignment_other_pct_per_oni_nino']:+.1f}%). Until the "
+                        "growing season is pre-registered from a crop calendar this "
+                        "coefficient may be an artefact of the alignment chosen.")
+                if not e["enso_specific"]:
+                    n_lost_to_iod += 1
+                    e["note"] = (
+                        "Real and reported, but NOT ENSO-specific: adding the Indian "
+                        "Ocean Dipole removes ENSO's incremental explanatory power "
+                        f"(p={e['p_incremental_over_iod']:.3f}). Treat as a shared "
+                        "Indo-Pacific teleconnection.")
+            elif pv < P_GATE:
+                n_lost_to_fdr += 1
+                e["note"] = (
+                    f"nominally significant (p={pv:.3f}) but does not survive "
+                    f"false-discovery control across the {m} pairs tested "
+                    f"(q={q:.3f}) -- not modelled")
+            else:
+                e["note"] = "no detectable ENSO signal -- not modelled"
 
     payload = {
         "_meta": {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "version": "v1",
+            "production_ready": False,
+            "blocking": (
+                "Seasonal alignment is selected by fit rather than pre-registered from a "
+                "crop calendar. Where the two candidate alignments disagree in sign the "
+                "published coefficient may be an artefact of that choice -- Australian "
+                "wheat is the clearest case, fitting -13.7%/ONI one way and +13.2% the "
+                "other. Resolving it needs USDA per-crop marketing-year calendars. No "
+                "coefficient here is wired into the UI until that is done."),
             "method": (
                 "Per country x commodity OLS of detrended log-yield anomaly on DJF ONI, "
                 "with separate El Nino (ONI>0) and La Nina (ONI<0) slopes. Trend removed "
@@ -467,7 +601,9 @@ def main() -> int:
                 "pairs_fitted": n_fit,
                 "pairs_signal_enso_alone": n_naive_sig,
                 "pairs_with_signal": n_sig,
-                "pairs_lost_to_iod_control": n_lost_to_iod,
+                "pairs_reported_but_not_enso_specific": n_lost_to_iod,
+                "pairs_lost_to_fdr_control": n_lost_to_fdr,
+                "pairs_alignment_unstable": n_unstable,
                 "pairs_too_thin": n_thin, "pairs_with_filled_runs_dropped": n_flat,
             },
         },
@@ -478,8 +614,9 @@ def main() -> int:
     with open(out, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=1, sort_keys=True, ensure_ascii=False)
         f.write("\n")
-    print(f"[OK] fitted {n_fit} pairs | ENSO alone significant: {n_naive_sig} | "
-          f"survives IOD control: {n_sig} | lost to IOD: {n_lost_to_iod}")
+    print(f"[OK] fitted {n_fit} | nominally sig: {n_naive_sig}"
+          f" | lost to FDR: {n_lost_to_fdr} | unstable: {n_unstable} | SURVIVING: {n_sig}"
+          f" (of which not ENSO-specific: {n_lost_to_iod})")
     print(f"[OK] {n_thin} too thin, {n_flat} had filled runs dropped")
     print(f"[OK] wrote {out}")
     return 0
