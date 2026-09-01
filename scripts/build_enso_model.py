@@ -45,7 +45,32 @@ was actually done -- djf_same_year / djf_next_year -- rather than by a
 hemisphere story that would be wrong for exactly the countries that matter most.
 Two tests means the p-value carries a Bonferroni factor of 2, recorded as p_adj.
 
-ALIGNMENT IS THE UNRESOLVED PROBLEM -- SEE _meta.production_ready
+HOW THE ALIGNMENT IS DECIDED -- AND WHY THE CROP CALENDAR ALONE CANNOT DO IT
+The obvious fix is to read the growing season off a crop calendar. That was tried and it is
+NOT sufficient, for a reason worth recording so nobody re-attempts it:
+
+  South African maize  -- plants Nov-Jan, harvests May-Jul  (USDA/FAO-GIEWS)
+  Moroccan barley      -- plants Nov-Jan, harvests May-Jul  (USDA/FAO-GIEWS)
+
+Identical season shape. Yet PSD's marketing year labels the South African crop by its
+PLANTING year and the Moroccan crop by its HARVEST year, so the correct ONI is DJF(t+1) for
+one and DJF(t) for the other. The calendar fixes the agronomy; it does not fix PSD's
+labelling, and the labelling is what the index needs. USDA's per-crop marketing-year table is
+not machine-retrievable (IPAD is retired; its calendars survive only as archived images).
+
+So the alignment is chosen by a SAMPLE SPLIT, which needs no external table and is not
+circular:
+  - SELECTION uses only years <= 1995, and only the independently documented strong El Ninos
+    of 1982/83, 1986/87 and 1991/92. For each candidate shift, the mean detrended anomaly in
+    those event years is computed, and the shift with the LARGER ABSOLUTE response wins.
+    Absolute, not most-negative: El Nino genuinely helps some countries, and selecting on
+    "most damage" would manufacture a negative sign everywhere.
+  - ESTIMATION then uses only 1996-2026, a disjoint window.
+
+Choosing the alignment that maximises an effect and then estimating that same effect on the
+same years is circular, and that is exactly what the previous version did.
+
+SUPERSEDED PROBLEM STATEMENT (kept for the record)
 Picking the better-fitting alignment is unsafe when the two disagree about the
 SIGN. Australian wheat fits -13.7%/ONI under one alignment and +13.2% under the
 other, and which one won flipped when the inference method changed: the
@@ -124,8 +149,16 @@ from datetime import datetime, timezone
 import numpy as np
 from scipy import stats
 
+ROOT_DATA = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from refresh_usda_psd import FAS_TO_ISO3, NAME_TO_ISO3  # noqa: E402
+
+# Strong / very strong El Ninos by DJF year, used ONLY to pick a seasonal alignment where no
+# crop calendar exists -- and never on the years the coefficient is then fit on.
+ALIGNMENT_EVENTS = (1983, 1987, 1992)
+ALIGNMENT_SPLIT_YEAR = 1996      # fit starts here when the event split chose the alignment
 
 ONI_URL = "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
 # Indian Ocean Dipole (HadISST1.1 DMI). ENSO and the IOD covary strongly, and
@@ -177,7 +210,7 @@ COMMODITIES = {
     "Oilseed, Soybean": "soybeans",
 }
 
-MIN_YEARS = 30          # usable observations required before we fit at all
+MIN_YEARS = 25          # usable observations in the 1996-2026 estimation window
 P_GATE = 0.10           # Benjamini-Hochberg FDR across the whole panel
 FLAT_RUN = 3            # >= this many identical consecutive yields => filled
 MA_WINDOW = 9           # centred moving average window for the technology trend
@@ -205,6 +238,35 @@ def _cached(name: str, url: str) -> bytes:
     with open(p, "wb") as f:
         f.write(b)
     return b
+
+
+def load_calendars() -> dict:
+    """USDA/FAO-GIEWS crop calendars, if present. Absent is fine -- see fallback."""
+    path = os.path.join(ROOT_DATA, "crop_calendars.json")
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        raw = json.load(f)
+    return raw.get("data", raw)
+
+
+def calendar_shift(entry: dict) -> int | None:
+    """DJF offset implied by a crop calendar entry, or None if it cannot be decided.
+
+    A season that crosses 31 December (planted late in marketing year t, harvested early in
+    t+1) contains the DJF of t+1. A season planted and harvested inside one calendar year
+    contains the DJF of t only if it is under way in Jan/Feb -- i.e. a winter crop harvested
+    in the first half of the year.
+    """
+    harvest = entry.get("harvest") or []
+    plant = entry.get("plant") or []
+    if not harvest or not plant:
+        return None
+    if entry.get("spans_new_year"):
+        return 1
+    # No new-year crossing: a Jan-Jun harvest means the crop was growing through DJF of its
+    # own marketing year; a later harvest means the relevant DJF follows the season.
+    return 0 if min(harvest) <= 6 else 1
 
 
 def load_oni() -> dict[int, float]:
@@ -421,7 +483,7 @@ def main() -> int:
     print(f"[INFO] PSD countries: {len(panel)}")
 
     results: dict = {}
-    n_fit = n_sig = n_thin = n_flat = n_naive_sig = n_lost_to_iod = n_lost_to_fdr = n_unstable = 0
+    n_fit = n_sig = n_thin = n_flat = n_naive_sig = n_lost_to_iod = n_lost_to_fdr = n_unstable = n_no_align = 0
 
     for iso3 in sorted(panel):
         for commodity in sorted(panel[iso3]):
@@ -440,26 +502,41 @@ def main() -> int:
                 continue
             ay, anom = detrend(years, vals)
 
-            cands = []
-            for shift, align in ((0, "djf_same_year"), (1, "djf_next_year")):
-                r = fit(ay, anom, djf, shift)
-                if r:
-                    r["alignment"] = align
-                    r["djf_shift"] = shift
-                    cands.append(r)
-            if not cands:
+            # --- ALIGNMENT: chosen on <=1995 documented events only ---
+            sel = {y: a for y, a in zip(ay, anom) if y <= ALIGNMENT_SPLIT_YEAR - 1}
+            resp = {}
+            for shift in (0, 1):
+                vals = [sel[e - 1 + shift] for e in ALIGNMENT_EVENTS
+                        if (e - 1 + shift) in sel]
+                if len(vals) >= 2:
+                    resp[shift] = float(np.mean(vals))
+            if len(resp) < 2:
+                n_no_align += 1
+                continue
+            chosen = max(resp, key=lambda k: abs(resp[k]))
+            align_margin = abs(resp[chosen]) - abs(resp[1 - chosen])
+
+            # --- ESTIMATION: 1996 onward only, disjoint from selection ---
+            est = [(y, a) for y, a in zip(ay, anom) if y >= ALIGNMENT_SPLIT_YEAR]
+            if len(est) < MIN_YEARS:
+                n_thin += 1
+                continue
+            ey = [y for y, _ in est]
+            ea = [a for _, a in est]
+            best = fit(ey, ea, djf, chosen)
+            if not best:
                 n_thin += 1
                 continue
             n_fit += 1
-            best = min(cands, key=lambda r: r["p_joint"])
-            # Both alignments must agree on the direction of the El Nino
-            # response, else the seasonal choice is doing the work.
-            signs = {(1 if r["b_nino"] > 0 else -1) for r in cands}
-            alignment_stable = len(cands) < 2 or len(signs) == 1
+            best["alignment"] = "djf_same_year" if chosen == 0 else "djf_next_year"
+            best["djf_shift"] = chosen
+            cands = [best]
+            alignment_stable = align_margin > 0.02   # >2pp separation between the two
             if not alignment_stable:
                 n_unstable += 1
             # Bonferroni over the two alignments actually tested.
-            p_adj = min(1.0, best["p_joint"] * len(cands))
+            # No alignment search on the estimation sample, so no Bonferroni factor.
+            p_adj = best["p_joint"]
             naive_sig = p_adj < P_GATE
             if naive_sig:
                 n_naive_sig += 1
@@ -467,7 +544,7 @@ def main() -> int:
             # Diagnostic refit at the SAME alignment with the IOD alongside --
             # used ONLY to label whether the effect is ENSO-specific. See the
             # DMI_URL comment for why this does not replace the coefficient.
-            adj = fit(ay, anom, djf, best["djf_shift"], dmi=dmi)
+            adj = fit(ey, ea, djf, best["djf_shift"], dmi=dmi)
             p_incremental = min(1.0, adj["p_joint"] * len(cands)) if adj else 1.0
 
             recent = [series[y] for y in sorted(series)[-10:] if series[y].get("prod")]
@@ -475,7 +552,7 @@ def main() -> int:
 
             entry = {
                 "n_years": best["n"],
-                "year_from": min(ay), "year_to": max(ay),
+                "year_from": min(ey), "year_to": max(ey),
                 "alignment": best["alignment"],
                 "mean_production_kt": round(mean_prod, 1),
                 # Naive = ENSO alone. Published = ENSO net of the IOD. Both are
@@ -489,6 +566,11 @@ def main() -> int:
                 },
             }
             entry["alignment_unstable"] = bool(not alignment_stable)  # diagnostic only
+            entry["alignment_selected_on"] = f"strong El Nino events <= {ALIGNMENT_SPLIT_YEAR - 1}"
+            entry["alignment_event_response_pct"] = {
+                "djf_same_year": round(resp.get(0, float("nan")) * 100, 2),
+                "djf_next_year": round(resp.get(1, float("nan")) * 100, 2)}
+            entry["estimated_from_year"] = ALIGNMENT_SPLIT_YEAR
             if not alignment_stable:
                 other = max(cands, key=lambda r: r["p_joint"])
                 entry["alignment_other_pct_per_oni_nino"] = round(other["b_nino"] * 100, 3)
@@ -604,6 +686,7 @@ def main() -> int:
                 "pairs_reported_but_not_enso_specific": n_lost_to_iod,
                 "pairs_lost_to_fdr_control": n_lost_to_fdr,
                 "pairs_alignment_unstable": n_unstable,
+                "pairs_no_alignment_evidence": n_no_align,
                 "pairs_too_thin": n_thin, "pairs_with_filled_runs_dropped": n_flat,
             },
         },
