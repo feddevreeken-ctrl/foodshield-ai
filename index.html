@@ -10,7 +10,7 @@
      country page renders with that country's name + score in the link preview. -->
 <!-- Pipeline count is also derived at runtime by updatePageTitle(); keep this
      static copy in step with data/source_manifest.json summary.total_sources. -->
-<meta name="description" content="Open-data food-security risk dashboard tracking 193 countries + 50 US states across 42 public pipelines. FDRS scores, climate vulnerability, trade dependency, live disturbances.">
+<meta name="description" content="Open-data dashboard tracking food-supply shock exposure across 193 countries + 50 US states and 42 public pipelines. FDRS scores trade, climate and conflict exposure — not how many people are currently hungry; hunger indicators are shown separately per country.">
 <meta name="theme-color" content="#0b0b0d">
 <link rel="canonical" href="https://foodshield-ai-fv.vercel.app/">
 
@@ -18,7 +18,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="FoodShield AI">
 <meta property="og:title" content="FoodShield AI — Global Food Disruption Risk">
-<meta property="og:description" content="Open-data food-security risk dashboard tracking 193 countries + 50 US states across 42 public pipelines. FDRS scores, climate vulnerability, trade dependency, live disturbances.">
+<meta property="og:description" content="Open-data dashboard tracking food-supply shock exposure across 193 countries + 50 US states and 42 public pipelines. FDRS scores trade, climate and conflict exposure — not how many people are currently hungry; hunger indicators are shown separately per country.">
 <meta property="og:url" content="https://foodshield-ai-fv.vercel.app/">
 <meta property="og:image" content="https://foodshield-ai-fv.vercel.app/og-image.png">
 <meta property="og:image:width" content="1200">
@@ -10048,7 +10048,7 @@ body::before {
         <label>Risk level</label>
         <select class="fs-select" id="filter-risk" onchange="applyFilters()">
           <option value="">All Risk Levels</option>
-          <option value="Resilient">Resilient (0–25)</option>
+          <option value="Low exposure">Low exposure (0–25)</option>
           <option value="Exposed">Exposed (26–50)</option>
           <option value="Dependent">Dependent (51–75)</option>
           <option value="Vulnerable">Vulnerable (76–88)</option>
@@ -10173,7 +10173,7 @@ body::before {
           <span class="legend-nd legend-item"><span class="legend-swatch legend-nodata"></span><span class="legend-label">No data</span></span>
         </div>
         <div class="legend-ramp">
-          <div class="legend-item" title="Resilient · 0–25"><span class="legend-swatch" style="background:#5fa85f"></span><span class="legend-label">Resilient</span></div>
+          <div class="legend-item" title="Low exposure · 0–25 · supply-shock exposure, not hunger"><span class="legend-swatch" style="background:#5fa85f"></span><span class="legend-label">Low exposure</span></div>
           <div class="legend-item" title="Exposed · 26–50"><span class="legend-swatch" style="background:#e0b94a"></span><span class="legend-label">Exposed</span></div>
           <div class="legend-item" title="Dependent · 51–75"><span class="legend-swatch" style="background:#e07a2e"></span><span class="legend-label">Dependent</span></div>
           <div class="legend-item" title="Vulnerable · 76–88"><span class="legend-swatch" style="background:#d23a2a"></span><span class="legend-label">Vulnerable</span></div>
@@ -10386,7 +10386,7 @@ body::before {
       <div class="rail-card">
         <div class="rail-card-title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
-          Most Resilient
+          Least exposed
         </div>
         <div id="rail-resilient"></div>
       </div>
@@ -18920,7 +18920,11 @@ function mapRiskColor(s) {
   return '#b5342a';                // severe — was #8e1f17 (1.95:1 vs map base, sub-3:1 non-text). Lifted for visibility; the most critical countries must read clearly against ocean/no-data.
 }
 function riskLabel(s) {
-  if (s <= 25) return 'Resilient';
+  if (s <= 25) return 'Low exposure';   // v?? — was 'Resilient'. The vector measures exposure
+                                        // to supply and trade shocks; it contains no term for
+                                        // realised hunger, so 'Resilient' claimed an outcome it
+                                        // never measured. India scores 20 on cereal self-sufficiency
+                                        // while 60.5M of its people are in food crisis.
   if (s <= 50) return 'Exposed';
   if (s <= 75) return 'Dependent';
   // v21 (#16) — split the top band into "Vulnerable" (76-88) and "Severe" (89+)
@@ -18943,7 +18947,7 @@ function riskLabel(s) {
 // surfaces now derive from the functions via `probe`, so a palette edit
 // propagates and no hex is written down twice.
 const RISK_BANDS = [
-  { label: 'Resilient',  range: '0–25',   probe: 12 },
+  { label: 'Low exposure', range: '0–25', probe: 12 },
   { label: 'Exposed',    range: '26–50',  probe: 38 },
   { label: 'Dependent',  range: '51–75',  probe: 63 },
   { label: 'Vulnerable', range: '76–88',  probe: 82 },
@@ -27168,7 +27172,7 @@ function fsBandScale(value){
   const v = Math.max(0, Math.min(100, Number(value)||0));
   return `<div class="fs-bandscale"><div class="fs-bandscale-track">`
     + `<div class="fs-bandscale-mark" style="left:${v}%"></div></div>`
-    + `<div class="fs-bandscale-ends"><span>Resilient</span><span>Severe</span></div></div>`;
+    + `<div class="fs-bandscale-ends"><span>Low exposure</span><span>Severe</span></div></div>`;
 }
 function fsDriverBars(comp9, labels, weights, riskColor, n){
   n = n || 3;
@@ -27757,6 +27761,31 @@ function renderCountryTab() {
                 the confidence of a fully-sourced one. The no-data warning
                 existed, but only inside a closed fold three sections down.
                 Absence of evidence was reading as evidence of resilience. */''}
+          ${/* v?? — hunger sits BESIDE the score, never behind a toggle.
+                FDRS measures exposure to supply and trade shocks and contains no
+                term for realised hunger, so a low score is not a statement that
+                people are fed. India scores 20 on cereal self-sufficiency while
+                60.5M of its people are in food crisis, and before this cell the
+                page said only the first half of that.
+                Measured across 191 countries, Spearman(displayed score, severe
+                food insecurity) is 0.674 — the score and the suffering are
+                related but far from the same thing, and the gap is widest
+                exactly where a reader is least likely to check: large, cereal
+                self-sufficient countries with severe internal access problems.
+                Deliberately NOT folded into the score: econ_access already
+                correlates 0.679 with severe food insecurity, so a hunger
+                component would largely double-count an existing weight. */''}
+          <div class="ctr-head-cell">
+            <span class="ctr-head-lbl">Undernourished</span>
+            ${(() => {
+              const a = (typeof calibrationAnchors === 'function') ? calibrationAnchors(c) : {};
+              const u = a && a.undernourishment_pct;
+              if (u == null) return '<span class="ctr-head-val" style="color:var(--t3)" title="FAO prevalence of undernourishment is not published for this country.">n/a</span>'
+                + '<span class="ctr-head-meta">FAO · no data</span>';
+              return `<span class="ctr-head-val" style="color:${u >= 20 ? '#d23a2a' : (u >= 10 ? '#e0b94a' : 'var(--t1)')}">${u}%</span>`
+                + `<span class="ctr-head-meta" title="FAO prevalence of undernourishment, via World Bank SN.ITK.DEFC.ZS. An OUTCOME measure — how many people are actually undernourished — and independent of the FDRS exposure score beside it.">FAO · share of population</span>`;
+            })()}
+          </div>
           <div class="ctr-head-cell">
             <span class="ctr-head-lbl">${(typeof riskLabel === 'function') ? riskLabel(c.fdrs) : 'Risk'} · FDRS</span>
             <span class="ctr-head-val" style="color:${col}">${c.fdrs}</span>
@@ -28546,7 +28575,7 @@ function renderScoreTab() {
   // visually distinct from countries like Lebanon/Syria/Haiti that are also
   // very high-risk but not actively in catastrophic crisis.
   const categories = [
-    {r:'0–25',   l:'Resilient',  d:'Diversified, stable, low import reliance',         col:'#6ba36b'},
+    {r:'0–25',   l:'Low exposure', d:'Diversified, stable, low import reliance. NOT a statement about hunger.', col:'#6ba36b'},
     {r:'26–50',  l:'Exposed',    d:'Moderate reliance, manageable risk',               col:'#c9a957'},
     {r:'51–75',  l:'Dependent',  d:'High import reliance, supply gaps growing',        col:'#d27a3e'},
     {r:'76–88',  l:'Vulnerable', d:'Chronic structural exposure, compounding shocks',  col:'#c44b3c'},
@@ -31279,7 +31308,10 @@ function _renderStressResults() {
   // are computed here and handed to the brief, which now owns ALL summary
   // rendering. The old Impact Summary / Risk-band Shift / why-card layer is
   // gone — it repeated the brief's numbers in a second visual language.
-  const bands  = ['Resilient','Exposed','Dependent','Vulnerable','Severe'];
+  // MUST stay identical to riskLabel()'s return values — bandIdx does an indexOf on
+  // this array, so a stale label here silently returns -1 and drops every country in
+  // that band from the before/after counts instead of throwing.
+  const bands  = ['Low exposure','Exposed','Dependent','Vulnerable','Severe'];
   const bandCol= ['#6ba36b','#c9a957','#d27a3e','#c44b3c','#7a2922'];
   const bandIdx = s => bands.indexOf(riskLabel(s));   // single source of truth
   const before = [0,0,0,0,0], after = [0,0,0,0,0];
@@ -32816,7 +32848,7 @@ const TOUR_STEPS = [
   {
     selector: '#map-legend',
     title: 'Five tiers, 0–100',
-    body: 'Resilient (green) to Severe (dark red). A country sits in a tier based on its structural fundamentals plus the live shocks hitting it right now.',
+    body: 'Low exposure (green) to Severe (dark red). The tier reflects a country\'s exposure to food-supply shocks — its trade, climate and conflict fundamentals plus the live shocks hitting it now. It is NOT a measure of how many people are hungry: see the hunger figures on each country.',
     before: () => { try { showTab('global'); } catch(e){} closePanelIfOpen(); return 200; },
   },
   {
