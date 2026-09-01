@@ -10089,6 +10089,7 @@ body::before {
   <button class="subnav-btn active" data-tab="global" data-sub-group="explore" onclick="showTab('global',this)">Global Map</button>
   <button class="subnav-btn" data-tab="country" data-sub-group="explore" onclick="showTab('country',this)" title="A country's full profile — and, in the same tab, its import/export flow atlas, supplier concentration and chokepoint exposure.">Country &amp; Flows</button>
   <button class="subnav-btn" data-tab="commodities" data-sub-group="explore" onclick="showTab('commodities',this)">Commodities</button>
+  <button class="subnav-btn" data-tab="elnino" data-sub-group="explore" onclick="showTab('elnino',this)" title="El Niño / La Niña: the live ENSO state, and each country's crop response measured from 64 years of FAOSTAT yield history.">El Niño<span class="subnav-shock-pill" id="enso-nav-pill" style="display:none"></span></button>
   <!-- Analyze -->
   <button class="subnav-btn" data-tab="scenario" data-sub-group="analyze" onclick="showTab('scenario',this)" title="Shock stress-test, plus the 2030 modeled outlook — both forward-looking modelling, neither a prediction.">Scenario<span class="subnav-shock-pill">Live shock</span></button>
   <button class="subnav-btn" data-tab="score" data-sub-group="analyze" onclick="showTab('score',this)" title="FDRS formula, global ranking and the 2×2 dependency matrix — with side-by-side country comparison as a mode inside this tab.">Rankings</button>
@@ -10669,6 +10670,20 @@ body::before {
       <!-- v22.3 — grid layout fully controlled by CSS rule on #commodities-grid -->
       <div id="commodities-grid" style="margin-bottom:24px;"></div>
       <div id="commodity-detail"></div>
+    </div>
+  </div>
+
+  <!-- EL NIÑO TAB — live ENSO state + measured per-country crop response -->
+  <div id="tab-elnino" class="tab-page">
+    <div class="content-page">
+      <div id="enso-head"></div>
+      <div id="enso-controls"></div>
+      <div id="enso-mapwrap" style="position:relative;margin-top:14px;">
+        <div id="enso-map" style="height:clamp(340px,52vh,620px);border:1px solid var(--bg4);border-radius:6px;background:#0b0b0b;"></div>
+        <div id="enso-legend"></div>
+      </div>
+      <div id="enso-detail"></div>
+      <div id="enso-limits"></div>
     </div>
   </div>
 
@@ -22803,6 +22818,7 @@ function destroyChart(id) {
 // ── Tab routing ───────────────────────────────────
 const TAB_GROUPS = {
   global:'explore', country:'explore', trade:'explore', commodities:'explore',
+  elnino:'explore',
   score:'analyze', compare:'analyze', forecast:'analyze', scenario:'analyze',
   companies:'analyze',
   livedata:'live', datastatus:'live', disturbances:'live', news:'live',
@@ -40555,5 +40571,307 @@ function showCommodityDetail(key) {
     <div id="fs-ask-body"></div>
   </div>
 </div>
+<script>
+/* ────────────────────────────────────────────────────────────────────────
+   EL NIÑO PANEL
+
+   Three things, deliberately kept separate because they carry very different
+   confidence:
+
+     1. WHAT THE OCEAN IS DOING  — live, from NOAA CPC (data/enso.json).
+     2. WHAT A COUNTRY'S CROPS DO ABOUT IT — measured, from 64 years of
+        FAOSTAT yield history (data/enso_model.json, data/enso_exposure.json).
+     3. WHAT WE CANNOT SAY — stated on the page rather than left implicit.
+
+   The map is a SEPARATE Leaflet instance from the global map and uses a
+   DIVERGING scale, because this quantity is signed: El Niño measurably helps
+   some countries (US wheat +4.4%/ONI, Argentine maize +4.5%) and measurably
+   hurts others (South African maize −21%/ONI). Painting that on the risk ramp
+   would imply every country moves the same direction, which is the single most
+   common error in ENSO reporting.
+
+   No world price is modelled anywhere here. World agricultural prices rose in
+   only one of six El Niño episodes 1980-2014; the record 2015-16 event
+   coincided with the FAO Food Price Index at a seven-year low in the very month
+   the ONI peaked; and both modern price spikes peaked under La Niña. The
+   defensible quantity is physical availability, which needs no elasticity.
+   ──────────────────────────────────────────────────────────────────────── */
+(function () {
+  'use strict';
+  var S = { ready: false, map: null, layer: null, oni: 1.5, mode: 'impact',
+            enso: null, exp: null, model: null, sel: null };
+
+  var LEVELS = [
+    ['la_nina_strong',   -1.5, 'Strong La Niña'],
+    ['la_nina_moderate', -1.0, 'Moderate La Niña'],
+    ['la_nina_weak',     -0.5, 'Weak La Niña'],
+    ['neutral',           0.0, 'Neutral'],
+    ['el_nino_weak',      0.5, 'Weak El Niño'],
+    ['el_nino_moderate',  1.0, 'Moderate El Niño'],
+    ['el_nino_strong',    1.5, 'Strong El Niño'],
+    ['el_nino_very_strong', 2.0, 'Very strong El Niño'],
+    ['el_nino_extreme',   2.5, 'Extreme El Niño']
+  ];
+  var esc = function (t) { return String(t == null ? '' : t)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
+  var keyFor = function (oni) {
+    var best = LEVELS[0]; for (var i = 0; i < LEVELS.length; i++)
+      if (Math.abs(LEVELS[i][1] - oni) < Math.abs(best[1] - oni)) best = LEVELS[i];
+    return best;
+  };
+  /* Diverging, and deliberately NOT the risk ramp — see header comment. */
+  function impactColor(pct, coverage) {
+    if (pct == null || !coverage) return '#2a2a2a';
+    var t = Math.max(-1, Math.min(1, pct / 15));
+    if (t < 0) { var a = -t; return 'rgb(' + Math.round(150 + 90 * a) + ',' +
+        Math.round(120 - 80 * a) + ',' + Math.round(110 - 70 * a) + ')'; }
+    return 'rgb(' + Math.round(120 - 70 * t) + ',' + Math.round(140 + 70 * t) + ',' +
+      Math.round(150 + 50 * t) + ')';
+  }
+  function coverageColor(c) {
+    if (!c) return '#2a2a2a';
+    var v = Math.round(60 + 150 * c);
+    return 'rgb(' + Math.round(v * 0.45) + ',' + Math.round(v * 0.75) + ',' + v + ')';
+  }
+
+  async function load() {
+    var get = async function (n) {
+      try { var r = await fetch('data/' + n + '.json', { cache: 'no-store' });
+            if (!r.ok) return null; var j = await r.json(); return j && j.data ? j.data : j; }
+      catch (e) { return null; }
+    };
+    var out = await Promise.all([get('enso'), get('enso_exposure'), get('enso_model')]);
+    S.enso = out[0]; S.exp = out[1]; S.model = out[2];
+  }
+
+  function renderHead() {
+    var e = S.enso, el = document.getElementById('enso-head');
+    if (!el) return;
+    if (!e || !e.latest) { el.innerHTML = '<div class="ctr-note">Live ENSO state unavailable — data/enso.json did not load.</div>'; return; }
+    var L = e.latest, w = e.weekly_nino34 || {}, hr = e.historical_rank || {};
+    var traj = (e.trajectory || []).slice(-8);
+    var spark = traj.map(function (t) {
+      var h = Math.max(2, Math.min(38, Math.abs(t.anom) * 16));
+      var up = t.anom >= 0;
+      return '<span title="' + esc(t.season + ' ' + t.year + ': ' + (t.anom > 0 ? '+' : '') + t.anom) +
+        '" style="display:inline-flex;flex-direction:column;justify-content:' + (up ? 'flex-end' : 'flex-start') +
+        ';height:40px;width:13px;"><i style="display:block;height:' + h + 'px;background:' +
+        (up ? '#d2693a' : '#4a86b3') + ';border-radius:1px;"></i></span>';
+    }).join('');
+    el.innerHTML =
+      '<div style="display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;padding:16px 0 6px;border-bottom:1px solid var(--bg4);">' +
+        '<div><div style="font-family:\'Geist Mono\',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--t3)">Oceanic Niño Index · ' + esc(L.season + ' ' + L.year) + '</div>' +
+          '<div style="font-size:40px;line-height:1.05;font-weight:600;color:' + (L.anom >= 0 ? '#d2693a' : '#4a86b3') + '">' + (L.anom > 0 ? '+' : '') + esc(L.anom) + '</div>' +
+          '<div style="font-size:12px;color:var(--t2)">' + esc(L.band) + '</div></div>' +
+        '<div><div style="font-family:\'Geist Mono\',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--t3)">Trajectory · last 8 seasons</div>' +
+          '<div style="display:flex;align-items:center;gap:2px;margin-top:6px;">' + spark + '</div>' +
+          '<div style="font-size:10.5px;color:var(--t3);margin-top:4px;">' + esc(traj.length ? traj[0].season + ' ' + traj[0].year + ' → ' + L.season + ' ' + L.year : '') + '</div></div>' +
+        '<div><div style="font-family:\'Geist Mono\',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--t3)">Weekly Niño 3.4</div>' +
+          '<div style="font-size:22px;font-weight:600;color:var(--t1)">' + (w.anom > 0 ? '+' : '') + esc(w.anom) + '</div>' +
+          '<div style="font-size:10.5px;color:var(--t3)">' + esc(w.date || '') + (w.east_based ? ' · east-based (Niño 1+2 ' + (w.nino12_anom > 0 ? '+' : '') + esc(w.nino12_anom) + ')' : '') + '</div></div>' +
+        (hr.rank ? '<div><div style="font-family:\'Geist Mono\',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--t3)">Historical rank</div>' +
+          '<div style="font-size:22px;font-weight:600;color:var(--t1)">' + esc(hr.rank) + ' / ' + esc(hr.of) + '</div>' +
+          '<div style="font-size:10.5px;color:var(--t3);max-width:230px;">among all ' + esc(hr.season) + ' seasons since 1950</div></div>' : '') +
+      '</div>' +
+      '<div class="ctr-note" style="margin-top:8px;">' + esc(e.index_note || '') + ' Source: NOAA CPC.</div>';
+  }
+
+  function renderControls() {
+    var el = document.getElementById('enso-controls'); if (!el) return;
+    var lvl = keyFor(S.oni);
+    var opts = LEVELS.map(function (l) {
+      return '<option value="' + l[1] + '"' + (l[1] === S.oni ? ' selected' : '') + '>' + esc(l[2]) + ' (ONI ' + (l[1] > 0 ? '+' : '') + l[1].toFixed(1) + ')</option>';
+    }).join('');
+    var modes = [['impact', 'Modelled crop impact'], ['coverage', 'Model coverage']];
+    el.innerHTML =
+      '<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;margin-top:14px;">' +
+        '<label style="font-size:11px;color:var(--t2)">Scenario<br><select id="enso-level" style="margin-top:4px;background:var(--bg2);color:var(--t1);border:1px solid var(--bg4);border-radius:4px;padding:6px 8px;font-size:12px;">' + opts + '</select></label>' +
+        '<label style="font-size:11px;color:var(--t2)">Map layer<br><select id="enso-mode" style="margin-top:4px;background:var(--bg2);color:var(--t1);border:1px solid var(--bg4);border-radius:4px;padding:6px 8px;font-size:12px;">' +
+          modes.map(function (m) { return '<option value="' + m[0] + '"' + (m[0] === S.mode ? ' selected' : '') + '>' + m[1] + '</option>'; }).join('') + '</select></label>' +
+        '<div style="font-size:11px;color:var(--t3);max-width:520px;line-height:1.5;">Scenario levels are <b>ONI</b> as CPC publishes it — the same series the coefficients were fitted on. Do not compare against BoM or IRI values for the same ocean; they use different baselines.</div>' +
+      '</div>';
+    var a = document.getElementById('enso-level'), b = document.getElementById('enso-mode');
+    if (a) a.onchange = function () { S.oni = parseFloat(a.value); paint(); renderDetail(); };
+    if (b) b.onchange = function () { S.mode = b.value; paint(); renderLegend(); };
+  }
+
+  function rowFor(iso) {
+    var r = S.exp && S.exp[iso]; if (!r) return null;
+    var lv = r.levels && r.levels[keyFor(S.oni)[0]];
+    return lv ? { cov: r.coverage, lv: lv, r: r } : null;
+  }
+
+  function paint() {
+    if (!S.layer) return;
+    S.layer.setStyle(function (f) {
+      var p = f.properties || {}, iso = p.ISO_A3 || p.ADM0_A3 || p.iso_a3 || '';
+      var d = rowFor(iso);
+      var col = S.mode === 'coverage'
+        ? coverageColor(d ? d.cov : 0)
+        : impactColor(d ? d.lv.production_shock_pct : null, d ? d.cov : 0);
+      return { fillColor: col, fillOpacity: d ? 0.86 : 0.30, color: '#7d8894', weight: 0.4 };
+    });
+  }
+
+  function renderLegend() {
+    var el = document.getElementById('enso-legend'); if (!el) return;
+    var body = S.mode === 'coverage'
+      ? '<b>Model coverage</b> — the share of a country\'s measured crop production that has a detectable ENSO signal. Dark means we measured little or nothing there, <i>not</i> that the country is safe.'
+      : '<b>Modelled crop impact</b> at this scenario, as a share of the country\'s total measured production. <span style="color:#e05a3a">Red = production falls</span>, <span style="color:#5aa0c8">blue = production rises</span>. Grey = no measured signal.';
+    el.innerHTML = '<div style="margin-top:10px;font-size:11px;color:var(--t2);line-height:1.6;max-width:900px;">' + body + '</div>';
+  }
+
+  function renderDetail() {
+    var el = document.getElementById('enso-detail'); if (!el) return;
+    var iso = S.sel;
+    if (!iso) { el.innerHTML = '<div class="ctr-note" style="margin-top:14px;">Select a country on the map for its measured crop-by-crop response.</div>'; return; }
+    var name = (typeof COUNTRIES !== 'undefined' && COUNTRIES[iso] && COUNTRIES[iso].name) || iso;
+    var d = rowFor(iso), m = S.model && S.model[iso];
+    if (!d || !m) {
+      el.innerHTML = '<div style="margin-top:16px;padding:14px;border:1px solid var(--bg4);border-radius:6px;">' +
+        '<div style="font-size:15px;font-weight:600;">' + esc(name) + '</div>' +
+        '<div class="ctr-note" style="margin-top:6px;">No ENSO model for this country. Either no crop calendar was available to fix the seasonal alignment, or no crop cleared false-discovery control. This is an absence of measurement, <b>not</b> a finding that ENSO has no effect here.</div></div>';
+      return;
+    }
+    var lv = d.lv;
+    var rows = Object.keys(m).sort().map(function (c) {
+      var e = m[c];
+      if (!e.signal) return '<tr><td style="padding:4px 10px 4px 0;color:var(--t3)">' + esc(c) + '</td>' +
+        '<td colspan="4" style="color:var(--t3);font-size:11px;">not modelled — ' + esc((e.note || '').slice(0, 90)) + '</td></tr>';
+      var b = e.yield_pct_per_oni_nino, bn = e.yield_pct_per_oni_nina;
+      return '<tr>' +
+        '<td style="padding:4px 10px 4px 0;color:var(--t1)">' + esc(c) + '</td>' +
+        '<td style="padding:4px 10px 4px 0;color:' + (b < 0 ? '#e05a3a' : '#5aa0c8') + ';font-family:\'Geist Mono\',monospace;">' + (b > 0 ? '+' : '') + esc(b.toFixed(2)) + '%</td>' +
+        '<td style="padding:4px 10px 4px 0;color:var(--t2);font-family:\'Geist Mono\',monospace;">' + (bn > 0 ? '+' : '') + esc(bn.toFixed(2)) + '%</td>' +
+        '<td style="padding:4px 10px 4px 0;color:var(--t3);font-family:\'Geist Mono\',monospace;">q=' + esc(e.q_value) + ' · n=' + esc(e.n_years) + '</td>' +
+        '<td style="padding:4px 0;color:var(--t3);font-size:11px;">' + esc(e.alignment === 'djf_same_year' ? 'DJF of harvest year' : 'DJF of following year') +
+          (e.enso_specific ? '' : ' · <span style="color:#c9a957">shared with IOD</span>') + '</td></tr>';
+    }).join('');
+    el.innerHTML =
+      '<div style="margin-top:16px;padding:14px;border:1px solid var(--bg4);border-radius:6px;">' +
+        '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;align-items:baseline;">' +
+          '<div style="font-size:15px;font-weight:600;">' + esc(name) + '</div>' +
+          '<div style="font-size:11px;color:var(--t3)">at ONI ' + (S.oni > 0 ? '+' : '') + S.oni.toFixed(1) + ' · ' + esc(keyFor(S.oni)[2]) + '</div></div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:26px;margin:12px 0 14px;">' +
+          '<div><div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);font-family:\'Geist Mono\',monospace;">Production change</div>' +
+            '<div style="font-size:24px;font-weight:600;color:' + (lv.production_shock_pct < 0 ? '#e05a3a' : '#5aa0c8') + '">' + (lv.production_shock_pct > 0 ? '+' : '') + esc(lv.production_shock_pct) + '%</div>' +
+            '<div style="font-size:11px;color:var(--t3)">' + esc(Math.round(lv.production_shock_kt).toLocaleString()) + ' kt</div></div>' +
+          (lv.import_need_pct_of_consumption != null ? '<div><div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);font-family:\'Geist Mono\',monospace;">Extra import need</div>' +
+            '<div style="font-size:24px;font-weight:600;color:var(--t1)">' + (lv.import_need_pct_of_consumption > 0 ? '+' : '') + esc(lv.import_need_pct_of_consumption) + '%</div>' +
+            '<div style="font-size:11px;color:var(--t3)">of staple consumption</div></div>' : '') +
+          '<div><div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);font-family:\'Geist Mono\',monospace;">Coverage</div>' +
+            '<div style="font-size:24px;font-weight:600;color:var(--t1)">' + Math.round((d.cov || 0) * 100) + '%</div>' +
+            '<div style="font-size:11px;color:var(--t3)">of production measured</div></div>' +
+        '</div>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="color:var(--t3);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;">' +
+          '<th style="text-align:left;padding-bottom:6px;">Crop</th><th style="text-align:left;">El Niño %/ONI</th><th style="text-align:left;">La Niña %/ONI</th><th style="text-align:left;">Confidence</th><th style="text-align:left;">Season alignment</th>' +
+        '</tr></thead><tbody>' + rows + '</tbody></table>' +
+        '<div class="ctr-note" style="margin-top:10px;">Coefficients are the change in <b>yield</b> per unit of ONI, measured from FAOSTAT harvest-year history, not taken from literature. Separate El Niño and La Niña slopes because the response is asymmetric — La Niña is not negative El Niño. The percentage above is diluted by unmodelled production, so read it with the coverage figure.</div>' +
+      '</div>';
+  }
+
+  function renderLimits() {
+    var el = document.getElementById('enso-limits'); if (!el) return;
+    var mc = 0, tot = 0;
+    if (S.model) Object.keys(S.model).forEach(function (i) {
+      Object.keys(S.model[i]).forEach(function (c) { tot++; if (S.model[i][c].signal) mc++; }); });
+    el.innerHTML =
+      '<div style="margin-top:20px;padding:14px;border:1px solid var(--bg4);border-left:3px solid #c9a957;border-radius:6px;max-width:900px;">' +
+        '<div style="font-size:12px;font-weight:600;color:#c9a957;letter-spacing:.06em;text-transform:uppercase;font-family:\'Geist Mono\',monospace;">What this panel cannot tell you</div>' +
+        '<ul style="margin:10px 0 0;padding-left:18px;font-size:12px;line-height:1.75;color:var(--t2);">' +
+          '<li><b>Coverage is narrow.</b> ' + mc + ' of ' + tot + ' country-crop pairs carry a measured signal. Every other pair is unmeasured, and hundreds more are missing entirely because no crop calendar was available to fix which DJF falls inside their growing season.</li>' +
+          '<li><b>It only sees yield, not area.</b> Where ENSO works by delaying or abandoning planting rather than by reducing yield per hectare — Indonesian and Philippine rice are the documented cases — this model is blind by construction and correctly reports nothing.</li>' +
+          '<li><b>National averages hide opposing sub-national effects.</b> El Niño wets Ethiopia\'s Oct–Dec Deyr rains while drying the JJAS kiremt that supplies most of its food. A single national number averages those toward zero.</li>' +
+          '<li><b>No price is modelled.</b> World agricultural prices rose in only one of six El Niño episodes 1980–2014, and the record 2015–16 event coincided with the FAO Food Price Index at a seven-year low in the month the ONI peaked. Both modern price spikes peaked under <i>La Niña</i>. Local prices do move, but through domestic market structure and trade policy, not a world price.</li>' +
+          '<li><b>It is a shift in the odds, not a forecast.</b> ENSO changes the probability distribution of a harvest. It does not determine any single country-season, and this panel should never be read as saying what will happen.</li>' +
+        '</ul></div>';
+  }
+
+  /* The global map loads this GeoJSON into G.features, but this tab can be the
+     FIRST thing a visitor opens, in which case G is still empty. So fetch it
+     independently when it is missing — the browser serves it from cache when
+     the global map has already pulled it, and the same CDN fallback chain is
+     used so one CDN being down does not blank the panel. */
+  var GEO_URLS = [
+    'https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_50m_admin_0_countries.geojson',
+    'https://cdn.statically.io/gh/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson',
+    'https://cdn.jsdelivr.net/gh/holtzy/D3-graph-gallery@master/DATA/world.geojson'
+  ];
+  async function getFeatures() {
+    if (typeof G !== 'undefined' && G.features && G.features.length) return G.features;
+    for (var i = 0; i < GEO_URLS.length; i++) {
+      try {
+        var r = await fetch(GEO_URLS[i]);
+        if (!r.ok) continue;
+        var j = await r.json();
+        if (j && j.features && j.features.length) {
+          j.features.forEach(function (f) {
+            var pr = f.properties || (f.properties = {});
+            if (!pr.name) pr.name = pr.NAME || pr.ADMIN || pr.NAME_LONG || '';
+          });
+          return j.features;
+        }
+      } catch (e) { /* next CDN */ }
+    }
+    return null;
+  }
+
+  async function buildMap() {
+    if (S.map || typeof L === 'undefined') return;
+    var host = document.getElementById('enso-map'); if (!host) return;
+    /* Resolve geometry BEFORE constructing the map. An earlier cut built the
+       Leaflet instance first and then wrote a fallback message into the same
+       element, which silently destroyed the map's own DOM and left an empty
+       container with zero paths. */
+    var feats = await getFeatures();
+    if (!feats) {
+      host.innerHTML = '<div class="ctr-note" style="padding:18px;">Country geometry could not be loaded from any CDN, so the map cannot draw. The country table below is unaffected.</div>';
+      return;
+    }
+    S.map = L.map(host, { zoomControl: true, attributionControl: false,
+                          worldCopyJump: true, minZoom: 1 }).setView([14, 6], 2);
+    S.layer = L.geoJSON({ type: 'FeatureCollection', features: feats }, {
+      style: function () { return { fillColor: '#2a2a2a', fillOpacity: .3, color: '#7d8894', weight: .4 }; },
+      onEachFeature: function (f, lyr) {
+        var p = f.properties || {}, iso = p.ISO_A3 || p.ADM0_A3 || p.iso_a3 || '';
+        lyr.on('click', function () { S.sel = iso; renderDetail(); });
+        lyr.on('mouseover', function () {
+          var d = rowFor(iso);
+          var t = (p.name || iso) + (d ? ' · ' + (d.lv.production_shock_pct > 0 ? '+' : '') +
+            d.lv.production_shock_pct + '% production' : ' · not modelled');
+          lyr.bindTooltip(t, { sticky: true }).openTooltip();
+        });
+      }
+    }).addTo(S.map);
+    paint();
+  }
+
+  window.ensoInit = async function () {
+    var pill = document.getElementById('enso-nav-pill');
+    if (!S.ready) { await load(); S.ready = true;
+      if (S.enso && S.enso.latest && pill && Math.abs(S.enso.latest.anom) >= 0.5) {
+        pill.textContent = S.enso.latest.band.indexOf('El') >= 0 ? 'El Niño' : 'La Niña';
+        pill.style.display = '';
+      }
+    }
+    renderHead(); renderControls(); renderLegend(); renderDetail(); renderLimits();
+    await buildMap();
+    setTimeout(function () { if (S.map) { S.map.invalidateSize(); paint(); } }, 60);
+  };
+
+  /* Lazy-init on tab entry without touching showTab's own body. */
+  var boot = function () {
+    if (typeof window.showTab !== 'function') { return setTimeout(boot, 200); }
+    var orig = window.showTab;
+    window.showTab = function (tab) {
+      var r = orig.apply(this, arguments);
+      if (tab === 'elnino') { try { window.ensoInit(); } catch (e) { console.error('[enso]', e); } }
+      return r;
+    };
+  };
+  boot();
+})();
+</script>
+
 </body>
 </html>
