@@ -10051,8 +10051,18 @@ table.enso-tbl thead th {
   position:sticky; top:0; z-index:2; background:var(--bg1);
   box-shadow:0 1px 0 var(--b2);
 }
-table.enso-tbl tbody tr:nth-child(even) td { background:rgba(255,255,255,.018); }
-table.enso-tbl tbody tr:hover td { background:rgba(255,255,255,.05); }
+/* No zebra. Grafana's current TableNG ships no zebra token, Carbon makes it an
+   opt-in modifier and Superset defaults bordered:false — the hairline rule plus
+   a real hover state carries row separation without the extra wash. */
+table.enso-tbl tbody tr:hover td,
+table.enso-tbl tbody tr:hover th { background:rgba(255,255,255,.05); }
+
+/* Freeze the identifying column on the wide tables — Retool names the exact
+   failure this fixes: auto-hiding scrollbars hide that more columns exist. */
+table.enso-tbl th[scope="row"], table.enso-tbl td.nm {
+  position:sticky; left:0; z-index:1; background:var(--bg1);
+}
+table.enso-tbl thead th:first-child { z-index:3; }
 
 /* ── Sub-view chrome + laptop layout ─────────────────────────────────────
    Tuned for a 1440×900 laptop: the reading column stops at 1240px so prose
@@ -10076,14 +10086,7 @@ table.enso-tbl tbody tr:hover td { background:rgba(255,255,255,.05); }
 @media (max-width:1179px) { #enso-map { height:clamp(340px,52vh,560px); } }
 
 /* ── Mechanism: the Pacific cross-section ──────────────────────────────── */
-.enso-xsec-pair { display:grid; grid-template-columns:1fr; gap:var(--sp-2); margin-top:var(--sp-2); }
-@media (min-width:1000px){ .enso-xsec-pair { grid-template-columns:1fr 1fr; } }
-.enso-xsec-pair figure { margin:0; border:1px solid var(--b2); background:var(--bg1); }
-.enso-xsec-pair figcaption {
-  font-size:11.5px; color:var(--t2); line-height:1.5;
-  padding:10px 12px; border-bottom:1px solid var(--b1);
-  min-height:56px;
-}
+/* (.enso-xsec-pair retired — the section is three-up now, see .enso-xsec-trio) */
 .enso-xs-tag {
   display:inline-block; margin-right:8px; font-family:'Geist Mono',monospace;
   font-size:8.5px; letter-spacing:.12em; text-transform:uppercase;
@@ -10094,6 +10097,46 @@ table.enso-tbl tbody tr:hover td { background:rgba(255,255,255,.05); }
 .enso-xsec { display:block; width:100%; height:auto; }
 .enso-xsec .xs-l { font-family:'Geist Mono',monospace; font-size:9px; letter-spacing:.14em; fill:var(--t3); }
 .enso-xsec .xs-t { font-family:'Geist Mono',monospace; font-size:8.5px; letter-spacing:.12em; fill:var(--t3); }
+
+/* Three states, but not three equal panels — at equal width the 8px in-figure
+   labels became unreadable. The live state leads at full width; neutral and
+   La Nina sit beneath it as the references it is being read against. */
+.enso-xsec-lead { margin:var(--sp-2) 0 0; border:1px solid #6d3a30; background:var(--bg1); }
+.enso-xsec-ref-h {
+  font-family:'Geist Mono',monospace; font-size:9px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--t3); margin:var(--sp-2) 0 8px;
+}
+.enso-xsec-refs { display:grid; grid-template-columns:1fr; gap:var(--sp-2); }
+@media (min-width:840px){ .enso-xsec-refs { grid-template-columns:1fr 1fr; } }
+.enso-xsec-refs figure { margin:0; border:1px solid var(--b2); background:var(--bg1); }
+.enso-xsec-lead figcaption, .enso-xsec-refs figcaption {
+  font-size:11.5px; color:var(--t2); line-height:1.5;
+  padding:10px 12px; border-bottom:1px solid var(--b1);
+}
+.enso-xsec-refs figcaption { min-height:70px; }
+/* At reference size the in-figure annotation is unreadable and becomes texture.
+   The shape of the thermocline is the whole point at this scale — keep the
+   place names, drop the rest. */
+.enso-xsec-refs .xs-fine { display:none; }
+.enso-xsec-refs .enso-xsec { opacity:.94; }
+.enso-xs-tag.cool { color:#7fa8cc; border-color:#33465c; background:rgba(74,134,179,.12); }
+.enso-figure-note { margin-top:10px; max-width:88ch; }
+
+/* The Bjerknes loop — the chain closes, it does not terminate */
+.enso-loop {
+  display:grid; grid-template-columns:88px minmax(0,1fr); gap:16px;
+  border-left:2px solid #d2693a; background:rgba(210,105,58,.05);
+  padding:14px 16px; margin-top:var(--sp-2);
+}
+.enso-loop-arc svg { width:100%; height:78px; display:block; }
+.enso-loop-t { font-size:14px; color:var(--t1); margin-bottom:5px; }
+.enso-loop-x { font-size:12px; color:var(--t2); line-height:1.6; max-width:76ch; }
+.enso-loop-c {
+  font-family:'Geist Mono',monospace; font-size:11px; color:#e0796a;
+  margin-top:8px; letter-spacing:.02em;
+}
+.enso-loop-n { font-size:11px; color:var(--t3); line-height:1.55; margin-top:8px; max-width:76ch; }
+@media (max-width:640px){ .enso-loop { grid-template-columns:1fr; } .enso-loop-arc { display:none; } }
 
 /* The chain */
 .enso-chain { border-top:1px solid var(--b3); margin-top:var(--sp-3); }
@@ -41442,44 +41485,82 @@ function showCommodityDetail(key) {
      Drawn by hand in SVG rather than pulled from a library because the shapes
      ARE the argument and each one has to line up with a number the agencies
      have published. */
+  /* state: 'normal' | 'elnino' | 'lanina'. Three panels, not two, because the
+     canonical treatments (NOAA PMEL's TAO schematic, Climate.gov's Walker
+     figure, the BoM diagram IRI republishes) are all three-state — "normal"
+     only reads as a STATE when you can see it against both departures. Drawing
+     two also repeated, in the diagram, the one-directional error this page's
+     map code explicitly warns about. */
   function pacificSVG(state) {
     /* Vertical budget, top to bottom: wind band, convection caption, cloud,
        rain, sea surface, ocean. An earlier cut put the cloud at sea−46 with a
        caption above it, which placed both ABOVE the viewBox and clipped them
        away entirely. */
     var W = 880, H = 252, L = 74, R = 838, sea = 94, floor = 224;
-    var elnino = state === 'elnino';
-    var g = elnino ? 'ensoWarmE' : 'ensoWarmN';
+    var elnino = state === 'elnino', lanina = state === 'lanina';
+    var g = elnino ? 'ensoWarmE' : lanina ? 'ensoWarmL' : 'ensoWarmN';
+    /* La Nina is the normal state with the gradient pushed further west and the
+       thermocline tilted harder — not a mirror of El Nino. */
+    var tilt = elnino ? 0 : lanina ? 1.35 : 1;
 
     /* Thermocline: steeply tilted in the normal state (deep west, shallow
        east); flattened and pushed down in the east under El Niño. */
     /* Sea surface really is tilted: the trades pile water up in the west, about
        half a metre of it. Exaggerated here, but the direction is the point —
        and it flattens when the trades let go. */
-    var seaW = elnino ? sea + 3 : sea - 6, seaE = elnino ? sea - 1 : sea + 8;
+    var seaW = elnino ? sea + 3 : sea - 6 * tilt, seaE = elnino ? sea - 1 : sea + 8 * tilt;
     var seaLine = 'M' + L + ',' + seaW + ' C' + (L + 260) + ',' + (seaW + (elnino ? 0 : 3)) + ' ' +
                   (R - 260) + ',' + (seaE - (elnino ? 0 : 3)) + ' ' + R + ',' + seaE;
+    var tW = elnino ? 166 : Math.round(206 * (lanina ? 1.06 : 1));
+    var tE = elnino ? 210 : Math.round(108 / (lanina ? 1.35 : 1));
     var therm = elnino
-      ? 'M' + L + ',166 C' + (L + 240) + ',176 ' + (R - 260) + ',200 ' + R + ',210'
-      : 'M' + L + ',206 C' + (L + 250) + ',196 ' + (R - 250) + ',126 ' + R + ',108';
+      ? 'M' + L + ',' + tW + ' C' + (L + 240) + ',176 ' + (R - 260) + ',200 ' + R + ',' + tE
+      : 'M' + L + ',' + tW + ' C' + (L + 250) + ',' + (tW - 10) + ' ' + (R - 250) + ',' + (tE + 18) + ' ' + R + ',' + tE;
     var warm = elnino
-      ? 'M' + L + ',' + seaW + ' ' + seaLine.slice(1) + ' L' + R + ',210 C' + (R - 260) + ',200 ' + (L + 240) + ',176 ' + L + ',166 Z'
-      : 'M' + L + ',' + seaW + ' ' + seaLine.slice(1) + ' L' + R + ',108 C' + (R - 250) + ',126 ' + (L + 250) + ',196 ' + L + ',206 Z';
+      ? 'M' + L + ',' + seaW + ' ' + seaLine.slice(1) + ' L' + R + ',' + tE + ' C' + (R - 260) + ',200 ' + (L + 240) + ',176 ' + L + ',' + tW + ' Z'
+      : 'M' + L + ',' + seaW + ' ' + seaLine.slice(1) + ' L' + R + ',' + tE + ' C' + (R - 250) + ',' + (tE + 18) + ' ' + (L + 250) + ',' + (tW - 10) + ' ' + L + ',' + tW + ' Z';
     /* Cold water below the thermocline in the east — the half of the picture
        that disappears under El Niño. */
     var cold = elnino
-      ? 'M' + R + ',210 C' + (R - 260) + ',200 ' + (L + 240) + ',176 ' + L + ',166 L' + L + ',' + floor + ' L' + R + ',' + floor + ' Z'
-      : 'M' + R + ',108 C' + (R - 250) + ',126 ' + (L + 250) + ',196 ' + L + ',206 L' + L + ',' + floor + ' L' + R + ',' + floor + ' Z';
+      ? 'M' + R + ',' + tE + ' C' + (R - 260) + ',200 ' + (L + 240) + ',176 ' + L + ',' + tW + ' L' + L + ',' + floor + ' L' + R + ',' + floor + ' Z'
+      : 'M' + R + ',' + tE + ' C' + (R - 250) + ',' + (tE + 18) + ' ' + (L + 250) + ',' + (tW - 10) + ' ' + L + ',' + tW + ' L' + L + ',' + floor + ' L' + R + ',' + floor + ' Z';
 
     /* Trades: strong easterlies (drawn right-to-left) normally; weak westerly
        anomalies (left-to-right) now. */
-    var arrows = '', i, y = 13;
+    /* Surface wind, drawn at a weight that tracks the live ONI rather than a
+       hardcoded constant — canonical schematics scale arrows to strength. */
+    var mag = Math.min(1.6, Math.max(0.55, Math.abs(S.oni || 1) / 1.6));
+    var sw = (elnino ? 1.15 : 1.45) * (lanina ? 1.25 : mag);
+    var arrows = '', i, y = 46;
     for (i = 0; i < 6; i++) {
       var x0 = L + 40 + i * 128;
       arrows += elnino
-        ? '<path d="M' + x0 + ',' + y + ' l46,0 m-9,-4 l9,4 l-9,4" stroke="#d2693a" stroke-width="1.3" fill="none" opacity=".85"/>'
-        : '<path d="M' + (x0 + 46) + ',' + y + ' l-46,0 m9,-4 l-9,4 l9,4" stroke="#8aa6c4" stroke-width="1.6" fill="none" opacity=".9"/>';
+        ? '<path d="M' + x0 + ',' + y + ' l46,0 m-9,-4 l9,4 l-9,4" stroke="#d2693a" stroke-width="' + sw.toFixed(2) + '" fill="none" opacity=".85"/>'
+        : '<path d="M' + (x0 + 46) + ',' + y + ' l-46,0 m9,-4 l-9,4 l9,4" stroke="#8aa6c4" stroke-width="' + sw.toFixed(2) + '" fill="none" opacity=".9"/>';
     }
+
+    /* THE WALKER CELL, CLOSED. Drawing surface winds alone showed the wind
+       reversing with no visible cause — the reader could not see the circuit.
+       Every canonical version (Climate.gov, PMEL, BoM/IRI) draws the full loop:
+       rising limb over the warm pool, upper-level return aloft, descending limb
+       over the cold side. */
+    var riseX = elnino ? 545 : lanina ? 150 : 190;
+    var sinkX = elnino ? 792 : lanina ? 800 : 770;
+    var topY = 14;
+    var cell =
+      '<g class="enso-walker" fill="none" stroke="#7f8c99" stroke-width="1.05" opacity=".62">' +
+        /* rising limb */
+        '<path d="M' + riseX + ',' + (sea - 58) + ' L' + riseX + ',' + (topY + 8) + '"/>' +
+        '<path d="M' + (riseX - 4) + ',' + (topY + 14) + ' l4,-6 l4,6"/>' +
+        /* upper return aloft, toward the descending side */
+        '<path d="M' + riseX + ',' + topY + ' L' + sinkX + ',' + topY + '" stroke-dasharray="6 4"/>' +
+        /* descending limb */
+        '<path d="M' + sinkX + ',' + topY + ' L' + sinkX + ',' + (sea - 34) + '"/>' +
+        '<path d="M' + (sinkX - 4) + ',' + (sea - 40) + ' l4,6 l4,-6"/>' +
+        '<text x="' + ((riseX + sinkX) / 2) + '" y="' + (topY - 5) + '" class="xs-t xs-fine" text-anchor="middle" ' +
+          'fill="#7f8c99" stroke="none">WALKER CIRCULATION</text>' +
+        '<text x="' + (sinkX + 7) + '" y="' + (sea - 52) + '" class="xs-t xs-fine" fill="#7f8c99" stroke="none">SINKING · DRY</text>' +
+      '</g>';
 
     /* Convection sits over the warm pool: Maritime Continent normally, out at
        the Date Line and eastward now. */
@@ -41489,10 +41570,16 @@ function showCommodityDetail(key) {
       var rx = cx - 54 + i * 18;
       rain += '<line x1="' + rx + '" y1="' + (sea - 22) + '" x2="' + (rx - 5) + '" y2="' + (sea - 4) + '" stroke="#6b8db8" stroke-width="1.1" opacity=".65"/>';
     }
-    var cloud = '<g opacity=".95">' +
-      '<ellipse cx="' + cx + '" cy="' + (sea - 40) + '" rx="66" ry="16" fill="#2b3340"/>' +
-      '<ellipse cx="' + (cx - 34) + '" cy="' + (sea - 32) + '" rx="34" ry="12" fill="#2b3340"/>' +
-      '<ellipse cx="' + (cx + 32) + '" cy="' + (sea - 33) + '" rx="36" ry="13" fill="#2b3340"/>' + rain + '</g>';
+    /* One scalloped mass with a lit upper edge, not three identical ellipses in
+       a row — that regularity is what reads as a cloud ICON rather than a drawn
+       convective tower. */
+    var cy0 = sea - 34;
+    var cloud = '<g opacity=".96">' +
+      '<path d="M' + (cx - 68) + ',' + cy0 +
+        ' q6,-15 22,-13 q5,-19 26,-17 q13,-16 32,-6 q19,-9 30,7 q19,-1 20,16 q14,3 12,13 Z" fill="#2b3340"/>' +
+      '<path d="M' + (cx - 40) + ',' + (cy0 - 13) +
+        ' q9,-13 26,-11 q12,-13 28,-4" fill="none" stroke="#3d4a5a" stroke-width="1.4" opacity=".85"/>' +
+      rain + '</g>';
 
     /* Upwelling off Peru — present normally, capped now. */
     var up = elnino
@@ -41507,27 +41594,32 @@ function showCommodityDetail(key) {
         '<linearGradient id="' + g + '" x1="0" y1="0" x2="1" y2="0">' +
           (elnino
             ? '<stop offset="0%" stop-color="#8a4a2c" stop-opacity=".55"/><stop offset="55%" stop-color="#d2693a" stop-opacity=".62"/><stop offset="100%" stop-color="#e07a44" stop-opacity=".7"/>'
+            : lanina
+            ? '<stop offset="0%" stop-color="#e07a44" stop-opacity=".78"/><stop offset="45%" stop-color="#8a4a2c" stop-opacity=".4"/><stop offset="100%" stop-color="#24455f" stop-opacity=".72"/>'
             : '<stop offset="0%" stop-color="#e07a44" stop-opacity=".7"/><stop offset="60%" stop-color="#8a4a2c" stop-opacity=".45"/><stop offset="100%" stop-color="#2c4a63" stop-opacity=".55"/>') +
         '</linearGradient>' +
       '</defs>' +
       '<rect x="' + L + '" y="' + (sea - 10) + '" width="' + (R - L) + '" height="' + (floor - sea + 10) + '" fill="#0d1218"/>' +
       '<path d="' + cold + '" fill="#1b2a38" opacity="' + (elnino ? '.55' : '.85') + '"/>' +
       '<path d="' + warm + '" fill="url(#' + g + ')"/>' +
-      '<path d="' + therm + '" stroke="#c9a957" stroke-width="1.6" fill="none" stroke-dasharray="5 4"/>' +
+      '<g class="enso-therm">' +
+        '<path d="' + therm + '" stroke="#c9a957" stroke-width="5.5" fill="none" opacity=".16"/>' +
+        '<path d="' + therm + '" stroke="#c9a957" stroke-width="1.6" fill="none" stroke-dasharray="5 4"/>' +
+      '</g>' +
       '<path d="' + seaLine + '" stroke="#a8a69c" stroke-width="1.4" fill="none"/>' +
-      cloud + arrows + up +
+      cloud + cell + arrows + up +
       /* Land masses as simple wedges — enough to orient, no more. */
       '<path d="M' + L + ',' + sea + ' l0,' + (floor - sea) + ' l-30,0 l0,-' + (floor - sea + 12) + ' Z" fill="#1c1c22"/>' +
       '<path d="M' + R + ',' + sea + ' l0,' + (floor - sea) + ' l30,0 l0,-' + (floor - sea + 12) + ' Z" fill="#1c1c22"/>' +
       '<text x="' + (L - 32) + '" y="' + (floor + 15) + '" class="xs-l">INDONESIA</text>' +
       '<text x="' + ((L + R) / 2) + '" y="' + (floor + 15) + '" class="xs-l" text-anchor="middle">DATE LINE</text>' +
       '<text x="' + (R + 30) + '" y="' + (floor + 15) + '" class="xs-l" text-anchor="end">PERU</text>' +
-      '<text x="' + (L + 8) + '" y="' + (sea + 18) + '" class="xs-t">WEST</text>' +
-      '<text x="' + (R - 8) + '" y="' + (sea + 18) + '" class="xs-t" text-anchor="end">EAST</text>' +
-      '<text x="' + (cx) + '" y="' + (sea - 62) + '" class="xs-t" text-anchor="middle">' +
+      '<text x="' + (L + 8) + '" y="' + (sea + 18) + '" class="xs-t xs-fine">WEST</text>' +
+      '<text x="' + (R - 8) + '" y="' + (sea + 18) + '" class="xs-t xs-fine" text-anchor="end">EAST</text>' +
+      '<text x="' + (cx) + '" y="' + (sea - 62) + '" class="xs-t xs-fine" text-anchor="middle">' +
         (elnino ? 'RAIN FOLLOWS THE WARM WATER' : 'RAIN SITS OVER THE MARITIME CONTINENT') + '</text>' +
-      '<text x="' + (L + 6) + '" y="' + (elnino ? 158 : 220) + '" class="xs-t" fill="#c9a957">THERMOCLINE</text>' +
-      '<text x="' + (R - 6) + '" y="' + (elnino ? 226 : 102) + '" class="xs-t" fill="#c9a957" text-anchor="end">' +
+      '<text x="' + (L + 6) + '" y="' + (elnino ? 158 : 220) + '" class="xs-t xs-fine" fill="#c9a957">THERMOCLINE</text>' +
+      '<text x="' + (R - 6) + '" y="' + (elnino ? 226 : 102) + '" class="xs-t xs-fine" fill="#c9a957" text-anchor="end">' +
         (elnino ? 'PUSHED DOWN — UPWELLING CAPPED' : 'SHALLOW — COLD WATER IN REACH') + '</text>' +
     '</svg>';
   }
@@ -41545,12 +41637,20 @@ function showCommodityDetail(key) {
       'rest of this page follows from that one movement: the countries that lose their rainfall, the canal that loses its ' +
       'watershed, the fishery that loses its upwelling.</div>';
 
-    out += '<div class="enso-xsec-pair">' +
-      '<figure><figcaption><span class="enso-xs-tag">Normal</span>Trades blow east to west. Warm pool held against Asia. ' +
-      'Cold water upwells off Peru.</figcaption>' + pacificSVG('normal') + '</figure>' +
-      '<figure><figcaption><span class="enso-xs-tag on">Now · September 2026</span>Trades reversed. Warm pool pushed east. ' +
-      'Upwelling capped. Rain displaced to the Date Line.</figcaption>' + pacificSVG('elnino') + '</figure>' +
-    '</div>';
+    out += '<figure class="enso-xsec-lead is-now">' +
+        '<figcaption><span class="enso-xs-tag on">El Niño · September 2026</span>Trades reversed. The warm pool has slid ' +
+        'east and the rain has gone with it, out to the Date Line. Cold water can no longer reach the surface off Peru.</figcaption>' +
+        pacificSVG('elnino') +
+      '</figure>' +
+      '<div class="enso-xsec-ref-h">The two states it is being read against</div>' +
+      '<div class="enso-xsec-refs">' +
+        '<figure><figcaption><span class="enso-xs-tag">Neutral</span>Trades blow east to west. Warm pool held against Asia, ' +
+        'rain over the Maritime Continent, cold water upwelling off Peru.</figcaption>' + pacificSVG('normal') + '</figure>' +
+        '<figure><figcaption><span class="enso-xs-tag cool">La Niña</span>Trades blow harder still. Warm pool pressed further ' +
+        'west, thermocline steeper, upwelling stronger. Not a mirror of El Niño — its damage is its own.</figcaption>' +
+        pacificSVG('lanina') + '</figure>' +
+      '</div>' +
+    (M.figure_note ? '<div class="ctr-note enso-figure-note">' + esc(M.figure_note) + '</div>' : '');
 
     /* The chain, each link with the observation proving it is live */
     out += '<div class="enso-chain">' + ch.map(function (c) {
@@ -41564,8 +41664,34 @@ function showCommodityDetail(key) {
           '<div class="enso-link-r now"><span>Right now</span>' + esc(c.now) + '</div>' +
           '<div class="enso-link-e">' + esc(c.evidence) + '</div>' +
         '</div></div>';
-    }).join('') + '</div>' +
-    prov('NOAA CPC El Niño Advisory 13 Aug 2026 and weekly update 31 Aug 2026 · BoM 11 Aug · JMA 10 Aug · IRI 19 Aug', 'sourced');
+    }).join('') + '</div>';
+
+    /* The five steps close into a circuit. Drawing them as a numbered list and
+       stopping is the textbook way this gets taught wrong — it is the Bjerknes
+       feedback, and the loop is the reason a small nudge grows into an event. */
+    var fb = M.feedback;
+    if (fb) {
+      out += '<div class="enso-loop">' +
+        '<div class="enso-loop-arc" aria-hidden="true">' +
+          '<svg viewBox="0 0 120 90" preserveAspectRatio="none">' +
+            '<path d="M112,4 C4,4 4,86 108,86" fill="none" stroke="#d2693a" stroke-width="1.3" ' +
+              'stroke-dasharray="5 4" opacity=".8"/>' +
+            '<path d="M101,81 l8,5 l-8,5" fill="none" stroke="#d2693a" stroke-width="1.3" opacity=".8"/>' +
+          '</svg>' +
+        '</div>' +
+        '<div class="enso-loop-b">' +
+          '<div class="enso-loop-t">' + esc(fb.title) + '</div>' +
+          '<div class="enso-loop-x">' + esc(fb.text) + '</div>' +
+          '<div class="enso-loop-c">' + esc(fb.closes) + '</div>' +
+          (fb.brake ? '<div class="enso-loop-n">' + esc(fb.brake) + '</div>' : '') +
+          (fb.sources || []).map(function (s) {
+            return '<div style="font-size:10.5px;margin-top:4px;"><a href="' + esc(s.url) + '" target="_blank" ' +
+              'rel="noopener" style="color:var(--accent)">' + esc(s.label) + '</a></div>';
+          }).join('') +
+        '</div>' +
+      '</div>';
+    }
+    out += prov('NOAA CPC El Niño Advisory 13 Aug 2026 and weekly update 31 Aug 2026 · BoM 11 Aug · JMA 10 Aug · IRI 19 Aug', 'sourced');
 
     /* Flavour — the west-to-east gradient IS the finding */
     if (fl.regions) {
