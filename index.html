@@ -10212,7 +10212,11 @@ table.enso-tbl thead th:first-child { z-index:3; }
   display:grid; grid-template-columns:var(--enso-gutter) minmax(90px,124px) minmax(0,1fr) 66px; gap:var(--enso-gap);
   align-items:center; padding:9px 0; border-bottom:1px solid var(--b1);
 }
-.enso-flav-row::before { content:''; }
+/* Explicit columns. A ::before spacer plus four children made five items in a
+   three-column mobile grid, which dropped the value into the gutter. */
+.enso-flav-k   { grid-column:2; grid-row:1; }
+.enso-flav-bar { grid-column:3; grid-row:1; }
+.enso-flav-v   { grid-column:4; grid-row:1; }
 .enso-flav-k { font-family:'Geist Mono',monospace; font-size:11px; color:var(--t1); }
 .enso-flav-k i { display:block; font-style:normal; font-size:9px; color:var(--t3); margin-top:1px; }
 .enso-flav-bar { height:9px; background:var(--bg3); border-radius:1px; overflow:hidden; }
@@ -10220,10 +10224,13 @@ table.enso-tbl thead th:first-child { z-index:3; }
 .enso-flav-v { font-family:'Geist Mono',monospace; font-size:15px; color:#d2693a; text-align:right; font-variant-numeric:tabular-nums; }
 .enso-flav-v i { font-style:normal; font-size:9px; color:var(--t3); margin-left:2px; }
 .enso-flav-w { font-size:10.5px; color:var(--t3); }
-.enso-flav-w { grid-column:2 / -1; margin-top:-2px; }
+.enso-flav-w { grid-column:2 / -1; grid-row:2; margin-top:-2px; }
 @media (max-width:860px){
-  .enso-flav-row { grid-template-columns:var(--enso-gutter) 1fr 58px; }
-  .enso-flav-w { grid-column:2 / -1; }
+  .enso-flav-row { grid-template-columns:var(--enso-gutter) minmax(0,1fr) 58px; }
+  .enso-flav-k   { grid-column:2; grid-row:1; }
+  .enso-flav-v   { grid-column:3; grid-row:1; }
+  .enso-flav-bar { grid-column:2 / -1; grid-row:2; }
+  .enso-flav-w   { grid-column:2 / -1; grid-row:3; }
 }
 .enso-flav-note { font-size:11.5px; color:var(--t2); line-height:1.6; padding-left:12px; border-left:2px solid; }
 .enso-flav-note b { display:block; color:var(--t1); margin-bottom:4px; font-size:12.5px; }
@@ -41735,8 +41742,10 @@ function showCommodityDetail(key) {
       'watershed, the fishery that loses its upwelling.</div>';
 
     out += '<figure class="enso-xsec-lead is-now">' +
-        '<figcaption><span class="enso-xs-tag on">El Niño · September 2026</span>Trades reversed. The warm pool has slid ' +
-        'east and the rain has gone with it, out to the Date Line. Cold water can no longer reach the surface off Peru.</figcaption>' +
+        '<figcaption><span class="enso-xs-tag on">El Niño · September 2026</span>Trades reversed or weakened across the ' +
+        'western tropical Pacific (BoM). The warm pool has slid east and the rain has gone with it, out to the Date Line. ' +
+        'Upwelling off Peru is capped — that last step is the mechanism, inferred from Niño 1+2 warmth, not a measured ' +
+        'upwelling observation.</figcaption>' +
         pacificSVG('elnino') +
       '</figure>' +
       '<div class="enso-xsec-ref-h">The two states it is being read against</div>' +
@@ -42070,16 +42079,27 @@ function showCommodityDetail(key) {
   }
   /* Strongest single crop coefficient — from enso_model.json, the file that IS
      marked production-ready. Signed by the El Niño slope. */
+  /* enso_specific:false means the coefficient survives on its own but does NOT
+     survive the control for the Indian Ocean Dipole — it is shared Indo-Pacific
+     evidence, not an ENSO-specific measurement. Four surviving pairs are marked
+     this way (AUS barley, BRA wheat, IDN corn, URY rice) and were previously
+     painted and tabled as if they were ENSO. The fill now prefers a genuinely
+     ENSO-specific crop and only falls back to a shared one, flagged. */
   function strongestCrop(iso) {
     var m = S.model && S.model[iso]; if (!m) return null;
-    var best = null;
+    var best = null, bestShared = null;
     for (var crop in m) {
       var c = m[crop];
       if (!c || !c.signal) continue;
-      if (!best || Math.abs(c.yield_pct_per_oni_nino) > Math.abs(best.c.yield_pct_per_oni_nino))
-        best = { crop: crop, c: c };
+      var slot = (c.enso_specific === false) ? 'shared' : 'specific';
+      var cur = { crop: crop, c: c, shared: slot === 'shared' };
+      if (slot === 'specific') {
+        if (!best || Math.abs(c.yield_pct_per_oni_nino) > Math.abs(best.c.yield_pct_per_oni_nino)) best = cur;
+      } else if (!bestShared || Math.abs(c.yield_pct_per_oni_nino) > Math.abs(bestShared.c.yield_pct_per_oni_nino)) {
+        bestShared = cur;
+      }
     }
-    return best;
+    return best || bestShared;
   }
 
   function fillFor(iso) {
@@ -42114,9 +42134,10 @@ function showCommodityDetail(key) {
   function tooltipFor(iso, nm) {
     var parts = ['<b>' + esc(nm || nameFor(iso)) + '</b>'];
     var b = strongestCrop(iso);
-    if (b) parts.push('measured · ' + esc(b.crop) + ' ' + num(b.c.yield_pct_per_oni_nino, 1) + '%/ONI');
+    if (b) parts.push('measured · ' + esc(b.crop) + ' ' + num(b.c.yield_pct_per_oni_nino, 1) + '%/ONI' +
+      (b.shared ? ' <span style="color:#c9a957">(shared with the IOD — not ENSO-specific)</span>' : ''));
     var d = rowFor(iso);
-    if (d && d.cov) parts.push('aggregate ' + num(d.lv.production_shock_pct, 1) + '% · coverage ' +
+    if (d && d.cov) parts.push('aggregate ≈' + num(Math.round(d.lv.production_shock_pct), 0) + '% · coverage ' +
       Math.round(d.cov * 100) + '%');
     if (!b && !(d && d.cov)) parts.push('<span style="color:#8b8980">no measured signal here</span>');
     var regs = S.isoIndex[iso] || [];
@@ -42135,7 +42156,7 @@ function showCommodityDetail(key) {
     var ip = ipcFor(iso);
     if (ip) live.push('IPC phase 3+: ' + ip.phase3plus_pct + '% of population');
     var nw = newsFor(iso);
-    if (nw.length) live.push(nw.length + ' story' + (nw.length > 1 ? 'ies' : '') + ' in the last cycle');
+    if (nw.length) live.push(nw.length === 1 ? '1 story in the last cycle' : nw.length + ' stories in the last cycle');
     if (live.length) parts.push('<span style="color:#5b9b8a">observed now · ' + live.join('<br>observed now · ') + '</span>');
     return parts.join('<br>');
   }
@@ -42313,7 +42334,7 @@ function showCommodityDetail(key) {
      colour in. Hidden on narrow screens where they would collide. */
   var ANNOTATIONS = [
     { at: [38.5, -98.4], label: [46, -46], side: 'right', t: 'KANSAS',
-      d: 'El Niño cuts winter-wheat abandonment 3pp. US wheat +4.4%/ONI — the strongest result in the panel.' },
+      d: 'El Niño cuts winter-wheat abandonment 3pp. US wheat +4.4%/ONI — the most statistically significant result in the panel (q<0.0001), though not the largest.' },
     { at: [-28.6, 26.2], label: [-26, 62], side: 'right', t: 'FREE STATE',
       d: 'South African maize −21%/ONI. Zimbabwe −27.6%. The best-evidenced El Niño food signal there is.' },
     { at: [9.08, -79.68], label: [-14, -120], side: 'right', t: 'GATÚN',
@@ -42598,9 +42619,14 @@ function showCommodityDetail(key) {
       '<div style="display:flex;flex-wrap:wrap;gap:20px;align-items:baseline;">' +
       '<div style="font-size:17px;color:var(--t1);font-weight:600;">' + esc(nm) + '</div>';
     if (d) {
+      /* While the file is production_ready:false the page says "direction only",
+         so printing −34.24% invited exactly the quantitative use the caveat
+         forbids. Rounded to the whole percent, which is all the flag supports. */
       out += '<div><span class="enso-stat-l">Production shock, ' + esc(keyFor(S.oni)[2]) + '</span>' +
         '<div class="enso-stat-v" style="color:' + (impactColor(d.lv.production_shock_pct, 1) || 'var(--t1)') + '">' +
-        num(d.lv.production_shock_pct, 2) + '%</div></div>' +
+        (S.meta.exp && S.meta.exp.production_ready === false
+          ? '≈' + num(Math.round(d.lv.production_shock_pct), 0) + '%'
+          : num(d.lv.production_shock_pct, 2) + '%') + '</div></div>' +
         '<div><span class="enso-stat-l">Coverage</span><div class="enso-stat-v">' +
         Math.round(d.cov * 100) + '%</div></div>';
     }
@@ -42682,7 +42708,8 @@ function showCommodityDetail(key) {
       'verified harvest month gets no coefficient rather than a guessed alignment. Sorted by the size of the El Niño slope.</div>' +
       '<div class="enso-tblwrap"><table class="enso-tbl"><thead><tr><th scope="col">Country</th><th scope="col">Crop</th>' +
       '<th scope="col" style="text-align:right">El Niño %/ONI</th><th scope="col" style="text-align:right">La Niña %/ONI</th>' +
-      '<th scope="col" style="text-align:right">Mean production</th><th scope="col" style="text-align:right">q</th><th scope="col">Alignment</th></tr></thead><tbody>' +
+      '<th scope="col" style="text-align:right">Mean production</th><th scope="col" style="text-align:right">q</th>' +
+      '<th scope="col">ENSO-specific?</th><th scope="col">Alignment</th></tr></thead><tbody>' +
       rows.map(function (r) {
         return '<tr><td class="nm">' + esc(nameFor(r.iso)) + '</td><td>' + esc(r.crop) + '</td>' +
           '<td class="num" style="color:' + (impactColor(r.c.yield_pct_per_oni_nino, 1) || 'var(--t1)') + '">' +
@@ -42690,6 +42717,8 @@ function showCommodityDetail(key) {
           '<td class="num">' + num(r.c.yield_pct_per_oni_nina, 2) + '</td>' +
           '<td class="num">' + (r.c.mean_production_kt != null ? Math.round(r.c.mean_production_kt).toLocaleString() : '—') + '</td>' +
           '<td class="num">' + (r.c.q_value != null ? r.c.q_value.toFixed(3) : '—') + '</td>' +
+          '<td style="font-size:10.5px;color:' + (r.c.enso_specific === false ? '#c9a957' : 'var(--t3)') + '">' +
+            (r.c.enso_specific === false ? 'no — shared with IOD' : 'yes') + '</td>' +
           '<td style="font-size:10.5px;color:var(--t3)">' + esc(r.c.alignment_basis || '') + '</td></tr>';
       }).join('') + '</tbody></table></div>' +
       prov('FAOSTAT QCL yield 1961–2024, fitted here · ' + esc(dia(mt.method || '')), 'modeled');
@@ -42798,11 +42827,13 @@ function showCommodityDetail(key) {
     /* Tier 1 — the record */
     out += '<div style="margin-top:var(--sp-2);"><div class="enso-legend-t">1 · What the record shows ' + badge('observed', 'event study') + '</div>' +
       '<div style="font-size:12.5px;color:var(--t1);margin:5px 0;">' + esc(rec.claim || '') + '</div>' +
+      (rec.figure ? '<div class="ctr-note" style="margin-bottom:4px;">' + esc(rec.figure) + '</div>' : '') +
       '<blockquote style="margin:8px 0;padding-left:12px;border-left:2px solid var(--b3);font-size:11.5px;color:var(--t2);line-height:1.6;">' +
         '“' + esc(rec.quote || '') + '”</blockquote>' +
       '<div class="enso-chart"><canvas id="enso-c-record"></canvas></div>' +
-      '<div class="enso-chart-cap">Six-month average agricultural price index around each El Niño episode. One episode in six rose. ' +
-      'The strongest event of the era, 1997-98, fell 14.8% — with worldwide damages estimated at $35–45 bn happening at the same time.</div>' +
+      '<div class="enso-chart-cap">Both windows the figure prints, in its plot order. Warm bars are price <b>rises</b>. ' +
+      'One peak in seven rose — 2002-03, the only episode the source text names as a rise.</div>' +
+      (E.record.peaks_note ? '<div class="ctr-note" style="margin-top:6px;max-width:80ch;">' + esc(E.record.peaks_note) + '</div>' : '') +
       prov((rec.source || '') + '', 'sourced') + '</div>';
 
     /* FFPI at event peaks */
@@ -42953,8 +42984,9 @@ function showCommodityDetail(key) {
        'El Niño wets Ethiopia’s Oct–Dec Deyr rains while drying the JJAS kiremt that feeds most of the country. In ' +
        'one 2023/24 season Mato Grosso soy fell 16% while Rio Grande do Sul rose 68%. One colour per country hides both.'],
       ['Australia’s signal is mostly the Indian Ocean Dipole',
-       'The apparent ENSO effect on Australian wheat falls to r = −0.08 once the IOD is controlled for — which is why ' +
-       'no coefficient is published for it here. Australia in 2026 is running wet, against the script.'],
+       'The apparent ENSO effect on Australian <i>wheat</i> falls to r = −0.08 once the IOD is controlled for, and no wheat ' +
+       'coefficient is published here. Australian <i>barley</i> does carry one (−11.9%/ONI) but it does not survive the same ' +
+       'control, so the table marks it <b>not ENSO-specific</b>. Australia in 2026 is running wet, against the script.'],
       ['No world price is modelled',
        'The economics view reports what the record and the literature say. It forecasts no price, and no elasticity ' +
        'anywhere on this page is this project’s own.'],
@@ -42977,7 +43009,7 @@ function showCommodityDetail(key) {
       '<div class="enso-rule enso-rule-strong"></div>' +
       '<details class="enso-limits">' +
         '<summary>' +
-          '<span class="enso-lim-eyebrow">The limits · they apply to every view above</span>' +
+          '<span class="enso-lim-eyebrow">The limits · they govern every view in this tab</span>' +
           '<span class="enso-lim-h">What this panel cannot tell you</span>' +
           '<span class="enso-lim-count">' + limits.length + ' limits' +
             (nReg ? ' · ' + nReg + ' claims it refuses to make' : '') + '</span>' +
@@ -43008,6 +43040,7 @@ function showCommodityDetail(key) {
     if (!iso) return '';
     var t = Date.parse(iso); if (isNaN(t)) return esc(iso);
     var h = (Date.now() - t) / 36e5;
+    if (h < -1) return 'dated ' + new Date(t).toISOString().slice(0, 10);   /* feeds do publish ahead */
     if (h < 1) return 'just now';
     if (h < 24) return Math.round(h) + 'h ago';
     var d = Math.round(h / 24);
@@ -43273,7 +43306,7 @@ function showCommodityDetail(key) {
   /* Each chart states its own finding, because a <canvas> exposes nothing to
      assistive tech and the caption beside it is interpretation, not the data. */
   var CHART_ALT = {
-    'enso-c-record': 'Bar chart: change in the agricultural price index around each of six El Niño episodes between 1982 and 2005. Five fell or barely moved; only 2002-03 rose, by 10.4 per cent.',
+    'enso-c-record': 'Bar chart: change in the agricultural price index around each of the seven ENSO peaks the World Bank figure annotates, in two windows. Only 2002-03 rose, by 10.4 per cent against the previous six months.',
     'enso-c-ffpi': 'Scatter plot: FAO Food Price Index, nominal and real, at eleven El Niño peak years from 1994 to 2024, on a true year axis with no connecting line because the gaps between them are years.',
     'enso-c-ffpilive': 'Line chart: FAO Food Price Index headline, cereals and vegetable oils over the last 24 months. Vegetable oils run far above the others.',
     'enso-c-panama': 'Step chart: Panama Canal daily transit slots falling from about 37 to 18 through the 2023-24 El Niño, with the current 2026 restriction of 32 marked separately.',
@@ -43297,27 +43330,28 @@ function showCommodityDetail(key) {
                  ensowater: ['enso-c-panama'] }[sub];
     if (sub && !want) return;
     S._chartFilter = want || null;
-    /* 1 — the event study */
-    if (E.record && E.record.episodes) {
-      var ep = E.record.episodes;
+    /* 1 — the event study. Both windows the figure prints, in its own plot
+       order, with only the three episodes the source text names labelled.
+       PRICE direction, not production direction: a price RISE is the harmful
+       case here, so warm = up. Reusing the production scale unchanged made the
+       one harmful bar read as beneficial. */
+    if (E.record && E.record.peaks) {
+      var pk = E.record.peaks;
+      var nameFor6 = { 1: '1982-83', 5: '2002-03', 7: '2015, ongoing' };
+      var priceColor = function (v) { return v > 0 ? '#d2693a' : '#6a93a8'; };
       mk('enso-c-record', {
         type: 'bar',
         data: {
-          labels: ep.map(function (e) { return e.episode; }),
-          datasets: [{
-            label: 'Agricultural price index, % change',
-            data: ep.map(function (e) { return e.w1; }),
-            /* The map's own diverging pair, NOT the severity ramp. An earlier cut
-               used RAMP[0] green here for the positive bar, which is exactly the
-               error this page's header comment says the choropleth exists to
-               avoid — committed in the one chart carrying the price claim. */
-            backgroundColor: ep.map(function (e) { return impactColor(e.w1 > 0 ? 8 : -8, 1); }),
-            borderWidth: 0
-          }]
+          labels: pk.map(function (p) { return nameFor6[p.n] || ('peak ' + p.n); }),
+          datasets: [
+            { label: 'vs previous six months', data: pk.map(function (p) { return p.prev6m; }),
+              backgroundColor: pk.map(function (p) { return priceColor(p.prev6m); }), borderWidth: 0 },
+            { label: 'vs same six months a year earlier', data: pk.map(function (p) { return p.yoy; }),
+              backgroundColor: pk.map(function (p) { return priceColor(p.yoy); }), borderWidth: 0, opacity: .6 }
+          ]
         },
         options: defaults({
-          plugins: { legend: { display: false }, tooltip: {
-            callbacks: { afterLabel: function (c) { return ep[c.dataIndex].note || ''; } } } },
+          plugins: { legend: { display: true } },
           scales: {
             x: { grid: { display: false }, ticks: { color: '#6a685e', font: { size: 10, family: 'Geist Mono' } }, border: { display: false } },
             y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#6a685e', font: { size: 10, family: 'Geist Mono' },
