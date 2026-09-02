@@ -42831,9 +42831,12 @@ function showCommodityDetail(key) {
       '<blockquote style="margin:8px 0;padding-left:12px;border-left:2px solid var(--b3);font-size:11.5px;color:var(--t2);line-height:1.6;">' +
         '“' + esc(rec.quote || '') + '”</blockquote>' +
       '<div class="enso-chart"><canvas id="enso-c-record"></canvas></div>' +
-      '<div class="enso-chart-cap">Both windows the figure prints, in its plot order. Warm bars are price <b>rises</b>. ' +
-      'One peak in seven rose — 2002-03, the only episode the source text names as a rise.</div>' +
-      (E.record.peaks_note ? '<div class="ctr-note" style="margin-top:6px;max-width:80ch;">' + esc(E.record.peaks_note) + '</div>' : '') +
+      '<div class="enso-chart-cap">Both windows the figure prints. Warm bars are price <b>rises</b>. Only 2002-03 is ' +
+      'clearly positive on both; the three strongest events on the figure all fall.</div>' +
+      (E.record.method ? '<div class="ctr-note" style="margin-top:6px;max-width:80ch;">' + esc(E.record.method) + '</div>' : '') +
+      (E.record.tension ? '<div class="enso-gate" style="border-color:#6b5828;background:rgba(201,169,87,.06);' +
+        'border-left-color:#c9a957;margin-top:10px;"><b>The figure and the sentence do not quite agree.</b> ' +
+        esc(E.record.tension) + '</div>' : '') +
       prov((rec.source || '') + '', 'sourced') + '</div>';
 
     /* FFPI at event peaks */
@@ -43306,7 +43309,7 @@ function showCommodityDetail(key) {
   /* Each chart states its own finding, because a <canvas> exposes nothing to
      assistive tech and the caption beside it is interpretation, not the data. */
   var CHART_ALT = {
-    'enso-c-record': 'Bar chart: change in the agricultural price index around each of the seven ENSO peaks the World Bank figure annotates, in two windows. Only 2002-03 rose, by 10.4 per cent against the previous six months.',
+    'enso-c-record': 'Bar chart: change in the agricultural price index around the seven ENSO peaks the World Bank annotates — 1982-83, 1986-87, 1991-92, 1997-98, 2002-03, 2009-10 and the 2015-16 event ongoing at press — in two windows. Only 2002-03 is clearly positive on both.',
     'enso-c-ffpi': 'Scatter plot: FAO Food Price Index, nominal and real, at eleven El Niño peak years from 1994 to 2024, on a true year axis with no connecting line because the gaps between them are years.',
     'enso-c-ffpilive': 'Line chart: FAO Food Price Index headline, cereals and vegetable oils over the last 24 months. Vegetable oils run far above the others.',
     'enso-c-panama': 'Step chart: Panama Canal daily transit slots falling from about 37 to 18 through the 2023-24 El Niño, with the current 2026 restriction of 32 marked separately.',
@@ -43337,12 +43340,14 @@ function showCommodityDetail(key) {
        one harmful bar read as beneficial. */
     if (E.record && E.record.peaks) {
       var pk = E.record.peaks;
-      var nameFor6 = { 1: '1982-83', 5: '2002-03', 7: '2015, ongoing' };
+      /* Every peak is labelled now — the episode years were recovered from the
+         PDF by matching each label's x-coordinate against the axis year ticks,
+         so nothing here is inferred from reading order. */
       var priceColor = function (v) { return v > 0 ? '#d2693a' : '#6a93a8'; };
       mk('enso-c-record', {
         type: 'bar',
         data: {
-          labels: pk.map(function (p) { return nameFor6[p.n] || ('peak ' + p.n); }),
+          labels: pk.map(function (p) { return p.episode || ('peak ' + p.n); }),
           datasets: [
             { label: 'vs previous six months', data: pk.map(function (p) { return p.prev6m; }),
               backgroundColor: pk.map(function (p) { return priceColor(p.prev6m); }), borderWidth: 0 },
