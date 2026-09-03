@@ -10353,6 +10353,17 @@ table.enso-tbl thead th:first-child { z-index:3; }
   margin-top:4px; letter-spacing:.01em;
 }
 .enso-idx-cmp-b { font-size:11.5px; color:var(--t2); line-height:1.6; margin-top:5px; max-width:82ch; }
+.enso-idx-out {
+  border:1px solid var(--b2); border-left:2px solid #c9a957;
+  background:var(--bg1); padding:10px calc(var(--enso-inset) - 1px) 10px calc(var(--enso-inset) - 2px);
+  font-size:12px; color:var(--t2); line-height:1.6; max-width:82ch;
+}
+.enso-idx-out b { color:var(--t1); font-weight:600; }
+.enso-idx-missing {
+  font-family:'Geist Mono',monospace; font-size:9.5px; letter-spacing:.05em;
+  text-transform:uppercase; color:#c9a957; border:1px solid #6b5c33;
+  padding:1px 5px; margin-left:8px; border-radius:2px; white-space:nowrap;
+}
 @media (max-width:820px){
   .enso-idx-row { grid-template-columns:118px minmax(0,1fr) 66px; }
   .enso-idx-win { grid-column:2 / -1; }
@@ -41962,7 +41973,22 @@ function showCommodityDetail(key) {
      supply the only pairs that hold everything constant but one variable. */
   function renderIndices() {
     var el = document.getElementById('enso-indices'); if (!el) return;
-    var I = S.indices; if (!I || !I.indices || !I.indices.length) { el.innerHTML = ''; return; }
+    var I = S.indices;
+    if (!I || !I.indices || !I.indices.length) {
+      /* Blank is the one thing this strip must not be. A failed fetch and an
+         empty file read identically to a reader, so say which. */
+      var didFail = (S.failed || []).indexOf('enso_indices') !== -1;
+      el.innerHTML =
+        '<div class="enso-idx enso-idx-out" role="status">' +
+          '<b>The index comparison is not showing.</b> ' +
+          (didFail
+            ? 'data/enso_indices.json did not load — a fetch failure, not a finding. ' +
+              'The headline index above comes from a different file and is unaffected.'
+            : 'No index rows were published in the last collector run, so there is ' +
+              'nothing to compare. This is an upstream outage, not a reading of zero.') +
+        '</div>';
+      return;
+    }
     var rows = I.indices, by = {};
     rows.forEach(function (r) { by[r.key] = r; });
 
@@ -41977,14 +42003,29 @@ function showCommodityDetail(key) {
 
     /* Headline the one honest like-for-like: same agency, same water, same
        season — only the baseline differs. */
-    var lede, head = (I.comparisons || []).filter(function (c) {
-      return c.free_variable && c.free_variable.indexOf('baseline') === 0;
-    })[0];
-    if (head && by[head.a] && by[head.b]) {
+    var cmps = (I.comparisons || []).filter(function (c) { return by[c.a] && by[c.b]; });
+    var head = cmps.filter(function (c) { return c.free_field === 'baseline'; })[0];
+    var lede;
+    if (head) {
       lede = 'Two indices for the same three months of the same water disagree by <b>' +
         head.delta.toFixed(2) + ' °C</b> — on the baseline alone.';
+    } else if (cmps.length) {
+      /* The baseline pair needs RONI. When RONI is missing — or has lagged a season
+         and been refused — say what IS comparable. Claiming nothing is comparable
+         while a valid pair renders below would be the same contradiction in the
+         degraded path. */
+      var c0 = cmps[0];
+      lede = esc(by[c0.a].label) + ' and ' + esc(by[c0.b].label) + ' differ by <b>' +
+        c0.delta.toFixed(2) + '</b> on ' + esc(c0.free_field) + ' alone' +
+        (cmps.length > 1 ? ', and ' + (cmps.length - 1) + ' more pair' +
+          (cmps.length > 2 ? 's' : '') + ' hold' + (cmps.length === 2 ? 's' : '') +
+          ' one variable free' : '') + '.';
     } else {
-      lede = 'Five indices, three different averaging windows.';
+      var kinds = {};
+      rows.forEach(function (r) { kinds[r.window_kind] = 1; });
+      lede = rows.length + ' indices across ' + Object.keys(kinds).length +
+        ' averaging window' + (Object.keys(kinds).length === 1 ? '' : 's') +
+        ' — no two of them can currently be compared like for like.';
     }
 
     var groupHTML = GROUPS.map(function (g) {
@@ -42029,16 +42070,28 @@ function showCommodityDetail(key) {
       '</div>';
     }).join('');
 
-    var miss = (I.unavailable || []).length
-      ? '<div class="ctr-note" style="margin-top:9px;">Not reachable this run: ' +
-        esc(I.unavailable.map(function (u) { return u.key; }).join(', ')) +
-        '. Omitted rather than carried over from a previous fetch.</div>'
+    /* A partial outage used to be visible only to a reader who opened the fold.
+       The count now rides in the summary, because "one of these is missing" changes
+       how the rest should be read. */
+    var gone = I.unavailable || [], names = {};
+    rows.forEach(function (r) { names[r.key] = r.label; });
+    var missTag = gone.length
+      ? ' <span class="enso-idx-missing">' + gone.length + ' of ' +
+        ((I.expected || []).length || (rows.length + gone.length)) + ' unavailable</span>'
+      : '';
+    var miss = gone.length
+      ? '<div class="enso-idx-out" style="margin-top:12px;">' +
+          '<b>Not reachable this run:</b> ' +
+          esc(gone.map(function (u) { return u.label || names[u.key] || u.key; }).join(', ')) +
+          '. Omitted rather than carried over from an earlier fetch, so a comparison ' +
+          'that needed one of them is absent below rather than silently narrowed.' +
+        '</div>'
       : '';
 
     el.innerHTML =
       '<details class="enso-idx">' +
         '<summary>' +
-          '<span class="enso-idx-k">The same ocean, ' + rows.length + ' indices</span>' +
+          '<span class="enso-idx-k">The same ocean, ' + rows.length + ' indices' + missTag + '</span>' +
           '<span class="enso-idx-lede">' + lede + ' <span class="enso-gate-more">Show them</span></span>' +
         '</summary>' +
         '<div class="enso-idx-body">' +

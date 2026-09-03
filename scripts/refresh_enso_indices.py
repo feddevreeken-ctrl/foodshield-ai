@@ -45,6 +45,14 @@ BOM_SOI_URL = "https://www.bom.gov.au/clim_data/IDCKGSM000/soi.txt"
 
 MAX_AGE_DAYS = 45
 
+# The comparability check below compares these fields literally, so the same box
+# of ocean must carry the same string everywhere. Two spellings read as two regions.
+LABELS = {"oni": "ONI", "roni": "RONI", "wk34": "Weekly Niño 3.4",
+          "bom_rel": "Relative Niño 3.4", "soi": "Troup SOI"}
+N34 = "Niño 3.4 (170°W–120°W)"
+ABS_BASE = "absolute, fixed 1991–2020"
+REL_BASE = "relative to the tropical mean"
+
 
 def _fetch(url: str) -> str:
     return http_get(url, timeout=60, headers=UA, retries=3).text
@@ -99,14 +107,17 @@ def main() -> int:
         try:
             indices.append(fn())
         except Exception as e:  # noqa: BLE001 -- omit, never back-fill
-            unavailable.append({"key": key, "reason": f"{type(e).__name__}: {e}"})
+            # carry the label: the UI has no row to read a name from for a source
+            # that never arrived, and "roni" is not a thing a reader can identify.
+            unavailable.append({"key": key, "label": LABELS.get(key, key),
+                                "reason": f"{type(e).__name__}: {e}"})
 
     def oni():
         seas, yr, v = parse_seasonal(_fetch(ONI_URL), 3)
         return {
             "key": "oni", "label": "ONI", "agency": "NOAA CPC", "value": v, "unit": "°C",
             "window": f"{seas} {yr}, 3-month mean", "window_kind": "seasonal",
-            "region": "Niño 3.4 (170°W–120°W)", "baseline": "absolute, fixed 1991–2020",
+            "region": N34, "baseline": ABS_BASE,
             "threshold": 0.5,
             "note": "The index this page headlines. Absolute anomaly against a fixed base.",
             "url": ONI_URL,
@@ -117,7 +128,7 @@ def main() -> int:
         return {
             "key": "roni", "label": "RONI", "agency": "NOAA CPC", "value": v, "unit": "°C",
             "window": f"{seas} {yr}, 3-month mean", "window_kind": "seasonal",
-            "region": "Niño 3.4", "baseline": "relative to the tropical mean",
+            "region": N34, "baseline": REL_BASE,
             "threshold": 0.5,
             "note": "Subtracts the tropical-mean warming trend, so it reads lower than ONI "
                     "as the tropics warm.",
@@ -132,7 +143,7 @@ def main() -> int:
             "key": "wk34", "label": "Weekly Niño 3.4", "agency": "NOAA CPC",
             "value": newest["nino34_anom"], "unit": "°C",
             "window": f"week ending {d.strftime('%-d %b %Y')}", "window_kind": "weekly",
-            "region": "Niño 3.4", "baseline": "absolute, fixed 1991–2020", "threshold": None,
+            "region": N34, "baseline": ABS_BASE, "threshold": None,
             "note": "A single week, not a season. Runs hotter than the seasonal mean "
                     "because it has not been averaged down.",
             "url": WEEKLY_URL,
@@ -144,7 +155,7 @@ def main() -> int:
             "key": "bom_rel", "label": "Relative Niño 3.4", "agency": "BoM Australia",
             "value": v, "unit": "°C",
             "window": f"week {_d(start)} – {_d(end)}", "window_kind": "weekly",
-            "region": "Niño 3.4", "baseline": "relative to the tropical mean",
+            "region": N34, "baseline": REL_BASE,
             "threshold": 0.8,
             "note": "BoM's operational ocean index since Sept 2025, and it uses a higher "
                     "threshold (+0.8) than CPC (+0.5) -- the same water clears a different bar.",
@@ -163,48 +174,73 @@ def main() -> int:
             "url": BOM_SOI_URL,
         }
 
-    for k, fn in (("oni", oni), ("roni", roni), ("wk34", weekly),
-                  ("bom_rel", bom_rel), ("soi", soi)):
+    EXPECTED = (("oni", oni), ("roni", roni), ("wk34", weekly),
+                ("bom_rel", bom_rel), ("soi", soi))
+    for k, fn in EXPECTED:
         attempt(k, fn)
+
+    if not indices:
+        # run_all's safe_run leaves the previous file in place when a step raises.
+        # Writing indices:[] here would overwrite good data with nothing, which is
+        # strictly worse than a stale file the UI can date and flag.
+        raise RuntimeError(
+            "no index feed reachable -- refusing to overwrite the existing file with an "
+            "empty one. Sources tried: " + ", ".join(u["key"] for u in unavailable))
 
     by = {i["key"]: i for i in indices}
 
-    def pair(a, b, holds, differs, reading):
-        if a not in by or b not in by:
-            return None
-        return {
-            "a": a, "b": b, "holds_constant": holds, "free_variable": differs,
-            "delta": round(abs(by[a]["value"] - by[b]["value"]), 2),
-            "reading": reading,
-        }
+    # ---- comparability, computed rather than asserted -----------------------
+    # A pair is publishable only if exactly ONE of these differs. Hardcoding
+    # "holds_constant" was the same error one level up: RONI can lag ONI by a
+    # season, and a hand-written "same 3-month season" label would then sit on a
+    # card that is quietly comparing across windows -- the precise thing this
+    # file exists to prevent. So the invariant is derived from the rows.
+    FIELDS = ("agency", "region", "baseline", "window")
+    READINGS = {
+        "baseline": "A like-for-like comparison. The whole gap is the choice of baseline -- "
+                    "removing the tropical-mean warming trend, nothing else.",
+        "window": "NOT a disagreement. The gap is arithmetic: one number has been averaged "
+                  "down over a longer period and the other has not.",
+        "agency": "Same water, same window, same baseline -- the gap is two agencies' "
+                  "processing chains, not two different climates.",
+        "region": "Different boxes of ocean. The gap is where you look, not how you measure.",
+    }
+    CANDIDATES = [("oni", "roni"), ("oni", "wk34"), ("wk34", "bom_rel")]
 
-    comparisons = [c for c in (
-        pair("oni", "roni",
-             ["agency (CPC)", "region (Niño 3.4)", "window (same 3-month season)"],
-             "baseline: absolute vs relative to the tropical mean",
-             "A like-for-like comparison. The whole gap is the choice of baseline -- "
-             "removing the tropical-mean warming trend, nothing else."),
-        pair("oni", "wk34",
-             ["agency (CPC)", "region (Niño 3.4)", "baseline (absolute 1991–2020)"],
-             "averaging window: 3-month season vs a single week",
-             "NOT a disagreement. The gap is arithmetic: one number has been averaged "
-             "over three months and the other has not."),
-    ) if c]
-
-    invalid = []
-    if "bom_rel" in by and "wk34" in by:
-        invalid.append({
-            "a": "wk34", "b": "bom_rel",
-            "why": "Three variables are free at once -- different agency, different "
-                   "baseline (absolute vs relative) and a different week. The two numbers "
-                   "being close is a coincidence of this particular week, not agreement.",
-        })
+    comparisons, invalid = [], []
+    for ka, kb in CANDIDATES:
+        a, b = by.get(ka), by.get(kb)
+        if not a or not b:
+            continue
+        diffs = [f for f in FIELDS if a.get(f) != b.get(f)]
+        detail = [{"field": f, "a": a.get(f), "b": b.get(f)} for f in diffs]
+        if len(diffs) == 1:
+            f = diffs[0]
+            comparisons.append({
+                "a": ka, "b": kb,
+                "holds_constant": [g for g in FIELDS if g != f],
+                "free_variable": f"{f}: {a[f]} vs {b[f]}",
+                "free_field": f,
+                "delta": round(abs(a["value"] - b["value"]), 2),
+                "reading": READINGS.get(f, "One variable differs."),
+            })
+        else:
+            invalid.append({
+                "a": ka, "b": kb, "differs": detail,
+                "why": f"{len(diffs)} variables are free at once ("
+                       + "; ".join(f"{d['field']}: {d['a']} vs {d['b']}" for d in detail)
+                       + "). Any gap between these two numbers is a mix of all of them, so "
+                         "it cannot be attributed to a cause and must not be read as "
+                         "agreement or disagreement.",
+            })
 
     payload = {
         "indices": indices,
         "comparisons": comparisons,
         "invalid_comparisons": invalid,
         "unavailable": unavailable,
+        "expected": [k for k, _ in EXPECTED],
+
         "stale_after_days": MAX_AGE_DAYS,
     }
     write_json(
