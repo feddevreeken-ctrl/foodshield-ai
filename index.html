@@ -10359,6 +10359,12 @@ table.enso-tbl thead th:first-child { z-index:3; }
   font-size:12px; color:var(--t2); line-height:1.6; max-width:82ch;
 }
 .enso-idx-out b { color:var(--t1); font-weight:600; }
+.enso-tag-snap {
+  font-family:'Geist Mono',monospace; font-size:9.5px; letter-spacing:.03em;
+  color:#c9a957; border:1px solid #6b5c33; padding:1px 6px; border-radius:2px;
+  line-height:1.5;
+}
+.enso-stat-snap { font-style:normal; color:#c9a957; font-size:9.5px; letter-spacing:.03em; }
 .enso-idx-missing {
   font-family:'Geist Mono',monospace; font-size:9.5px; letter-spacing:.05em;
   text-transform:uppercase; color:#c9a957; border:1px solid #6b5c33;
@@ -41614,7 +41620,13 @@ function showCommodityDetail(key) {
       S.meta[k] = out[i] ? out[i].meta : {};
     });
     if (S.enso && S.enso.latest && typeof S.enso.latest.anom === 'number') {
-      S.oni = keyFor(S.enso.latest.anom)[1];
+      /* S.oni is the SCENARIO selector and must stay on a discrete ladder centre,
+         because the <select> matches option values against it. But the live
+         anomaly was previously thrown away here, so +1.39 became 1.5 and the map
+         then labelled itself "Strong El Niño" while the hero printed NOAA's own
+         band for the same number, "Moderate". Keep both, and disclose the snap. */
+      S.oniLive = S.enso.latest.anom;
+      S.oni = keyFor(S.oniLive)[1];
     }
     /* Index every region by ISO3 so a country can report every region it
        belongs to — Indonesia is in two, Ethiopia is in two with OPPOSITE
@@ -42216,6 +42228,18 @@ function showCommodityDetail(key) {
       '<div class="ctr-note" style="max-width:32ch;margin-top:5px;">A marker says a hazard was reported. It says nothing about what caused it.</div></div>';
   }
 
+  /* The modelled layers are only published at the ladder centres, so a live ONI
+     between two of them has to be painted with the nearer one. That is a
+     defensible modelling choice and an indefensible thing to leave unsaid:
+     nearest-centre snapping does not agree with NOAA's interval bands, which is
+     how +1.39 could read Moderate in the hero and Strong on the map. */
+  function scenarioSnap() {
+    if (S.oniLive == null) return null;
+    var centre = keyFor(S.oni);
+    if (Math.abs(centre[1] - S.oniLive) < 0.005) return null;
+    return { label: centre[2], centre: centre[1], live: S.oniLive };
+  }
+
   function renderMapTag() {
     var el = document.getElementById('enso-maptag'); if (!el) return;
     var live = MODES_LIVE.indexOf(S.mode) >= 0;
@@ -42224,7 +42248,18 @@ function showCommodityDetail(key) {
     el.innerHTML =
       '<span class="' + (live ? 'enso-tag-live' : 'enso-tag-mod') + '">' + (live ? 'Observed' : 'Modelled') + '</span>' +
       '<span>' + esc(lbl || '') + '</span>' +
-      (live ? '' : '<span>· scenario ' + esc(keyFor(S.oni)[2]) + '</span>') +
+      (function () {
+        /* Live layers paint observed ASAP/GDACS/IPC and use no scenario at all, so
+           the scenario stays suppressed there — annotating them would invent a
+           dependency that does not exist. The disclosure belongs on the modelled
+           layers, which really are painted at a ladder centre rather than at the
+           observed value. */
+        if (live) return '';
+        var snap = scenarioSnap();
+        return '<span>· scenario ' + esc(keyFor(S.oni)[2]) + '</span>' +
+          (snap ? '<span class="enso-tag-snap">nearest step to the observed ' +
+            num(snap.live, 2) + '</span>' : '');
+      })() +
       '<span class="enso-tag-src">' + (live
         ? 'JRC ASAP · GDACS · IPC via WFP HungerMap'
         : 'FAOSTAT 1961–2024 fitted here · teleconnections from the published literature') + '</span>';
@@ -42237,7 +42272,13 @@ function showCommodityDetail(key) {
     if (st) {
       var live = MODES_LIVE.indexOf(S.mode) >= 0;
       st.textContent = 'Map layer: ' + (live ? 'observed, ' : 'modelled, ') + S.mode +
-        (live ? '' : ', scenario ' + keyFor(S.oni)[2]) + '.';
+        (live ? '' : ', scenario ' + keyFor(S.oni)[2]) + '.' +
+        (function () {
+          if (live) return '';
+          var sn = scenarioSnap(); return sn
+            ? ' Modelled values use the ' + sn.label + ' scenario at ' + num(sn.centre, 1) +
+              ', the nearest published step to the observed ' + num(sn.live, 2) + '.' : '';
+        })();
     }
     var ramp = '';
     for (var i = -15; i <= 15; i += 2.5) ramp += '<i style="background:' + (impactColor(i, 1) || '#2a2a2a') + '"></i>';
@@ -42878,7 +42919,9 @@ function showCommodityDetail(key) {
       /* While the file is production_ready:false the page says "direction only",
          so printing −34.24% invited exactly the quantitative use the caveat
          forbids. Rounded to the whole percent, which is all the flag supports. */
-      out += '<div><span class="enso-stat-l">Production shock, ' + esc(keyFor(S.oni)[2]) + '</span>' +
+      var snap5 = scenarioSnap();
+      out += '<div><span class="enso-stat-l">Production shock, ' + esc(keyFor(S.oni)[2]) +
+        (snap5 ? ' <i class="enso-stat-snap">not the observed ' + num(snap5.live, 2) + '</i>' : '') + '</span>' +
         '<div class="enso-stat-v" style="color:' + (impactColor(d.lv.production_shock_pct, 1) || 'var(--t1)') + '">' +
         (S.meta.exp && S.meta.exp.production_ready === false
           ? '≈' + num(Math.round(d.lv.production_shock_pct), 0) + '%'
@@ -42959,7 +43002,10 @@ function showCommodityDetail(key) {
       '<div class="enso-rule"></div>' +
       '<span class="enso-eyebrow">Every coefficient that survived</span>' +
       '<h3 class="enso-h" style="font-size:19px;">' + rows.length + ' country–crop pairs cleared false-discovery control. ' +
-        (counts.pairs_fitted || '—') + ' were fitted; ' + (counts.pairs_without_calendar || '—') + ' could not be.</h3>' +
+        (counts.pairs_fitted || '—') + ' were fitted; ' + (counts.pairs_without_calendar || '—') +
+        ' lacked a harvest calendar' +
+        (counts.pairs_too_thin ? ' and ' + counts.pairs_too_thin + ' had too few years' : '') +
+        '.</h3>' +
       '<div class="enso-dek">Coverage is limited by the crop calendar, which is the honest constraint — a pair with no ' +
       'verified harvest month gets no coefficient rather than a guessed alignment. Sorted by the size of the El Niño slope.</div>' +
       '<div class="enso-tblwrap"><table class="enso-tbl"><thead><tr><th scope="col">Country</th><th scope="col">Crop</th>' +
