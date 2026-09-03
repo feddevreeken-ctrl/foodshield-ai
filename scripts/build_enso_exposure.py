@@ -89,19 +89,48 @@ def main() -> int:
         total_prod = sum(e.get("mean_production_kt") or 0.0 for e in commodities.values())
         if total_prod <= 0:
             continue
+        # A pair that survives on its own but NOT against the Indian Ocean Dipole
+        # control is not evidence of an ENSO effect. Four such pairs (Australian
+        # barley, Brazilian wheat, Indonesian maize, Uruguayan rice) used to sit
+        # inside the production-weighted sum while the map called the result "what
+        # ENSO implies". They are excluded from the ENSO aggregate now and
+        # reported separately, because the honest answer for a country whose only
+        # modelled crop is one of them is "no ENSO signal", not a number.
+        def enso_specific(e):
+            return e.get("enso_specific") is not False
+
+        def counted(e):
+            return e.get("signal") and enso_specific(e)
+
         signal_prod = sum(e.get("mean_production_kt") or 0.0
-                          for e in commodities.values() if e.get("signal"))
+                          for e in commodities.values() if counted(e))
+        shared_prod = sum(e.get("mean_production_kt") or 0.0
+                          for e in commodities.values()
+                          if e.get("signal") and not enso_specific(e))
 
         consumption = sum(
             (psd_c.get(k) or {}).get("consumption_kt") or 0.0
             for k in ("wheat", "corn", "rice", "soybeans")
         )
 
+        def shock_for(oni, predicate):
+            kt = 0.0
+            for e in commodities.values():
+                if not predicate(e):
+                    continue
+                prod = e.get("mean_production_kt") or 0.0
+                if prod <= 0:
+                    continue
+                b = (e["yield_pct_per_oni_nino"] if oni >= 0
+                     else e["yield_pct_per_oni_nina"])
+                kt += prod * (b / 100.0) * oni
+            return kt
+
         levels: dict = {}
         for label, oni in LEVELS.items():
             shock_kt = 0.0
             for e in commodities.values():
-                if not e.get("signal"):
+                if not counted(e):
                     continue
                 prod = e.get("mean_production_kt") or 0.0
                 if prod <= 0:
@@ -123,15 +152,31 @@ def main() -> int:
                     -100.0 * shock_kt / consumption, 2)
             levels[label] = entry
 
+        # Kept, clearly separated, never summed into the ENSO figure above.
+        shared_levels = {}
+        if shared_prod > 0:
+            for label, oni in LEVELS.items():
+                kt = shock_for(oni, lambda e: e.get("signal") and not enso_specific(e))
+                shared_levels[label] = {
+                    "oni": oni,
+                    "production_shock_kt": round(kt, 1),
+                    "production_shock_pct": round(100.0 * kt / total_prod, 2),
+                }
+
         out[iso3] = {
             "coverage": round(signal_prod / total_prod, 3),
             "modelled_commodities": sorted(
-                k for k, e in commodities.items() if e.get("signal")),
+                k for k, e in commodities.items() if counted(e)),
+            "shared_iod_commodities": sorted(
+                k for k, e in commodities.items()
+                if e.get("signal") and not enso_specific(e)),
+            "shared_iod_coverage": round(shared_prod / total_prod, 3),
             "unmodelled_commodities": sorted(
                 k for k, e in commodities.items() if not e.get("signal")),
             "total_production_kt": round(total_prod, 1),
             "staple_consumption_kt": round(consumption, 1),
             "levels": levels,
+            "shared_iod_levels": shared_levels,
         }
 
     strong = "el_nino_strong"
@@ -145,10 +190,30 @@ def main() -> int:
             "version": "v1",
             "production_ready": False,
             "blocking": (
-                "Inherits data/enso_model.json's unresolved seasonal alignment: "
-                "coefficients are selected by fit rather than pre-registered from a crop "
-                "calendar, and 9 of the 15 surviving pairs flip sign between the two "
-                "candidate alignments. NOT wired into the UI."),
+                "ONE limitation is real and unresolved: NO OUT-OF-SAMPLE VALIDATION. The "
+                "aggregate has never been scored against harvests it was not fitted on, so "
+                "its calibration is unknown even where its direction is not. Until that is "
+                "settled the aggregate is a direction, not a magnitude, and the UI renders "
+                "it rounded to the whole percent and paints it in banded steps for that "
+                "reason. The second limitation is now RESOLVED: the four pairs that survive "
+                "on their own but not against the Indian Ocean Dipole control (Australian "
+                "barley, Brazilian wheat, Indonesian maize, Uruguayan rice) are no longer "
+                "inside the production-weighted sum. They are reported separately under "
+                "shared_iod_levels / shared_iod_commodities and are never added to the ENSO "
+                "figure. A country whose only modelled crop was one of them now correctly "
+                "reports no ENSO coverage rather than a number."),
+            "blocking_superseded": (
+                "PREVIOUS TEXT, KEPT FOR AUDIT -- every claim in it was false against the "
+                "current model: \"Inherits data/enso_model.json's unresolved seasonal "
+                "alignment: coefficients are selected by fit rather than pre-registered "
+                "from a crop calendar, and 9 of the 15 surviving pairs flip sign between "
+                "the two candidate alignments. NOT wired into the UI.\" Alignment is fixed "
+                "from published harvest calendars and never chosen by fit; there are 28 "
+                "surviving pairs, not 15; and the file has been wired into the UI for some "
+                "time."),
+            "ready_when": (
+                "Flip production_ready to true only when the aggregate has been scored "
+                "out-of-sample. The non-ENSO-specific pairs are already excluded."),
             "index": "ONI (CPC oni.ascii.txt, ERSSTv6 lineage)",
             "index_note": (
                 "Scenario levels are ONI as published in CPC's oni.ascii.txt, the series "

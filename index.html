@@ -10365,6 +10365,8 @@ table.enso-tbl thead th:first-child { z-index:3; }
   line-height:1.5;
 }
 .enso-stat-snap { font-style:normal; color:#c9a957; font-size:9.5px; letter-spacing:.03em; }
+.enso-th-act { font-family:'Geist Mono',monospace; font-size:8.5px; letter-spacing:.06em;
+  text-transform:uppercase; color:#c9a957; font-weight:400; }
 .enso-idx-missing {
   font-family:'Geist Mono',monospace; font-size:9.5px; letter-spacing:.05em;
   text-transform:uppercase; color:#c9a957; border:1px solid #6b5c33;
@@ -11404,6 +11406,9 @@ table.enso-tbl thead th:first-child { z-index:3; }
 
       <section id="enso-hero" class="enso-sec" aria-label="Current ocean state"></section>
       <section id="enso-indices" class="enso-sec"></section>
+      <!-- Outside the sub-views on purpose: a fetch failure has to be visible on
+           whichever view the reader lands on, not only on the map. -->
+      <div id="enso-failures"></div>
       <div id="enso-status" class="enso-sr" role="status" aria-live="polite"></div>
 
       <div class="viewswitch" role="tablist" aria-label="El Niño views">
@@ -41458,6 +41463,15 @@ function showCommodityDetail(key) {
     return best;
   };
 
+  /* The scenario ladder runs both ways, but the crop layer only ever read the
+     El Niño slope. Selecting "Strong La Niña" therefore repainted the map with
+     El Niño coefficients and labelled them with the La Niña scenario. The model
+     fits a separate slope per phase; use the one the selected scenario is in. */
+  function cropSlope(c) {
+    return (S.oni < 0) ? c.yield_pct_per_oni_nina : c.yield_pct_per_oni_nino;
+  }
+  function phaseWord() { return (S.oni < 0) ? 'La Niña' : 'El Niño'; }
+
   /* Diverging, and deliberately NOT the risk ramp — see the header comment.
      Warm = production falls, cool = production rises. */
   function impactColor(pct, coverage) {
@@ -42235,6 +42249,11 @@ function showCommodityDetail(key) {
      how +1.39 could read Moderate in the hero and Strong on the map. */
   function scenarioSnap() {
     if (S.oniLive == null) return null;
+    /* Only an AUTO-selected scenario is standing in for the observation. Once the
+       reader picks a level from the control they are asking a what-if, and
+       captioning that "nearest step to the observed +1.39" would misdescribe
+       their own choice as an approximation of today. */
+    if (S.oni !== keyFor(S.oniLive)[1]) return null;
     var centre = keyFor(S.oni);
     if (Math.abs(centre[1] - S.oniLive) < 0.005) return null;
     return { label: centre[2], centre: centre[1], live: S.oniLive };
@@ -42375,7 +42394,8 @@ function showCommodityDetail(key) {
     return { lv: lv, cov: e.coverage || 0, e: e };
   }
   /* Strongest single crop coefficient — from enso_model.json, the file that IS
-     marked production-ready. Signed by the El Niño slope. */
+     marked production-ready. Signed by the slope of the SELECTED phase, not
+     always the El Niño one. */
   /* enso_specific:false means the coefficient survives on its own but does NOT
      survive the control for the Indian Ocean Dipole — it is shared Indo-Pacific
      evidence, not an ENSO-specific measurement. Four surviving pairs are marked
@@ -42391,8 +42411,8 @@ function showCommodityDetail(key) {
       var slot = (c.enso_specific === false) ? 'shared' : 'specific';
       var cur = { crop: crop, c: c, shared: slot === 'shared' };
       if (slot === 'specific') {
-        if (!best || Math.abs(c.yield_pct_per_oni_nino) > Math.abs(best.c.yield_pct_per_oni_nino)) best = cur;
-      } else if (!bestShared || Math.abs(c.yield_pct_per_oni_nino) > Math.abs(bestShared.c.yield_pct_per_oni_nino)) {
+        if (!best || Math.abs(cropSlope(c)) > Math.abs(cropSlope(best.c))) best = cur;
+      } else if (!bestShared || Math.abs(cropSlope(c)) > Math.abs(cropSlope(bestShared.c))) {
         bestShared = cur;
       }
     }
@@ -42422,16 +42442,25 @@ function showCommodityDetail(key) {
     }
     if (S.mode === 'crop') {
       var b = strongestCrop(iso);
-      return b ? impactColor(b.c.yield_pct_per_oni_nino, 1) : null;
+      return b ? impactColor(cropSlope(b.c), 1) : null;
     }
     var d = rowFor(iso);
-    return d ? impactColor(d.lv.production_shock_pct, d.cov) : null;
+    if (!d) return null;
+    /* While the file is production_ready:false the page says "direction, not
+       magnitude" and prints the number rounded to the whole percent. A continuous
+       colour scale over the unrounded value contradicts both: Indonesia's old
+       +0.46% displayed as ≈0% and still took a visibly beneficial fill. Band the
+       colour to the same precision the text discloses. */
+    var pct = d.lv.production_shock_pct;
+    if (S.meta.exp && S.meta.exp.production_ready === false && pct != null) pct = Math.round(pct);
+    return impactColor(pct, d.cov);
   }
 
   function tooltipFor(iso, nm) {
     var parts = ['<b>' + esc(nm || nameFor(iso)) + '</b>'];
     var b = strongestCrop(iso);
-    if (b) parts.push('measured · ' + esc(b.crop) + ' ' + num(b.c.yield_pct_per_oni_nino, 1) + '%/ONI' +
+    if (b) parts.push('measured · ' + esc(b.crop) + ' ' + num(cropSlope(b.c), 1) + '%/ONI, ' +
+      esc(phaseWord()) + ' slope' +
       (b.shared ? ' <span style="color:#c9a957">(shared with the IOD — not ENSO-specific)</span>' : ''));
     var d = rowFor(iso);
     if (d && d.cov) parts.push('aggregate ≈' + num(Math.round(d.lv.production_shock_pct), 0) + '% · coverage ' +
@@ -42928,6 +42957,22 @@ function showCommodityDetail(key) {
           : num(d.lv.production_shock_pct, 2) + '%') + '</div></div>' +
         '<div><span class="enso-stat-l">Coverage</span><div class="enso-stat-v">' +
         Math.round(d.cov * 100) + '%</div></div>';
+      /* These pairs survive on their own but not against the Indian Ocean Dipole
+         control, so they are no longer summed into the ENSO figure. Removing them
+         silently would be its own dishonesty — the number still exists, it just
+         is not evidence of ENSO. */
+      var sh = d.e && d.e.shared_iod_levels && d.e.shared_iod_levels[keyFor(S.oni)[0]];
+      if (sh && d.e.shared_iod_commodities && d.e.shared_iod_commodities.length) {
+        out += '<div><span class="enso-stat-l">Shared with the IOD ' +
+          '<i class="enso-stat-snap">excluded from the figure left</i></span>' +
+          /* NOT rounded to the whole percent like the ENSO figure beside it. That
+             rounding exists because the ENSO aggregate is published as a
+             direction; this number is published only to show what was taken OUT,
+             and rounding Indonesia's +0.46 to "0%" would hide the very thing the
+             row exists to disclose. */
+          '<div class="enso-stat-v" style="color:#c9a957">' +
+          num(sh.production_shock_pct, 2) + '%</div></div>';
+      }
     }
     out += '</div>';
 
@@ -42941,16 +42986,24 @@ function showCommodityDetail(key) {
       rows.push([crop, c]);
     }
     if (rows.length) {
-      rows.sort(function (a, b) { return Math.abs(b[1].yield_pct_per_oni_nino) - Math.abs(a[1].yield_pct_per_oni_nino); });
+      /* Both slopes stay on screen — the table is the place to see them side by
+         side. What follows the selected scenario is the ORDER and the colour, so
+         a La Niña scenario stops highlighting the El Niño column. */
+      rows.sort(function (a, b) { return Math.abs(cropSlope(b[1])) - Math.abs(cropSlope(a[1])); });
+      var nina = S.oni < 0;
+      var act = ' <span class="enso-th-act">selected</span>';
       out += '<div class="enso-tblwrap"><table class="enso-tbl"><thead><tr>' +
-        '<th scope="col">Crop</th><th scope="col" style="text-align:right">El Niño %/ONI</th><th scope="col" style="text-align:right">La Niña %/ONI</th>' +
+        '<th scope="col">Crop</th>' +
+        '<th scope="col" style="text-align:right">El Niño %/ONI' + (nina ? '' : act) + '</th>' +
+        '<th scope="col" style="text-align:right">La Niña %/ONI' + (nina ? act : '') + '</th>' +
         '<th scope="col" style="text-align:right">Mean production</th><th scope="col">Basis</th></tr></thead><tbody>' +
         rows.map(function (r) {
           var c = r[1];
           return '<tr><td class="nm">' + esc(r[0]) + '</td>' +
-            '<td class="num" style="color:' + (impactColor(c.yield_pct_per_oni_nino, 1) || 'var(--t1)') + '">' +
+            '<td class="num"' + (nina ? '' : ' style="color:' + (impactColor(c.yield_pct_per_oni_nino, 1) || 'var(--t1)') + '"') + '>' +
               num(c.yield_pct_per_oni_nino, 2) + '</td>' +
-            '<td class="num">' + num(c.yield_pct_per_oni_nina, 2) + '</td>' +
+            '<td class="num"' + (nina ? ' style="color:' + (impactColor(c.yield_pct_per_oni_nina, 1) || 'var(--t1)') + '"' : '') + '>' +
+              num(c.yield_pct_per_oni_nina, 2) + '</td>' +
             '<td class="num">' + (c.mean_production_kt != null ? Math.round(c.mean_production_kt).toLocaleString() + ' kt' : '—') + '</td>' +
             '<td style="font-size:10.5px;color:var(--t3)">q=' + (c.q_value != null ? c.q_value.toFixed(3) : '—') +
               ' · n=' + esc(c.n_years) + ' · ' + esc(c.alignment_basis || '') +
@@ -42971,6 +43024,9 @@ function showCommodityDetail(key) {
             '<div style="font-size:12.5px;color:var(--t1)">' + esc(r.label) + ' ' + confPips(r.confidence) + '</div>' +
             '<div style="font-size:11.5px;color:var(--t2);margin-top:3px;">' + esc(r.quantified) + '</div>' +
             (r.confidence_note ? '<div class="ctr-note" style="margin-top:4px;">' + esc(r.confidence_note) + '</div>' : '') +
+            /* Some regions cover only part of a country — Ethiopia sits in two with
+               opposite signs, and a single national fill cannot say so. */
+            (r.scope_note ? '<div class="ctr-note" style="margin-top:4px;color:#c9a957;">' + esc(r.scope_note) + '</div>' : '') +
             '<div style="font-size:10.5px;color:var(--t3);margin-top:4px;">Damage season ' + esc(r.damage_season) +
               ' · lag ' + esc(r.lag_months) + ' · La Niña: ' + esc(r.la_nina_reverses) + '</div>' +
             (r.sources || []).filter(function (s) { return s.url; }).map(function (s) {
@@ -43844,9 +43900,12 @@ function showCommodityDetail(key) {
      wrote an empty string for both "no rows" and "the request failed", which
      is the one kind of silence this page is not allowed to keep. */
   function renderFailures() {
-    var el = document.getElementById('enso-gate'); if (!el) return;
-    if (!S.failed || !S.failed.length) return;
-    el.insertAdjacentHTML('afterbegin',
+    /* Was written into #enso-gate, which only exists inside the map sub-view, and
+       was only called while drawing that view. A reader landing on Shipping,
+       Prices or Live saw blank sections with no alert at all. */
+    var el = document.getElementById('enso-failures'); if (!el) return;
+    if (!S.failed || !S.failed.length) { el.innerHTML = ''; return; }
+    el.innerHTML = (
       '<div class="enso-gate" role="alert">' +
         '<b>' + S.failed.length + ' data file' + (S.failed.length > 1 ? 's' : '') + ' did not load.</b> ' +
         'Sections that depend on ' + esc(S.failed.join(', ')) + ' are missing rather than empty — ' +
@@ -43855,8 +43914,24 @@ function showCommodityDetail(key) {
       '</div>');
   }
   window.ensoRetry = async function () {
-    S.ready = false; S.drawn = {}; S.names = null;
+    /* buildMap() returns immediately when S.map exists, so clearing S.drawn was
+       not enough: region and lane layers built during the first buildMap kept
+       whatever data the failed load had left, and the retry silently changed
+       nothing on the map. Tear the instance down and let it be rebuilt. */
+    S.ready = false; S.drawn = {}; S.names = null; S.features = null;
+    if (S.map) {
+      try { S.map.remove(); } catch (e) { /* already detached */ }
+    }
+    S.map = null; S.base = null; S.layerBase = null; S.layerRegions = null;
+    S.lanePins = []; S.laneLines = []; S.alertPins = []; S.sel = null;
+    /* Chart.js instances are bound to canvases inside the sub-views that are
+       about to be re-rendered; destroy them or they leak and refuse to rebind. */
+    Object.keys(S.charts || {}).forEach(function (k) {
+      try { S.charts[k].destroy(); } catch (e) { /* not built yet */ }
+    });
+    S.charts = {};
     var g = document.getElementById('enso-gate'); if (g) g.innerHTML = '';
+    var host = document.getElementById('enso-map'); if (host) host.innerHTML = '';
     await window.ensoInit(S.sub);
   };
 
@@ -43885,6 +43960,9 @@ function showCommodityDetail(key) {
     /* The hero and the limits live outside the sub-views, so they render once
        regardless of which view is open. */
     if (!S.drawn.frame) { renderHero(); renderIndices(); S.drawn.frame = true; }
+    /* Outside the sub-view branches: the banner must appear on whichever view is
+       open, and must clear itself when a retry succeeds. */
+    renderFailures();
     if (S.sub === 'elnino' && !S.drawn.limits) { renderLimits(); S.drawn.limits = true; }
     wireTabKeys(); syncTabRoving();
 
@@ -43892,7 +43970,7 @@ function showCommodityDetail(key) {
 
     if (S.sub === 'elnino') {
       if (!S.drawn.map) {
-        renderLandHead(); renderGate(); renderFailures(); renderControls(); renderLegend();
+        renderLandHead(); renderGate(); renderControls(); renderLegend();
         renderDetail(); renderCoeffs();
         await buildMap();
         /* Country NAMES only exist once the geometry has resolved — every view
