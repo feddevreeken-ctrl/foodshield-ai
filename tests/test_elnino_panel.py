@@ -46,6 +46,24 @@ PANAMA_PROBE = """() => {
     return {labels: ch.data.labels, cap: cap ? cap.textContent : ''};
 }"""
 
+NOW_PROBE = """() => {
+    const svg = document.querySelector('.enso-strip');
+    const plot = document.querySelector('.enso-strip-plot');
+    const lab = document.querySelector('.enso-strip-now');
+    if (!svg || !plot || !lab) return null;
+    const line = [...svg.querySelectorAll('line')]
+      .filter(l => l.getAttribute('stroke-dasharray') === '7 4')[0];
+    if (!line) return null;
+    const pr = plot.getBoundingClientRect();
+    const gr = line.getBoundingClientRect();
+    const lr = lab.getBoundingClientRect();
+    const ys = [...svg.querySelectorAll('rect')].map(r => +r.getAttribute('y'));
+    return {offset: Math.round((lr.top + lr.height / 2) - gr.top),
+            ruleY: Math.round(gr.top - pr.top),
+            topBarY: Math.min.apply(null, ys),
+            label: lab.textContent};
+}"""
+
 def check(label: str, ok: bool, detail: str = "") -> None:
     global CHECKS
     CHECKS += 1
@@ -155,6 +173,17 @@ def main() -> int:
         check("no text inside the stretched chart",
               bool(strip) and strip["textInSvg"] == 0, str(strip and strip["textInSvg"]))
         check("the strip carries an accessible description", bool(strip and strip["hasLabel"]))
+
+        marker = page.evaluate(NOW_PROBE)
+        # top:% used to resolve against the whole figure (chart + axis + caption),
+        # putting the label 16px below the rule it names.
+        check("the 'now' label sits on its own rule",
+              bool(marker) and abs(marker["offset"]) <= 3, str(marker))
+        # A fixed axis silently clamps: the rule would pin to the ceiling while its
+        # label still printed the true, higher number.
+        check("nothing is clamped to the axis ceiling",
+              bool(marker) and marker["ruleY"] > 2 and marker["topBarY"] > 2, str(marker))
+
 
         print("\nphase follows the selected scenario")
         page.select_option("#enso-country", "USA")

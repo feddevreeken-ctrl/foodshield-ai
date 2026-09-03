@@ -10033,7 +10033,10 @@ table.enso-tbl tr:hover td { background:rgba(255,255,255,.014); }
 .enso-hero-note { margin-top:5px; max-width:96ch; font-size:var(--enso-fs-meta); line-height:1.45; }
 
 /* The ENSO record strip — the hero's subject, not a background wash. */
-.enso-strip-fig { margin:14px 0 0; position:relative; }
+.enso-strip-fig { margin:14px 0 0; }
+/* Exactly the chart's height, so an absolutely-positioned marker inside it
+   resolves against the plot rather than against the whole figure. */
+.enso-strip-plot { position:relative; height:96px; }
 .enso-strip-now {
   position:absolute; right:0; transform:translateY(-50%);
   font-family:'Geist Mono',monospace; font-size:var(--enso-fs-chip);
@@ -10058,7 +10061,7 @@ table.enso-tbl tr:hover td { background:rgba(255,255,255,.014); }
 }
 .enso-strip-fig figcaption b { color:var(--t2); font-weight:600; }
 @media (max-width:640px) {
-  .enso-strip { height:72px; }
+  .enso-strip, .enso-strip-plot { height:72px; }
   .enso-strip-yr { font-size:8.5px; }
 }
 .enso-h-tight { font-size:var(--enso-fs-head); line-height:1.2; letter-spacing:var(--enso-tr-head); margin:0 0 6px; max-width:34ch; }
@@ -41782,7 +41785,15 @@ function showCommodityDetail(key) {
   function recordStrip(hist, live) {
     if (!hist || hist.length < 20) return '';
     var W = 1000, H = 132, PAD = 10, mid = Math.round(H * 0.52);
-    var peak = 2.6;                        // fixed, so the axis never rescales
+    /* A FIXED ±2.6 axis silently clamps anything beyond it: a reading of +3.0
+       would be drawn at the same height as +2.6 while its label still said +3.0,
+       which is the chart contradicting its own annotation. BoM currently
+       forecasts this event above anything since 1950, so that is a live risk and
+       not a hypothetical. The axis holds at 2.6 — enough for the whole published
+       record — and only grows if a value would otherwise be cut off. */
+    var extremes = hist.map(function (r) { return Math.abs(r.anom || 0); });
+    if (live != null) extremes.push(Math.abs(live));
+    var peak = Math.max(2.6, Math.ceil(Math.max.apply(null, extremes) * 10) / 10 + 0.1);
     var span = mid - PAD;
     var y = function (v) { return mid - (Math.max(-peak, Math.min(peak, v)) / peak) * span; };
     var n = hist.length, slot = (W - 2) / n, bw = Math.max(4, slot - 2.2);
@@ -41826,7 +41837,8 @@ function showCommodityDetail(key) {
     }).join('');
 
     var hi = hist.reduce(function (a, b) { return b.anom > a.anom ? b : a; });
-    return '<svg class="enso-strip" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" ' +
+    return '<div class="enso-strip-plot">' +
+      '<svg class="enso-strip" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" ' +
       'role="img" aria-label="Every ENSO season since ' + hist[0].year + ', measured at its ' +
       'December-to-February peak. Warm bars above the centre line are El Niño, cool bars below are ' +
       'La Niña, and the dashed lines mark the plus and minus 0.5 thresholds. The strongest on record ' +
@@ -41836,9 +41848,13 @@ function showCommodityDetail(key) {
       '<line x1="0" x2="' + W + '" y1="' + mid + '" y2="' + mid + '" stroke="#3d3d4a" stroke-width="1"/>' +
       thr + bars + now +
       '</svg>' +
+      /* The label's top:% resolved against .enso-strip-fig — which also contains
+         the axis row and the caption — so it rendered 16px BELOW the rule it
+         labels. It is scoped to a wrapper that is exactly the chart's height. */
       (nowY == null ? '' :
         '<span class="enso-strip-now" style="top:' + ((nowY / H) * 100).toFixed(2) + '%">now ' +
           num(live, 2) + '</span>') +
+      '</div>' +
       '<div class="enso-strip-ax" aria-hidden="true">' + ticks + '</div>';
   }
 
