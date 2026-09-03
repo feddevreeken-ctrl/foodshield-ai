@@ -38,6 +38,14 @@ STRIP_PROBE = """() => {
             textInSvg: svg.querySelectorAll('text').length};
 }"""
 
+PANAMA_PROBE = """() => {
+    const cv = document.getElementById('enso-c-panama');
+    const ch = cv && window.Chart && Chart.getChart ? Chart.getChart(cv) : null;
+    if (!ch) return null;
+    const cap = document.querySelector('.enso-chart-cap');
+    return {labels: ch.data.labels, cap: cap ? cap.textContent : ''};
+}"""
+
 def check(label: str, ok: bool, detail: str = "") -> None:
     global CHECKS
     CHECKS += 1
@@ -275,6 +283,25 @@ def main() -> int:
             ".enso-news-t", "e => e.map(x => x.getAttribute('href') || '')")
         check("no feed link escapes the http(s) allow-list",
               all(h.startswith("http") for h in hrefs) if hrefs else True, str(hrefs[:3]))
+
+        print("\nthe Panama step chart does not fake elapsed time")
+        page.goto(f"{base}/index.html?tab=ensowater", wait_until="networkidle")
+        page.wait_for_selector("#enso-c-panama", timeout=20_000)
+        page.wait_for_timeout(2000)
+        pan = page.evaluate(PANAMA_PROBE)
+        # Category labels space a 4-day gap and a 2-year gap identically, so the
+        # interval has to be stated on the label itself.
+        check("step labels carry their real interval",
+              bool(pan) and sum(1 for l in pan["labels"] if "+" in l) >= 4, str(pan and pan["labels"]))
+        check("the multi-year jump to today is spelled out",
+              bool(pan) and any("yr" in l for l in pan["labels"]), str(pan and pan["labels"]))
+        check("the caption says the axis is ordinal",
+              bool(pan) and "not to scale in time" in (pan["cap"] or ""), (pan or {}).get("cap", "")[:120])
+
+        # Back to the view the layout checks below were written against — they
+        # measure the news rail and bulletin strip, which only exist there.
+        open_panel(page, base, "ensolive")
+        page.wait_for_selector(".enso-bul", timeout=20_000)
 
         print("\nlayout")
         edges = page.evaluate("""() => {

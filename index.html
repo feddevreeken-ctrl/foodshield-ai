@@ -43353,7 +43353,10 @@ function showCommodityDetail(key) {
         out += '<div style="margin-top:var(--sp-2);"><div class="enso-legend-t">What happened last time ' + badge('observed', 'record') + '</div>' +
           '<div style="font-size:12.5px;color:var(--t1);margin:5px 0 4px;">' + esc(pr.headline) + '</div>' +
           '<div class="enso-chart"><canvas id="enso-c-panama"></canvas></div>' +
-          '<div class="enso-chart-cap">' + esc(pr.grain) + '</div>' +
+          '<div class="enso-chart-cap">' + esc(pr.grain) +
+            ' <b>Steps are in order, not to scale in time</b> — each label carries the ' +
+            'real interval since the one before it, and today sits more than two years ' +
+            'after the last 2023–24 step.</div>' +
           '<div class="ctr-note" style="margin-top:6px;">' + esc(pr.lake) + ' ' + esc(pr.queue) + ' ' + esc(pr.outturn) + '</div>' +
           '</div>';
       }
@@ -43993,7 +43996,7 @@ function showCommodityDetail(key) {
     'enso-c-record': 'Bar chart: change in the agricultural price index around the seven ENSO peaks the World Bank annotates — 1982-83, 1986-87, 1991-92, 1997-98, 2002-03, 2009-10 and the 2015-16 event ongoing at press — in two windows. Only 2002-03 is clearly positive on both.',
     'enso-c-ffpi': 'Scatter plot: FAO Food Price Index, nominal and real, at eleven El Niño peak years from 1994 to 2024, on a true year axis with no connecting line because the gaps between them are years.',
     'enso-c-ffpilive': 'Line chart: FAO Food Price Index headline, cereals and vegetable oils over the last 24 months. Vegetable oils run far above the others.',
-    'enso-c-panama': 'Step chart: Panama Canal daily transit slots falling from about 37 to 18 through the 2023-24 El Niño, with the current 2026 restriction of 32 marked separately.',
+    'enso-c-panama': 'Step chart: Panama Canal daily transit slots falling from about 37 to 18 through the 2023-24 El Niño, with the current 2026 restriction of 32 marked separately. The horizontal axis is an ordered sequence of canal advisories, not a time scale — intervals between steps range from four days to more than two years and each label states its own.',
     'enso-c-rtfp': 'Horizontal bar chart: year-on-year domestic food price inflation across the countries reporting to the World Bank Real-Time Food Prices index, highest first.'
   };
   function mk(id, cfg) {
@@ -44112,12 +44115,38 @@ function showCommodityDetail(key) {
     var pan = lanes.filter(function (l) { return l.id === 'panama'; })[0];
     if (pan && pan.precedent_2023 && pan.precedent_2023.steps) {
       var st = pan.precedent_2023.steps;
-      var labels = ['normal'].concat(st.map(function (x) { return x.date; }));
+      /* These are ACP advisories, not evenly spaced samples: the gaps run 4 days,
+         96 days and then nineteen MONTHS to today. Chart.js category labels give
+         all of them the same width, so the picture read as one steady decline
+         across a single continuous period. Rather than force a time axis — which
+         would crush the whole 2023-24 sequence into a few pixels beside a two-year
+         void — the axis stays ordinal and each label carries the real interval, so
+         the spacing cannot be mistaken for elapsed time. */
+      var shortDate = function (iso) {
+        var d = new Date(iso + 'T00:00:00Z');
+        return isNaN(d) ? iso : d.toLocaleDateString('en-GB',
+          { day: 'numeric', month: 'short', year: '2-digit', timeZone: 'UTC' });
+      };
+      var gapDays = function (a, b) {
+        var d = (new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000;
+        return isFinite(d) ? Math.round(d) : null;
+      };
+      var gapLabel = function (n) {
+        if (n == null) return '';
+        return n >= 365 ? '  +' + (n / 365).toFixed(1) + ' yr'
+             : n >= 60  ? '  +' + Math.round(n / 30) + ' mo'
+                        : '  +' + n + ' d';
+      };
+      var labels = ['normal'].concat(st.map(function (x, i) {
+        return shortDate(x.date) + (i ? gapLabel(gapDays(st[i - 1].date, x.date)) : '');
+      }));
       var vals = [37].concat(st.map(function (x) { return x.total; }));
       var nowVal = null, nowLbl = null;
       if (pan.live_2026 && pan.live_2026.steps && pan.live_2026.steps.length) {
         var lastNow = pan.live_2026.steps[pan.live_2026.steps.length - 1];
-        nowVal = lastNow.total; nowLbl = lastNow.effective;
+        nowVal = lastNow.total;
+        nowLbl = shortDate(lastNow.effective) +
+          gapLabel(gapDays(st[st.length - 1].date, lastNow.effective));
       }
       if (nowLbl) { labels = labels.concat([nowLbl]); }
       mk('enso-c-panama', {
