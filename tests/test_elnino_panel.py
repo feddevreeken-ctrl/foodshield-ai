@@ -136,6 +136,33 @@ def main() -> int:
         check("snap badge hidden once a scenario is chosen by hand",
               page.locator(".enso-tag-snap").count() == 0)
 
+        print("\ncrop colour encodes the change, not the raw slope")
+        # The coefficients are %/ONI slopes and ONI is negative under La Nina, so
+        # a POSITIVE nina slope is a production FALL. Colouring the raw slope is
+        # right under El Nino by coincidence and inverted under La Nina.
+        WARM = "(el) => { const c = getComputedStyle(el).color.match(/\\d+/g).map(Number); return c[0] > c[2]; }"
+
+        def slope_of(cell) -> float:
+            return float(cell.inner_text().replace("−", "-").replace("+", ""))
+
+        page.select_option("#enso-level", "1.5")
+        page.select_option("#enso-country", "USA")
+        page.wait_for_timeout(300)
+        cell = page.locator("#enso-detail tbody tr td.num").nth(0)
+        sl, warm = slope_of(cell), cell.evaluate(WARM)
+        check("El Nino: a positive slope is coloured as a rise",
+              (sl > 0) == (not warm), f"slope {sl}, warm={warm}")
+
+        page.select_option("#enso-level", "-1.5")
+        page.wait_for_timeout(300)
+        cell = page.locator("#enso-detail tbody tr td.num").nth(1)
+        sl, warm = slope_of(cell), cell.evaluate(WARM)
+        check("La Nina: a positive slope is coloured as a FALL (ONI is negative)",
+              (sl > 0) == warm, f"slope {sl}, warm={warm}")
+        check("the table states that sign and colour may disagree",
+              "not match the sign of the colour" in page.locator("#enso-detail").inner_text())
+        page.select_option("#enso-level", "1.5")
+
         print("\nnon-ENSO-specific pairs are out of the aggregate")
         page.select_option("#enso-level", "1.5")
         page.select_option("#enso-country", "IDN")

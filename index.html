@@ -41523,6 +41523,18 @@ function showCommodityDetail(key) {
   function cropSlope(c) {
     return (S.oni < 0) ? c.yield_pct_per_oni_nina : c.yield_pct_per_oni_nino;
   }
+  /* The coefficients are SLOPES in percent per unit ONI, so the modelled change
+     is slope x ONI — and ONI is NEGATIVE under La Niña. Colouring the raw slope
+     is therefore right under El Niño by coincidence and inverted under La Niña:
+     USA corn's +3.15 %/ONI nina slope is a 3.15 x -1.5 = -4.7% change, a fall,
+     not the rise a positive number reads as. build_enso_exposure.py already
+     multiplies by oni for the aggregate; the crop layer has to do the same.
+     Rank by the slope (|slope x oni| orders identically, oni being shared) but
+     SIGN and COLOUR by the change. */
+  function cropEffect(c) {
+    var b = cropSlope(c);
+    return (b == null || S.oni == null) ? null : b * S.oni;
+  }
   function phaseWord() { return (S.oni < 0) ? 'La Niña' : 'El Niño'; }
 
   /* Diverging, and deliberately NOT the risk ramp — see the header comment.
@@ -42496,7 +42508,7 @@ function showCommodityDetail(key) {
     }
     if (S.mode === 'crop') {
       var b = strongestCrop(iso);
-      return b ? impactColor(cropSlope(b.c), 1) : null;
+      return b ? impactColor(cropEffect(b.c), 1) : null;
     }
     var d = rowFor(iso);
     if (!d) return null;
@@ -42513,8 +42525,8 @@ function showCommodityDetail(key) {
   function tooltipFor(iso, nm) {
     var parts = ['<b>' + esc(nm || nameFor(iso)) + '</b>'];
     var b = strongestCrop(iso);
-    if (b) parts.push('measured · ' + esc(b.crop) + ' ' + num(cropSlope(b.c), 1) + '%/ONI, ' +
-      esc(phaseWord()) + ' slope' +
+    if (b) parts.push('measured · ' + esc(b.crop) + ' ' + num(cropEffect(b.c), 1) + '% at this scenario' +
+      ' <span style="color:#8b8980">(' + num(cropSlope(b.c), 1) + ' %/ONI, ' + esc(phaseWord()) + ' slope)</span>' +
       (b.shared ? ' <span style="color:#c9a957">(shared with the IOD — not ENSO-specific)</span>' : ''));
     var d = rowFor(iso);
     if (d && d.cov) parts.push('aggregate ≈' + num(Math.round(d.lv.production_shock_pct), 0) + '% · coverage ' +
@@ -43046,6 +43058,15 @@ function showCommodityDetail(key) {
       rows.sort(function (a, b) { return Math.abs(cropSlope(b[1])) - Math.abs(cropSlope(a[1])); });
       var nina = S.oni < 0;
       var act = ' <span class="enso-th-act">selected</span>';
+      /* The cells print SLOPES; the colour encodes the CHANGE those slopes imply
+         at the selected scenario. Under La Niña the two disagree in sign — a
+         positive %/ONI slope is a fall, because ONI is negative — so the
+         convention has to be stated or a red "+3.15" reads as a bug. */
+      var colourNote = '<div class="ctr-note" style="margin-top:8px;">Values are <b>slopes</b>, ' +
+        'in percent of yield per unit of ONI. The colour is the <b>direction of the change</b> ' +
+        'they imply at the selected scenario (' + esc(keyFor(S.oni)[2]) + ', ONI ' + num(S.oni, 1) +
+        ') — warm falls, cool rises. Under La Niña the ONI is negative, so a positive slope ' +
+        'is a fall and the sign of the number will not match the sign of the colour.</div>';
       out += '<div class="enso-tblwrap"><table class="enso-tbl"><thead><tr>' +
         '<th scope="col">Crop</th>' +
         '<th scope="col" style="text-align:right">El Niño %/ONI' + (nina ? '' : act) + '</th>' +
@@ -43054,15 +43075,17 @@ function showCommodityDetail(key) {
         rows.map(function (r) {
           var c = r[1];
           return '<tr><td class="nm">' + esc(r[0]) + '</td>' +
-            '<td class="num"' + (nina ? '' : ' style="color:' + (impactColor(c.yield_pct_per_oni_nino, 1) || 'var(--t1)') + '"') + '>' +
+            '<td class="num"' + (nina ? '' : ' style="color:' +
+              (impactColor(c.yield_pct_per_oni_nino * S.oni, 1) || 'var(--t1)') + '"') + '>' +
               num(c.yield_pct_per_oni_nino, 2) + '</td>' +
-            '<td class="num"' + (nina ? ' style="color:' + (impactColor(c.yield_pct_per_oni_nina, 1) || 'var(--t1)') + '"' : '') + '>' +
+            '<td class="num"' + (nina ? ' style="color:' +
+              (impactColor(c.yield_pct_per_oni_nina * S.oni, 1) || 'var(--t1)') + '"' : '') + '>' +
               num(c.yield_pct_per_oni_nina, 2) + '</td>' +
             '<td class="num">' + (c.mean_production_kt != null ? Math.round(c.mean_production_kt).toLocaleString() + ' kt' : '—') + '</td>' +
             '<td style="font-size:10.5px;color:var(--t3)">q=' + (c.q_value != null ? c.q_value.toFixed(3) : '—') +
               ' · n=' + esc(c.n_years) + ' · ' + esc(c.alignment_basis || '') +
               (c.enso_specific ? '' : ' · <span style="color:#c9a957">shared with IOD</span>') + '</td></tr>';
-        }).join('') + '</tbody></table></div>';
+        }).join('') + '</tbody></table></div>' + colourNote;
     } else {
       out += '<div class="ctr-note" style="margin-top:8px;">No ENSO coefficient cleared false-discovery control for this ' +
         'country. Either no crop calendar was available to fix the seasonal alignment, or no crop survived. ' +
