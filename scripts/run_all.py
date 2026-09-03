@@ -56,6 +56,7 @@ import refresh_usda_psd
 import refresh_ndgain
 import refresh_enso
 import refresh_enso_indices
+import refresh_enso_bulletins
 import refresh_aqueduct
 import refresh_asap
 import refresh_faostat_prodindex
@@ -112,6 +113,7 @@ STEPS = [
     ("ND-GAIN climate",        refresh_ndgain.main,             "ndgain.json"),
     ("ENSO state (CPC)",       refresh_enso.main,               "enso.json"),
     ("ENSO indices",           refresh_enso_indices.main,       "enso_indices.json"),
+    ("ENSO bulletins",         refresh_enso_bulletins.main,     "enso_bulletins.json"),
     ("WRI Aqueduct water",     refresh_aqueduct.main,           "aqueduct.json"),
     # v83 — the three feeds that give this dashboard a PRESENT tense. Until now
     # the climate component was baseline hydrology (1979-2019) plus 1991-2020
