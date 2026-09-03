@@ -179,10 +179,51 @@ def main() -> int:
         # putting the label 16px below the rule it names.
         check("the 'now' label sits on its own rule",
               bool(marker) and abs(marker["offset"]) <= 3, str(marker))
-        # A fixed axis silently clamps: the rule would pin to the ceiling while its
-        # label still printed the true, higher number.
-        check("nothing is clamped to the axis ceiling",
-              bool(marker) and marker["ruleY"] > 2 and marker["topBarY"] > 2, str(marker))
+
+        # A ceiling check against live data proves nothing: today's reading and the
+        # record both sit under the old fixed 2.6 axis, so a clamped chart passes it
+        # too. The only way to test a clamp is to feed it a value that would clamp.
+        # Serve a spiked enso.json and require the axis to move.
+        base_top = marker["topBarY"] if marker else None
+        hist_max = page.evaluate(
+            "async () => Math.max(...(await (await fetch('data/enso.json')).json())"
+            ".data.history.map(r => Math.abs(r.anom)))")
+        spike = round(hist_max + 1.5, 2)
+
+        def spike_enso(route):
+            r = route.fetch()
+            body = r.json()
+            body["data"]["latest"]["anom"] = spike
+            route.fulfill(json=body)
+
+        page.route("**/data/enso.json", spike_enso)
+        try:
+            open_panel(page, base)
+            page.wait_for_selector(".enso-strip", timeout=20_000)
+            page.wait_for_timeout(600)
+            spiked = page.evaluate(NOW_PROBE)
+        finally:
+            page.unroute("**/data/enso.json")
+
+        check("a reading above the record is printed at its true value",
+              bool(spiked) and ("%.2f" % spike) in (spiked["label"] or ""),
+              f'want {spike:.2f} in {spiked and spiked["label"]}')
+        # NOTE this one is a smoke check only: a clamped rule also lands inside the
+        # plot, so it passes on the buggy code too. Named for what it can actually
+        # detect rather than for what the fix was.
+        check("the marker stays inside the plot",
+              bool(spiked) and spiked["ruleY"] > 2,
+              f'rule at {spiked and spiked["ruleY"]}px')
+        # THIS is the discriminating one. Under a fixed axis the record bar cannot
+        # move when the live value changes; verified to fail against the old code
+        # with 'record bar 12.27 -> 12.27'.
+        check("the whole record rescales to make room",
+              bool(spiked) and base_top is not None and spiked["topBarY"] > base_top + 2,
+              f'record bar {base_top} -> {spiked and spiked["topBarY"]} (must drop)')
+
+        open_panel(page, base)   # back to real data for everything downstream
+        page.wait_for_selector(".enso-strip", timeout=20_000)
+
 
 
         print("\nphase follows the selected scenario")
