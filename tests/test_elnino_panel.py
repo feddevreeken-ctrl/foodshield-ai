@@ -163,6 +163,23 @@ def main() -> int:
               "not match the sign of the colour" in page.locator("#enso-detail").inner_text())
         page.select_option("#enso-level", "1.5")
 
+        print("\nthe crop legend describes what the fill encodes")
+        page.select_option("#enso-mode", "crop")
+        page.wait_for_timeout(350)
+        leg = page.locator("#enso-legend").inner_text()
+        check("crop legend does not call the fill a %/ONI slope",
+              "%/ONI" not in leg, leg[:120])
+        check("crop legend names the scenario the colour is scaled to",
+              "Strong El" in leg and "ONI" in leg, leg[:160])
+        page.select_option("#enso-level", "-1.5")
+        page.wait_for_timeout(350)
+        leg_nina = page.locator("#enso-legend").inner_text()
+        check("crop legend follows the selected scenario",
+              "La Ni" in leg_nina and leg_nina != leg, leg_nina[:160])
+        page.select_option("#enso-level", "1.5")
+        page.select_option("#enso-mode", "impact")
+        page.wait_for_timeout(250)
+
         print("\nnon-ENSO-specific pairs are out of the aggregate")
         page.select_option("#enso-level", "1.5")
         page.select_option("#enso-country", "IDN")

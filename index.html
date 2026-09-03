@@ -42395,14 +42395,24 @@ function showCommodityDetail(key) {
       'implies rather than what is being reported.</div>';
       return;
     }
+    /* The crop fill used to encode the raw %/ONI slope, and the legend said so.
+       It now encodes slope x ONI — the change that slope implies at the selected
+       scenario — so the label has to move with it, or the legend describes a
+       quantity the map no longer paints. */
     var solidT = S.mode === 'coverage' ? 'Model coverage' :
-                 S.mode === 'crop' ? 'Strongest measured crop, %/ONI' : 'Modelled production shock';
+                 S.mode === 'crop' ? 'Strongest measured crop, % yield change'
+                                   : 'Modelled production shock';
     var solidBody = S.mode === 'coverage'
       ? '<div class="ctr-note" style="max-width:34ch">Share of a country’s production with a detectable ENSO signal. Dark means nobody measured there.</div>'
       : '<div class="enso-ramp">' + ramp + '</div>' +
         '<div style="display:flex;justify-content:space-between;font-family:\'Geist Mono\',monospace;font-size:9px;color:var(--t3);width:150px;margin-top:3px;">' +
         '<span>−15%</span><span>0</span><span>+15%</span></div>' +
-        '<div class="ctr-note" style="max-width:34ch;margin-top:5px;">Warm falls, cool rises. Unfilled means <b>no measured signal — not a finding of zero effect</b>.</div>';
+        '<div class="ctr-note" style="max-width:34ch;margin-top:5px;">Warm falls, cool rises. Unfilled means <b>no measured signal — not a finding of zero effect</b>.</div>' +
+        (S.mode === 'crop'
+          ? '<div class="ctr-note" style="max-width:34ch;margin-top:5px;">The crop\u2019s fitted slope <b>times the ONI of the ' +
+            'selected scenario</b> (' + esc(keyFor(S.oni)[2]) + ', ONI ' + num(S.oni, 1) + '), so the colour ' +
+            'rescales with the scenario. Under La Ni\u00f1a the ONI is negative and a positive slope is a fall.</div>'
+          : '');
 
     el.innerHTML =
       '<div class="enso-legend">' +
