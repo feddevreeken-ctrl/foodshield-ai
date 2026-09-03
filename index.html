@@ -10031,6 +10031,36 @@ table.enso-tbl tr:hover td { background:rgba(255,255,255,.014); }
 .enso-oni { font-size:clamp(34px,4.4vw,54px); }
 .enso-hero-grid { gap:24px; align-items:baseline; row-gap:8px; }
 .enso-hero-note { margin-top:5px; max-width:96ch; font-size:var(--enso-fs-meta); line-height:1.45; }
+
+/* The ENSO record strip — the hero's subject, not a background wash. */
+.enso-strip-fig { margin:14px 0 0; position:relative; }
+.enso-strip-now {
+  position:absolute; right:0; transform:translateY(-50%);
+  font-family:'Geist Mono',monospace; font-size:var(--enso-fs-chip);
+  letter-spacing:var(--enso-tr-caps); text-transform:uppercase;
+  color:#0b0b0d; background:#ebe9e2; padding:1px 5px; border-radius:var(--rad-chip);
+  white-space:nowrap; pointer-events:none;
+}
+.enso-strip {
+  display:block; width:100%; height:96px;
+  /* preserveAspectRatio="none" — bars may stretch, which is why no text lives
+     inside this element. */
+}
+.enso-strip-ax { position:relative; height:14px; margin-top:2px; overflow:hidden; padding:0 2px; }
+.enso-strip-yr {
+  position:absolute; transform:translateX(-50%); white-space:nowrap;
+  font-family:'Geist Mono',monospace; font-size:var(--enso-fs-chip);
+  letter-spacing:var(--enso-tr-body); color:var(--t3);
+}
+.enso-strip-fig figcaption {
+  font-size:var(--enso-fs-meta); line-height:1.55; color:var(--t3);
+  max-width:var(--enso-measure); margin-top:8px;
+}
+.enso-strip-fig figcaption b { color:var(--t2); font-weight:600; }
+@media (max-width:640px) {
+  .enso-strip { height:72px; }
+  .enso-strip-yr { font-size:8.5px; }
+}
 .enso-h-tight { font-size:var(--enso-fs-head); line-height:1.2; letter-spacing:var(--enso-tr-head); margin:0 0 6px; max-width:34ch; }
 .enso-dek-tight { font-size:var(--enso-fs-body); margin-bottom:10px; }
 .enso-rule-strong { border-top-width:2px; margin-top:var(--sp-3); }
@@ -41736,26 +41766,80 @@ function showCommodityDetail(key) {
     });
   }
 
-  /* ── §1 THE OCEAN ────────────────────────────────────────────────────── */
-  function wave(traj) {
-    if (!traj || !traj.length) return '';
-    var w = 1000, h = 120, mid = h / 2, step = w / Math.max(1, traj.length - 1);
-    var pts = traj.map(function (t, i) {
-      return [i * step, mid - Math.max(-2.6, Math.min(2.6, t.anom)) * 30];
-    });
-    var d = 'M' + pts.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' L');
-    var area = d + ' L' + w + ',' + mid + ' L0,' + mid + ' Z';
-    return '<svg class="enso-hero-wave" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" aria-hidden="true">' +
-      '<defs><linearGradient id="ensoWaveG" x1="0" y1="0" x2="0" y2="1">' +
-        '<stop offset="0%" stop-color="#d2693a" stop-opacity=".55"/>' +
-        '<stop offset="50%" stop-color="#d2693a" stop-opacity=".04"/>' +
-        '<stop offset="50%" stop-color="#4a86b3" stop-opacity=".04"/>' +
-        '<stop offset="100%" stop-color="#4a86b3" stop-opacity=".55"/>' +
-      '</linearGradient></defs>' +
-      '<path d="' + area + '" fill="url(#ensoWaveG)"/>' +
-      '<line x1="0" y1="' + mid + '" x2="' + w + '" y2="' + mid + '" stroke="#3d3d4a" stroke-width="1"/>' +
-      '<path d="' + d + '" fill="none" stroke="#8b8980" stroke-width="1.6" vector-effect="non-scaling-stroke"/>' +
-    '</svg>';
+  /* ── §1 THE OCEAN ──────────────────────────────────────────────────────
+     The hero used to carry a smooth gradient sparkline over the last fourteen
+     seasons. That is a chart type borrowed from finance: it says "a line went
+     up" and nothing about ENSO. Every agency that publishes this index draws
+     the same picture instead — one bar per event, warm above the line, cool
+     below, the ±0.5 thresholds marked — because ENSO is a record of discrete
+     named events, not a continuous price. Drawing the whole 1950–present record
+     also shows what "1 of 77" means, which no sparkline can.
+
+     The live value is NOT plotted as one of the bars: it is a JJA season and
+     every bar is a DJF peak. It sits as a marked rule across the record instead,
+     which is the honest comparison — where this event stands now, against where
+     past events finished. */
+  function recordStrip(hist, live) {
+    if (!hist || hist.length < 20) return '';
+    var W = 1000, H = 132, PAD = 10, mid = Math.round(H * 0.52);
+    var peak = 2.6;                        // fixed, so the axis never rescales
+    var span = mid - PAD;
+    var y = function (v) { return mid - (Math.max(-peak, Math.min(peak, v)) / peak) * span; };
+    var n = hist.length, slot = (W - 2) / n, bw = Math.max(4, slot - 2.2);
+
+    var bars = hist.map(function (r, i) {
+      var x = 1 + i * slot + (slot - bw) / 2, v = r.anom || 0;
+      var top = v >= 0 ? y(v) : mid, hgt = Math.max(0.8, Math.abs(y(v) - mid));
+      /* Same colour language as the map: warm is the El Niño side. Sub-threshold
+         seasons are dimmed so the eye reads events, not noise. */
+      var strong = Math.abs(v) >= 0.5;
+      var fill = v >= 0 ? '#d2693a' : '#4a86b3';
+      return '<rect x="' + x.toFixed(2) + '" y="' + top.toFixed(2) + '" width="' + bw.toFixed(2) +
+        '" height="' + hgt.toFixed(2) + '" fill="' + fill + '" opacity="' + (strong ? '.85' : '.28') + '"/>';
+    }).join('');
+
+    var thr = [0.5, -0.5].map(function (v) {
+      return '<line x1="0" x2="' + W + '" y1="' + y(v).toFixed(1) + '" y2="' + y(v).toFixed(1) +
+        '" stroke="#5d5d6a" stroke-width="1" stroke-dasharray="3 5" opacity=".55"/>';
+    }).join('');
+
+    var nowY = (live != null) ? y(live) : null;
+    /* Dashed, and stopping short of the right edge where its label goes: a solid
+       full-bleed rule read as the figure's own border rather than as a value. */
+    var now = nowY == null ? '' :
+      '<line x1="0" x2="' + (W - 4) + '" y1="' + nowY.toFixed(1) + '" y2="' + nowY.toFixed(1) +
+        '" stroke="#ebe9e2" stroke-width="1.1" stroke-dasharray="7 4" opacity=".75"/>' +
+      '<circle cx="' + (W - 4) + '" cy="' + nowY.toFixed(1) + '" r="3.2" fill="#ebe9e2"/>';
+
+    /* Decade ticks live in HTML, not in the SVG: the chart uses
+       preserveAspectRatio="none" so the bars can stretch to any width, and that
+       stretches glyphs with them. Text stays out of a distorted coordinate
+       space. Positioned by percentage so it tracks the bars at any width. */
+    var ticks = hist.map(function (r, i) {
+      if (r.year % 10) return '';
+      var pct = ((1 + i * slot + slot / 2) / W) * 100;
+      /* Centring every label pushes the first one off the left edge and the last
+         one off the right. Anchor the outer two to their edges instead. */
+      var anchor = pct < 4 ? 'transform:none;' : pct > 96 ? 'transform:translateX(-100%);' : '';
+      return '<span class="enso-strip-yr" style="left:' + pct.toFixed(2) + '%;' + anchor + '">' +
+        r.year + '</span>';
+    }).join('');
+
+    var hi = hist.reduce(function (a, b) { return b.anom > a.anom ? b : a; });
+    return '<svg class="enso-strip" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" ' +
+      'role="img" aria-label="Every ENSO season since ' + hist[0].year + ', measured at its ' +
+      'December-to-February peak. Warm bars above the centre line are El Niño, cool bars below are ' +
+      'La Niña, and the dashed lines mark the plus and minus 0.5 thresholds. The strongest on record ' +
+      'is ' + hi.year + ' at ' + hi.anom.toFixed(2) + '. ' +
+      (live != null ? 'The current reading, ' + live.toFixed(2) + ', is drawn as a horizontal rule ' +
+        'because it is a mid-year season and every bar is a winter peak.' : '') + '">' +
+      '<line x1="0" x2="' + W + '" y1="' + mid + '" y2="' + mid + '" stroke="#3d3d4a" stroke-width="1"/>' +
+      thr + bars + now +
+      '</svg>' +
+      (nowY == null ? '' :
+        '<span class="enso-strip-now" style="top:' + ((nowY / H) * 100).toFixed(2) + '%">now ' +
+          num(live, 2) + '</span>') +
+      '<div class="enso-strip-ax" aria-hidden="true">' + ticks + '</div>';
   }
 
   function renderHero() {
@@ -41772,7 +41856,7 @@ function showCommodityDetail(key) {
 
     el.innerHTML =
       '<h2 class="enso-sr">The ocean, right now</h2>' +
-      '<div class="enso-hero">' + wave(traj) +
+      '<div class="enso-hero">' +
         '<div class="enso-hero-grid">' +
           '<div style="flex:0 1 auto;min-width:190px;">' +
             '<span class="enso-prov" style="display:block;margin-bottom:6px;">Oceanic Niño Index · ' +
@@ -41793,6 +41877,19 @@ function showCommodityDetail(key) {
             '<div class="enso-stat-v">' + L.sst_c.toFixed(2) + ' °C</div>' +
             '<div class="enso-stat-n">sea-surface temperature, absolute</div></div>' : '') +
         '</div>' +
+        (function () {
+          var H = (S.enso && S.enso.history) || [];
+          var strip = recordStrip(H, (L && typeof L.anom === 'number') ? L.anom : null);
+          if (!strip) return '';
+          var hi = H.reduce(function (a, b) { return b.anom > a.anom ? b : a; }, H[0] || { anom: 0 });
+          return '<figure class="enso-strip-fig">' + strip +
+            '<figcaption>' +
+              'Every ENSO winter since ' + esc(String(H[0].year)) + ', at its December–February peak. ' +
+              'The strongest on the record is <b>' + esc(String(hi.year)) + '</b> at ' + num(hi.anom, 2) + '. ' +
+              'The pale rule is where this event reads <b>today</b> — drawn as a line, not a bar, because ' +
+              esc((L && L.season) || 'the current season') + ' is a mid-year season and every bar here is a winter peak.' +
+            '</figcaption></figure>';
+        })() +
       '</div>' +
       '';
   }
@@ -43420,15 +43517,30 @@ function showCommodityDetail(key) {
     var ins = (S.econ && S.econ.insecurity) || null;
     if (!ins || !ins.rows) { el.innerHTML = ''; return; }
     el.innerHTML = '<div class="enso-rule"></div>' +
-            '<h2 class="enso-h">The part of this that is not contested.</h2>' +
-      '<div class="enso-dek">The macroeconomics is argued over and the price channel is weaker than it is usually presented. ' +
-      'The humanitarian record is neither. These are counted caseloads from declared emergencies.</div>' +
-      '<div class="enso-tblwrap"><table class="enso-tbl"><thead><tr><th scope="col">Event</th><th scope="col">Place</th><th scope="col">Caseload</th><th scope="col">Source</th></tr></thead><tbody>' +
+            '<h2 class="enso-h">The least argued-over part, and still not a headcount.</h2>' +
+      /* This used to read "These are counted caseloads from declared emergencies."
+         They are not counted. The rows are appeal targets, IPC projections and
+         assessed need — one of them reaching us through a press report of an SADC
+         figure rather than the SADC document. The distinction is the difference
+         between people counted and people estimated, and this page does not get
+         to blur it just because the direction is not in dispute. */
+      '<div class="enso-dek">The macroeconomics is argued over and the price channel is weaker than it is ' +
+      'usually presented. The humanitarian record is less contested than either — but it is ' +
+      '<b>reported, not counted</b>: appeal targets, IPC projections and assessed need, published by the ' +
+      'responding agencies at the time. Each row says which it is.</div>' +
+      '<div class="enso-tblwrap"><table class="enso-tbl"><thead><tr><th scope="col">Event</th>' +
+      '<th scope="col">Place</th><th scope="col">Figure reported</th><th scope="col">What it measures</th>' +
+      '<th scope="col">Source</th></tr></thead><tbody>' +
       ins.rows.map(function (r) {
         return '<tr><td class="nm">' + esc(r.event) + '</td><td class="nm">' + esc(r.place) + '</td>' +
-          '<td style="color:var(--t1);max-width:420px;">' + esc(r.figure) + '</td>' +
-          '<td style="font-size:10.5px;">' + (r.url ? '<a href="' + esc(r.url) + '" target="_blank" rel="noopener" style="color:var(--accent)">' + esc(r.source) + '</a>' : esc(r.source)) + '</td></tr>';
+          '<td style="color:var(--t1);max-width:380px;">' + esc(r.figure) + '</td>' +
+          '<td><span class="enso-prov">' + esc(r.measure || 'reported figure') + '</span>' +
+            (r.source_kind ? '<span class="enso-meta" style="display:block;margin-top:2px;">' +
+              esc(r.source_kind) + '</span>' : '') + '</td>' +
+          '<td style="font-size:var(--enso-fs-meta);">' + (r.url ? '<a href="' + esc(safeUrl(r.url)) + '" target="_blank" rel="noopener" style="color:var(--accent)">' + esc(r.source) + '</a>' : esc(r.source)) + '</td></tr>';
       }).join('') + '</tbody></table></div>' +
+      (ins.measure_note ? '<div class="ctr-note" style="margin-top:8px;max-width:var(--enso-measure);">' +
+        esc(ins.measure_note) + '</div>' : '') +
       prov('SADC · OCHA · IPC · FAO · national disaster declarations', 'sourced');
   }
 

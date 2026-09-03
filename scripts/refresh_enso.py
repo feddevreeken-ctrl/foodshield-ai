@@ -137,6 +137,19 @@ def main() -> int:
         },
         "trajectory": [{"season": r["season"], "year": r["year"], "anom": r["anom"]}
                        for r in recent],
+        # The full published series, thinned to the DJF peak of each ENSO year.
+        # The hero used to draw a smooth gradient sparkline over the last 14
+        # seasons, which is a chart type borrowed from finance and says nothing
+        # about ENSO. Every agency that publishes this index draws the same
+        # picture instead: one bar per event, warm above the line and cool below,
+        # with the +/-0.5 thresholds marked. That is the instrument's own idiom
+        # and it also shows what "1 of 77" means, which no sparkline can.
+        "history": [{"season": r["season"], "year": r["year"], "anom": r["anom"]}
+                    for r in oni if r["season"] == "DJF"],
+        "history_note": (
+            "One point per ENSO year, taken at the DJF peak -- the season the event is "
+            "conventionally named for and the one CPC's own event tables use. The current "
+            "season is shown separately because this event has not reached its DJF yet."),
         "weekly_nino34": {
             "date": w["date"], "anom": w["nino34_anom"], "sst_c": w["nino34"],
             "nino12_anom": w["nino12_anom"],

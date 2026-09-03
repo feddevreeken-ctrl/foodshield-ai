@@ -29,6 +29,15 @@ FAILURES: list[str] = []
 CHECKS = 0
 
 
+STRIP_PROBE = """() => {
+    const svg = document.querySelector('.enso-strip');
+    if (!svg) return null;
+    return {bars: svg.querySelectorAll('rect').length,
+            now: (document.querySelector('.enso-strip-now') || {}).textContent || null,
+            hasLabel: !!svg.getAttribute('aria-label'),
+            textInSvg: svg.querySelectorAll('text').length};
+}"""
+
 def check(label: str, ok: bool, detail: str = "") -> None:
     global CHECKS
     CHECKS += 1
@@ -74,7 +83,8 @@ def main() -> int:
         # Serving the repo over a plain file server is not production: Vercel's
         # analytics shim does not exist here, and third-party APIs rate-limit a
         # loop of test loads. Those are environment noise. Anything else is not.
-        IGNORE = ("_vercel/insights", "api.reliefweb.int")
+        IGNORE = ("_vercel/insights", "api.reliefweb.int", "tiles.openfreemap.org",
+                  "basemaps.cartocdn.com")
 
         def note(text: str, where: str = "") -> None:
             # "Failed to load resource: ... 404" carries the URL in the message's
@@ -114,9 +124,29 @@ def main() -> int:
         print("\nscenario disclosure")
         tag = page.locator(".enso-tag-snap")
         check("modelled layer discloses the scenario it is painted at", tag.count() == 1)
+        # Read expected values from the feed rather than hardcoding them: CPC
+        # publishes a new season every month, and this assertion is about the hero
+        # agreeing with enso.json, not about any particular number.
+        feed = page.evaluate("async () => (await (await fetch('data/enso.json')).json()).data.latest")
         hero = page.locator("#enso-hero").inner_text()
+        band = feed["band"].replace("El Nino", "El Niño").replace("La Nina", "La Niña")
+        val = ("%+.2f" % feed["anom"]).replace("-", "−")
         check("hero prints the agency band, not the snapped one",
-              "Moderate" in hero and "+1.39" in hero, hero[:90])
+              band in hero and val in hero, "want %s / %s in: %s" % (band, val, hero[:110]))
+
+        print("\nthe record strip is the whole record")
+        strip = page.evaluate(STRIP_PROBE)
+        hist = page.evaluate("async () => (await (await fetch('data/enso.json')).json()).data.history.length")
+        check("one bar per winter in the published record",
+              bool(strip) and strip["bars"] == hist,
+              "%s bars vs %s winters" % (strip and strip["bars"], hist))
+        check("the current reading is marked and labelled",
+              bool(strip) and strip["now"] and "now" in strip["now"].lower(),
+              str(strip and strip["now"]))
+        # preserveAspectRatio="none" stretches glyphs, so no text may live in the SVG
+        check("no text inside the stretched chart",
+              bool(strip) and strip["textInSvg"] == 0, str(strip and strip["textInSvg"]))
+        check("the strip carries an accessible description", bool(strip and strip["hasLabel"]))
 
         print("\nphase follows the selected scenario")
         page.select_option("#enso-country", "USA")
