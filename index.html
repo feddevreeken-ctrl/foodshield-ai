@@ -10318,6 +10318,41 @@ table.enso-tbl thead th:first-child { z-index:3; }
 .enso-idx-note { grid-column:1 / -1; font-size:11px; color:var(--t2); line-height:1.55; margin-top:-2px; max-width:88ch; }
 .enso-idx-note a { color:var(--accent); text-decoration:none; }
 .enso-idx-note a:hover { text-decoration:underline; }
+
+/* Window groups. Bars are scaled within a group, never across one — the layout
+   itself has to refuse the comparison the prose warns about. */
+.enso-idx-grp { margin-top:14px; }
+.enso-idx-grp:first-of-type { margin-top:4px; }
+.enso-idx-grp-h { padding-bottom:6px; border-bottom:1px solid var(--b2); }
+.enso-idx-grp-h b {
+  display:block; font-family:'Geist Mono',monospace; font-size:9.5px;
+  letter-spacing:.09em; text-transform:uppercase; color:var(--t2); font-weight:600;
+}
+.enso-idx-grp-h i {
+  display:block; font-style:normal; font-size:11px; color:var(--t3);
+  line-height:1.5; margin-top:3px; max-width:74ch;
+}
+.enso-idx-cmps { margin-top:18px; }
+.enso-idx-cmp {
+  /* The accent rule sits OUT at the body's padding edge so the card's TEXT lands
+     on the same inset as every other line in the panel. Indenting the text to
+     make room for the border is what produced a fourth left edge the first time. */
+  border-left:2px solid var(--b3);
+  margin:9px 0 0 calc(-1 * (var(--enso-inset) - 1px));
+  padding:9px 0 9px calc(var(--enso-inset) - 3px);
+}
+.enso-idx-cmp-bad { border-left-color:#6b5a52; }
+.enso-idx-cmp-h { font-size:12px; color:var(--t1); }
+.enso-idx-cmp-h b { font-weight:600; }
+.enso-idx-delta {
+  float:right; font-family:'Geist Mono',monospace; font-size:10.5px;
+  color:var(--t3); letter-spacing:.02em;
+}
+.enso-idx-cmp-v {
+  font-family:'Geist Mono',monospace; font-size:10px; color:#c9a957;
+  margin-top:4px; letter-spacing:.01em;
+}
+.enso-idx-cmp-b { font-size:11.5px; color:var(--t2); line-height:1.6; margin-top:5px; max-width:82ch; }
 @media (max-width:820px){
   .enso-idx-row { grid-template-columns:118px minmax(0,1fr) 66px; }
   .enso-idx-win { grid-column:2 / -1; }
@@ -41919,37 +41954,101 @@ function showCommodityDetail(key) {
      showed exactly one of them. This shows the disagreement. It is deliberately
      NOT a ranking: the rows differ in region, baseline and averaging window, so
      the point is that "how strong is it" has no single answer. */
+  /* The indices differ in region, in baseline AND in averaging window. A single
+     min/max across all of them would perform exactly the comparison this panel's
+     own caution forbids — a 3-month seasonal mean read against a single week is
+     arithmetic, not disagreement. So: group by window, scale the bars WITHIN a
+     group so the picture never compares across one either, and let the collector
+     supply the only pairs that hold everything constant but one variable. */
   function renderIndices() {
     var el = document.getElementById('enso-indices'); if (!el) return;
-    var I = S.indices; if (!I || !I.indices) { el.innerHTML = ''; return; }
-    var rows = I.indices;
-    var sst = rows.filter(function (r) { return r.unit === '°C'; });
-    var lo = Math.min.apply(null, sst.map(function (r) { return r.value; }));
-    var hi = Math.max.apply(null, sst.map(function (r) { return r.value; }));
+    var I = S.indices; if (!I || !I.indices || !I.indices.length) { el.innerHTML = ''; return; }
+    var rows = I.indices, by = {};
+    rows.forEach(function (r) { by[r.key] = r; });
+
+    var GROUPS = [
+      { kind: 'seasonal',    title: 'Three-month seasonal means',
+        sub: 'Averaged over a season. These are comparable with each other.' },
+      { kind: 'weekly',      title: 'Single weeks',
+        sub: 'Not averaged down, so they run hotter. Never read one against a seasonal mean.' },
+      { kind: 'atmospheric', title: 'The atmosphere',
+        sub: 'A pressure index, not a temperature. Different quantity, different units.' }
+    ];
+
+    /* Headline the one honest like-for-like: same agency, same water, same
+       season — only the baseline differs. */
+    var lede, head = (I.comparisons || []).filter(function (c) {
+      return c.free_variable && c.free_variable.indexOf('baseline') === 0;
+    })[0];
+    if (head && by[head.a] && by[head.b]) {
+      lede = 'Two indices for the same three months of the same water disagree by <b>' +
+        head.delta.toFixed(2) + ' °C</b> — on the baseline alone.';
+    } else {
+      lede = 'Five indices, three different averaging windows.';
+    }
+
+    var groupHTML = GROUPS.map(function (g) {
+      var set = rows.filter(function (r) { return r.window_kind === g.kind; });
+      if (!set.length) return '';
+      /* scale within the group only */
+      var peak = Math.max.apply(null, set.map(function (r) { return Math.abs(r.value); })) || 1;
+      return '<div class="enso-idx-grp">' +
+        '<div class="enso-idx-grp-h"><b>' + esc(g.title) + '</b><i>' + esc(g.sub) + '</i></div>' +
+        '<div class="enso-idx-rows">' + set.map(function (r) {
+          var warm = r.unit === '°C';
+          return '<div class="enso-idx-row">' +
+            '<div class="enso-idx-lab"><b>' + esc(r.label) + '</b><i>' + esc(r.agency) + '</i></div>' +
+            '<div class="enso-idx-bar"><span style="width:' +
+              Math.round(Math.min(1, Math.abs(r.value) / peak) * 100) + '%;background:' +
+              (warm ? (r.value >= 0 ? '#d2693a' : '#4a86b3') : '#8f7bb0') + '"></span></div>' +
+            '<div class="enso-idx-val">' + (r.value > 0 ? '+' : '') + r.value.toFixed(2) +
+              '<i>' + esc(warm ? '°C' : '') + '</i></div>' +
+            '<div class="enso-idx-win">' + esc(r.window) + '</div>' +
+            '<div class="enso-idx-note">' + esc(r.note) +
+              ' <a href="' + esc(r.url) + '" target="_blank" rel="noopener">source ↗</a></div>' +
+          '</div>';
+        }).join('') + '</div></div>';
+    }).join('');
+
+    var cmpHTML = (I.comparisons || []).map(function (c) {
+      var a = by[c.a], b = by[c.b]; if (!a || !b) return '';
+      return '<div class="enso-idx-cmp">' +
+        '<div class="enso-idx-cmp-h"><b>' + esc(a.label) + '</b> vs <b>' + esc(b.label) + '</b>' +
+          '<span class="enso-idx-delta">Δ ' + c.delta.toFixed(2) + '</span></div>' +
+        '<div class="enso-idx-cmp-v">Free variable — ' + esc(c.free_variable) + '</div>' +
+        '<div class="enso-idx-cmp-b">' + esc(c.reading) + '</div>' +
+      '</div>';
+    }).join('');
+
+    var badHTML = (I.invalid_comparisons || []).map(function (c) {
+      var a = by[c.a], b = by[c.b]; if (!a || !b) return '';
+      return '<div class="enso-idx-cmp enso-idx-cmp-bad">' +
+        '<div class="enso-idx-cmp-h"><b>' + esc(a.label) + '</b> vs <b>' + esc(b.label) + '</b>' +
+          '<span class="enso-idx-delta">not comparable</span></div>' +
+        '<div class="enso-idx-cmp-b">' + esc(c.why) + '</div>' +
+      '</div>';
+    }).join('');
+
+    var miss = (I.unavailable || []).length
+      ? '<div class="ctr-note" style="margin-top:9px;">Not reachable this run: ' +
+        esc(I.unavailable.map(function (u) { return u.key; }).join(', ')) +
+        '. Omitted rather than carried over from a previous fetch.</div>'
+      : '';
 
     el.innerHTML =
       '<details class="enso-idx">' +
         '<summary>' +
-          '<span class="enso-idx-k">The same ocean, five indices</span>' +
-          '<span class="enso-idx-lede">This week it reads anywhere from <b>+' + lo.toFixed(2) + '</b> to <b>+' +
-            hi.toFixed(2) + ' °C</b> depending on which one you ask. <span class="enso-gate-more">Show them</span></span>' +
+          '<span class="enso-idx-k">The same ocean, ' + rows.length + ' indices</span>' +
+          '<span class="enso-idx-lede">' + lede + ' <span class="enso-gate-more">Show them</span></span>' +
         '</summary>' +
         '<div class="enso-idx-body">' +
-          '<div class="ctr-note" style="max-width:82ch;margin-bottom:10px;">' + esc((S.meta.indices || {}).caution || '') + '</div>' +
-          '<div class="enso-idx-rows">' + rows.map(function (r) {
-            var warm = r.unit === '°C';
-            var mag = warm ? Math.min(1, Math.abs(r.value) / hi) : Math.min(1, Math.abs(r.value) / 30);
-            return '<div class="enso-idx-row">' +
-              '<div class="enso-idx-lab"><b>' + esc(r.label) + '</b><i>' + esc(r.agency) + '</i></div>' +
-              '<div class="enso-idx-bar"><span style="width:' + Math.round(mag * 100) + '%;background:' +
-                (warm ? '#d2693a' : '#4a86b3') + '"></span></div>' +
-              '<div class="enso-idx-val">' + (r.value > 0 ? '+' : '') + r.value.toFixed(2) +
-                '<i>' + esc(r.unit === '°C' ? '°C' : '') + '</i></div>' +
-              '<div class="enso-idx-win">' + esc(r.window) + '</div>' +
-              '<div class="enso-idx-note">' + esc(r.note) +
-                ' <a href="' + esc(r.url) + '" target="_blank" rel="noopener">source ↗</a></div>' +
-            '</div>';
-          }).join('') + '</div>' +
+          '<div class="ctr-note" style="max-width:82ch;margin-bottom:12px;">' +
+            esc((S.meta.indices || {}).notes || '') + '</div>' +
+          groupHTML +
+          (cmpHTML || badHTML ? '<div class="enso-idx-cmps"><div class="enso-idx-grp-h">' +
+            '<b>What can actually be compared</b><i>Only pairs holding everything constant but one ' +
+            'variable.</i></div>' + cmpHTML + badHTML + '</div>' : '') +
+          miss +
         '</div>' +
       '</details>';
   }
