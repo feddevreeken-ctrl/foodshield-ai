@@ -191,6 +191,48 @@ def main() -> int:
         check("Indonesia reports no ENSO coverage", "coverage" in idn and "0%" in idn, idn[:110])
         check("the excluded IOD-shared value is still shown", "shared with the iod" in idn)
 
+        print("\npanel styling stays inside the panel")
+        # .viewswitch is site-wide (Rankings, Scenario, About & Method, Data all
+        # use it) and --fs-* are the site's own five-step scale. A previous pass
+        # restyled both globally while only the El Nino panel was in scope.
+        style = page.evaluate("""() => {
+            const pick = sel => { const e = document.querySelector(sel); if (!e) return null;
+              const cs = getComputedStyle(e);
+              return {ff: cs.fontFamily.split(',')[0].replace(/"/g,''), tt: cs.textTransform}; };
+            const root = getComputedStyle(document.documentElement);
+            return {
+              scenario: pick('#tab-scenario .viewswitch-btn'),
+              about:    pick('#tab-about .viewswitch-btn'),
+              elnino:   pick('#tab-elnino .viewswitch-btn'),
+              fsBody: root.getPropertyValue('--fs-body').trim(),
+              fsMeta: root.getPropertyValue('--fs-meta').trim(),
+              fsHead: root.getPropertyValue('--fs-head').trim(),
+            };
+        }""")
+        for other in ("scenario", "about"):
+            v = style[other]
+            check(f"site tab bar ({other}) keeps its own treatment",
+                  bool(v) and v["tt"] == "uppercase" and v["ff"] == "Geist Mono", str(v))
+        check("El Nino tab bar uses the panel register",
+              style["elnino"] and style["elnino"]["tt"] == "none", str(style["elnino"]))
+        check("site type tokens are untouched",
+              (style["fsBody"], style["fsMeta"], style["fsHead"]) == ("12px", "10px", "18px"),
+              f'{style["fsBody"]}/{style["fsMeta"]}/{style["fsHead"]}')
+
+        print("\nmap annotations contain their own text")
+        # iconSize was [188, 1]: Leaflet wrote that height inline, so the card was
+        # one pixel tall and every line of body text sat outside it, on the map.
+        boxes = page.evaluate("""() => [...document.querySelectorAll('.enso-anno')].map(e => {
+            const r = e.getBoundingClientRect();
+            const last = e.querySelector('span');
+            const lr = last ? last.getBoundingClientRect() : null;
+            return {h: Math.round(r.height), contains: lr ? (lr.bottom <= r.bottom + 1) : false};
+        })""")
+        check("annotation cards are taller than a single line",
+              bool(boxes) and all(b["h"] > 30 for b in boxes), str(boxes))
+        check("annotation text sits inside its card",
+              bool(boxes) and all(b["contains"] for b in boxes), str(boxes))
+
         print("\nagency bulletins in the news view")
         open_panel(page, base, "ensolive")
         page.wait_for_selector(".enso-bul", timeout=20_000)
