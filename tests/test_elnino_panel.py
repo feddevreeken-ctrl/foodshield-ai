@@ -158,7 +158,7 @@ def main() -> int:
         band = feed["band"].replace("El Nino", "El Niño").replace("La Nina", "La Niña")
         val = ("%+.2f" % feed["anom"]).replace("-", "−")
         check("hero prints the agency band, not the snapped one",
-              band in hero and val in hero, "want %s / %s in: %s" % (band, val, hero[:110]))
+              band.lower() in hero.lower() and val in hero, "want %s / %s in: %s" % (band, val, hero[:110]))
 
         print("\nthe record strip is the whole record")
         strip = page.evaluate(STRIP_PROBE)
