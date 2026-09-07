@@ -11037,6 +11037,32 @@ table.enso-tbl thead th:first-child { z-index:3; }
   #tab-elnino .enso-cols, #tab-elnino .enso-section-intro .enso-section-dek { column-count:1; }
 }
 @media (max-width:600px){ #tab-elnino .enso-raster-label:nth-child(n+5) { display:none; } }
+/* Harvest story under the map: a modelled plate per country stays on screen while the stops scroll. */
+#tab-elnino .enso-harvest-story { margin-top:32px; }
+#tab-elnino #enso-harvest-fig { border-style:dashed; }
+#tab-elnino .hs-body { padding:16px 24px 10px; }
+#tab-elnino .hs-row { display:grid; grid-template-columns:104px minmax(0,1fr) minmax(0,1fr); gap:8px 12px; align-items:center; padding:10px 0; border-top:1px solid var(--grid); }
+#tab-elnino .hs-row:first-child { border-top:0; padding-top:0; }
+#tab-elnino .hs-crop { font:500 13px/1.3 'Geist',sans-serif; color:var(--t1); text-transform:capitalize; }
+#tab-elnino .hs-crop i { display:block; font:10px/1.4 'Geist Mono',monospace; color:#c9a957; font-style:normal; text-transform:none; }
+#tab-elnino .hs-bar { position:relative; height:24px; background:rgba(235,233,226,.06); }
+#tab-elnino .hs-bar b { display:block; height:100%; background:var(--cool); opacity:.85; }
+#tab-elnino .hs-bar.neg b { background:var(--warm); }
+#tab-elnino .hs-bar::before { content:attr(data-k); position:absolute; left:4px; top:4px; padding:0 4px; font:9.5px/16px 'Geist Mono',monospace; color:var(--t1); background:rgba(11,16,23,.62); }
+#tab-elnino .hs-bar i { position:absolute; right:6px; top:0; font:11px/24px 'Geist Mono',monospace; color:var(--t1); font-style:normal; font-variant-numeric:tabular-nums; }
+#tab-elnino .hs-key { display:flex; flex-wrap:wrap; gap:6px 18px; margin:14px 0 2px; font:10.5px/1.5 'Geist Mono',monospace; color:var(--t3); }
+#tab-elnino .hs-key .k { display:inline-block; width:10px; height:10px; margin-right:6px; vertical-align:-1px; }
+#tab-elnino .hs-key .k.fall { background:var(--warm); }
+#tab-elnino .hs-key .k.rise { background:var(--cool); }
+#tab-elnino .hs-quiet { margin:6px 0 0; font:10.5px/1.5 'Geist Mono',monospace; color:var(--t3); }
+#tab-elnino .tour-btn { font:500 11.5px/1 'Geist Mono',monospace; color:var(--t1); background:none; border:1px solid var(--ink); padding:0 12px; min-height:36px; cursor:pointer; }
+#tab-elnino .tour-btn:hover { background:rgba(235,233,226,.06); }
+#tab-elnino .tour-step .enso-gate { margin:12px 0; }
+#tab-elnino .enso-chapter { display:none; margin:96px 24px 8px; }
+#tab-elnino:is([data-sub="elnino"],:not([data-sub])) .enso-chapter { display:block; }
+#tab-elnino .enso-chapter h2 { margin:6px 0 0; }
+#tab-elnino .enso-chapter .enso-eyebrow { display:block; }
+@media (max-width:980px){ #tab-elnino .enso-harvest-story .enso-tour-fig .enso-plate-h { display:flex; } #tab-elnino .hs-row { grid-template-columns:1fr; gap:6px; } }
 @media (prefers-reduced-motion:reduce){ #tab-elnino .tour-step, #tab-elnino .tour-spot i { transition:none; } }
 #tab-elnino.active .enso-oni-plate.is-plotting .enso-record-bar { animation:ensoBarRise .12s ease-out both; animation-delay:var(--delay); }
 #tab-elnino.active .enso-oni-plate.is-plotting .enso-trajectory { stroke-dasharray:1; animation:ensoTrace .6s .2s ease-out both; }
@@ -11872,6 +11898,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
       <div id="enso-status" class="enso-sr" role="status" aria-live="polite"></div>
 
       <div class="subview active" id="subview-elnino" role="tabpanel" aria-labelledby="viewbtn-elnino">
+        <!-- Order is the story: the map plate, the selected country's detail, then the guided reading (which hosts the gate), the table, the limits. -->
         <div class="enso-mapgrid">
           <div id="enso-mapwrap">
             <div id="enso-controls"></div>
@@ -11880,9 +11907,8 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
             <div id="enso-legend"></div>
           </div>
         </div>
-        <div id="enso-gate"></div>
-        <div id="enso-land-head"></div>
         <div id="enso-detail" aria-live="polite"></div>
+        <div id="enso-land-head"></div>
         <div id="enso-coeffs"></div>
         <section id="enso-limits" class="enso-sec"></section>
       </div>
@@ -42310,7 +42336,8 @@ function showCommodityDetail(key) {
       'Niño 1+2 ' + num(w.nino12_anom, 1) + ' °C', 'east-based ' + (w.east_based == null ? 'unavailable' : w.east_based ? 'yes' : 'no'),
       'crop fit ' + stamp(metaDate('model')), 'exposure ' + stamp(metaDate('exp')),
       'bulletins ' + ((S.bulletins && S.bulletins.bulletins) || []).length, 'stories ' + ensoNews().length];
-    el.innerHTML = '<p class="enso-ocean-intro">The Oceanic Niño Index is NOAA\u2019s headline number for El Niño: how much warmer or cooler than usual ' +
+    el.innerHTML = '<div class="enso-chapter"><span class="enso-eyebrow">The number this map hangs on</span><h2 class="enso-h">Where the number comes from</h2></div>' +
+      '<p class="enso-ocean-intro">The Oceanic Niño Index is NOAA\u2019s headline number for El Niño: how much warmer or cooler than usual ' +
       'the sea surface is inside one box of the central Pacific, averaged over three months. The chart plots every winter since ' +
       esc((e.history && e.history[0] && e.history[0].year) || '1950') + ' as a bar and, on the same scale, the ' + (e.trajectory || []).length +
       (noEvent ? ' most recent seasons. No event is present.' : ' seasons of the event now under way.') + '</p>' +
@@ -42479,7 +42506,7 @@ function showCommodityDetail(key) {
   }
 
   /* Available illustration plates. Missing states retain the SVG schematic. */
-  var ENSO_RASTERS = {walker:true, elnino:false, lanina:false, trades:true, basin:true, nino34:true};
+  var ENSO_RASTERS = {walker:true, elnino:'baked', lanina:false, trades:true, basin:true, nino34:true}; /* 'baked' = the plate carries its own labels */
   function rasterImage(name, alt, sizes) {
     return '<img loading="lazy" decoding="async" width="1536" height="1024" src="img/enso/' + name + '.webp" ' +
       'srcset="img/enso/' + name + '-768.webp 768w, img/enso/' + name + '.webp 1536w" sizes="' + sizes + '" alt="' + esc(alt) + '">';
@@ -42504,12 +42531,13 @@ function showCommodityDetail(key) {
       [neutral || nina ? 'Rain over the warm pool' : 'Rain follows the warm water',neutral || nina ? 8 : 43,36],
       [neutral || nina ? 'Cold water in reach' : 'Upwelling capped',73,71]];
     var weight = Math.min(3, Math.max(.8, Math.abs(S.oniLive == null ? 0 : S.oniLive) * 1.2));
+    var baked = ENSO_RASTERS[name] === 'baked';
     return '<div class="enso-raster" role="img" aria-label="' + esc(label) + '">' +
       rasterImage(name, label, lead ? '(max-width: 760px) 100vw, 1180px' : '(max-width: 840px) 100vw, 580px') +
-      rasterLabels(labels) +
+      (baked ? '' : rasterLabels(labels) +
       '<svg class="enso-raster-leaders" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' +
         '<path d="M50,13 L58,15 M53,79 L59,73 M78,71 L84,65" fill="none" stroke="currentColor" stroke-width=".1"/>' +
-      '</svg>' +
+      '</svg>') +
       (lead ? '<svg class="enso-wind-live" viewBox="0 0 120 20" aria-hidden="true"><path d="M112,10 H8 m8,-6 l-8,6 l8,6" fill="none" stroke="currentColor" stroke-width="' + weight.toFixed(2) + '"/></svg>' : '') +
       '</div>';
   }
@@ -42851,8 +42879,8 @@ function showCommodityDetail(key) {
     el.innerHTML =
       '<details class="enso-idx">' +
         '<summary>' +
-          '<span class="enso-idx-k">The same ocean, ' + rows.length + ' indices' + missTag + '</span>' +
-          '<span class="enso-idx-lede">' + lede + ' <span class="enso-gate-more">Show them</span></span>' +
+          '<span class="enso-idx-k">' + rows.length + ' agencies, one ocean' + missTag + '</span>' +
+          '<span class="enso-idx-lede">' + lede + ' <span class="enso-gate-more">See all ' + rows.length + '</span></span>' +
         '</summary>' +
         '<div class="enso-idx-body">' +
           '<div class="ctr-note" style="max-width:82ch;margin-bottom:12px;">' +
@@ -42867,21 +42895,119 @@ function showCommodityDetail(key) {
   }
 
   /* ── §2 THE LAND — head, honesty gate, controls ──────────────────────── */
+  function harvestRows() {
+    var rows = [];
+    for (var iso in (S.model || {})) {
+      var m = S.model[iso];
+      for (var crop in m) { var c = m[crop]; if (c && c.signal) rows.push({ iso: iso, crop: crop, c: c }); }
+    }
+    rows.sort(function (a, b) { return Math.abs(b.c.yield_pct_per_oni_nino) - Math.abs(a.c.yield_pct_per_oni_nino); });
+    return rows;
+  }
+  /* One country's fitted slopes as a small modelled plate: the figure the
+     harvest story keeps on screen while the reader moves through the stops. */
+  function harvestFigure(iso) {
+    var m = (S.model || {})[iso] || {};
+    var crops = Object.keys(m).map(function (crop) { return { crop: crop, c: m[crop] }; });
+    var sig = crops.filter(function (x) { return x.c && x.c.signal; });
+    var quiet = crops.filter(function (x) { return !(x.c && x.c.signal); }).map(function (x) { return x.crop; });
+    var mx = Math.max.apply(null, sig.map(function (x) {
+      return Math.max(Math.abs(x.c.yield_pct_per_oni_nino || 0), Math.abs(x.c.yield_pct_per_oni_nina || 0)); }).concat([1]));
+    var bar = function (v, k) {
+      var w = Math.round(Math.abs(v || 0) / mx * 100);
+      return '<div class="hs-bar' + (v < 0 ? ' neg' : '') + '" data-k="' + k + '"><b style="width:' + w + '%"></b><i>' + num(v, 1) + '</i></div>';
+    };
+    return plateHead(nameFor(iso), 'Fitted yield change per unit of ONI · FAOSTAT 1961–2024', stamp(metaDate('model')), 'modelled') +
+      '<div class="hs-body">' + (sig.length ? sig.map(function (x) {
+        return '<div class="hs-row"><span class="hs-crop">' + esc(x.crop) + (x.c.enso_specific === false ? '<i>shared with IOD</i>' : '') + '</span>' +
+          bar(x.c.yield_pct_per_oni_nino, 'El Niño') + bar(x.c.yield_pct_per_oni_nina, 'La Niña') + '</div>';
+      }).join('') : '<p class="enso-log">No crop in this country cleared the false-discovery test.</p>') +
+      '<div class="hs-key"><span><b class="k fall"></b>yield falls</span><span><b class="k rise"></b>yield rises</span><span>% of yield per unit of ONI</span></div>' +
+      (quiet.length ? '<p class="hs-quiet">No surviving signal: ' + esc(quiet.join(', ')) + '.</p>' : '') + '</div>' +
+      '<figcaption class="enso-log">Modelled. Bars are the fitted slopes; the country colour on the map is this total rounded to whole percents.</figcaption>';
+  }
   function renderLandHead() {
     var el = document.getElementById('enso-land-head'); if (!el) return;
     var expMeta = S.meta.exp || {};
-    var pairs = Object.keys(S.model || {}).reduce(function (n, iso) {
-      return n + Object.keys(S.model[iso] || {}).filter(function (crop) { return S.model[iso][crop] && S.model[iso][crop].signal; }).length;
-    }, 0);
+    var rows = harvestRows();
+    var pairs = rows.length;
+    /* Stops come from the data: the three largest falls in different countries,
+       the largest rise, and the most certain pair. Nothing here is typed in. */
+    var seen = {}, ex = [];
+    rows.forEach(function (r) { if (r.c.yield_pct_per_oni_nino < 0 && !seen[r.iso] && ex.length < 3) { seen[r.iso] = 1; ex.push({ r: r, kind: 'fall' }); } });
+    var pos = rows.filter(function (r) { return r.c.yield_pct_per_oni_nino > 0 && !seen[r.iso]; })[0];
+    if (pos) { seen[pos.iso] = 1; ex.push({ r: pos, kind: 'rise' }); }
+    var sure = rows.slice().sort(function (a, b) { return (a.c.q_value == null ? 1 : a.c.q_value) - (b.c.q_value == null ? 1 : b.c.q_value); })
+      .filter(function (r) { return !seen[r.iso]; })[0];
+    if (sure) { seen[sure.iso] = 1; ex.push({ r: sure, kind: 'sure' }); }
+    var firstIso = ex.length ? ex[0].r.iso : null;
+    var stop = function (o) {
+      return '<article class="tour-step"' + (o.iso ? ' data-iso="' + esc(o.iso) + '"' : '') + '><span class="tour-eyebrow">' + esc(o.eyebrow) + '</span>' +
+        '<h3>' + o.title + '</h3>' + o.body + '</article>';
+    };
+    var stops = [stop({ iso: firstIso, eyebrow: 'How to read the map', title: 'Two layers, kept apart',
+      body: '<p>The colours are a model: FAOSTAT yields since 1961, fitted country by country to the winter ONI, then drawn at the scenario chosen above the map. ' +
+        'Warm means the fitted yield falls, cool means it rises. No fill means no measured signal, which is not the same as no effect.</p>' +
+        '<p>The hatching is a different kind of claim. It marks where published studies found a link, and it is never mixed into the colours.</p>' })];
+    ex.forEach(function (o, i) {
+      var r = o.r, c = r.c, x = c.yield_pct_per_oni_nino, y = c.yield_pct_per_oni_nina, nm = nameFor(r.iso);
+      var q = c.q_value != null ? c.q_value.toFixed(3) : '—';
+      var lead = o.kind === 'fall'
+        ? 'In ' + esc(nm) + ', each unit of the index has taken about ' + Math.abs(x).toFixed(1) + '% off ' + esc(r.crop) + ' yields in the fitted record' + (i === 0 ? ', the largest El Niño slope in the panel.' : '.')
+        : o.kind === 'rise'
+        ? 'In ' + esc(nm) + ', ' + esc(r.crop) + ' yields have risen about ' + x.toFixed(1) + '% per unit of the index. El Niño does not push every harvest the same way.'
+        : esc(nm) + ' ' + esc(r.crop) + ' is the most statistically certain pair in the panel: ' + num(x, 1) + '% per unit of the index, at q ' + q + '.';
+      stops.push(stop({ iso: r.iso, eyebrow: (i + 1) + ' · ' + nm + ' · ' + r.crop,
+        title: esc(nm) + ' <span class="enso-link-m">' + num(x, 1) + ' %/ONI</span>',
+        body: '<p>' + lead + '</p>' +
+          '<p class="enso-link-e">La Niña slope ' + num(y, 1) + ' %/ONI · q ' + q + ' · ' + esc(c.alignment_basis || '') +
+            (c.mean_production_kt != null ? ' · mean production ' + Math.round(c.mean_production_kt).toLocaleString() + ' kt' : '') + '</p>' +
+          (c.enso_specific === false ? '<p class="enso-link-e">Shared with the Indian Ocean Dipole, so it is not counted as ENSO evidence in the country total.</p>' : '') +
+          '<p><button type="button" class="tour-btn" data-iso="' + esc(r.iso) + '">Show ' + esc(nm) + ' on the map</button></p>' }));
+    });
+    stops.push(stop({ iso: firstIso, eyebrow: 'The other layer', title: 'What published studies add',
+      body: '<p>Hatched regions are findings from the literature, drawn where each study drew them: warm hatching where a study found El Niño cutting output, cool hatching where it found output rising. ' +
+        'They are evidence of a different kind from the fitted colours, so the map never blends the two.</p>' +
+        '<p><button type="button" class="tour-btn" data-act="regions">Show the hatching on the map</button></p>' }));
+    stops.push(stop({ iso: firstIso, eyebrow: 'Before you quote a number', title: 'What the totals can and cannot say',
+      body: '<p>Two things are safe to read from a country colour: which way it moves, and roughly how far. The exact figure is not, and neither is a comparison ' +
+        'between two countries that round to the same number. The per-crop slopes in the table below are the production-ready part.</p><div id="enso-gate"></div>' +
+        '<p class="enso-link-e"><button type="button" class="enso-inline-link" data-act="limits">The eight limits that govern every view in this tab</button></p>' }));
     el.innerHTML = '<div class="enso-section-intro"><div class="enso-section-index">01</div>' +
-      '<h2 class="enso-h">Where it lands on harvests</h2><p class="enso-section-dek enso-cols">The colours are a model: FAOSTAT yields since 1961, ' +
-      'fitted country by country to the winter ONI and drawn at the scenario chosen above. The hatching is different. It marks what published ' +
-      'studies found, and the two are kept apart on purpose. Totals are directional, because the fit has not been checked out of sample. ' +
-      'Pick a country for its crop-by-crop coefficients.</p>' +
+      '<h2 class="enso-h">Where it lands on harvests</h2>' +
       '<div class="enso-section-counts">Fitted crop pairs ' + (S.model ? pairs : 'unavailable') +
       ' · linked countries ' + Object.keys(S.isoIndex || {}).length + ' · aggregate ' +
-      (expMeta.production_ready === true ? 'validated' : expMeta.production_ready === false ? 'directional' : 'unverified') + '</div></div>';
-
+      (expMeta.production_ready === true ? 'validated' : expMeta.production_ready === false ? 'directional' : 'unverified') + '</div></div>' +
+      '<section class="enso-tour enso-harvest-story" id="enso-harvest-story" aria-label="Guided reading of the harvest map">' +
+        '<div class="enso-tour-fig"><figure class="enso-plate" id="enso-harvest-fig"' + (firstIso ? ' data-iso="' + esc(firstIso) + '"' : '') + '>' +
+          (firstIso ? harvestFigure(firstIso) : '') + '</figure></div>' +
+        '<div class="enso-tour-steps">' + stops.join('') + '</div></section>';
+    wireHarvestStory();
+  }
+  function wireHarvestStory() {
+    var fig = document.getElementById('enso-harvest-fig'), story = document.getElementById('enso-harvest-story'); if (!fig || !story) return;
+    var steps = Array.prototype.slice.call(story.querySelectorAll('.tour-step'));
+    var apply = function (step) {
+      steps.forEach(function (x) { x.classList.toggle('active', x === step); });
+      var iso = step.getAttribute('data-iso');
+      if (iso && fig.getAttribute('data-iso') !== iso) { fig.innerHTML = harvestFigure(iso); fig.setAttribute('data-iso', iso); }
+    };
+    if (steps.length) apply(steps[0]);
+    story.addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-act],[data-iso].tour-btn'); if (!b) return;
+      var scroller = document.querySelector('#tab-elnino .content-page');
+      var act = b.getAttribute('data-act');
+      if (act === 'limits') { var lim = document.getElementById('enso-limits'); if (lim && scroller) scroller.scrollTo({ top: scroller.scrollTop + lim.getBoundingClientRect().top - 80, behavior: reduced() ? 'auto' : 'smooth' }); var d = lim && lim.querySelector('details'); if (d) d.open = true; return; }
+      if (act === 'regions') { S.showRegions = true; var t = document.getElementById('enso-tog-regions'); if (t) t.checked = true; toggleRegions(); renderLegend(); }
+      else if (b.getAttribute('data-iso')) selectCountry(b.getAttribute('data-iso'), { fly: true });
+      if (scroller) scroller.scrollTo({ top: 0, behavior: reduced() ? 'auto' : 'smooth' });
+    });
+    if (!('IntersectionObserver' in window)) { steps.forEach(function (x) { x.classList.add('active'); }); return; }
+    if (S.harvestIO) S.harvestIO.disconnect();
+    S.harvestIO = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) { if (en.isIntersecting) apply(en.target); });
+    }, { rootMargin: '-42% 0px -45% 0px', threshold: 0 });
+    steps.forEach(function (x) { S.harvestIO.observe(x); });
   }
 
   /* Surface data/enso_exposure.json's own blocking flag instead of painting
@@ -44885,7 +45011,7 @@ function showCommodityDetail(key) {
         'the file failed to load or returned unusable data, not a finding. ' +
         '<button type="button" class="enso-inline-link" onclick="ensoRetry()">Try again</button>' +
       '</div>' : '') + (issues.length ?
-      '<div class="enso-gate" role="status"><b>Check feed freshness and coverage.</b> Collection dates do not change the date of an observation.' +
+      '<div class="enso-gate" role="status"><b>' + issues.length + (issues.length === 1 ? ' feed is' : ' feeds are') + ' past review or empty.</b> Collection dates are not observation dates. ' +
         issues.map(function (k) {
           return feedStamp(k, S.feedNames[k]) + (!hasRows(k) ? '<span>No rows in the loaded feed.</span>' : '');
         }).join('') + '</div>' : '');
