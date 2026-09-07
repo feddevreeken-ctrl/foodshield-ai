@@ -131,8 +131,9 @@ def main() -> int:
 
         page.on("pageerror", lambda e: note(str(e)))
         page.on("console", on_console)
+        # A fetch cut off by the test's own navigation (the live-alerts poll) is not an application error.
         page.on("requestfailed",
-                lambda r: note(f"request failed: {r.failure or ''}", r.url))
+                lambda r: None if 'ERR_ABORTED' in str(r.failure or '') else note(f"request failed: {r.failure or ''}", r.url))
 
         print("\nindex strip — comparability")
         open_panel(page, base)
@@ -449,8 +450,8 @@ def main() -> int:
         labels = page.eval_on_selector_all(
             '.enso-xsec-lead [role="img"], .enso-xsec-refs [role="img"]',
             "els => els.map(e => e.getAttribute('aria-label'))")
-        check("three cross-sections have distinct state descriptions",
-              len(labels) == 3 and len(set(labels)) == 3 and all(labels), str(labels))
+        check("the cross-sections all carry distinct state descriptions",
+              len(labels) >= 3 and len(set(labels)) == len(labels) and all(labels), str(labels))
         page.locator('#viewbtn-ensowater').click()
         page.wait_for_selector('#subview-ensowater.active #enso-c-panama')
         page.locator('#viewbtn-ensowater').focus()
