@@ -51,15 +51,15 @@ NOW_PROBE = """() => {
     const plot = document.querySelector('.enso-strip-plot');
     const lab = document.querySelector('.enso-strip-now');
     if (!svg || !plot || !lab) return null;
-    const line = [...svg.querySelectorAll('line')]
-      .filter(l => l.getAttribute('stroke-dasharray') === '7 4')[0];
+    const line = svg.querySelector('.enso-live-point');
     if (!line) return null;
     const pr = plot.getBoundingClientRect();
     const gr = line.getBoundingClientRect();
+    const pointY = gr.top + gr.height / 2;
     const lr = lab.getBoundingClientRect();
     const ys = [...svg.querySelectorAll('rect')].map(r => +r.getAttribute('y'));
-    return {offset: Math.round((lr.top + lr.height / 2) - gr.top),
-            ruleY: Math.round(gr.top - pr.top),
+    return {offset: Math.round((lr.top + lr.height / 2) - pointY),
+            ruleY: Math.round(pointY - pr.top),
             topBarY: Math.min.apply(null, ys),
             label: lab.textContent};
 }"""
@@ -88,7 +88,7 @@ def serve(port: int) -> socketserver.TCPServer:
 
 def open_panel(page, base: str, tab: str = "elnino"):
     page.goto(f"{base}/index.html?tab={tab}", wait_until="networkidle")
-    page.wait_for_selector("#enso-hero .enso-hero-k, #enso-hero", state="attached")
+    page.wait_for_selector("#enso-hero", state="attached")
     page.wait_for_function(
         "() => document.getElementById('enso-indices')"
         "        && document.getElementById('enso-indices').innerHTML.length > 0",
@@ -105,6 +105,11 @@ def main() -> int:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, channel="chrome")
         page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        # The Quick Start modal and the first-visit hint sit over the nav on a fresh
+        # profile and swallow real clicks; the site stores both opt-outs in localStorage.
+        page.add_init_script(
+            "try { localStorage.setItem('foodshield_skip_intro', '1');"
+            " localStorage.setItem('foodshield_hint_shown', '1'); } catch (e) {}")
         errors: list[str] = []
         # Serving the repo over a plain file server is not production: Vercel's
         # analytics shim does not exist here, and third-party APIs rate-limit a
@@ -166,7 +171,7 @@ def main() -> int:
         band = feed["band"].replace("El Nino", "El Niño").replace("La Nina", "La Niña")
         val = ("%+.2f" % feed["anom"]).replace("-", "−")
         check("hero prints the agency band, not the snapped one",
-              band.lower() in hero.lower() and val in hero, "want %s / %s in: %s" % (band, val, hero[:110]))
+              band.lower() in hero.lower() and val.lower() in hero.lower(), "want %s / %s in: %s" % (band, val, hero[:110]))
 
         print("\nthe record strip is the whole record")
         strip = page.evaluate(STRIP_PROBE)
@@ -175,18 +180,26 @@ def main() -> int:
               bool(strip) and strip["bars"] == hist,
               "%s bars vs %s winters" % (strip and strip["bars"], hist))
         check("the current reading is marked and labelled",
-              bool(strip) and strip["now"] and "now" in strip["now"].lower(),
+              bool(strip) and strip["now"] and feed["season"].lower() in strip["now"].lower() and val in strip["now"],
               str(strip and strip["now"]))
         # preserveAspectRatio="none" stretches glyphs, so no text may live in the SVG
         check("no text inside the stretched chart",
               bool(strip) and strip["textInSvg"] == 0, str(strip and strip["textInSvg"]))
         check("the strip carries an accessible description", bool(strip and strip["hasLabel"]))
 
+        page.wait_for_timeout(1100)  # opening plot animation has completed
         marker = page.evaluate(NOW_PROBE)
-        # top:% used to resolve against the whole figure (chart + axis + caption),
-        # putting the label 16px below the rule it names.
-        check("the 'now' label sits on its own rule",
+        # The HTML callout and SVG endpoint must use the same y coordinate.
+        check("the live callout sits on its plotted point",
               bool(marker) and abs(marker["offset"]) <= 3, str(marker))
+
+        axis = page.evaluate("""() => {
+            const h = document.querySelector('#enso-hero');
+            return !!h.querySelector('svg .enso-y-axis') &&
+              [...h.querySelectorAll('.enso-threshold-label')].some(e => e.textContent.includes('+0.5 El Niño threshold')) &&
+              [...h.querySelectorAll('.enso-threshold-label')].some(e => e.textContent.includes('−0.5 La Niña threshold'));
+        }""")
+        check("ONI hero has a y-axis and both labelled thresholds", axis)
 
         # A ceiling check against live data proves nothing: today's reading and the
         # record both sit under the old fixed 2.6 axis, so a clamped chart passes it
@@ -208,7 +221,7 @@ def main() -> int:
         try:
             open_panel(page, base)
             page.wait_for_selector(".enso-strip", timeout=20_000)
-            page.wait_for_timeout(600)
+            page.wait_for_timeout(1100)
             spiked = page.evaluate(NOW_PROBE)
         finally:
             page.unroute("**/data/enso.json")
@@ -382,25 +395,42 @@ def main() -> int:
         page.wait_for_selector(".enso-bul", timeout=20_000)
 
         print("\nlayout")
+        # Plate grammar: bulletin rows carry an agency column and the indices
+        # comparison sits at its plate's inner edge, so the tab no longer has one
+        # global text edge. Text inside each container must still share one edge.
         edges = page.evaluate("""() => {
-            const host = document.querySelector('.enso-panel') || document.body;
-            const col = host.getBoundingClientRect().left;
-            const sel = '.enso-idx-cmp-b,.enso-idx-cmp-h,.enso-idx-grp-h b,.enso-bul-k,.enso-bul-sub';
-            return [...new Set([...document.querySelectorAll(sel)].map(n => {
-              const r = n.getBoundingClientRect(), cs = getComputedStyle(n);
-              return Math.round(r.left + parseFloat(cs.paddingLeft) + parseFloat(cs.borderLeftWidth) - col);
-            }))];
+            const groups = {
+              bulletins: ['.enso-bul .enso-bul-k', '.enso-bul .enso-bul-sub'],
+              indices:   ['.enso-idx-cmps .enso-idx-cmp-h', '.enso-idx-cmps .enso-idx-cmp-b'],
+            };
+            const out = {};
+            for (const [name, sels] of Object.entries(groups)) {
+              const seen = new Set();
+              for (const sel of sels) for (const n of document.querySelectorAll(sel)) {
+                if (!n.offsetParent) continue;            // hidden (closed details, other view)
+                const r = n.getBoundingClientRect(), cs = getComputedStyle(n);
+                seen.add(Math.round(r.left + parseFloat(cs.paddingLeft) + parseFloat(cs.borderLeftWidth)));
+              }
+              out[name] = [...seen];
+            }
+            return out;
         }""")
-        check("boxed text shares one left edge", len(edges) == 1, str(edges))
+        check("text inside each container shares one left edge",
+              all(len(v) <= 1 for v in edges.values()) and len(edges["bulletins"]) == 1, str(edges))
         desktop_ok = page.evaluate(
             "() => document.documentElement.scrollWidth <= document.documentElement.clientWidth")
         mobile_overflow = []
+        rounded = []
         page.set_viewport_size({"width": 390, "height": 844})
         for tab in ("elnino", "ensomech", "ensowater", "ensomoney", "ensolive"):
             open_panel(page, base, tab)
             page.wait_for_selector(f"#subview-{tab} .enso-subview-meta")
             page.eval_on_selector_all("#tab-elnino details", "els => els.forEach(e => e.open = true)")
             page.wait_for_timeout(350)
+            rounded.extend(page.evaluate("""() => [...document.querySelectorAll('#tab-elnino *')]
+                .filter(e => { const c = getComputedStyle(e); return [c.borderTopLeftRadius, c.borderTopRightRadius, c.borderBottomLeftRadius, c.borderBottomRightRadius]
+                    .some(r => parseFloat(r) > 0); })
+                .map(e => e.id || e.className).slice(0, 10)"""))
             overflow = page.evaluate("""() => {
                 const selectors = ['html', '#nav', '#enso-view-nav', '#tab-elnino',
                     '#tab-elnino .content-page', '#tab-elnino .subview.active',
@@ -411,6 +441,23 @@ def main() -> int:
             print(f"  390px {tab}: " + (", ".join(overflow) if overflow else "no horizontal overflow"))
             mobile_overflow.extend(f"{tab}: {s}" for s in overflow)
         check("no horizontal overflow", desktop_ok and not mobile_overflow, "; ".join(mobile_overflow))
+
+        check("every element in the El Niño tab has square corners", not rounded, str(rounded))
+        page.set_viewport_size({"width": 1440, "height": 1000})
+        open_panel(page, base, "ensomech")
+        page.wait_for_selector('.enso-xsec-lead')
+        labels = page.eval_on_selector_all(
+            '.enso-xsec-lead [role="img"], .enso-xsec-refs [role="img"]',
+            "els => els.map(e => e.getAttribute('aria-label'))")
+        check("three cross-sections have distinct state descriptions",
+              len(labels) == 3 and len(set(labels)) == 3 and all(labels), str(labels))
+        page.locator('#viewbtn-ensowater').click()
+        page.wait_for_selector('#subview-ensowater.active #enso-c-panama')
+        page.locator('#viewbtn-ensowater').focus()
+        page.keyboard.press('ArrowRight')
+        page.wait_for_selector('#subview-ensomoney.active #enso-c-record')
+        check("view switcher works with clicks and arrow keys",
+              page.locator('#viewbtn-ensomoney').get_attribute('aria-selected') == 'true')
 
         check("no console errors", not errors, "; ".join(errors[:2]))
         browser.close()
