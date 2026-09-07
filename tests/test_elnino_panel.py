@@ -131,6 +131,14 @@ def main() -> int:
 
         print("\nindex strip — comparability")
         open_panel(page, base)
+        switcher = page.locator('#enso-view-nav')
+        in_nav = switcher.evaluate("el => !!el.closest('#nav')")
+        visible_here = switcher.is_visible()
+        page.evaluate("showTab('global')")
+        hidden_elsewhere = not switcher.is_visible()
+        page.evaluate("showTab('elnino')")
+        check("El Nino view switcher belongs to nav and only shows on its host tab",
+              in_nav and visible_here and hidden_elsewhere and switcher.is_visible())
         page.eval_on_selector_all(".enso-idx", "els => els.forEach(e => e.open = true)")
         kinds = page.eval_on_selector_all(
             ".enso-idx-grp-h b", "els => els.map(e => e.textContent)")
@@ -311,7 +319,7 @@ def main() -> int:
             return {
               scenario: pick('#tab-scenario .viewswitch-btn'),
               about:    pick('#tab-about .viewswitch-btn'),
-              elnino:   pick('#tab-elnino .viewswitch-btn'),
+              elnino:   pick('#enso-view-nav .viewswitch-btn'),
               fsBody: root.getPropertyValue('--fs-body').trim(),
               fsMeta: root.getPropertyValue('--fs-meta').trim(),
               fsHead: root.getPropertyValue('--fs-head').trim(),
@@ -384,8 +392,25 @@ def main() -> int:
             }))];
         }""")
         check("boxed text shares one left edge", len(edges) == 1, str(edges))
-        check("no horizontal overflow", page.evaluate(
-            "() => document.documentElement.scrollWidth <= document.documentElement.clientWidth"))
+        desktop_ok = page.evaluate(
+            "() => document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+        mobile_overflow = []
+        page.set_viewport_size({"width": 390, "height": 844})
+        for tab in ("elnino", "ensomech", "ensowater", "ensomoney", "ensolive"):
+            open_panel(page, base, tab)
+            page.wait_for_selector(f"#subview-{tab} .enso-subview-meta")
+            page.eval_on_selector_all("#tab-elnino details", "els => els.forEach(e => e.open = true)")
+            page.wait_for_timeout(350)
+            overflow = page.evaluate("""() => {
+                const selectors = ['html', '#nav', '#enso-view-nav', '#tab-elnino',
+                    '#tab-elnino .content-page', '#tab-elnino .subview.active',
+                    '#tab-elnino .subview.active .enso-tblwrap'];
+                return selectors.filter(s => [...document.querySelectorAll(s)].some(e =>
+                    e.clientWidth && e.scrollWidth > e.clientWidth + 1));
+            }""")
+            print(f"  390px {tab}: " + (", ".join(overflow) if overflow else "no horizontal overflow"))
+            mobile_overflow.extend(f"{tab}: {s}" for s in overflow)
+        check("no horizontal overflow", desktop_ok and not mobile_overflow, "; ".join(mobile_overflow))
 
         check("no console errors", not errors, "; ".join(errors[:2]))
         browser.close()
