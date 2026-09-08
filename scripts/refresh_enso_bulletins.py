@@ -110,7 +110,7 @@ def iri_monthly() -> dict:
     return {
         "agency": "IRI / Columbia",
         "kind": "monthly",
-        "title": m.group(0).strip() + " — ENSO forecast",
+        "title": m.group(0).strip() + " · ENSO forecast",
         "summary": ("The IRI/CPC plume and the consensus probabilistic forecast, issued monthly. "
                     "This is the forecast the page's own outlook language is checked against."),
         "published": pub.isoformat(),
