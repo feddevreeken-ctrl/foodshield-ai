@@ -151,6 +151,31 @@ def wmo_news(limit: int = 3) -> list[dict]:
     return items[:limit]
 
 
+CPC_DISC = "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml"
+
+
+def cpc_monthly() -> dict:
+    """NOAA CPC's ENSO Diagnostic Discussion: the primary monthly bulletin, and
+    the same desk whose ONI and weekly Niño 3.4 drive the hero. Parsed from the
+    page's own markers: the issue date after "issued by", the Alert System
+    Status line, and the first two sentences of the Synopsis."""
+    txt = re.sub(r"\s+", " ", strip_tags(get(CPC_DISC)))
+    m_date = re.search(r"issued by CLIMATE PREDICTION CENTER/NCEP/NWS\s+(\d{1,2} [A-Z][a-z]+ \d{4})", txt)
+    m_stat = re.search(r"ENSO Alert System Status:\s*(.+?)\s+Synopsis:", txt)
+    m_syn = re.search(r"Synopsis:\s*((?:[^.]*?\.){1,2})", txt)
+    if not (m_date and m_stat and m_syn):
+        raise RuntimeError("CPC discussion page shape changed")
+    issued = datetime.strptime(m_date.group(1), "%d %B %Y").replace(tzinfo=timezone.utc)
+    return {
+        "agency": "NOAA CPC",
+        "kind": "monthly",
+        "title": "ENSO Alert System Status: " + m_stat.group(1).strip(),
+        "summary": m_syn.group(1).strip() + " The monthly ENSO Diagnostic Discussion, issued on the second Thursday.",
+        "published": issued.isoformat(),
+        "url": CPC_DISC,
+    }
+
+
 def climate_gov_probe() -> dict:
     """Returns an 'unavailable' record. Kept as a live check, not a wired source."""
     text = strip_tags(get(CG_BLOG))
@@ -174,6 +199,7 @@ def main() -> int:
         except Exception as e:  # noqa: BLE001
             unavailable.append({"key": key, "reason": f"{type(e).__name__}: {e}"[:200]})
 
+    attempt("cpc_monthly", cpc_monthly)
     attempt("bom_weekly", bom_weekly)
     attempt("iri_monthly", iri_monthly)
     attempt("wmo_news", wmo_news, many=True)
@@ -213,7 +239,7 @@ def main() -> int:
         "enso_bulletins.json",
         {"bulletins": items, "unavailable": unavailable,
          "stale_after_days": STALE_DAYS},
-        source="BoM Australia; IRI/Columbia; WMO",
+        source="NOAA CPC; BoM Australia; IRI/Columbia; WMO",
         notes=("Agency products, not press coverage — the news view keeps them in their own "
                "strip. Every item carries the date its agency published it, parsed from the "
                "page; an undated item is dropped rather than stamped with the collection "

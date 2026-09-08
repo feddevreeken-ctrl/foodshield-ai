@@ -384,6 +384,13 @@ TRADE_PRESS_FEEDS = [
     ("Maritime Executive",  "https://maritime-executive.com/articles.rss"),
     ("gCaptain",            "https://gcaptain.com/feed/"),
     ("Hellenic Shipping News", "https://www.hellenicshippingnews.com/feed/"),
+    # v9-07 — three science/climate desks verified live on 7 Sep 2026 (200,
+    # fresh items, robots allow the feed). They carry the ENSO science and the
+    # regional harvest reporting the trade press does not: Carbon Brief and
+    # Yale E360 on the event itself, Phys.org Earth on agency press releases.
+    ("Carbon Brief",        "https://www.carbonbrief.org/feed/"),
+    ("Yale Environment 360", "https://e360.yale.edu/feed.xml"),
+    ("Phys.org Earth",      "https://phys.org/rss-feed/earth-news/"),
 ]
 
 # Tier 2 — general wires. Low relevance density (5-30%) but high authority and
@@ -430,6 +437,8 @@ INSTITUTIONAL_FEEDS = [
     ("FAO Newsroom",        "https://www.fao.org/feeds/fao-newsroom-rss"),
     ("ReliefWeb",           "https://reliefweb.int/updates/rss.xml?view=headlines"),
     ("European Commission", "https://ec.europa.eu/commission/presscorner/api/rss?language=en"),
+    # v9-07 — Copernicus C3S: monthly climate bulletins, verified live 7 Sep 2026.
+    ("Copernicus C3S",      "https://climate.copernicus.eu/rss.xml"),
 ]
 
 ALL_FEEDS = ([(l, u, "trade_press") for l, u in TRADE_PRESS_FEEDS]

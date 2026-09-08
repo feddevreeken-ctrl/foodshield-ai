@@ -11108,6 +11108,12 @@ table.enso-tbl thead th:first-child { z-index:3; }
 #tab-elnino .enso-two > .enso-plate { margin:0; }
 #tab-elnino .enso-after .enso-two { margin-top:0; }
 #tab-elnino .enso-after > .enso-gate { margin:24px 0 0; }
+/* Map annotations: a plate-style card in open water, hairline leader to the place. */
+#tab-elnino .enso-anno { width:176px; background:rgba(11,16,23,.94); border:1px solid var(--grid); border-radius:0; padding:8px 10px; box-shadow:none; backdrop-filter:none; }
+#tab-elnino .enso-anno b { display:block; font:500 10.5px/1.4 'Geist Mono',monospace; letter-spacing:.02em; color:var(--t1); text-transform:none; margin-bottom:3px; }
+#tab-elnino .enso-anno span { font-size:11px; line-height:1.45; color:var(--t2); }
+#tab-elnino .enso-anno-left { border-right:1px solid var(--ink); }
+#tab-elnino .enso-anno-right { border-left:1px solid var(--ink); }
 #tab-elnino #enso-world-plate { border-style:dashed; }
 #tab-elnino .enso-world-map { position:relative; background:var(--plate); min-height:120px; }
 #tab-elnino .enso-world-map svg { display:block; width:100%; height:auto; }
@@ -42400,7 +42406,8 @@ function showCommodityDetail(key) {
           '<span class="enso-plate-date">observed · read ' + esc(stamp(metaDate('enso'))) + '</span></div>' +
         '<div class="enso-oni-chart">' + recordStrip(e.history || [], L.anom) + '</div>' +
         '<figcaption class="enso-log">' + esc(logs.join(' · ')) +
-          '<span>+ is warmer than the 1991–2020 base; on its own it says nothing about food.</span></figcaption>' +
+          '<span>+ is warmer than the 1991–2020 base; on its own it says nothing about food.</span>' +
+          '<span>NOAA CPC publishes the weekly Niño 3.4 on Mondays and the ONI monthly; this page pulls both every six hours and re-reads them while it is open.</span></figcaption>' +
       '</figure><div class="enso-prose enso-hero-note"><div>' +
         '<p>This page follows that number downstream. 01 shows where a model fitted to FAOSTAT yields says it lands on harvests, kept apart from what published studies found. ' +
         '02 is the mechanism the agencies describe. 03 is the canal and the rivers, 04 is prices, and 05 is what was reported this week.</p>' +
@@ -42842,6 +42849,23 @@ function showCommodityDetail(key) {
   }
   /* The tour: the figure stays on screen; the step under the reader's eye
      picks the plate state and lights a window on the drawing. */
+  /* An open tab should not go stale: every 30 minutes, while the El Niño tab
+     is visible, re-read data/enso.json (cache bypassed) and, if NOAA's numbers
+     have moved through the refresh, reload the whole module. */
+  function ensoPoll() {
+    if (S.pollTimer) return;
+    S.pollTimer = setInterval(async function () {
+      try {
+        var tab = document.getElementById('tab-elnino');
+        if (document.visibilityState !== 'visible' || !tab || !tab.classList.contains('active')) return;
+        var r = await fetch('data/enso.json', { cache: 'no-store' }); if (!r.ok) return;
+        var j = await r.json(); var stamp = j && j._meta && j._meta.generated_at;
+        if (stamp && S.meta && S.meta.enso && S.meta.enso.generated_at && stamp !== S.meta.enso.generated_at) {
+          if (typeof ensoRetry === 'function') ensoRetry();
+        }
+      } catch (e) { /* a failed poll changes nothing; the next one will try again */ }
+    }, 30 * 60 * 1000);
+  }
   function wireTour() {
     var fig = document.getElementById('enso-tour-fig'); if (!fig) return;
     var steps = Array.prototype.slice.call(document.querySelectorAll('#enso-tour .tour-step'));
@@ -43661,11 +43685,11 @@ function showCommodityDetail(key) {
      defend, sited on the place it belongs to — the map should argue, not just
      colour in. Hidden on narrow screens where they would collide. */
   var ANNOTATIONS = [
-    { at: [38.5, -98.4], label: [46, -46], side: 'right', t: 'KANSAS',
+    { at: [38.5, -98.4], label: [40, -128], side: 'left', t: 'Kansas',
       d: 'El Niño cuts winter-wheat abandonment 3pp. US wheat +4.4%/ONI, the most statistically significant result in the panel (q<0.0001), though not the largest.' },
-    { at: [-28.6, 26.2], label: [-26, 62], side: 'right', t: 'FREE STATE',
+    { at: [-28.6, 26.2], label: [-33, 58], side: 'right', t: 'Free State',
       d: 'South African maize −21%/ONI. Zimbabwe −27.6%. The best-evidenced El Niño food signal there is.' },
-    { at: [9.08, -79.68], label: [-14, -120], side: 'right', t: 'GATÚN',
+    { at: [9.08, -79.68], label: [-19, -116], side: 'right', t: 'Gatún',
       d: 'Rainfall 34% below normal. Slots cut to 32/day from 1 Sept 2026.' }
   ];
   /* The text sits in open water and a hairline runs to the place it describes.
@@ -43673,10 +43697,10 @@ function showCommodityDetail(key) {
   function drawAnnotations() {
     ANNOTATIONS.forEach(function (a) {
       L.polyline([a.label, a.at], {
-        color: '#4a4a5a', weight: 0.8, opacity: .75, dashArray: '2 3', interactive: false
+        color: '#e6e3da', weight: 0.7, opacity: .55, interactive: false
       }).addTo(S.map);
-      L.circleMarker(a.at, { radius: 2.2, color: '#8b8980', weight: 1,
-        fillColor: '#ebe9e2', fillOpacity: .9, interactive: false }).addTo(S.map);
+      L.circleMarker(a.at, { radius: 2.6, color: '#e6e3da', weight: 1,
+        fillColor: '#0b1017', fillOpacity: 1, interactive: false }).addTo(S.map);
       L.marker(a.label, {
         interactive: false,
         /* Leaflet z-orders markers by latitude, so the Tropic of Cancer label at
@@ -45243,6 +45267,7 @@ function showCommodityDetail(key) {
       skeleton();
       if (!S.loading) S.loading = load();
       await S.loading; S.ready = true; S.loading = null;
+      ensoPoll();
       /* The live observation chooses the nearest published step during load.
          Re-apply a shared URL scenario after that step is derived so a deep
          link remains an explicit what-if instead of silently becoming today. */
