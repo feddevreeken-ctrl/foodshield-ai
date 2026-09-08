@@ -11048,6 +11048,8 @@ table.enso-tbl thead th:first-child { z-index:3; }
 #tab-elnino .hs-bar { position:relative; height:24px; background:rgba(235,233,226,.06); }
 #tab-elnino .hs-bar b { display:block; height:100%; background:var(--cool); opacity:.85; }
 #tab-elnino .hs-bar.neg b { background:var(--warm); }
+#tab-elnino .hs-bar.warm b { background:var(--warm); }
+#tab-elnino .hs-bar.cool b { background:var(--cool); }
 #tab-elnino .hs-bar::before { content:attr(data-k); position:absolute; left:4px; top:4px; padding:0 4px; font:9.5px/16px 'Geist Mono',monospace; color:var(--t1); background:rgba(11,16,23,.62); }
 #tab-elnino .hs-bar i { position:absolute; right:6px; top:0; font:11px/24px 'Geist Mono',monospace; color:var(--t1); font-style:normal; font-variant-numeric:tabular-nums; }
 #tab-elnino .hs-key { display:flex; flex-wrap:wrap; gap:6px 18px; margin:14px 0 2px; font:10.5px/1.5 'Geist Mono',monospace; color:var(--t3); }
@@ -11114,6 +11116,19 @@ table.enso-tbl thead th:first-child { z-index:3; }
 #tab-elnino .enso-anno span { font-size:11px; line-height:1.45; color:var(--t2); }
 #tab-elnino .enso-anno-left { border-right:1px solid var(--ink); }
 #tab-elnino .enso-anno-right { border-left:1px solid var(--ink); }
+#tab-elnino .money-fig-row { margin:0 0 12px; font-size:13px; line-height:1.5; color:var(--t1); }
+#tab-elnino .money-fig-row i { display:block; font:10.5px/1.5 'Geist Mono',monospace; color:var(--t3); font-style:normal; }
+#tab-elnino .money-two { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+#tab-elnino .money-side { display:block; font:600 13px/1.4 'Geist',sans-serif; color:var(--t1); margin-bottom:8px; }
+#tab-elnino .hs-row.money-one { grid-template-columns:120px minmax(0,1fr); }
+#tab-elnino .live-kv { align-items:flex-start; }
+#tab-elnino .live-kv span:last-child { font-family:'Geist',sans-serif; text-align:right; font-size:12px; }
+#tab-elnino .live-kv a { color:var(--t1); text-decoration:none; }
+#tab-elnino .live-kv a:hover { text-decoration:underline; }
+#tab-elnino .enso-live-full { margin:0 24px; }
+#tab-elnino .enso-live-full > h2 { display:none; }
+#tab-elnino .plate-body .enso-rail-list { margin:0; }
+@media (max-width:980px){ #tab-elnino .money-two { grid-template-columns:1fr; } #tab-elnino .enso-live-full { margin:0 16px; } }
 #tab-elnino #enso-world-plate { border-style:dashed; }
 #tab-elnino .enso-world-map { position:relative; background:var(--plate); min-height:120px; }
 #tab-elnino .enso-world-map svg { display:block; width:100%; height:auto; }
@@ -44299,6 +44314,80 @@ function showCommodityDetail(key) {
     var out = '<div class="enso-after-h enso-view-open"><h2 class="enso-h">Prices and the historical record</h2>' +
       '<p class="enso-dek enso-cols">' + esc((S.meta.econ || {}).headline || '') + ' The chapters below run from what the record shows, through what models estimate and where they disagree, to the markets where the damage actually lands.</p></div>';
 
+    /* The story: six stops with a data-drawn figure each; the chapters below are the evidence in full. */
+    var figs = {};
+    /* Price plates: a rise is warm, a fall is cool (the harvest plates run the other way, where warm is a yield loss). */
+    var bar = function (v, k, mx) { var w = Math.round(Math.abs(v || 0) / (mx || 1) * 100); return '<div class="hs-bar ' + (v > 0 ? 'warm' : 'cool') + '" data-k="' + esc(k) + '"><b style="width:' + w + '%"></b><i>' + num(v, 1) + '</i></div>'; };
+    var peaks = rec.peaks || [];
+    if (peaks.length) {
+      var pm = Math.max.apply(null, peaks.map(function (q) { return Math.max(Math.abs(q.prev6m || 0), Math.abs(q.yoy || 0)); }).concat([1]));
+      figs.record = plateHead('Agricultural prices around seven El Niño peaks', 'World Bank Commodity Markets Outlook · % change · two windows', readOn, 'observed') +
+        '<div class="plate-body">' + peaks.map(function (q) {
+          return '<div class="hs-row"><span class="hs-crop">' + esc(q.episode) + '</span>' + bar(q.prev6m, 'vs previous 6 months', pm) + bar(q.yoy, 'vs a year earlier', pm) + '</div>';
+        }).join('') + '<div class="hs-key"><span><b class="k rise"></b>index fell</span><span><b class="k fall"></b>index rose</span><span>% change in the agricultural price index</span></div></div>' +
+        '<figcaption class="enso-log">Observed. Only 2002-03 rises on both windows; the three strongest events all fall.</figcaption>';
+    }
+    if (E.ffpi && E.ffpi.series) {
+      var lt2 = S.ffpi && S.ffpi.latest;
+      figs.index = plateHead('The FAO Food Price Index at each peak, and today', 'FAO · annual averages · 2014–2016 = 100', readOn, 'observed') +
+        '<div class="plate-body">' + E.ffpi.series.map(function (r) {
+          return '<div class="enso-kv"><span>' + esc(String(r.year)) + ' · ' + esc(r.event || '') + '</span><span>' + esc(String(r.nominal)) + ' nominal · ' + esc(String(r.real)) + ' real</span></div>';
+        }).join('') + (lt2 ? '<div class="enso-kv" style="color:var(--t1)"><span>' + esc(lt2.month) + ' · today</span><span>' + esc(String(lt2.fpi)) + ' nominal</span></div>' : '') + '</div>' +
+        '<figcaption class="enso-log">Observed. Points, not a line: the years between events are real gaps.</figcaption>';
+    }
+    if ((mod.rows || []).length) {
+      figs.models = plateHead('What published models estimate', 'Peer-reviewed and institutional models', readOn, 'published') +
+        '<div class="plate-body">' + mod.rows.slice(0, 4).map(function (r) {
+          return '<p class="money-fig-row"><span>' + esc(String(r.finding).length > 150 ? String(r.finding).slice(0, 147) + '…' : r.finding) + '</span><i>' + esc(r.source) + '</i></p>';
+        }).join('') + '</div><figcaption class="enso-log">Published. Conditional averages; each row carries its own caveat in the evidence below.</figcaption>';
+    }
+    if ((con.positions || []).length) {
+      figs.disagreement = plateHead('Two positions on the same events', 'The literature’s open disagreement', readOn, 'published') +
+        '<div class="plate-body money-two">' + con.positions.map(function (q) {
+          return '<div><b class="money-side">' + esc(q.side) + '</b>' + (q.figures || []).slice(0, 3).map(function (f) {
+            return '<div class="enso-kv"><span>' + esc(f.k) + '</span><span>' + esc(f.v) + '</span></div>'; }).join('') + '</div>';
+        }).join('') + '</div><figcaption class="enso-log">Published. They disagree on the sign for the United States; this page shows both and picks neither.</figcaption>';
+    }
+    var rt0 = S.rtfp || {};
+    var rtTop = Object.keys(rt0).map(function (iso) { return { iso: iso, v: rt0[iso] && rt0[iso].food_inflation_pct }; })
+      .filter(function (x) { return typeof x.v === 'number'; }).sort(function (a, b) { return b.v - a.v; }).slice(0, 8);
+    if (rtTop.length) {
+      var rm = Math.max.apply(null, rtTop.map(function (x) { return Math.abs(x.v); }).concat([1]));
+      figs.local = plateHead('Domestic food inflation, highest eight', 'World Bank Real-Time Food Prices via HDX · % year on year', stamp(metaDate('rtfp')), 'observed') +
+        '<div class="plate-body">' + rtTop.map(function (x) {
+          return '<div class="hs-row money-one"><span class="hs-crop">' + esc(nameFor(x.iso)) + '</span>' + bar(x.v, 'food inflation', rm) + '</div>';
+        }).join('') + ((loc.cases || []).length ? '<p class="hs-quiet">Past events: ' + esc(loc.cases.slice(0, 3).map(function (c) { return c.place + ' ' + c.metric; }).join(' · ')) + '.</p>' : '') + '</div>' +
+        '<figcaption class="enso-log">Observed at the market, never inferred from the ONI.</figcaption>';
+    }
+    var insR = (E.insecurity && E.insecurity.rows) || [];
+    if (insR.length) {
+      figs.people = plateHead('Need reported after past events', 'Appeal targets, IPC projections and assessed need', readOn, 'published') +
+        '<div class="plate-body">' + insR.slice(0, 6).map(function (r) {
+          return '<div class="enso-kv"><span>' + esc(r.event) + ' · ' + esc(r.place) + '</span><span>' + esc(r.figure) + '</span></div>';
+        }).join('') + '</div><figcaption class="enso-log">Reported, not counted.</figcaption>';
+    }
+    var mStop = function (key, n, eyebrow, title, body) {
+      if (!figs[key]) return '';
+      return '<article class="tour-step" data-fig="' + key + '"><span class="tour-eyebrow">' + esc(eyebrow) + '</span><h3>' + esc(title) + '</h3><p>' + body + '</p>' +
+        '<p><button type="button" class="tour-btn" data-act="chapter" data-n="' + n + '">Read the evidence</button></p></article>';
+    };
+    var stops = [
+      mStop('record', 1, '1 · the record', 'World prices have barely moved', esc(rec.claim || '')),
+      mStop('index', 1, '2 · the index', 'The FAO index at each peak, and today', esc(E.ffpi && E.ffpi.note || '') + (S.ffpi && S.ffpi.latest ? ' ' + esc(highestPriceIndex()) : '')),
+      mStop('models', 2, '3 · the models', 'What an average effect looks like', esc(mod.preamble || '')),
+      mStop('disagreement', 3, '4 · the disagreement', 'Where the literature splits', esc(con.preamble || '')),
+      mStop('local', 4, '5 · where it lands', 'Local prices carry the damage', esc(loc.preamble || '')),
+      mStop('people', 5, '6 · the people', 'Need reported after past events', esc((E.insecurity && E.insecurity.measure_note) || 'Appeal targets, IPC projections and assessed need, published by the responding agencies at the time.'))
+    ].join('');
+    var firstFig = Object.keys(figs)[0];
+    if (firstFig) {
+      out += '<section class="enso-tour enso-money-story" id="enso-money-story" aria-label="The price question in six stops">' +
+        '<div class="enso-tour-fig"><figure class="enso-plate" id="enso-money-fig" data-fig="' + firstFig + '">' + figs[firstFig] + '</figure></div>' +
+        '<div class="enso-tour-steps">' + stops + '</div></section>' +
+        '<div class="enso-after-h" style="margin:72px 24px 0"><h2 class="enso-h">The evidence in full</h2></div>';
+      S.moneyFigs = figs;
+    }
+
     /* Chapter 1: the record */
     out += chapter('1 · the record', rec.title || 'What the record shows', esc(rec.claim || '')) +
       '<figure class="enso-plate">' + plateHead('Seven El Niño peaks and the agricultural price index', 'World Bank Commodity Markets Outlook · event study', readOn, 'observed') +
@@ -44402,6 +44491,28 @@ function showCommodityDetail(key) {
     if (loc.conditioning) out += '<p class="enso-dek enso-cols" style="margin-top:24px">' + esc(loc.conditioning) + '</p>';
     out += '</div>';
     el.innerHTML = out;
+    wireFigStory('enso-money-story', 'enso-money-fig', S.moneyFigs || {}, function (b) {
+      var n = parseInt(b.getAttribute('data-n'), 10);
+      var target = n === 5 ? document.querySelector('#enso-people .enso-after') : document.querySelector('#enso-money .enso-after:nth-of-type(' + n + ')');
+      var sc = document.querySelector('#tab-elnino .content-page');
+      if (target && sc) sc.scrollTo({ top: sc.scrollTop + target.getBoundingClientRect().top - 80, behavior: reduced() ? 'auto' : 'smooth' });
+    });
+  }
+  /* Shared wiring for the figure stories: the figure swaps by data-fig, the
+     step under the reader's eye is active, and a button handler is optional. */
+  function wireFigStory(storyId, figId, figs, onButton) {
+    var fig = document.getElementById(figId), story = document.getElementById(storyId); if (!fig || !story) return;
+    var steps = Array.prototype.slice.call(story.querySelectorAll('.tour-step'));
+    var apply = function (step) {
+      steps.forEach(function (x) { x.classList.toggle('active', x === step); });
+      var key = step.getAttribute('data-fig');
+      if (key && figs[key] && fig.getAttribute('data-fig') !== key) { fig.innerHTML = figs[key]; fig.setAttribute('data-fig', key); }
+    };
+    if (steps.length) apply(steps[0]);
+    if (onButton) story.addEventListener('click', function (ev) { var b = ev.target.closest('.tour-btn'); if (b) onButton(b); });
+    if (!('IntersectionObserver' in window)) { steps.forEach(function (x) { x.classList.add('active'); }); return; }
+    var io = new IntersectionObserver(function (entries) { entries.forEach(function (en) { if (en.isIntersecting) apply(en.target); }); }, { rootMargin: '-42% 0px -45% 0px', threshold: 0 });
+    steps.forEach(function (x) { io.observe(x); });
   }
 
   /* ── §5 THE PEOPLE ───────────────────────────────────────────────────── */
@@ -44855,11 +44966,67 @@ function showCommodityDetail(key) {
         }).join('') + '</ul>' + prov('IFPRI Export Restrictions Tracker', 'sourced'));
     }
 
-    var out = '<div class="enso-live-grid">' +
-      '<div class="enso-live-main">' + main + '</div>' +
-      '<aside class="enso-live-rail" aria-label="Context for the headlines">' + rail + '</aside>' +
-    '</div>';
+    /* The story: six feeds, each a stop with its own plate on the left. The
+       full story list and the agency block follow as the evidence in full. */
+    var lf = {};
+    var B0 = S.bulletins;
+    if (B0 && B0.bulletins && B0.bulletins.length) {
+      lf.agencies = plateHead('From the agencies themselves', 'NOAA CPC · BoM · IRI · WMO, their own dated products', stamp(metaDate('bulletins')), 'observed') +
+        '<div class="plate-body">' + B0.bulletins.slice(0, 6).map(function (b) {
+          return '<div class="enso-kv live-kv"><span>' + esc(b.agency) + ' · ' + esc(String(b.published).slice(0, 10)) + '</span><span><a href="' + esc(safeUrl(b.url)) + '" target="_blank" rel="noopener">' + esc(b.title) + '</a></span></div>';
+        }).join('') + '</div><figcaption class="enso-log">Observed. Bulletins past their cadence are flagged stale in the block below, not hidden.</figcaption>';
+    }
+    lf.wire = plateHead('Where the coverage is pointing', (S.meta.news && S.meta.news.source ? esc(S.meta.news.source) : 'publisher feeds') + ' · keyword-matched', stamp(metaDate('news')), 'observed') +
+      '<div class="plate-body">' + consensusBlock(news, true) + '</div><figcaption class="enso-log">Coverage follows news cycles, not exposure.</figcaption>';
+    if (hot.length) {
+      var maj2 = hot.filter(function (h) { return h.a.hotspot_code === 2; }).length;
+      lf.hotspots = plateHead('Agricultural hotspots', 'JRC ASAP · crop and rangeland biomass below normal', stamp(metaDate('asap')), 'observed') +
+        '<div class="plate-body"><ul class="enso-rail-list">' + hot.slice(0, 10).map(function (h) {
+          return '<li><button class="enso-chip" onclick="ensoFocus(\'' + esc(h.iso) + '\')">' + esc(nameFor(h.iso)) + '</button><span style="color:' + (h.a.hotspot_code === 2 ? RAMP[3] : RAMP[1]) + '">' + esc(h.a.hotspot_label) + '</span></li>';
+        }).join('') + '</ul></div><figcaption class="enso-log">' + maj2 + ' major, ' + (hot.length - maj2) + ' standard, of ' + Object.keys(S.asap || {}).length + ' assessed.</figcaption>';
+    }
+    if (gd.length) {
+      lf.alerts = plateHead('Drought, flood and cyclone alerts', 'GDACS (JRC and UN) · teleconnection countries only', stamp(metaDate('gdacs')), 'observed') +
+        '<div class="plate-body"><ul class="enso-rail-list">' + gd.slice(0, 10).map(function (e) {
+          return '<li><button class="enso-chip" onclick="ensoFocus(\'' + esc(e.iso3) + '\')">' + esc(e.country || e.iso3) + '</button><span style="color:' + (e.alert_level === 'Red' ? RAMP[4] : RAMP[2]) + '">' + esc(e.event_type_label) + ' · ' + esc(e.alert_level) + '</span></li>';
+        }).join('') + '</ul></div><figcaption class="enso-log">A hazard report is not an attribution.' + (gdDropped ? ' ' + gdDropped + ' further live alert' + (gdDropped > 1 ? 's' : '') + ' outside these countries excluded.' : '') + '</figcaption>';
+    }
+    if (rel.length) {
+      lf.events = plateHead('Humanitarian events', 'ReliefWeb · teleconnection countries only', stamp(metaDate('relief')), 'observed') +
+        '<div class="plate-body"><ul class="enso-rail-list enso-rail-links">' + rel.slice(0, 10).map(function (ev) {
+          return '<li><a href="' + esc(ev.url) + '" target="_blank" rel="noopener">' + esc(ev.title) + '</a><span>' + esc(ev.country || ev.iso3) + ' · ' + ago(ev.date) + '</span></li>';
+        }).join('') + '</ul></div><figcaption class="enso-log">' + (relDropped ? relDropped + ' other live events sit outside these countries.' : 'All live events shown.') + '</figcaption>';
+    }
+    if (tr.length) {
+      lf.policy = plateHead('Export restrictions', 'IFPRI Export Restrictions Tracker', stamp(metaDate('restrictions')), 'observed') +
+        '<div class="plate-body"><ul class="enso-rail-list">' + tr.slice(0, 10).map(function (r) {
+          return '<li><button class="enso-chip" onclick="ensoFocus(\'' + esc(r.iso) + '\')">' + esc(r.country) + '</button><span>' + esc(r.commodity) + ' · ' + esc(r.measure) + ' <em style="font-style:normal;color:' + (r.status === 'active' ? RAMP[3] : 'var(--t3)') + '">' + esc(r.status) + '</em></span></li>';
+        }).join('') + '</ul></div><figcaption class="enso-log">Trade policy has moved world prices more than the weather has. This is that channel.</figcaption>';
+    }
+    var lStop = function (key, eyebrow, title, body) {
+      if (!lf[key]) return '';
+      return '<article class="tour-step" data-fig="' + key + '"><span class="tour-eyebrow">' + esc(eyebrow) + '</span><h3>' + esc(title) + '</h3>' + body + '</article>';
+    };
+    var namedN = news.filter(function (r) { return r.tier === 'named'; }).length;
+    var lStops = [
+      lStop('agencies', '1 · the agencies', 'What the monitoring bodies say', '<p>Not press. These are the agencies’ own dated products: NOAA CPC’s monthly discussion, BoM’s weekly index, IRI’s forecast plume and WMO’s updates. ' +
+        (B0 && B0.bulletins && B0.bulletins.length ? 'The newest is ' + esc(B0.bulletins[0].agency) + ' on ' + esc(String(B0.bulletins[0].published).slice(0, 10)) + ': ' + esc(B0.bulletins[0].title) + '.' : '') + '</p>'),
+      lStop('wire', '2 · the wire', 'What the wire is saying', '<p>' + (news.length ? news.length + ' of ' + (((S.news || {}).items || []).length) + ' stories in the current cycle qualify, ' + namedN + ' of them name the event outright, and each row in the list below says why it is here. Country tagging is keyword-matched by the collector, not verified.' : 'No matching stories in the current cycle.') + '</p>'),
+      lStop('hotspots', '3 · the fields', 'Where crops are already under stress', '<p>JRC ASAP flags where crop or rangeland biomass is running below normal, assessed monthly from satellite biomass and rainfall. A hotspot is an observation of stress, not an attribution to El Niño.</p>'),
+      lStop('alerts', '4 · the hazards', 'Drought, flood and cyclone alerts', '<p>GDACS alerts are shown only where the event touches a country with a published teleconnection. A hazard report records that a hazard is happening; why is a separate question.</p>'),
+      lStop('events', '5 · the people', 'Humanitarian events', '<p>ReliefWeb’s live events, filtered to the same countries. Appeals and assessments are reported need, not counted need.</p>'),
+      lStop('policy', '6 · the policy', 'Export restrictions', '<p>El Niño years reliably trigger export restrictions, and trade policy has moved world prices more than the weather has. Active measures are marked.</p>')
+    ].join('');
+    var firstL = Object.keys(lf)[0];
+    var out = '<div class="enso-after-h enso-view-open"><h2 class="enso-h">What is being reported now</h2>' +
+      '<p class="enso-dek enso-cols">Everything here is observed and dated, and none of it is attributed to El Niño by this page. A drought alert records that a drought is happening; why is a separate question. Six feeds, one stop each; the full story list and the agency block follow.</p>' +
+      '<div class="enso-section-counts">Stories ' + news.length + ' · agencies ' + ((B0 && B0.bulletins) || []).length + ' · hotspots ' + hot.length + ' · alerts ' + gd.length + ' · events ' + rel.length + ' · restrictions ' + tr.length + '</div></div>' +
+      (firstL ? '<section class="enso-tour enso-live-story" id="enso-live-story" aria-label="Six live feeds"><div class="enso-tour-fig"><figure class="enso-plate" id="enso-live-fig" data-fig="' + firstL + '">' + lf[firstL] + '</figure></div><div class="enso-tour-steps">' + lStops + '</div></section>' : '') +
+      '<div class="enso-after-h" style="margin:72px 24px 0"><h2 class="enso-h">The stories, in full</h2></div>' +
+      '<div class="enso-live-full">' + main + '</div>';
     el.innerHTML = out;
+    S.liveFigs = lf;
+    wireFigStory('enso-live-story', 'enso-live-fig', lf, null);
 
     var pill = document.getElementById('enso-live-count');
     if (pill) {
@@ -45134,6 +45301,7 @@ function showCommodityDetail(key) {
     panel.querySelectorAll('.enso-chart canvas').forEach(function (cv) {
       if (cv.closest('.enso-plate')) return;
       var f = figures[cv.id]; if (!f) return;
+      if (cv.closest('.enso-plate')) return;   /* the view already framed this chart */
       var chart = cv.parentElement, frame = document.createElement('figure');
       frame.className = 'enso-plate is-' + f[3];
       frame.innerHTML = plateHead(f[0], f[1], stamp(metaDate(f[2])), f[3]);
@@ -45145,18 +45313,8 @@ function showCommodityDetail(key) {
         cv.id === 'enso-c-rtfp' ? 'Observation window varies by country; see the source records' : 'Observation years on the horizontal axis');
       frame.appendChild(log);
     });
-    if (S.sub === 'ensomoney') {
-      var money = document.getElementById('enso-money'), lead = money.querySelector('.enso-plate');
-      if (lead && money.firstElementChild !== lead) money.prepend(lead);
-    }
-    if (S.sub === 'ensolive') {
-      var main = panel.querySelector('.enso-live-main'), bul = panel.querySelector('.enso-bul');
-      if (main && bul && !bul.closest('.enso-plate')) {
-        var frame = document.createElement('figure'); frame.className = 'enso-plate is-published';
-        frame.innerHTML = plateHead('Agency bulletin register', 'Monitoring agencies · publication dates on each row', stamp(metaDate('bulletins')), 'published');
-        frame.appendChild(bul); main.prepend(frame);
-      }
-    }
+    /* Economics and Live now lead with their own stories; the earlier
+       "first plate to the top" and "frame the bulletin block" steps are gone. */
     /* Prose has one measure; a diagram or table keeps the full plate width. */
     panel.querySelectorAll('h2').forEach(function (h) {
       if (!h.closest('.enso-prose, .enso-section-intro')) {
@@ -45228,11 +45386,15 @@ function showCommodityDetail(key) {
       ensolive: [['bulletins', 'Agency bulletins'], ['news', 'Newswire'], ['asap', 'Agricultural hotspots'],
         ['gdacs', 'Hazard alerts'], ['relief', 'Humanitarian events'], ['restrictions', 'Policy snapshot']] };
     var panel = document.getElementById('subview-' + S.sub); if (!panel) return;
-    var plate = panel.querySelector('.enso-plate, #enso-mapwrap');
+    /* The stamp line belongs to the view's opening block, never to a story
+       figure: those are swapped as the reader scrolls and would carry it off. */
+    var home = panel.querySelector('.enso-view-open, .enso-tour-open .enso-prose') ||
+      panel.querySelector('#enso-mapwrap') ||
+      panel.querySelector('.enso-plate:not(.enso-tour-fig .enso-plate)');
     var el = panel.querySelector('.enso-subview-meta');
     if (!el) {
       el = document.createElement('div'); el.className = 'enso-subview-meta enso-log';
-      (plate || panel).appendChild(el);
+      (home || panel).appendChild(el);
     }
     el.innerHTML = (sources[S.sub] || []).map(function (x) { return feedStamp(x[0], x[1]); }).join('');
   }
