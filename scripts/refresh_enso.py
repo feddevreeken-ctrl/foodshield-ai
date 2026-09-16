@@ -168,6 +168,45 @@ def main() -> int:
                      f"so ranking a mid-year season against DJF would understate it."),
         },
     }
+    # v84 -- event analogs. Every agency answers the same question in a strong
+    # year: "is this tracking 1997?" That needs the ONI path of past events on
+    # the event's own calendar, MJJ of the onset year through AMJ after the DJF
+    # peak, with the current season on the same axis. Events are chosen by DJF
+    # peak, never by name, so a new record enters the set on its own.
+    order = ["MJJ", "JJA", "JAS", "ASO", "SON", "OND", "NDJ",
+             "DJF", "JFM", "FMA", "MAM", "AMJ"]
+    by_key = {(r["season"], r["year"]): r["anom"] for r in oni}
+
+    def path(peak_year):
+        # DJF is labelled with the January year, so the onset seasons sit in
+        # the year before the peak and the decay seasons in the peak year.
+        return [by_key.get((sn, peak_year - 1 if i < 7 else peak_year))
+                for i, sn in enumerate(order)]
+
+    # The season now under way belongs to the event whose DJF has not arrived
+    # yet, so its peak year is next year's January for seasons before DJF.
+    cur_peak = latest["year"] + 1 if latest["season"] in order[:7] else latest["year"]
+    peaks = sorted((r for r in oni if r["season"] == "DJF" and r["year"] != cur_peak),
+                   key=lambda r: r["anom"], reverse=True)[:5]
+    payload["analogs"] = {
+        "seasons": order,
+        "axis_note": ("Seasons run from MJJ of the onset year to AMJ after the DJF "
+                      "peak. DJF carries the January year, as in CPC's table."),
+        "events": [{"label": f"{r['year'] - 1}-{str(r['year'])[2:]}",
+                    "peak_djf_year": r["year"], "peak": r["anom"],
+                    "path": path(r["year"])} for r in peaks],
+        "current": {"label": f"{cur_peak - 1}-{str(cur_peak)[2:]}",
+                    "peak_djf_year": cur_peak, "path": path(cur_peak)},
+        "selection": "The five largest DJF values in the ONI record, excluding the event now under way.",
+    }
+    # v84 -- the four Nino regions over the last half year, so the east-based
+    # structure can be drawn as a series rather than asserted from one week.
+    payload["weekly_regions"] = {
+        "regions": ["nino12", "nino3", "nino34", "nino4"],
+        "rows": [{"date": r["date"], "nino12": r["nino12_anom"], "nino3": r["nino3_anom"],
+                  "nino34": r["nino34_anom"], "nino4": r["nino4_anom"]} for r in weekly[-26:]],
+        "note": "Weekly anomalies from wksst9120.for, 1991-2020 base, last 26 weeks.",
+    }
     payload["source_url"] = ONI_URL
     write_json("enso.json", payload, source="NOAA CPC",
                notes=("Live ENSO state: ONI series, latest weekly Nino3.4, and the "

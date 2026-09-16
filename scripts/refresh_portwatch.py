@@ -279,6 +279,60 @@ def build():
     return out, latest, lag, cur_start, base_start, base_end, where
 
 
+# v84 -- daily history for the chokepoints the El Nino Shipping view draws, so
+# a lane can show a year of observed transits rather than one 28-day mean. The
+# same daily layer, one bounded query; the 28-day summary above is untouched.
+HISTORY_DAYS = 365
+HISTORY_KEYS = ["suez", "panama", "bosporus", "bab_el_mandeb", "malacca", "hormuz",
+                "cape_of_good_hope", "gibraltar"]
+
+
+def build_history(latest):
+    pids = sorted(pid for pid, slug in SLUGS.items() if slug in HISTORY_KEYS)
+    start = latest - timedelta(days=HISTORY_DAYS - 1)
+    where = (f"date >= DATE '{start}' AND date <= DATE '{latest}' AND portid IN ("
+             + ",".join(f"'{p}'" for p in pids) + ")")
+    fields = "date,portid," + ",".join(f for _, f in SEGMENTS)
+    rows = _paged(DAILY_URL, where, fields, "portid,date")
+    if not rows:
+        raise RuntimeError("daily layer returned 0 rows for the history window")
+    series = {}
+    for r in rows:
+        d = _day(r)
+        slug = SLUGS.get(r.get("portid"))
+        if d is None or not slug:
+            continue
+        s = series.setdefault(slug, {"dates": [], **{k: [] for k, _ in SEGMENTS}})
+        s["dates"].append(d)
+        for k, f in SEGMENTS:
+            v = r.get(f)
+            s[k].append(int(v) if isinstance(v, (int, float)) else None)
+    return {"days": HISTORY_DAYS, "start": start.isoformat(), "end": latest.isoformat(),
+            "segments": [k for k, _ in SEGMENTS], "chokepoints": series}
+
+
+def main_history():
+    try:
+        latest = _latest_date()
+        hist = build_history(latest)
+    except Exception as e:
+        # Keep the last good file: a failed history pull must not blank a year
+        # of observations. run_all's safe_run treats the non-zero exit as a
+        # failure and preserves what is on disk.
+        print(f"[FAIL] PortWatch history: {e}")
+        return 1
+    n = sum(len(s["dates"]) for s in hist["chokepoints"].values())
+    write_json("portwatch_history.json", hist, source=SOURCE,
+               notes=(f"Daily transit counts (total, dry bulk, tanker, container) for "
+                      f"{len(hist['chokepoints'])} chokepoints over the last {HISTORY_DAYS} days, "
+                      "from the same PortWatch daily layer as portwatch.json. Counts are "
+                      "vessel transits per calendar day as PortWatch publishes them; "
+                      "no smoothing is applied here."))
+    print(f"[OK] PortWatch history: {len(hist['chokepoints'])} chokepoints, {n} daily rows, "
+          f"{hist['start']}..{hist['end']}")
+    return 0
+
+
 def main():
     try:
         out, latest, lag, cur_start, base_start, base_end, where = build()

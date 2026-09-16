@@ -57,6 +57,7 @@ import refresh_ndgain
 import refresh_enso
 import refresh_enso_indices
 import refresh_enso_bulletins
+import refresh_sst_anomaly   # v84 -- OISST anomaly grid for the El Nino map
 import refresh_aqueduct
 import refresh_asap
 import refresh_faostat_prodindex
@@ -114,6 +115,8 @@ STEPS = [
     ("ENSO state (CPC)",       refresh_enso.main,               "enso.json"),
     ("ENSO indices",           refresh_enso_indices.main,       "enso_indices.json"),
     ("ENSO bulletins",         refresh_enso_bulletins.main,     "enso_bulletins.json"),
+    # v84 -- the observed SST anomaly field for the El Nino map (OISST via ERDDAP).
+    ("OISST SST anomaly",      refresh_sst_anomaly.main,        "sst_anomaly.json"),
     ("WRI Aqueduct water",     refresh_aqueduct.main,           "aqueduct.json"),
     # v83 — the three feeds that give this dashboard a PRESENT tense. Until now
     # the climate component was baseline hydrology (1979-2019) plus 1991-2020
@@ -126,6 +129,8 @@ STEPS = [
     ("HAPI conflict events",   refresh_hapi_conflict.main,      "hapi_conflict.json"),
     ("WB RTFP food prices",    refresh_rtfp.main,               "rtfp.json"),
     ("IMF PortWatch straits",  refresh_portwatch.main,          "portwatch.json"),
+    # v84 -- a year of daily transits for the lane chokepoints (same layer, own file).
+    ("IMF PortWatch history",  refresh_portwatch.main_history,  "portwatch_history.json"),
     ("INFORM risk index",      refresh_inform.main,             "inform_risk.json"),
     ("WB WGI governance",      refresh_wgi.main,                "wgi.json"),
     ("WB LPI logistics",       refresh_lpi.main,                "lpi.json"),
