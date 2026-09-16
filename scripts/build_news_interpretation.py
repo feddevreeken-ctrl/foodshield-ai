@@ -68,15 +68,20 @@ from _news_taxonomy import COMMODITIES as NEWS_COMMODITIES
 
 OUTPUT = "commodity_interpretation.json"
 
-# Provider registry. Model IDs verified against official docs on 2026-08-04:
-#   groq      console.groq.com/docs/models       -> llama-3.3-70b-versatile (production)
+# Provider registry. Model IDs verified against official docs on 2026-08-04;
+# groq re-verified 2026-09-16 against console.groq.com/docs/deprecations:
+#   groq      console.groq.com/docs/models       -> openai/gpt-oss-120b (production).
+#             llama-3.3-70b-versatile was shut down on 2026-08-16 and the endpoint
+#             has returned 404 since, so every note fell back to the template
+#             while _meta.status still read "ok". Groq names gpt-oss-120b as the
+#             replacement.
 #   gemini    ai.google.dev/gemini-api/docs/models -> gemini-2.5-flash (stable, free tier)
 #   anthropic claude-api skill model catalogue   -> claude-opus-5 ($5/$25 per MTok)
 # Re-verify before changing any of these; do not write model IDs from memory.
 PROVIDERS = {
     "groq": {
         "key_env": "GROQ_API_KEY",
-        "model": "llama-3.3-70b-versatile",
+        "model": "openai/gpt-oss-120b",
         "free_tier": "30 req/min, 1000 req/day, 12k tokens/min, 100k tokens/day",
     },
     "gemini": {
@@ -938,7 +943,13 @@ def call_llm(provider, api_key, system_prompt, user_prompt):
             payload={
                 "model": model,
                 "temperature": 0.2,     # low: this is summarisation, not ideation
-                "max_tokens": 400,
+                # v84 — gpt-oss-120b is a reasoning model: its thinking counts
+                # against max_tokens and comes back in a separate `reasoning`
+                # field. With the old 400-token cap and default effort, 7 of 9
+                # notes returned an EMPTY content string (measured 2026-09-16:
+                # 884 reasoning tokens on a one-sentence prompt; 90 at "low").
+                "reasoning_effort": "low",
+                "max_tokens": 1200,
                 "messages": [{"role": "system", "content": system_prompt},
                              {"role": "user", "content": user_prompt}],
             },
@@ -1378,8 +1389,11 @@ def main():
                "third-party headlines. Text failing validation is replaced by a "
                "deterministic template. Forward-looking language is hedged pathway framing, "
                "not forecast."),
+        # v84 — "ok" only when at least one note actually came from the model.
+        # A configured provider whose every call failed (deprecated model ID,
+        # revoked key) used to report "ok" over nine template notes.
         status=("degraded_inputs" if degraded else
-                ("ok" if provider else "deterministic_only")),
+                ("ok" if model_used else "deterministic_only")),
     )
     print(f"[OK] {model_used}/{len(COMMODITIES)} AI interpretations accepted, "
           f"{rejected} rejected by validation ({forced} caught at the output gate).")
