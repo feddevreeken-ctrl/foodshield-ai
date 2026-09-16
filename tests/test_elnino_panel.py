@@ -478,7 +478,7 @@ def main() -> int:
         open_panel(page, base)
         lens_results, headings, frames = [], [], []
         page.evaluate("window._stageAMap = document.getElementById('enso-map'); window._stageAMapId = window._stageAMap._leaflet_id")
-        for tab, mode in (("elnino", "sst"), ("ensoharvest", "impact"), ("ensowater", "none"), ("ensomoney", "none"), ("ensolive", "asap")):
+        for tab, mode in (("elnino", "sst"), ("ensoharvest", "impact"), ("ensowater", "none"), ("ensomoney", "ipc"), ("ensolive", "asap")):
             page.evaluate("tab => showTab(tab)", tab)
             page.wait_for_selector(f'#subview-{tab}.active .enso-subview-meta')
             lens_results.append(page.input_value('#enso-mode') == mode
@@ -524,6 +524,87 @@ def main() -> int:
         check("retry rebuilds one map and preserves explicit selections",
               page.locator('#enso-map .leaflet-map-pane').count() == 1
               and page.input_value('#enso-level') == '-1.5' and page.input_value('#enso-mode') == 'crop')
+
+        print("\nstage B instruments and consolidated plates")
+        page.evaluate("showTab('ensoharvest')")
+        page.wait_for_selector('#subview-ensoharvest.active #enso-harvest-fig')
+        check("nine scenario rungs retain the observed marker and both instrument rows",
+              page.locator('[data-native="enso-level"]').count() == 9
+              and page.locator('.is-observed-rung').count() == 1
+              and page.locator('.enso-instrument-row').count() == 2)
+        page.locator('[data-native="enso-level"][data-value="-1.5"]').click()
+        page.locator('[data-native="enso-mode"][data-value="crop"]').click()
+        check("visible scenario and layer buttons drive the native change handlers",
+              page.input_value('#enso-level') == '-1.5' and page.input_value('#enso-mode') == 'crop'
+              and page.locator('[data-native="enso-level"][data-value="-1.5"]').get_attribute('aria-pressed') == 'true'
+              and 'La Ni' in page.locator('#enso-legend').inner_text())
+        country_name = page.locator('#enso-country option[value="ZWE"]').text_content()
+        page.locator('#enso-country-search').fill(country_name)
+        page.wait_for_function("() => document.getElementById('enso-harvest-fig').dataset.iso === 'ZWE'")
+        check("country search synchronises native selection, bars and coefficients",
+              page.input_value('#enso-country') == 'ZWE'
+              and country_name in page.locator('#enso-detail').inner_text()
+              and page.locator('#enso-harvest-fig .hs-bar.neg[data-k="La Niña"]').count() > 0)
+        page.evaluate("ensoFocus('USA')")
+        page.wait_for_function("() => document.getElementById('enso-harvest-fig').dataset.iso === 'USA'")
+        check("ensoFocus updates both harvest surfaces without a scroll tour",
+              page.input_value('#enso-country') == 'USA'
+              and page.locator('.enso-harvest-pair #enso-coeffs #enso-detail').count() == 1
+              and page.locator('#enso-harvest-story').count() == 0)
+        grouped = page.evaluate("""() => {
+            const rows = [...document.querySelectorAll('#enso-calendar .cal-row:not(.cal-head)')];
+            const order = ['harvesting now','planting','in the ground','between seasons'];
+            const ranks = rows.map(r => order.indexOf(r.dataset.st));
+            return document.querySelectorAll('#enso-calendar .cal-group').length === 4
+                && ranks.every((v, i) => v >= 0 && (!i || v >= ranks[i - 1]))
+                && [...document.querySelectorAll('#enso-calendar .cal-group b')]
+                     .reduce((n, el) => n + Number(el.textContent), 0) === rows.length;
+        }""")
+        months = page.locator('#enso-calendar .cal-head .cal-c').all_text_contents()
+        check("calendar groups retain counts and explicit Jan to Dec columns",
+              grouped and months == ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'])
+        register_count = page.evaluate("async () => (await (await fetch('data/enso_econ.json')).json()).data.do_not_publish.rows.length")
+        check("shared How to read retains all eight limits and rejected claims",
+              page.locator('#enso-limits .enso-lim').count() == 8
+              and page.locator('#enso-limits .enso-reg-row').count() == register_count
+              and page.locator('#enso-limits #enso-gate').count() == 1
+              and 'How to read' in page.locator('#enso-limits summary').first.text_content())
+        page.evaluate("showTab('ensowater')")
+        page.wait_for_selector('#subview-ensowater.active #enso-c-panama')
+        water = page.evaluate("""() => {
+            const slot = document.getElementById('enso-c-panama'), ais = document.getElementById('enso-c-panama-daily');
+            return {lead: !!(slot.compareDocumentPosition(ais) & Node.DOCUMENT_POSITION_FOLLOWING),
+                    slot: slot.closest('figure').dataset.kind, ais: ais.closest('figure').dataset.kind,
+                    source: ais.closest('figure').querySelector('.enso-plate-sub').textContent};
+        }""")
+        history = page.evaluate("async () => (await (await fetch('data/portwatch_history.json')).json()).data.chokepoints.panama.dates")
+        lane_count = page.evaluate("async () => (await (await fetch('data/enso_lanes.json')).json()).data.lanes.length")
+        check("published Panama limits lead observed AIS with its actual coverage",
+              water['lead'] and water['slot'] == 'published' and water['ais'] == 'observed'
+              and history[0] in water['source'] and history[-1] in water['source'])
+        check("one lanes table replaces the tour and duplicate appendix",
+              page.locator('.enso-lanes-table tbody tr').count() == lane_count
+              and page.locator('#enso-lane-story').count() == 0)
+        page.evaluate("showTab('ensomoney')")
+        page.wait_for_selector('#subview-ensomoney.active #enso-c-ffpi')
+        ffpi = page.evaluate("""() => {
+            const c = Chart.getChart(document.getElementById('enso-c-ffpi'));
+            return c.data.datasets.map(d => ({label:d.label, line:!!d.showLine, style:d.pointStyle}));
+        }""")
+        check("Prices has one seven-event surface and distinct annual and monthly FFPI series",
+              page.locator('#enso-c-record .enso-event').count() == 7
+              and page.locator('#enso-c-ffpi').count() == 1
+              and page.locator('#enso-c-ffpilive, #enso-money-story').count() == 0
+              and len(ffpi) == 3 and all(not d['line'] for d in ffpi)
+              and 'monthly' in ffpi[2]['label'] and ffpi[1]['style'] != ffpi[2]['style'])
+        check("reported humanitarian need is the final price plate",
+              page.locator('#subview-ensomoney figure').last.get_attribute('data-kind') == 'reported'
+              and 'Reported humanitarian need' in page.locator('#subview-ensomoney figure').last.inner_text())
+        page.evaluate("showTab('ensolive')")
+        check("Reported board distinguishes published stories and reported assessments",
+              'Everything on this board is observed' not in page.locator('#enso-live').inner_text()
+              and page.locator('#enso-live .enso-wire-plate').get_attribute('data-kind') == 'published'
+              and page.locator('#enso-live .enso-live-rail figure[data-kind="reported"]').count() >= 1)
 
         check("no console errors", not errors, "; ".join(errors[:2]))
         browser.close()
