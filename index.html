@@ -24317,7 +24317,7 @@ function updatePageTitle() {
     title = s.country ? `${s.commodity ? com + ' · ' : ''}${title}` : `${com} dependency · FoodShield AI`;
     // v90 — was a hardcoded 34 against a manifest now at 42. This one is
     // crawler- and social-preview-facing, so it is worth deriving too.
-    desc = `${com} sourcing exposure across ${(LIVE?.manifest?.summary?.total_sources) || 42} public-data pipelines · FoodShield AI`;
+    desc = `${com} sourcing exposure across ${(LIVE?.manifest?.summary?.total_sources) || 54} public-data pipelines · FoodShield AI`;
   }
   document.title = title;
   let md = document.querySelector('meta[name="description"]');
@@ -34076,7 +34076,7 @@ const TOUR_STEPS = [
     // users as the literal text "${(LIVE?.manifest?.summary?.total_sources) || 40}".
     // An automated patch swapped a hardcoded 34 for an expression without
     // checking the quote style of the string it was editing.
-    body: `Countries are coloured by their <em>Food Disruption Risk Score</em>: green resilient, red severe. The score blends ${(LIVE?.manifest?.summary?.total_sources) || 42} data pipelines (imports, climate, conflict, logistics, prices) into one number you can scan in seconds.`,
+    body: `Countries are coloured by their <em>Food Disruption Risk Score</em>: green resilient, red severe. The score blends ${(LIVE?.manifest?.summary?.total_sources) || 54} data pipelines (imports, climate, conflict, logistics, prices) into one number you can scan in seconds.`,
     before: () => { try { showTab('global'); } catch(e){} closePanelIfOpen(); return 300; },
   },
   {
@@ -41825,7 +41825,7 @@ function showCommodityDetail(key) {
      correct encoding for them and the wrong one for the modelled layers. The
      legend says so, because the difference is the whole argument of the page. */
   var MODES_MODELLED = ['impact', 'crop', 'coverage'];
-  var MODES_LIVE = ['asap', 'gdacs', 'ipc'];
+  var MODES_LIVE = ['asap', 'gdacs', 'ipc', 'sst'];
 
   var LEVELS = [
     ['la_nina_strong',   -1.5, 'Strong La Niña'],
@@ -43449,7 +43449,8 @@ function showCommodityDetail(key) {
                     ['coverage', 'Model coverage']];
     var liveModes = [['asap', 'Agricultural hotspots (JRC ASAP)'],
                      ['gdacs', 'Active drought & flood alerts (GDACS)'],
-                     ['ipc', 'Food insecurity, IPC phase 3+']];
+                     ['ipc', 'Food insecurity, IPC phase 3+']]
+      .concat(S.sst && S.sst.anom ? [['sst', 'Sea-surface temperature anomaly (NOAA OISST)']] : []);
     var opt = function (m) {
       return '<option value="' + m[0] + '"' + (m[0] === S.mode ? ' selected' : '') + '>' + esc(m[1]) + '</option>';
     };
@@ -43491,7 +43492,11 @@ function showCommodityDetail(key) {
     var tr = document.getElementById('enso-tog-regions');
     var tl = document.getElementById('enso-tog-lanes');
     if (lv) lv.onchange = function () { S.oni = parseFloat(this.value); writeEnsoQuery(); paint(); renderDetail(); renderLegend(); };
-    if (md) md.onchange = function () { S.mode = this.value; writeEnsoQuery(); paint(); renderLegend(); };
+    if (md) md.onchange = function () {
+      S.mode = this.value;
+      if (S.mode === 'sst') { S.showSST = true; toggleSST(); var tg = document.getElementById('enso-tog-sst'); if (tg) tg.checked = true; }
+      writeEnsoQuery(); paint(); renderLegend();
+    };
     if (cn) cn.onchange = function () { selectCountry(this.value || null, { fly: true }); };
     if (tr) tr.onchange = function () { S.showRegions = this.checked; toggleRegions(); renderLegend(); };
     if (tl) tl.onchange = function () { S.showLanes = this.checked; toggleLanes(); renderLegend(); };
@@ -43537,7 +43542,8 @@ function showCommodityDetail(key) {
     var frame = document.getElementById('enso-mapwrap');
     if (frame) frame.classList.toggle('is-modelled', !live);
     var lbl = { impact: 'Modelled production shock', crop: 'Strongest measured crop', coverage: 'Model coverage',
-                asap: 'Agricultural hotspots', gdacs: 'Active drought & flood alerts', ipc: 'Food insecurity, IPC 3+' }[S.mode];
+                asap: 'Agricultural hotspots', gdacs: 'Active drought & flood alerts', ipc: 'Food insecurity, IPC 3+',
+                sst: 'Sea-surface temperature anomaly' }[S.mode];
     el.innerHTML =
       '<span class="' + (live ? 'enso-tag-live' : 'enso-tag-mod') + '">' + (live ? 'Observed' : 'Modelled') + '</span>' +
       '<span>' + esc(lbl || '') + '</span>' +
@@ -43556,7 +43562,7 @@ function showCommodityDetail(key) {
             num(snap.live, 2) + '</span>' : '');
       })() +
       '<span class="enso-tag-src">' + (live
-        ? { asap: 'JRC ASAP', gdacs: 'GDACS', ipc: 'IPC via WFP HungerMap' }[S.mode]
+        ? { asap: 'JRC ASAP', gdacs: 'GDACS', ipc: 'IPC via WFP HungerMap', sst: 'NOAA OISST v2.1 via CoastWatch ERDDAP' }[S.mode]
         : 'FAOSTAT 1961–2024 fitted here · teleconnections from the published literature') + '</span>';
   }
 
@@ -43588,6 +43594,15 @@ function showCommodityDetail(key) {
         [[RAMP[0], 'lower share'], [RAMP[2], 'mid'], [RAMP[4], 'higher share of population']],
         'IPC/CH via WFP HungerMap. This is an outcome, and it has many causes. ENSO is one of them.']
     };
+    if (S.mode === 'sst') {
+      el.innerHTML = '<div class="enso-legend">' + sstLegend() +
+        (S.showRegions ? '<div class="enso-legend-block"><div class="enso-legend-t">Published teleconnection ' + badge('published', 'literature') + '</div>' +
+          '<div class="ctr-note" style="max-width:32ch;margin-top:5px;">Hatching marks findings published elsewhere; land carries no modelled fill on this layer.</div></div>' : '') +
+        (S.showLanes ? laneLegend() : '') + (S.showAlerts ? alertLegend() : '') +
+      '</div>' +
+      '<div class="ctr-note" style="margin-top:8px;">The ocean is the observation here and the land is left unfilled. Switch the <b>Map layer</b> back to a modelled layer to see where the fitted harvest response lands.</div>';
+      return;
+    }
     if (LIVE_LEG[S.mode]) {
       var lg = LIVE_LEG[S.mode];
       var body = lg[1].map(function (p) {
@@ -43706,6 +43721,9 @@ function showCommodityDetail(key) {
   }
 
   function fillFor(iso) {
+    /* The ocean is the observation on this layer; land stays unfilled so the
+       modelled colours cannot be read against it. */
+    if (S.mode === 'sst') return null;
     if (S.mode === 'asap') {
       var a = asapFor(iso);
       if (!a) return null;
@@ -43775,6 +43793,7 @@ function showCommodityDetail(key) {
 
   function paint() {
     if (!S.layerBase) return;
+    if (S.mode === 'sst' && S.sstLayer && !S.showSST) { S.showSST = true; toggleSST(); }
     /* A native <select> fires change on every arrow-key step. Without this a
        user scrubbing the nine ONI levels triggers a fresh 680ms globe-wide
        ripple per keystroke, so rapid repeats repaint instantly instead. */
