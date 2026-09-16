@@ -33,7 +33,7 @@ STRIP_PROBE = """() => {
     const svg = document.querySelector('.enso-strip');
     if (!svg) return null;
     return {bars: svg.querySelectorAll('rect').length,
-            now: (document.querySelector('.enso-strip-now') || {}).textContent || null,
+            now: (document.querySelector('.enso-analog-now-lab') || {}).textContent || null,
             hasLabel: !!svg.getAttribute('aria-label'),
             textInSvg: svg.querySelectorAll('text').length};
 }"""
@@ -47,21 +47,18 @@ PANAMA_PROBE = """() => {
 }"""
 
 NOW_PROBE = """() => {
-    const svg = document.querySelector('.enso-strip');
-    const plot = document.querySelector('.enso-strip-plot');
-    const lab = document.querySelector('.enso-strip-now');
-    if (!svg || !plot || !lab) return null;
-    const line = svg.querySelector('.enso-live-point');
-    if (!line) return null;
-    const pr = plot.getBoundingClientRect();
-    const gr = line.getBoundingClientRect();
-    const pointY = gr.top + gr.height / 2;
-    const lr = lab.getBoundingClientRect();
-    const ys = [...svg.querySelectorAll('rect')].map(r => +r.getAttribute('y'));
+    const plot = document.querySelector('.enso-analog');
+    const svg = plot && plot.querySelector('svg');
+    const lab = document.querySelector('.enso-analog-now-lab');
+    const point = svg && svg.querySelector('.enso-live-point');
+    if (!svg || !plot || !lab || !point) return null;
+    const pr = svg.getBoundingClientRect(), gr = point.getBoundingClientRect();
+    const pointY = gr.top + gr.height / 2, lr = lab.getBoundingClientRect();
     return {offset: Math.round((lr.top + lr.height / 2) - pointY),
-            ruleY: Math.round(pointY - pr.top),
-            topBarY: Math.min.apply(null, ys),
-            label: lab.textContent};
+            ruleY: Math.round(pointY - pr.top), label: lab.textContent,
+            past: [...svg.querySelectorAll('.enso-analog-past')].map(p => p.getAttribute('d')),
+            ticks: [...plot.querySelectorAll('.enso-y-tick')].map(e => e.textContent),
+            overflow: (document.querySelector('.enso-overflow') || {}).textContent || ''};
 }"""
 
 def check(label: str, ok: bool, detail: str = "") -> None:
@@ -93,6 +90,8 @@ def open_panel(page, base: str, tab: str = "elnino"):
         "() => document.getElementById('enso-indices')"
         "        && document.getElementById('enso-indices').innerHTML.length > 0",
         timeout=25_000)
+    resolved = "elnino" if tab == "ensomech" else tab
+    page.wait_for_selector(f"#subview-{resolved}.active .enso-subview-meta", timeout=25_000)
 
 
 def main() -> int:
@@ -138,13 +137,15 @@ def main() -> int:
         print("\nindex strip — comparability")
         open_panel(page, base)
         switcher = page.locator('#enso-view-nav')
-        in_nav = switcher.evaluate("el => !!el.closest('#nav')")
+        # The switcher is the tab's persistent jump nav: first in the tab, sticky
+        # inside the scroller, ahead of the status header, the map and every view.
+        leads = switcher.evaluate("el => !!(el.compareDocumentPosition(document.getElementById('enso-hero')) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(el.compareDocumentPosition(document.getElementById('enso-map')) & Node.DOCUMENT_POSITION_FOLLOWING) && !!el.closest('#tab-elnino') && getComputedStyle(el).position === 'sticky' && el.getBoundingClientRect().bottom <= document.getElementById('enso-hero').getBoundingClientRect().top + 1")
         visible_here = switcher.is_visible()
         page.evaluate("showTab('global')")
         hidden_elsewhere = not switcher.is_visible()
         page.evaluate("showTab('elnino')")
-        check("El Nino view switcher belongs to nav and only shows on its host tab",
-              in_nav and visible_here and hidden_elsewhere and switcher.is_visible())
+        check("view switcher leads the tab, stays sticky, and only shows on its host tab",
+              leads and visible_here and hidden_elsewhere and switcher.is_visible())
         page.eval_on_selector_all(".enso-idx", "els => els.forEach(e => e.open = true)")
         kinds = page.eval_on_selector_all(
             ".enso-idx-grp-h b", "els => els.map(e => e.textContent)")
@@ -161,6 +162,13 @@ def main() -> int:
         check("the incomparable pair is shown as incomparable",
               page.locator(".enso-idx-cmp-bad").count() >= 1)
 
+        check("Ocean defaults to observed SST with the backdrop enabled",
+              page.input_value('#enso-mode') == 'sst' and page.is_checked('#enso-tog-sst')
+              and page.locator('.enso-tag-snap').count() == 0)
+        page.evaluate("showTab('ensoharvest')")
+        page.wait_for_selector('#subview-ensoharvest.active .enso-cal')
+        check("Harvests defaults to impact without the ocean backdrop",
+              page.input_value('#enso-mode') == 'impact' and not page.is_checked('#enso-tog-sst'))
         print("\nscenario disclosure")
         tag = page.locator(".enso-tag-snap")
         check("modelled layer discloses the scenario it is painted at", tag.count() == 1)
@@ -168,19 +176,20 @@ def main() -> int:
         # publishes a new season every month, and this assertion is about the hero
         # agreeing with enso.json, not about any particular number.
         feed = page.evaluate("async () => (await (await fetch('data/enso.json')).json()).data.latest")
-        hero = page.locator("#enso-hero").inner_text()
+        hero = page.locator("#enso-hero").text_content()
         band = feed["band"].replace("El Nino", "El Niño").replace("La Nina", "La Niña")
         val = ("%+.2f" % feed["anom"]).replace("-", "−")
         check("hero prints the agency band, not the snapped one",
               band.lower() in hero.lower() and val.lower() in hero.lower(), "want %s / %s in: %s" % (band, val, hero[:110]))
 
+        page.evaluate("showTab('elnino')")
         print("\nthe record strip is the whole record")
         strip = page.evaluate(STRIP_PROBE)
         hist = page.evaluate("async () => (await (await fetch('data/enso.json')).json()).data.history.length")
         check("one bar per winter in the published record",
               bool(strip) and strip["bars"] == hist,
               "%s bars vs %s winters" % (strip and strip["bars"], hist))
-        check("the current reading is marked and labelled",
+        check("the analog plate marks and labels the latest current reading",
               bool(strip) and strip["now"] and feed["season"].lower() in strip["now"].lower() and val in strip["now"],
               str(strip and strip["now"]))
         # preserveAspectRatio="none" stretches glyphs, so no text may live in the SVG
@@ -191,7 +200,7 @@ def main() -> int:
         page.wait_for_timeout(1100)  # opening plot animation has completed
         marker = page.evaluate(NOW_PROBE)
         # The HTML callout and SVG endpoint must use the same y coordinate.
-        check("the live callout sits on its plotted point",
+        check("the analog callout sits on its plotted point",
               bool(marker) and abs(marker["offset"]) <= 3, str(marker))
 
         axis = page.evaluate("""() => {
@@ -200,13 +209,11 @@ def main() -> int:
               [...h.querySelectorAll('.enso-threshold-label')].some(e => e.textContent.includes('+0.5 El Niño threshold')) &&
               [...h.querySelectorAll('.enso-threshold-label')].some(e => e.textContent.includes('−0.5 La Niña threshold'));
         }""")
-        check("ONI hero has a y-axis and both labelled thresholds", axis)
+        check("analog plate has fixed anchors and both labelled thresholds", axis and marker["ticks"] == ["−3", "0", "+3"])
 
-        # A ceiling check against live data proves nothing: today's reading and the
-        # record both sit under the old fixed 2.6 axis, so a clamped chart passes it
-        # too. The only way to test a clamp is to feed it a value that would clamp.
-        # Serve a spiked enso.json and require the axis to move.
-        base_top = marker["topBarY"] if marker else None
+        # Inject an out-of-range current value: preserve fixed anchors and
+        # historical geometry while printing the true value and overflow.
+        base_past = marker["past"] if marker else None
         hist_max = page.evaluate(
             "async () => Math.max(...(await (await fetch('data/enso.json')).json())"
             ".data.history.map(r => Math.abs(r.anom)))")
@@ -230,24 +237,21 @@ def main() -> int:
         check("a reading above the record is printed at its true value",
               bool(spiked) and ("%.2f" % spike) in (spiked["label"] or ""),
               f'want {spike:.2f} in {spiked and spiked["label"]}')
-        # NOTE this one is a smoke check only: a clamped rule also lands inside the
-        # plot, so it passes on the buggy code too. Named for what it can actually
-        # detect rather than for what the fix was.
         check("the marker stays inside the plot",
               bool(spiked) and spiked["ruleY"] > 2,
               f'rule at {spiked and spiked["ruleY"]}px')
-        # THIS is the discriminating one. Under a fixed axis the record bar cannot
-        # move when the live value changes; verified to fail against the old code
-        # with 'record bar 12.27 -> 12.27'.
-        check("the whole record rescales to make room",
-              bool(spiked) and base_top is not None and spiked["topBarY"] > base_top + 2,
-              f'record bar {base_top} -> {spiked and spiked["topBarY"]} (must drop)')
+        check("fixed anchors retain historical geometry and disclose overflow",
+              bool(spiked) and spiked["past"] == base_past
+              and spiked["ticks"] == ["−3", "0", "+3"]
+              and ("%.2f" % spike) in spiked["overflow"] and 'exceed' in spiked["overflow"],
+              str(spiked))
 
         open_panel(page, base)   # back to real data for everything downstream
         page.wait_for_selector(".enso-strip", timeout=20_000)
 
 
 
+        page.evaluate("showTab('ensoharvest')")
         print("\nphase follows the selected scenario")
         page.select_option("#enso-country", "USA")
         page.wait_for_timeout(250)
@@ -270,7 +274,10 @@ def main() -> int:
         # The coefficients are %/ONI slopes and ONI is negative under La Nina, so
         # a POSITIVE nina slope is a production FALL. Colouring the raw slope is
         # right under El Nino by coincidence and inverted under La Nina.
-        WARM = "(el) => { const c = getComputedStyle(el).color.match(/\\d+/g).map(Number); return c[0] > c[2]; }"
+        PALETTE = """el => {
+            const c = getComputedStyle(el).color.match(/\\d+/g).map(Number);
+            return c[0] > c[1] && c[1] > c[2] ? 'fall' : c[1] > c[0] && c[1] > c[2] ? 'rise' : 'neutral';
+        }"""
 
         def slope_of(cell) -> float:
             return float(cell.inner_text().replace("−", "-").replace("+", ""))
@@ -279,16 +286,16 @@ def main() -> int:
         page.select_option("#enso-country", "USA")
         page.wait_for_timeout(300)
         cell = page.locator("#enso-detail tbody tr td.num").nth(0)
-        sl, warm = slope_of(cell), cell.evaluate(WARM)
-        check("El Nino: a positive slope is coloured as a rise",
-              (sl > 0) == (not warm), f"slope {sl}, warm={warm}")
+        sl, colour = slope_of(cell), cell.evaluate(PALETTE)
+        check("El Nino: positive change uses green and negative change uses ochre",
+              colour == ("rise" if sl > 0 else "fall"), f"slope {sl}, colour={colour}")
 
         page.select_option("#enso-level", "-1.5")
         page.wait_for_timeout(300)
         cell = page.locator("#enso-detail tbody tr td.num").nth(1)
-        sl, warm = slope_of(cell), cell.evaluate(WARM)
-        check("La Nina: a positive slope is coloured as a FALL (ONI is negative)",
-              (sl > 0) == warm, f"slope {sl}, warm={warm}")
+        sl, colour = slope_of(cell), cell.evaluate(PALETTE)
+        check("La Nina: positive slope uses ochre for the yield fall",
+              colour == ("fall" if sl > 0 else "rise"), f"slope {sl}, colour={colour}")
         check("the table states that sign and colour may disagree",
               "not match the sign of the colour" in page.locator("#enso-detail").inner_text())
         page.select_option("#enso-level", "1.5")
@@ -296,14 +303,14 @@ def main() -> int:
         print("\nthe crop legend describes what the fill encodes")
         page.select_option("#enso-mode", "crop")
         page.wait_for_timeout(350)
-        leg = page.locator("#enso-legend").inner_text()
+        leg = page.locator("#enso-legend").text_content()
         check("crop legend does not call the fill a %/ONI slope",
               "%/ONI" not in leg, leg[:120])
         check("crop legend names the scenario the colour is scaled to",
               "Strong El" in leg and "ONI" in leg, leg[:160])
         page.select_option("#enso-level", "-1.5")
         page.wait_for_timeout(350)
-        leg_nina = page.locator("#enso-legend").inner_text()
+        leg_nina = page.locator("#enso-legend").text_content()
         check("crop legend follows the selected scenario",
               "La Ni" in leg_nina and leg_nina != leg, leg_nina[:160])
         page.select_option("#enso-level", "1.5")
@@ -423,9 +430,10 @@ def main() -> int:
         mobile_overflow = []
         rounded = []
         page.set_viewport_size({"width": 390, "height": 844})
-        for tab in ("elnino", "ensomech", "ensowater", "ensomoney", "ensolive"):
+        for tab in ("elnino", "ensomech", "ensoharvest", "ensowater", "ensomoney", "ensolive"):
             open_panel(page, base, tab)
-            page.wait_for_selector(f"#subview-{tab} .enso-subview-meta")
+            resolved = "elnino" if tab == "ensomech" else tab
+            page.wait_for_selector(f"#subview-{resolved} .enso-subview-meta")
             page.eval_on_selector_all("#tab-elnino details", "els => els.forEach(e => e.open = true)")
             page.wait_for_timeout(350)
             rounded.extend(page.evaluate("""() => [...document.querySelectorAll('#tab-elnino *')]
@@ -447,6 +455,12 @@ def main() -> int:
         page.set_viewport_size({"width": 1440, "height": 1000})
         open_panel(page, base, "ensomech")
         page.wait_for_selector('.enso-xsec-lead')
+        page.wait_for_timeout(300)
+        check("mechanism alias activates Ocean and scrolls to the mechanism",
+              page.locator('#viewbtn-elnino').get_attribute('aria-selected') == 'true'
+              and page.locator('#subview-elnino').evaluate("e => e.classList.contains('active')")
+              and abs(page.locator('#enso-mech').bounding_box()['y']
+                      - page.locator('#tab-elnino .content-page').bounding_box()['y'] - 120) < 5)
         labels = page.eval_on_selector_all(
             '.enso-xsec-lead [role="img"], .enso-xsec-refs [role="img"]',
             "els => els.map(e => e.getAttribute('aria-label'))")
@@ -459,6 +473,57 @@ def main() -> int:
         page.wait_for_selector('#subview-ensomoney.active #enso-c-record')
         check("view switcher works with clicks and arrow keys",
               page.locator('#viewbtn-ensomoney').get_attribute('aria-selected') == 'true')
+
+        print("\nstage A shared structure and lens contracts")
+        open_panel(page, base)
+        lens_results, headings, frames = [], [], []
+        page.evaluate("window._stageAMap = document.getElementById('enso-map'); window._stageAMapId = window._stageAMap._leaflet_id")
+        for tab, mode in (("elnino", "sst"), ("ensoharvest", "impact"), ("ensowater", "none"), ("ensomoney", "none"), ("ensolive", "asap")):
+            page.evaluate("tab => showTab(tab)", tab)
+            page.wait_for_selector(f'#subview-{tab}.active .enso-subview-meta')
+            lens_results.append(page.input_value('#enso-mode') == mode
+                and page.is_checked('#enso-tog-sst') == (tab == 'elnino')
+                and page.is_checked('#enso-tog-lanes') == (tab == 'ensowater')
+                and page.is_checked('#enso-tog-alerts') == (tab == 'ensolive'))
+            headings.append(page.locator('#tab-elnino h2:visible').count())
+            frames.append(page.evaluate("""() => [...document.querySelectorAll('#tab-elnino .enso-plate[data-kind], #enso-mapwrap[data-kind]')].every(e =>
+                getComputedStyle(e).borderTopStyle === (['modelled','published'].includes(e.dataset.kind) ? 'dashed' : 'solid'))"""))
+        check("each view applies its layer and overlay defaults", all(lens_results), str(lens_results))
+        check("one visible Instrument Serif H2 per view", headings == [1] * 5
+              and page.locator('#tab-elnino h2:visible').evaluate("e => getComputedStyle(e).fontFamily.includes('Instrument Serif')"), str(headings))
+        check("observed frames are solid and modelled or published frames dashed", all(frames), str(frames))
+        check("one persistent map instance across all five views", page.evaluate("""() =>
+            document.querySelectorAll('#enso-map').length === 1 && document.getElementById('enso-map') === window._stageAMap
+            && window._stageAMap._leaflet_id === window._stageAMapId
+            && document.querySelectorAll('#enso-map .leaflet-map-pane').length === 1"""))
+        check("limits remain reachable from every view", page.locator('#enso-limits').is_visible()
+              and page.locator('#enso-limits').evaluate("e => !e.closest('.subview')")
+              and page.locator('#enso-agency-status').is_visible())
+        page.evaluate("showTab('ensoharvest')")
+        calendar = page.evaluate("""async () => {
+            const model = (await (await fetch('data/enso_model.json')).json()).data;
+            const cal = (await (await fetch('data/crop_calendars.json')).json()).data;
+            let expected = 0;
+            for (const [iso, crops] of Object.entries(model)) for (const [crop, c] of Object.entries(crops))
+                if (c.signal && cal[iso] && cal[iso][crop] && (cal[iso][crop].harvest || []).length) expected++;
+            const rows = [...document.querySelectorAll('#enso-calendar .cal-row:not(.cal-head)')];
+            return {expected: Math.min(30, expected), actual: rows.length,
+                    complete: rows.every(r => r.querySelectorAll('.cal-c').length === 12)};
+        }""")
+        check("moved calendar retains every eligible row and all twelve months",
+              calendar['actual'] == calendar['expected'] and calendar['actual'] > 0 and calendar['complete'], str(calendar))
+        page.select_option('#enso-mode', 'impact')
+        palette = page.eval_on_selector_all('#enso-legend .enso-ramp i', "els => els.map(e => getComputedStyle(e).backgroundColor)")
+        check("yield ramp has fixed ochre, warm grey and green anchors",
+              palette[0] == 'rgb(201, 119, 58)' and palette[len(palette)//2] == 'rgb(139, 137, 128)' and palette[-1] == 'rgb(107, 163, 107)', str(palette))
+        page.goto(f"{base}/index.html?tab=ensomoney&enso_level=-1.5&enso_mode=crop", wait_until='networkidle')
+        page.wait_for_selector('#subview-ensomoney.active .enso-subview-meta')
+        check("explicit URL scenario and mode override view defaults",
+              page.input_value('#enso-level') == '-1.5' and page.input_value('#enso-mode') == 'crop')
+        page.evaluate("async () => await ensoRetry()")
+        check("retry rebuilds one map and preserves explicit selections",
+              page.locator('#enso-map .leaflet-map-pane').count() == 1
+              and page.input_value('#enso-level') == '-1.5' and page.input_value('#enso-mode') == 'crop')
 
         check("no console errors", not errors, "; ".join(errors[:2]))
         browser.close()
