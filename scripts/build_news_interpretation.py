@@ -597,6 +597,33 @@ def _allowed_numbers(facts):
     return signed, unsigned, years, date_strings
 
 
+# v84 — "%" (or the word) directly after a number marks it as a percentage.
+_PCT_SUFFIX_RE = re.compile(r"\s*(?:%|percent\b|per cent\b|percentage points?\b)", re.I)
+
+
+def _percent_facts(facts):
+    """Numeric facts that ARE percentages: any key carrying 'pct'. Returns
+    (signed, unsigned) sets, mirroring _allowed_numbers. Percent tokens in the
+    prose are matched against these only, so a count or a level can never
+    license a "N%" claim."""
+    signed, unsigned = set(), set()
+
+    def walk(node, field=None):
+        if isinstance(node, dict):
+            for k, v in node.items():
+                walk(v, k)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v, field)
+        elif isinstance(node, bool):
+            return
+        elif isinstance(node, (int, float)) and field and "pct" in field.lower():
+            signed.add(float(node))
+            unsigned.add(abs(float(node)))
+    walk(facts)
+    return signed, unsigned
+
+
 def _decimals(token):
     return len(token.split(".")[1]) if "." in token else 0
 
@@ -617,8 +644,11 @@ def find_unsupported_numbers(text, facts):
     explicit sign must match a fact of that same sign.
     """
     signed, unsigned, years, date_strings = _allowed_numbers(facts)
+    pct_signed, pct_unsigned = _percent_facts(facts)
+    masked = _mask_dates(text, date_strings)
     bad = []
-    for token in NUMBER_RE.findall(_mask_dates(text, date_strings)):
+    for m in NUMBER_RE.finditer(masked):
+        token = m.group(0)
         cleaned = token.replace(",", "")
         try:
             value = float(cleaned)
@@ -626,9 +656,20 @@ def find_unsupported_numbers(text, facts):
             continue
         places = _decimals(cleaned)
         explicit_sign = cleaned[0] in "+-"
-        pool = signed if explicit_sign else unsigned
+        # v84 — a percentage may only be licensed by a percentage fact. "the 20%
+        # threshold" reached the published file because a COUNT
+        # (psd_countries_excluded_stale_vintage: 20) had put 20 in the
+        # allowlist. A number is evidence only for the quantity it measures.
+        is_pct = bool(_PCT_SUFFIX_RE.match(masked, m.end()))
+        if is_pct:
+            pool = pct_signed if explicit_sign else pct_unsigned
+        else:
+            pool = signed if explicit_sign else unsigned
         candidate = value if explicit_sign else abs(value)
         if any(round(a, places) == round(candidate, places) for a in pool):
+            continue
+        if is_pct:
+            bad.append(token + "%")
             continue
         # Bare integers may also be a year quoted from a date fact.
         if (not explicit_sign and places == 0 and float(value).is_integer()
