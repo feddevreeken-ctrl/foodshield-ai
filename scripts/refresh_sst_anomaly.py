@@ -40,7 +40,11 @@ DATASETS = (("ncdcOisst21NrtAgg_LonPM180", "OISST v2.1 near-real-time (prelimina
 UA = {"User-Agent": "FoodShield-AI data refresh (github.com/feddevreeken-ctrl/foodshield-ai)"}
 
 STEP = 8                 # 0.25 deg * 8 = 2 deg
-LAT0, LAT1 = -60.0, 60.0
+# Full Web Mercator extent (Leaflet clips at 85.05 degrees): the first grid
+# centre at or above -85 is -84.875, so the 2 degree samples run to 84.875
+# and the top cell edge sits past the map edge. Cells under sea ice are kept;
+# OISST sets the surface there to the freezing point, so their anomaly is small.
+LAT0, LAT1 = -85.0, 85.0
 LON0, LON1 = -180.0, 178.0
 DAYS = 7
 
@@ -125,7 +129,7 @@ def build() -> dict:
         "preliminary": ds.startswith("ncdcOisst21Nrt"),
         "lat0": lats[0], "lon0": lons[0], "step_deg": STEP * 0.25,
         "nlat": len(lats), "nlon": len(lons),
-        "encoding": "row-major from the southern edge, tenths of a degree C, null over land or ice",
+        "encoding": "row-major from the southern edge, tenths of a degree C, null over land (ice-covered sea keeps a value)",
         "anom": grid,
         "range_c": [min(vals) / 10.0, max(vals) / 10.0],
         "box_means_c": {k: box_mean(b) for k, b in BOXES.items()},
@@ -134,7 +138,9 @@ def build() -> dict:
                      "weekly values: those use ERSST and a 1991-2020 base, this field uses "
                      "OISST's 1971-2000 daily climatology."),
         "sampling_note": ("One 0.25-degree cell in eight in each direction, not an area "
-                          "average; coastal structure off Peru is under-sampled."),
+                          "average; coastal structure off Peru is under-sampled. Rows run "
+                          "from 84.875 S to 84.875 N, the Web Mercator extent; ice-covered "
+                          "cells are kept, with the surface set to the freezing point by OISST."),
     }
 
 
