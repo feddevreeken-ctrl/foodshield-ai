@@ -45131,11 +45131,13 @@ function showCommodityDetail(key) {
        reported side of the board. */
     var tr = S.restrictions || [], policyPlate = '';
     if (tr.length) {
-      var active = tr.filter(function (r) { return r.status === 'active'; }).length;
+      /* The tracker's statuses are official, reported and historical; anything
+         not historical is a measure in force or reported in force. */
+      var active = tr.filter(function (r) { return r.status !== 'historical'; }).length;
       policyPlate = '<figure class="enso-plate">' + plateHead('Export restrictions on record', 'IFPRI Export Restrictions Tracker · ' + (active ? active + ' active' : 'no current measure'), stamp(metaDate('restrictions')), 'observed') +
         '<div class="plate-body"><ul class="enso-rail-list">' + tr.slice(0, 10).map(function (r) {
-          return '<li><button class="enso-chip" onclick="ensoFocus(\'' + esc(r.iso) + '\')">' + esc(r.country) + '</button><span>' + esc(r.commodity) + ' · ' + esc(r.measure) + ' <em style="font-style:normal;color:' + (r.status === 'active' ? RAMP[3] : 'var(--t3)') + '">' + esc(r.status) + '</em></span></li>';
-        }).join('') + '</ul></div><figcaption class="enso-log">' + (active ? 'Active measures are marked. ' : 'Nothing in the tracker is current; these are the last entries on record. ') +
+          return '<li><button class="enso-chip" onclick="ensoFocus(\'' + esc(r.iso) + '\')">' + esc(r.country) + '</button><span>' + esc(r.commodity) + ' · ' + esc(r.measure) + ' <em style="font-style:normal;color:' + (r.status !== 'historical' ? RAMP[3] : 'var(--t3)') + '">' + esc(r.status === 'historical' ? 'on record' : r.status) + '</em></span></li>';
+        }).join('') + '</ul></div><figcaption class="enso-log">' + (active ? 'Measures in force are marked; the rest are on record. ' : 'Nothing in the tracker is current; these are the last entries on record. ') +
         'Trade policy has moved world prices more than the weather has, which is why the channel stays on this board.</figcaption></figure>';
     }
 
