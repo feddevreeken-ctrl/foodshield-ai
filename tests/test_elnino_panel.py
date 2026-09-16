@@ -138,14 +138,14 @@ def main() -> int:
         open_panel(page, base)
         switcher = page.locator('#enso-view-nav')
         # The switcher is the tab's jump nav: first in the tab, ahead of the status
-        # header, the map and every view. It is not sticky: the owner found a
-        # pinned bar in the way, and a view change scrolls back to it instead.
-        leads = switcher.evaluate("el => !!(el.compareDocumentPosition(document.getElementById('enso-hero')) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(el.compareDocumentPosition(document.getElementById('enso-map')) & Node.DOCUMENT_POSITION_FOLLOWING) && !!el.closest('#tab-elnino') && getComputedStyle(el).position !== 'sticky' && getComputedStyle(el).position !== 'fixed' && el.getBoundingClientRect().bottom <= document.getElementById('enso-hero').getBoundingClientRect().top + 1")
+        # header, the map and every view, pinned as a translucent hairline bar
+        # (the owner: "this should stick but elegantly").
+        leads = switcher.evaluate("el => !!(el.compareDocumentPosition(document.getElementById('enso-hero')) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(el.compareDocumentPosition(document.getElementById('enso-map')) & Node.DOCUMENT_POSITION_FOLLOWING) && !!el.closest('#tab-elnino') && getComputedStyle(el).position === 'sticky' && getComputedStyle(el).backgroundColor.startsWith('rgba') && el.getBoundingClientRect().bottom <= document.getElementById('enso-hero').getBoundingClientRect().top + 1")
         visible_here = switcher.is_visible()
         page.evaluate("showTab('global')")
         hidden_elsewhere = not switcher.is_visible()
         page.evaluate("showTab('elnino')")
-        check("view switcher leads the tab, is not pinned, and only shows on its host tab",
+        check("view switcher leads the tab, pins as a translucent bar, and only shows on its host tab",
               leads and visible_here and hidden_elsewhere and switcher.is_visible())
         # A view change lands the reader at the top of the tab, not mid-page.
         page.evaluate("() => { const s = document.querySelector('#tab-elnino .content-page'); if (s) s.scrollTop = 1400; }")
@@ -366,6 +366,11 @@ def main() -> int:
               f'{style["fsBody"]}/{style["fsMeta"]}/{style["fsHead"]}')
 
         print("\nmap annotations contain their own text")
+        # The harvest notes (Kansas, Free State) draw on the Harvests lens only;
+        # the canal note belongs to Shipping. Measure them where they exist.
+        page.evaluate("showTab('ensoharvest')")
+        page.wait_for_selector('#subview-ensoharvest.active .enso-subview-meta')
+        page.wait_for_timeout(600)
         # iconSize was [188, 1]: Leaflet wrote that height inline, so the card was
         # one pixel tall and every line of body text sat outside it, on the map.
         boxes = page.evaluate("""() => [...document.querySelectorAll('.enso-anno')].map(e => {

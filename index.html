@@ -11302,7 +11302,16 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino #enso-status-home:empty { display:none; }
 #tab-elnino #enso-agency-status { font-size:14px; line-height:1.6; margin:12px 0 20px; }
 /* Stage A: shared instruments and the Ocean comparison plate. */
-#tab-elnino #enso-view-nav { position:static; margin:0 0 24px; padding:6px 0; gap:24px; background:none; overflow:visible; }
+/* Pinned, but quietly: a translucent hairline bar the content scrolls under,
+   not a solid block sitting on the instruments. */
+#tab-elnino #enso-view-nav { position:sticky; top:0; z-index:6; margin:0 0 24px; padding:8px 0; gap:24px; background:rgba(15,15,18,.84); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-bottom:1px solid var(--grid); overflow:visible; }
+#tab-elnino .enso-map-why { display:block; margin-top:6px; color:var(--t2); max-width:96ch; }
+#tab-elnino .enso-country-list { display:flex; flex-wrap:wrap; gap:6px 8px; margin:10px 0 0; }
+#tab-elnino .enso-key-sw { display:inline-block; width:14px; height:8px; margin-right:7px; vertical-align:middle; }
+#tab-elnino .enso-plate-key { display:flex; flex-wrap:wrap; gap:6px 16px; padding:8px 24px 0; font-size:var(--enso-fs-meta); color:var(--t2); }
+#tab-elnino .enso-plate-key .enso-sw { display:inline-block; width:12px; height:8px; margin-right:6px; vertical-align:middle; }
+#tab-elnino .enso-key-sw.is-dash { height:0; background:none!important; border-top:2px dashed currentColor; }
+#tab-elnino .enso-chart-legend .enso-key-note { color:var(--t3); font-family:'Geist Mono',monospace; font-size:var(--enso-fs-meta); }
 #tab-elnino #enso-view-nav .viewswitch-btn::after { display:none; }
 #tab-elnino #enso-view-nav .viewswitch-btn { padding:12px 0; font:500 14px/1.5 'Geist',sans-serif; }
 #tab-elnino .enso-ocean-heading { padding:24px 24px 0; }
@@ -42717,7 +42726,7 @@ function showCommodityDetail(key) {
       idx.forEach(function (m, k) { var x = xs.getPixelForValue(m.i); ctx.beginPath(); ctx.moveTo(x, ys.top); ctx.lineTo(x, ys.bottom); ctx.stroke(); });
       ctx.restore();
     } };
-    mk(id, {
+    mk(id, { keyNotes: ['vertical rules: advisory effective dates; the series covers only the date range in the heading'],
       type: 'line',
       data: { labels: h.dates, datasets: [
         { label: 'all vessels, single day', data: h.total, showLine: false, pointRadius: 1.3, pointBackgroundColor: 'rgba(182,184,190,.38)', borderWidth: 0 },
@@ -43113,6 +43122,7 @@ function showCommodityDetail(key) {
       '<p>These are directions reported in the literature, not fitted here, and a country can sit in two regions with opposite signs. On the harvest map they stay as hatching, apart from the model.</p>' +
       '<p><button type="button" class="tour-btn" data-act="map">See it on the harvest map</button></p></div></div>' +
       '<figure class="enso-plate" id="enso-world-plate" data-kind="published">' + plateHead('Published teleconnection regions', 'Teleconnection regions · ' + regs.length + ' from the literature', stamp(metaDate('regions')), 'published') +
+      '<div class="enso-plate-key"><span><i class="enso-sw" style="background:#c9773a"></i>a cited region where El Niño lowers output</span><span><i class="enso-sw" style="background:#6ba36b"></i>where it raises output</span><span><i class="enso-sw" style="background:#26262c"></i>no cited region</span><span>fills are national membership proxies for the region named in the study</span></div>' +
       '<div class="enso-raster enso-world-map" id="enso-world-map"><p class="enso-log enso-world-wait">The map draws once the country outlines have loaded.</p></div>' +
       '<figcaption class="enso-log">Published region fills are national membership proxies, not measured effect boundaries; ochre denotes falling output, green rising output and grey opposite findings, with labels restricted to source-rated high or medium confidence.</figcaption></figure></div>';
   }
@@ -43394,8 +43404,16 @@ function showCommodityDetail(key) {
   function renderLandHead() {
     var el = document.getElementById('enso-land-head'); if (!el) return;
     if (!S.countryInitialized) { var rows = harvestRows(); if (!S.sel && rows.length) S.sel = rows[0].iso; S.countryInitialized = true; }
+    /* The countries with a surviving fit, strongest slope first, as one tap
+       each: the map is one way in, this list is the other. */
+    var seen = {}, isos = [];
+    harvestRows().forEach(function (r) { if (!seen[r.iso]) { seen[r.iso] = true; isos.push(r.iso); } });
     el.innerHTML = '<div class="enso-section-intro"><h2 class="enso-h">Harvest responses</h2>' +
-      '<p>Select a country on the map or search above to compare its fitted crop responses.</p></div>';
+      '<p>Select a country on the map or search above to compare its fitted crop responses. ' +
+      (isos.length ? isos.length + ' countries carry a fitted signal, strongest El Niño slope first:' : '') + '</p>' +
+      (isos.length ? '<div class="enso-country-list">' + isos.map(function (iso) {
+        return '<button type="button" class="enso-chip' + (iso === S.sel ? ' is-selected' : '') + '" onclick="ensoFocus(\'' + esc(iso) + '\')">' + esc(nameFor(iso)) + '</button>';
+      }).join('') + '</div>' : '') + '</div>';
   }
   function renderGate() {
     var el = document.getElementById('enso-gate'); if (!el) return;
@@ -43426,7 +43444,7 @@ function showCommodityDetail(key) {
     var opt = function (m) {
       return '<option value="' + m[0] + '"' + (m[0] === S.mode ? ' selected' : '') + '>' + esc(m[1]) + '</option>';
     };
-    var modeOpts = opt(['none', 'Unfilled land']) +
+    var modeOpts = opt(['none', 'No land layer']) +
       '<optgroup label="Modelled: what ENSO implies">' + modelled.map(opt).join('') + '</optgroup>' +
       '<optgroup label="Observed or reported: source readings">' + liveModes.map(opt).join('') + '</optgroup>';
 
@@ -43459,7 +43477,7 @@ function showCommodityDetail(key) {
       '<div class="enso-instrument-row enso-layer-row"><div class="enso-layer-groups"><div class="enso-layer-group"><span class="enso-instrument-label">Modelled</span>' +
       buttons([['impact','Production shock'],['crop','Strongest crop'],['coverage','Coverage']]) + '</div>' +
       '<div class="enso-layer-group"><span class="enso-instrument-label">Observed / reported</span>' + buttons([['asap','Hotspots'],['gdacs','Hazards'],['ipc','IPC'],['rtfp','Food inflation'],['sst','Sea-surface']]) + '</div>' +
-      buttons([['none','Unfilled land']]) + '<label class="enso-native-label"><span class="enso-sr">Native map layer</span><select class="enso-native" id="enso-mode">' + modeOpts + '</select></label></div>' +
+      buttons([['none','No land layer']]) + '<label class="enso-native-label"><span class="enso-sr">Native map layer</span><select class="enso-native" id="enso-mode">' + modeOpts + '</select></label></div>' +
       '<div class="enso-overlay-group" role="group" aria-label="Map overlays"><span class="enso-instrument-label">Overlays</span>' + overlays.map(function (o) {
         return '<label class="enso-overlay"><input class="enso-native" type="checkbox" id="enso-tog-' + o[0] + '"' + (o[3] ? ' checked' : '') + '><span class="enso-overlay-face"><i style="--swatch:' + o[2] + '"></i>' + o[1] + '</span></label>';
       }).join('') + '</div></div></div>';
@@ -43572,11 +43590,11 @@ function showCommodityDetail(key) {
        chokepoints when they are on, otherwise the bare reference geography. */
     var title = { impact: 'Modelled production shock', crop: 'Strongest measured crop', coverage: 'Model coverage', asap: 'Agricultural hotspots',
       gdacs: 'Drought and flood alerts', ipc: 'Food insecurity, IPC 3+', rtfp: 'Domestic food inflation, year on year', sst: 'Sea-surface anomaly',
-      none: S.showLanes ? 'Shipping chokepoints and lanes' : 'Unfilled land' }[S.mode];
+      none: S.showLanes ? 'Shipping chokepoints and lanes' : 'No land layer' }[S.mode];
     var key = {impact:'exp',crop:'model',coverage:'model'}[S.mode] || S.mode;
     var kind = modelled ? 'modelled' : (S.mode === 'sst' || S.mode === 'rtfp') ? 'observed' : S.mode === 'none' ? 'reference' : 'reported';
     var date = S.mode === 'sst' && S.sst ? 'seven-day mean ' + S.sst.time_start + ' to ' + S.sst.time_end :
-      S.mode === 'none' ? (S.showLanes ? 'land unfilled; transits collected ' + stamp(metaDate('portwatch')) + ', lane phases from published evidence' : 'no measured land quantity') :
+      S.mode === 'none' ? (S.showLanes ? 'land unfilled; transits collected ' + stamp(metaDate('portwatch')) + ', lane phases from published evidence' : 'reference geography only; choose a layer above to paint the land, and add overlays to any of them') :
       'collected ' + stamp(metaDate(key)) + (modelled ? '' : '; assessment periods vary by record');
     if (S.mode === 'rtfp') date = rtfpNote();
     if (S.mode === 'sst' && !S.showSST) title += ' (backdrop hidden)';
@@ -43597,7 +43615,23 @@ function showCommodityDetail(key) {
     instrumentNumbers(el);
     mapChrome();
     var st = document.getElementById('enso-status'); if (st) st.textContent = el.textContent;
+    /* One sentence on why this layer sits on a food-security page. The status
+       mirror above is taken before it is added, so the header keeps the facts. */
+    var why = MAP_WHY[S.mode === 'none' ? (S.showLanes ? 'lanes' : 'none') : S.mode];
+    if (why) el.insertAdjacentHTML('beforeend', '<span class="enso-map-why">' + esc(why) + '</span>');
   }
+  var MAP_WHY = {
+    sst: 'Why it is here: the warm water is the observation every other layer on this tab is traced back to. The dashed box is Niño 3.4, where CPC measures it.',
+    impact: 'Why it is here: the colour is the fitted yield response at the chosen scenario, weighted by production, so it says where a season like this has moved harvests in the record.',
+    crop: 'Why it is here: the single crop with the largest fitted response in each country, to show what the country total is made of.',
+    coverage: 'Why it is here: the share of a country’s production the fit covers. A pale country is one the model barely sees, not one that is safe.',
+    lanes: 'Why it is here: grain moves by sea. The Panama Canal’s locks are fed by rain, so an El Niño drought cuts its daily slots and pushes US Gulf to Asia cargoes onto longer routes; the lanes tagged El Niño side are the ones degraded in such years.',
+    none: 'No land layer is painted. Choose a layer above; the overlays can be added to any of them.',
+    rtfp: 'Why it is here: market food inflation is where a harvest or freight shock reaches households. It is measured in markets, not modelled.',
+    asap: 'Why it is here: hotspots are this season’s first observed sign of crop stress. The page does not attribute them to El Niño.',
+    gdacs: 'Why it is here: hazard alerts record droughts, floods and storms as they happen, shown where a published teleconnection exists.',
+    ipc: 'Why it is here: IPC phases are the reported outcome, acute food insecurity, against which every other layer is read.'
+  };
 
   function compactLegend() {
     var el = document.getElementById('enso-legend'), row = el && el.querySelector('.enso-legend'); if (!row) return;
@@ -43665,7 +43699,7 @@ function showCommodityDetail(key) {
       compactLegend(); return;
     }
     if (S.mode === 'none') {
-      el.innerHTML = '<div class="enso-legend">' + (S.showLanes ? laneLegend() : '<div class="enso-legend-block"><div class="enso-legend-t">Unfilled land</div><div class="enso-legend-row"><span class="enso-sw" style="background:#1c1c22"></span>No land quantity painted</div><div class="ctr-note">IPC measures food insecurity, not prices. Price evidence appears below.</div></div>') + (S.showSST ? sstLegend() : '') + (S.showAlerts ? alertLegend() : '') + '</div>';
+      el.innerHTML = '<div class="enso-legend">' + (S.showLanes ? laneLegend() : '<div class="enso-legend-block"><div class="enso-legend-t">No land layer</div><div class="enso-legend-row"><span class="enso-sw" style="background:#1c1c22"></span>Reference geography, nothing measured is painted</div><div class="ctr-note">IPC measures food insecurity, not prices. Price evidence appears below.</div></div>') + (S.showSST ? sstLegend() : '') + (S.showAlerts ? alertLegend() : '') + '</div>';
       compactLegend(); return;
     }
     if (S.mode === 'sst') {
@@ -44041,23 +44075,28 @@ function showCommodityDetail(key) {
      defend, sited on the place it belongs to — the map should argue, not just
      colour in. Hidden on narrow screens where they would collide. */
   var ANNOTATIONS = [
-    { at: [38.5, -98.4], label: [40, -128], side: 'left', t: 'Kansas',
+    { at: [38.5, -98.4], label: [40, -128], side: 'left', t: 'Kansas', lens: ['ensoharvest'],
       d: 'El Niño cuts winter-wheat abandonment 3pp. US wheat +4.4%/ONI, the most statistically significant result in the panel (q<0.0001), though not the largest.' },
-    { at: [-28.6, 26.2], label: [-33, 58], side: 'right', t: 'Free State',
+    { at: [-28.6, 26.2], label: [-33, 58], side: 'right', t: 'Free State', lens: ['ensoharvest'],
       d: 'South African maize −21%/ONI. Zimbabwe −27.6%. The best-evidenced El Niño food signal there is.' },
-    { at: [9.08, -79.68], label: [-19, -116], side: 'right', t: 'Gatún',
+    { at: [9.08, -79.68], label: [-19, -116], side: 'right', t: 'Gatún', lens: ['ensowater'],
       d: 'Rainfall 34% below normal. Slots cut to 32/day from 1 Sept 2026.' }
   ];
   /* The text sits in open water and a hairline runs to the place it describes.
-     Anchored on the landmass it covered the very fill it was annotating. */
+     Anchored on the landmass it covered the very fill it was annotating. Each
+     note belongs to one lens: harvest notes on Harvests, the canal on Shipping;
+     on the other views their leader lines pointed at nothing. */
   function drawAnnotations() {
-    ANNOTATIONS.forEach(function (a) {
-      L.polyline([a.label, a.at], {
+    if (!S.map) return;
+    (S.annoLayers || []).forEach(function (l) { try { S.map.removeLayer(l); } catch (e) {} });
+    S.annoLayers = [];
+    ANNOTATIONS.filter(function (a) { return !a.lens || a.lens.indexOf(S.sub) >= 0; }).forEach(function (a) {
+      S.annoLayers.push(L.polyline([a.label, a.at], {
         color: '#e6e3da', weight: 0.7, opacity: .55, interactive: false
-      }).addTo(S.map);
-      L.circleMarker(a.at, { radius: 2.6, color: '#e6e3da', weight: 1,
-        fillColor: '#0b1017', fillOpacity: 1, interactive: false }).addTo(S.map);
-      L.marker(a.label, {
+      }).addTo(S.map));
+      S.annoLayers.push(L.circleMarker(a.at, { radius: 2.6, color: '#e6e3da', weight: 1,
+        fillColor: '#0b1017', fillOpacity: 1, interactive: false }).addTo(S.map));
+      S.annoLayers.push(L.marker(a.label, {
         interactive: false,
         /* Leaflet z-orders markers by latitude, so the Tropic of Cancer label at
            23.44N painted OVER the Kansas card at 46N and ran straight through
@@ -44075,7 +44114,7 @@ function showCommodityDetail(key) {
              size to its content; the width comes from CSS. */
           iconSize: null, iconAnchor: a.side === 'left' ? [196, 8] : [-8, 8]
         })
-      }).addTo(S.map);
+      }).addTo(S.map));
     });
   }
 
@@ -44933,15 +44972,26 @@ function showCommodityDetail(key) {
       var old = frame.querySelector('.enso-chart-legend'); if (old) old.remove();
       var legend = document.createElement('div'); legend.className = 'enso-chart-legend';
       legend.setAttribute('aria-label', 'Toggle chart series');
+      /* A key, not a list of names: each series shows its own colour and line
+         style, and a chart can add plain notes for marks that are not series
+         (vertical rules, step lines). */
       cfg.data.datasets.forEach(function (ds, i) {
         var button = document.createElement('button'); button.type = 'button';
-        button.textContent = ds.label; button.setAttribute('aria-pressed', 'true');
+        var col = ds.borderColor || ds.backgroundColor || ds.pointBackgroundColor || '#b6b8be';
+        if (Object.prototype.toString.call(col) === '[object Array]') col = col[0];
+        var sw = document.createElement('i'); sw.className = 'enso-key-sw' + (ds.borderDash && ds.borderDash.length ? ' is-dash' : '');
+        sw.style.background = String(col); sw.style.color = String(col);
+        button.appendChild(sw); button.appendChild(document.createTextNode(ds.label || ''));
+        button.setAttribute('aria-pressed', 'true');
         button.onclick = function () {
           var chart = S.charts[id], visible = chart.isDatasetVisible(i);
           chart.setDatasetVisibility(i, !visible); chart.update('none');
           button.setAttribute('aria-pressed', visible ? 'false' : 'true');
         };
         legend.appendChild(button);
+      });
+      (cfg.keyNotes || []).forEach(function (t) {
+        var n = document.createElement('span'); n.className = 'enso-key-note'; n.textContent = t; legend.appendChild(n);
       });
       frame.querySelector('.enso-plate-h').after(legend);
     }
@@ -45038,7 +45088,7 @@ function showCommodityDetail(key) {
         var marks = pan && pan.live_2026 && pan.live_2026.steps ? pan.live_2026.steps.map(function (st) { return { date: st.effective, label: 'slots ' + st.total + '/day' }; }) : [];
         dailyChart('panama', 'enso-c-panama-daily', marks);
       })();
-      mk('enso-c-panama', {
+      mk('enso-c-panama', { keyNotes: ['step line: the published slot limit per day; steps are in order, not to scale in time'],
         type: 'line',
         data: {
           labels: labels,
@@ -45352,7 +45402,7 @@ function showCommodityDetail(key) {
         if (S.drawn.mech) renderMechanism();
         S.drawn.map = true;
       }
-      toggleSST(); toggleRegions(); toggleLanes(); toggleAlerts();
+      toggleSST(); toggleRegions(); toggleLanes(); toggleAlerts(); drawAnnotations();
       renderControls(); renderDetail(); renderLegend();
       setTimeout(function () { resizeEnsoMap(); if (S.map) { buildDefs(); paint(); } }, 60);
     }
