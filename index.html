@@ -41914,24 +41914,36 @@ function showCommodityDetail(key) {
     if (days === 1) return 'updated yesterday';
     return 'updated ' + days + ' days ago';
   };
-  /* Collection age, not the age of an observation. Curated references get a
-     30-day review threshold; daily collectors get three days of grace. */
+  /* Collection age, not the age of an observation. Collectors run every six
+     hours, so three days without a run means the cron has failed. Hand-kept
+     references are re-read on a schedule of their own: monthly for the
+     evidence files, yearly for crop calendars, which USDA redraws at most
+     once a season. */
+  var REVIEW_DAYS = { exp: 30, model: 30, regions: 30, lanes: 30, econ: 30, mech: 30, restrictions: 30, calendars: 365 };
+  var FEED_LABELS = { enso: 'ONI and weekly Niño 3.4', exp: 'Exposure', model: 'Crop fit', regions: 'Teleconnections',
+    lanes: 'Lane evidence', econ: 'Economic evidence', mech: 'Mechanism snapshot', indices: 'Indices',
+    bulletins: 'Agency bulletins', sst: 'Sea-surface anomaly', pwhist: 'Chokepoint transit history',
+    calendars: 'Crop calendars', portwatch: 'AIS transits', rtfp: 'Domestic prices', ffpi: 'FAO prices',
+    asap: 'Agricultural hotspots', gdacs: 'Hazard alerts', ipc: 'Food insecurity', relief: 'Humanitarian events',
+    news: 'Newswire', restrictions: 'Export restrictions on record' };
   var feedIssue = function (key) {
     if (!S[key]) return 'feed unavailable';
     var m = S.meta[key] || {}, d = metaDate(key);
     if (!d) return 'refresh date unavailable';
-    if (m.stale || (m.status && ['ok', 'success'].indexOf(m.status) < 0))
+    /* "preliminary" is OISST's own word for its near-real-time product. The
+       legend says it where the field is drawn; it is not a fault of the feed. */
+    if (m.stale || (m.status && ['ok', 'success', 'preliminary'].indexOf(m.status) < 0))
       return 'source reports ' + (m.stale ? 'stale data' : m.status);
-    var reference = ['exp', 'model', 'regions', 'lanes', 'econ', 'mech', 'restrictions'].indexOf(key) >= 0;
-    var limit = reference ? 30 : 3;
-    if (Date.now() - d.getTime() > limit * 86400000)
-      return (reference ? 'snapshot past' : 'stale collection; past') + ' ' + limit + '-day review threshold';
+    var limit = REVIEW_DAYS[key] || 3, days = Math.floor((Date.now() - d.getTime()) / 86400000);
+    if (days > limit)
+      return REVIEW_DAYS[key] ? 'hand-kept; review was due after ' + limit + ' days'
+                              : 'collector has not run for ' + days + ' days';
     return '';
   };
   var feedStamp = function (key, label) {
     var issue = feedIssue(key), d = metaDate(key);
     return '<span class="enso-feed-note' + (issue ? ' enso-feed-warning' : '') + '">' +
-      esc(label + ' · read ' + stamp(d) + ' · ' + ageLabel(d) + (issue ? ' · ' + issue : '')) + '</span>';
+      esc((label || FEED_LABELS[key] || key) + ' · read ' + stamp(d) + ' · ' + ageLabel(d) + (issue ? ' · ' + issue : '')) + '</span>';
   };
   var hasRows = function (key, field) {
     var d = S[key];
@@ -45486,9 +45498,9 @@ function showCommodityDetail(key) {
         'the file failed to load or returned unusable data, not a finding. ' +
         '<button type="button" class="enso-inline-link" onclick="ensoRetry()">Try again</button>' +
       '</div>' : '') + (issues.length ?
-      '<div class="enso-gate" role="status"><b>' + issues.length + (issues.length === 1 ? ' feed is' : ' feeds are') + ' past review or empty.</b> Collection dates are not observation dates. ' +
+      '<div class="enso-gate" role="status"><b>' + issues.length + (issues.length === 1 ? ' feed needs' : ' feeds need') + ' review.</b> The dates are when this page last read each source, not when the source observed. ' +
         issues.map(function (k) {
-          return feedStamp(k, S.feedNames[k]) + (!hasRows(k) ? '<span>No rows in the loaded feed.</span>' : '');
+          return feedStamp(k, FEED_LABELS[k] || String(S.feedNames[k] || k).replace(/_/g, ' ')) + (!hasRows(k) ? '<span>No rows in the loaded feed.</span>' : '');
         }).join('') + '</div>' : '');
   }
   function renderSubviewMeta() {
