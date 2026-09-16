@@ -28,7 +28,8 @@ Formula (extended May 2026, expanded May 2026 v20.27):
     + flood_kick         (0-3)   — river discharge anomaly
     + aq_kick            (0-1)   — PM2.5 > WHO target-2 (35 µg/m³)
     + us_water_kick      (0-2)   — only for US-XX state codes
-    + us_fi_kick          (0-3)   — US-state food insecurity (Feeding America)
+    + us_fi_kick          (0)     — ZEROED v85: the page blends Feeding America
+                                  prevalence directly for US states
     + inform_amp         (0-3)   — INFORM risk >7.0 → composite humanitarian crisis amplifier
     + governance_drag    (0-2)   — WGI rule_of_law < -1.0 → governance brittleness amplifier
     + psd_shortfall      (0-3)   — USDA PSD production-vs-consumption gap proxy for the latest
@@ -398,7 +399,12 @@ def main():
         fa_row = feeding.get(iso) or {}
         fa_pct = fa_row.get("food_insecurity_pct")
         if iso.startswith("US-") and isinstance(fa_pct, (int, float)):
-            us_fi_kick = min(3, max(0, (fa_pct - 13) * 0.4))
+            # v85 -- ZEROED, field kept. The page already takes this prevalence
+            # directly for US states (70/30 blend with the structural score in
+            # index.html), so a kick from the same Feeding America field on top
+            # of it counted the same number twice. Re-enable only if that blend
+            # is removed.
+            us_fi_kick = 0 * min(3, max(0, (fa_pct - 13) * 0.4))
 
         # v20.27 — INFORM amplifier: composite humanitarian risk above 7.0
         # piles on the IPC/conflict picture. Capped at +3 so it doesn't

@@ -19837,8 +19837,13 @@ async function loadLiveData() {
       if (c._fdrsStructural == null) c._fdrsStructural = c.fdrs;
       // Scale MMG % onto 0-100 (5%->10, 20%->85, linear)
       const mmgScore = Math.max(0, Math.min(100, Math.round((fa.food_insecurity_pct - 5) / 15 * 75 + 10)));
-      // Blend: 70% MMG (real food-insecurity prevalence) + 30% structural (import dep, supply chain, etc)
-      c.fdrs = Math.round(mmgScore * 0.7 + c._fdrsStructural * 0.3);
+      // Blend: 70% MMG (real food-insecurity prevalence) + 30% structural (import dep, supply chain, etc),
+      // then the live nowcast on top. The blend used to overwrite the nowcast
+      // that had just been applied, so the weather and price signals the
+      // "why" panel listed were not in the number. The Feeding America kick is
+      // zero in the builder now, so nothing is counted twice.
+      const usNc = (LIVE.nowcast && LIVE.nowcast[c.iso] && LIVE.nowcast[c.iso].adjustment) || 0;
+      c.fdrs = Math.max(0, Math.min(100, Math.round(mmgScore * 0.7 + c._fdrsStructural * 0.3 + usNc)));
       c._fdrsAdj = c.fdrs - c._fdrsStructural;
       c._usMmgFI = fa.food_insecurity_pct;
       c._usMmgChildFI = fa.child_food_insecurity_pct;
@@ -27992,7 +27997,7 @@ function updateRail() {
       <div class="rank-num">${i+1}</div>
       <div class="rank-name">${c.name}</div>
       ${fsTrendMini(c.iso)}
-      ${(c._fdrsAdj && Math.abs(c._fdrsAdj) >= 1) ? `<div title="live nowcast shift vs the structural baseline" style="font-family:'Geist Mono',monospace;font-size:9px;font-weight:600;font-variant-numeric:tabular-nums;color:${c._fdrsAdj>0?'#c44b3c':'#6ba36b'};white-space:nowrap;">${c._fdrsAdj>0?'▲+':'▼−'}${Math.abs(Math.round(c._fdrsAdj))}</div>` : ''}
+      ${(c._fdrsAdj && Math.abs(c._fdrsAdj) >= 1) ? `<div title="${c._usMmgFI != null ? 'Feeding America prevalence blend plus live nowcast, vs the structural baseline' : 'live nowcast shift vs the structural baseline'}" style="font-family:'Geist Mono',monospace;font-size:9px;font-weight:600;font-variant-numeric:tabular-nums;color:${c._fdrsAdj>0?'#c44b3c':'#6ba36b'};white-space:nowrap;">${c._fdrsAdj>0?'▲+':'▼−'}${Math.abs(Math.round(c._fdrsAdj))}</div>` : ''}
       <div class="rank-score" style="background:${riskColor(c.fdrs)}1a;color:${riskColor(c.fdrs)}">${c.fdrs}</div>
     </div>`).join('');
 
@@ -28003,7 +28008,7 @@ function updateRail() {
       <div class="rank-num">${i+1}</div>
       <div class="rank-name">${c.name}</div>
       ${fsTrendMini(c.iso)}
-      ${(c._fdrsAdj && Math.abs(c._fdrsAdj) >= 1) ? `<div title="live nowcast shift vs the structural baseline" style="font-family:'Geist Mono',monospace;font-size:9px;font-weight:600;font-variant-numeric:tabular-nums;color:${c._fdrsAdj>0?'#c44b3c':'#6ba36b'};white-space:nowrap;">${c._fdrsAdj>0?'▲+':'▼−'}${Math.abs(Math.round(c._fdrsAdj))}</div>` : ''}
+      ${(c._fdrsAdj && Math.abs(c._fdrsAdj) >= 1) ? `<div title="${c._usMmgFI != null ? 'Feeding America prevalence blend plus live nowcast, vs the structural baseline' : 'live nowcast shift vs the structural baseline'}" style="font-family:'Geist Mono',monospace;font-size:9px;font-weight:600;font-variant-numeric:tabular-nums;color:${c._fdrsAdj>0?'#c44b3c':'#6ba36b'};white-space:nowrap;">${c._fdrsAdj>0?'▲+':'▼−'}${Math.abs(Math.round(c._fdrsAdj))}</div>` : ''}
       <div class="rank-score" style="background:${riskColor(c.fdrs)}1a;color:${riskColor(c.fdrs)}">${c.fdrs}</div>
     </div>`).join('');
 
