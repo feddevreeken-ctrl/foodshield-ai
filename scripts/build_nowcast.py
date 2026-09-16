@@ -34,7 +34,8 @@ Formula (extended May 2026, expanded May 2026 v20.27):
     + psd_shortfall      (0-3)   — USDA PSD production-vs-consumption gap proxy for the latest
                                    marketing year (a true 5-yr-baseline shortfall needs a history
                                    table not yet wired in; this is a cross-sectional gap signal)
-    - relief_present     (-2)    — active humanitarian response damps shock
+    - relief_present     (0)     — ZEROED v85: a ReliefWeb document count is
+                                  publication volume, not response capacity
 """
 import json
 import math
@@ -182,6 +183,21 @@ def main():
             ipc_p3 = _ipc_row.get("national_phase3plus_pct") or 0
         else:
             ipc_p3 = _ipc_row.get("phase3plus_pct") or 0
+        # v85 -- IPC analyses age like IDP snapshots do, and until now they did
+        # not: eight of 57 rows were over a year old (Angola 745 days, Dominican
+        # Republic 670, El Salvador 623) and carried full weight, and three
+        # countries read "high" confidence on nothing but such a row. Same shape
+        # as the v79 IDP gate, on the IPC cadence: full weight inside 12 months,
+        # linear decay to zero at 24, and a stale reading never confers
+        # confidence (see has_ipc below). Undated rows are treated as stale.
+        ipc_age_days = _age_days(_ipc_row.get("analysis_date"))
+        if ipc_age_days is None or ipc_age_days > 730:
+            ipc_weight = 0.0
+        elif ipc_age_days > 365:
+            ipc_weight = max(0.0, 1.0 - (ipc_age_days - 365) / 365.0)
+        else:
+            ipc_weight = 1.0
+        ipc_stale = ipc_weight < 1.0
         wfp_fcs  = (wfp.get(iso) or {}).get("fcs_pct") or 0
         # v23 — ACLED only counts as a LIVE nowcast signal when the feed is actually
         # live (is_live=true). On a 12-month-lagged access tier it's a STRUCTURAL
@@ -207,7 +223,7 @@ def main():
         aq_row   = aq.get(iso) or {}
         usg_row  = usgs.get(iso) or {}
 
-        ipc_pressure  = min(12, ipc_p3 * 0.12)
+        ipc_pressure  = round(min(12, ipc_p3 * 0.12) * ipc_weight, 2)
 
         # v89 — ABSOLUTE CASELOAD, alongside prevalence.
         #
@@ -228,10 +244,16 @@ def main():
         # emergency that ipc_pressure and fews_kick already register.
         _ipc_count = (_ipc_row.get("phase3plus_count")
                       if isinstance(_ipc_row.get("phase3plus_count"), (int, float)) else 0)
-        caseload_kick = min(5.0, 2.5 * math.log10(1 + _ipc_count / 1_000_000.0)) if _ipc_count > 0 else 0
+        caseload_kick = round(min(5.0, 2.5 * math.log10(1 + _ipc_count / 1_000_000.0)) * ipc_weight, 2) if _ipc_count > 0 else 0
         wfp_pressure  = min(6, max(0, (wfp_fcs - 30) * 0.15))
         conflict_kick = min(5, conflict * 0.05)
-        relief_damp   = -2 if relief_n >= 3 else (-1 if relief_n >= 1 else 0)
+        # v85 -- ZEROED, field kept (as inflation_shock is). relief_n is the number
+        # of ReliefWeb documents about a country inside a globally capped 50-item
+        # window: publication volume, not response capacity, and it was
+        # SUBTRACTED, so the countries most written about had their score
+        # lowered. Re-enable only against a sourced response measure (WFP
+        # operational tonnage, FTS funding), never a document count.
+        relief_damp   = 0
 
         # v42 — FEWS NET forward projection. FEWS is the best forward-looking famine
         # signal and was previously display-only. To avoid double-counting IPC's
@@ -471,7 +493,7 @@ def main():
         # so the UI can show it as provisional rather than authoritative.
         # Previously a missing signal silently became 0 ("no pressure"), which
         # made sparse-data countries look calmer and more certain than they are.
-        has_ipc = iso in ipc and (ipc.get(iso) or {}).get("phase3plus_pct") is not None
+        has_ipc = iso in ipc and (ipc.get(iso) or {}).get("phase3plus_pct") is not None and not ipc_stale
         has_wfp = iso in wfp and (wfp.get(iso) or {}).get("fcs_pct") is not None
         has_fews = isinstance(fews_cur, (int, float))   # v42 — FEWS is an authoritative crisis feed
         # v43 — significant displacement is an authoritative crisis signal, but
