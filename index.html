@@ -25133,7 +25133,7 @@ function curatedPartners(c, commodity, dir) {
       name: (typeof _nameFromISO === 'function' ? _nameFromISO(f[other]) : f[other]) || f[other],
       iso: f[other], kt: f.value, pct: null,
       obs: f.kind === 'observed', curated: true,
-      src: f.src, note: f.note, kind: f.kind,
+      src: f.src, note: f.note, kind: f.kind, year: f.year,
     }));
   return rows.length ? rows : null;
 }
@@ -29024,22 +29024,34 @@ function ctrSupplierChart(supplierRows, cname) {
 // The top import corridors — supplier → commodity, by cited tonnage. Magnitude,
 // so one hue and one scale (largest corridor = full width). The world map is the
 // Global Map tab's job; this is the ranked list of what actually moves.
+function atlasCitedYears(row) {
+  if (row && row.year != null) return String(row.year);
+  var years = String(row && row.note || '').match(/\b(?:19|20)\d{2}(?:[/-]\d{2,4})?\b/g) || [];
+  return years.filter(function (y, i) { return years.indexOf(y) === i; }).join(', ') || 'not supplied';
+}
 function ctrCorridorChart(deps, cname) {
-  const src = (deps || []).filter(d => d && d.totalKt > 0).slice().sort((a, b) => b.totalKt - a.totalKt).slice(0, 6);
+  var src = (deps || []).filter(function (d) { return d && d.totalKt > 0; }).map(function (d) {
+    var supplier = (d.rows || []).filter(function (r) { return r.name === d.topSupplier && typeof r.kt === 'number' && isFinite(r.kt) && r.kt > 0; })[0];
+    return { dep: d, supplier: supplier, kt: supplier ? supplier.kt : d.totalKt };
+  }).sort(function (a, b) { return b.kt - a.kt; }).slice(0, 6);
   if (!src.length) return '';
-  const max = src[0].totalKt || 1;
-  const rows = src.map(d => ({
-    label: d.topSupplier + ' → ' + d.label,
-    pct: d.totalKt / max * 100,
-    value: _ctrKt(d.totalKt),
-    meta: _ctrPct(d.topShare) + ' top',
-    color: 'var(--accent)',
-    title: cname + ' imports ' + _ctrKt(d.totalKt) + ' of ' + d.label + '; ' + _ctrPct(d.topShare)
-      + ' of it from ' + d.topSupplier + '. HHI ' + d.hhi.toLocaleString() + ' on the 0–10,000 scale.'
-  }));
+  var max = src[0].kt || 1;
+  var rows = src.map(function (r) {
+    var d = r.dep, supplier = r.supplier;
+    var years = supplier ? atlasCitedYears(supplier) : (d.rows || []).map(atlasCitedYears).filter(function (y, i, all) { return all.indexOf(y) === i; }).join('; ');
+    var source = supplier ? supplier.src || 'commodity atlas' : 'commodity atlas';
+    var label = (supplier ? supplier.name : 'total commodity imports') + ' → ' + d.label;
+    var basis = supplier ? supplier.kind || (supplier.obs ? 'observed' : 'reported basis unspecified') : 'aggregate of atlas flows';
+    return {
+      label: label, pct: r.kt / max * 100, value: _ctrKt(r.kt),
+      meta: 'cited year(s): ' + (years || 'not supplied'), color: 'var(--accent)',
+      title: cname + ': ' + label + ', ' + _ctrKt(r.kt) + '; ' + basis + '; source: ' + source +
+        '; cited year(s): ' + (years || 'not supplied') + '. ' + (supplier && supplier.note || '')
+    };
+  });
   return ctrBarChart(rows, {
     aria: 'Top cited import corridors for ' + cname + ' by tonnage',
-    caption: 'Cited bilateral tonnage · bar length relative to the largest corridor'
+    caption: 'Source: commodity atlas, mixed observed and modelled flows; row tooltips give source and basis. Cited years shown per row; total commodity imports used where bilateral tonnage is absent. Bar length relative to the largest row.'
   });
 }
 
@@ -29414,9 +29426,9 @@ function renderCountryTab() {
     </details>
 
     <details class="ctr-more" ontoggle="_ctrRemount()">
-      <summary>Where the score has been since 2018 <span class="ctr-more-count">modeled backcast · not an observed archive</span></summary>
+      <summary>Where the score has been since 2018 <span class="ctr-more-count">illustrative reconstruction, not observed</span></summary>
       <div class="ctr-more-body">
-        <div class="ctr-note">Reconstructed from the current score, the 2030 trajectory, and known global shocks (COVID 2020, Ukraine 2022, El Niño 2023). <b>This is not a directly observed FDRS archive.</b></div>
+        <div class="ctr-note">Reconstructed from the current score, the 2030 trajectory, and known global shocks (COVID 2020, Ukraine 2022, El Niño 2023). <b>Illustrative reconstruction, not observed.</b> Source: FoodShield reconstruction; current model as of ${fdrsDataDate() || 'unavailable'}.</div>
         <div style="height:200px;"><canvas id="fdrs-history-ct"></canvas></div>
         <div style="margin-top:14px;"><div class="fdrs-hist-timeline" id="fdrs-hist-events-${c.iso}"></div></div>
       </div>
@@ -29899,7 +29911,7 @@ function realShares(c, label, dir){
   const rows = partners.map(p => ({
     name:p.name, iso:p.iso, kt:p.kt||0,
     share: (p.kt||0) / totalKt,           // true share of this commodity's flow
-    obs: p.obs, src: p.src, note: p.note, kind: p.kind,
+    obs: p.obs, src: p.src, note: p.note, kind: p.kind, year: p.year,
   })).sort((a,b)=> b.kt - a.kt);
   const observedKt = rows.filter(r=>r.obs).reduce((a,r)=>a+r.kt,0);
   return { rows, totalKt, observedShare: observedKt/totalKt };
@@ -30577,7 +30589,7 @@ function renderForecastCountry(iso) {
           <div style="height:220px;"><canvas id="forecast-trade"></canvas></div>
         </div>
         <div class="card">
-          <div class="card-title"><span class="card-marker"></span> Population vs food supply / capita</div>
+          <div class="card-title"><span class="card-marker"></span> Population vs domestic production per capita</div>
           <div style="height:220px;"><canvas id="forecast-pop"></canvas></div>
         </div>
       </div>
@@ -31723,7 +31735,7 @@ let _scnBpContext = null;
 // v68.3 — Scenario paint state. _scnPaintOn above is the only boolean mode flag;
 // everything here is derived visual state and is nulled by _scnTeardownScenarioPaint().
 let _scnPaintDeltaByIso = null;
-let _scnPaintMaxAbs = 0;
+
 let _scnPaintMarker = null;
 let _scnPaintLegendState = null;
 let _scnPaintLayersState = null;
@@ -31758,31 +31770,21 @@ function _scnPaintMix(a, b, t) {
   return a.map((v, i) => v + (b[i] - v) * t);
 }
 
-function _scnDeltaRampColor(delta, maxAbs) {
-  const t = maxAbs > 0 ? Math.max(0, Math.min(1, Math.abs(Number(delta) || 0) / maxAbs)) : 0;
-  const stops = [
-    { at: 0,    c: _scnPaintRgb(_scnPaintCssVar('--b2', '#3d3d4a'), '#3d3d4a') },
-    { at: 0.35, c: _scnPaintRgb('#c9a957', '#c9a957') },
-    { at: 0.70, c: _scnPaintRgb('#c44b3c', '#c44b3c') },
-    { at: 1,    c: _scnPaintRgb('#7a2922', '#7a2922') },
-  ];
-  for (let i = 1; i < stops.length; i++) {
-    if (t <= stops[i].at) {
-      const span = stops[i].at - stops[i - 1].at || 1;
-      return _scnPaintHex(_scnPaintMix(stops[i - 1].c, stops[i].c, (t - stops[i - 1].at) / span));
-    }
-  }
-  return '#7a2922';
+// Fixed signed FDRS-point scale shared by the full map and its preview.
+function _scnDeltaRampColor(delta) {
+  var value = Math.max(-30, Math.min(30, Number(delta) || 0));
+  var zero = [155, 149, 140], end = value < 0 ? [91, 155, 138] : [196, 75, 60];
+  var fraction = value < 0 ? -value / 30 : value / 30;
+  return _scnPaintHex(_scnPaintMix(zero, end, fraction));
 }
-
-function _scnPaintDeltaColor(delta) {
-  return _scnDeltaRampColor(delta, _scnPaintMaxAbs || 0);
-}
-
-function _scnPaintLegendTicks() {
-  const max = Math.max(0, Math.ceil(_scnPaintMaxAbs || 0));
-  const mid = Math.max(1, Math.round(max / 2));
-  return { mid, max: Math.max(1, max) };
+function _scnPaintDeltaColor(delta) { return _scnDeltaRampColor(delta); }
+function _scnDeltaLegendHTML() {
+  var ticks = [-30, -15, 0, 15, 30];
+  return '<div class="legend-title">Modelled scenario change · FDRS points</div><div class="legend-ramp">' +
+    ticks.map(function (v) { return '<div class="legend-item"><span class="legend-swatch" style="background:' + _scnDeltaRampColor(v) +
+      '"></span><span class="legend-label">' + (v > 0 ? '+' : '') + v + '</span></div>'; }).join('') +
+    '</div><div class="ctr-note">Fixed anchors −30, 0, +30 points; beyond the ends share end colours. Negative: lower risk; positive: higher risk. Dark grey: unscored. Source: FoodShield scenario model; baseline data date ' +
+    (fdrsDataDate() || 'unavailable') + '.</div>';
 }
 
 function _scnApplyScenarioPaintChrome() {
@@ -31798,19 +31800,8 @@ function _scnApplyScenarioPaintChrome() {
         aria: legend.getAttribute('aria-label'),
       };
     }
-    const ticks = _scnPaintLegendTicks();
     legend.setAttribute('aria-label', 'Scenario FDRS shift legend');
-    legend.innerHTML = `
-      <div class="legend-title">FDRS shift under scenario
-        <span class="legend-nd legend-item"><span class="legend-swatch legend-nodata"></span><span class="legend-label">Unscored</span></span>
-      </div>
-      <div class="legend-ramp">
-        <div class="legend-item" title="No scenario shift · 0"><span class="legend-swatch" style="background:${_scnDeltaRampColor(0, ticks.max)}"></span><span class="legend-label">0</span></div>
-        <div class="legend-item" title="Moderate scenario shift · +${ticks.mid}"><span class="legend-swatch" style="background:#c9a957"></span><span class="legend-label">+${ticks.mid}</span></div>
-        <div class="legend-item" title="High scenario shift"><span class="legend-swatch" style="background:#c44b3c"></span><span class="legend-label">High</span></div>
-        <div class="legend-item" title="Peak scenario shift · +${ticks.max}"><span class="legend-swatch" style="background:#7a2922"></span><span class="legend-label">+${ticks.max}</span></div>
-      </div>
-      <div class="legend-scale"><span>0</span><span>+${ticks.mid}</span><span>+${ticks.max}</span></div>`;
+    legend.innerHTML = _scnDeltaLegendHTML();
   }
 
   const layers = document.getElementById('map-layers');
@@ -31849,25 +31840,18 @@ function _scnRestoreScenarioPaintChrome() {
 
 function _scnPaintFeatureStyle(f, c) {
   if (!_scnPaintOn || !c) return null;
-  const delta = (_scnPaintDeltaByIso && _scnPaintDeltaByIso.has(c.iso)) ? _scnPaintDeltaByIso.get(c.iso) : 0;
-  const maxAbs = _scnPaintMaxAbs || 0;
-  const t = maxAbs > 0 ? Math.max(0, Math.min(1, Math.abs(Number(delta) || 0) / maxAbs)) : 0;
+  var hasDelta = _scnPaintDeltaByIso && _scnPaintDeltaByIso.has(c.iso);
   return {
-    fillColor: _scnPaintDeltaColor(delta),
-    color: '#050507',
-    weight: t > 0 ? 0.62 : 0.38,
-    fillOpacity: t > 0 ? 0.58 + Math.sqrt(t) * 0.36 : 0.50,
+    fillColor: hasDelta ? _scnPaintDeltaColor(_scnPaintDeltaByIso.get(c.iso)) : '#20202a',
+    color: '#050507', weight: 0.5, fillOpacity: 1
   };
 }
 
 function _scnBuildPaintDeltas(results) {
   _scnPaintDeltaByIso = new Map();
-  _scnPaintMaxAbs = 0;
-  (results || []).forEach(r => {
-    const d = Number(r && r.delta);
-    if (!r || !r.iso || !Number.isFinite(d)) return;
-    _scnPaintDeltaByIso.set(r.iso, d);
-    _scnPaintMaxAbs = Math.max(_scnPaintMaxAbs, Math.abs(d));
+  (results || []).forEach(function (r) {
+    if (!r || !r.iso || typeof r.delta !== 'number' || !isFinite(r.delta)) return;
+    _scnPaintDeltaByIso.set(r.iso, r.delta);
   });
 }
 
@@ -32017,7 +32001,6 @@ function _scnRepaintScenarioMap() {
 function _scnTeardownScenarioPaint() {
   _scnPaintOn = false;
   _scnPaintDeltaByIso = null;
-  _scnPaintMaxAbs = 0;
   _scnRemoveScenarioPaintMarker();
   _scnClearScenarioSeveredCorridors();
   _scnRemoveScenarioPaintBanner();
@@ -32061,6 +32044,7 @@ function _scnMiniMapShellHTML() {
         <span class="scn-mini-map-empty">Map preview loading</span>
       </div>
       <div class="scn-mini-map-caption">Deltas under this stack: click for the full map</div>
+      ${_scnDeltaLegendHTML()}
     </div>`;
 }
 
@@ -32070,12 +32054,10 @@ function _scnMiniMapSvgHTML(results, selected, features) {
   const scale = width / (2 * Math.PI);
   const height = Math.round(scale * (latTop - latBot) * Math.PI / 180);
   const deltaByIso = new Map();
-  let maxAbs = 0;
   (results || []).forEach(r => {
-    const d = Number(r && r.delta);
-    if (!r || !r.iso || !Number.isFinite(d)) return;
+    const d = r && r.delta;
+    if (!r || !r.iso || (typeof d !== 'number' || !isFinite(d))) return;
     deltaByIso.set(r.iso, d);
-    maxAbs = Math.max(maxAbs, Math.abs(d));
   });
   const projection = d3.geoEquirectangular()
     .scale(scale)
@@ -32089,9 +32071,8 @@ function _scnMiniMapSvgHTML(results, selected, features) {
     const c = (typeof lookupFeature === 'function') ? lookupFeature(f) : null;
     const hasDelta = !!(c && deltaByIso.has(c.iso));
     const delta = hasDelta ? deltaByIso.get(c.iso) : null;
-    const t = (hasDelta && maxAbs > 0) ? Math.max(0, Math.min(1, Math.abs(delta) / maxAbs)) : 0;
-    const fill = hasDelta ? _scnDeltaRampColor(delta, maxAbs || 1) : '#20202a';
-    const opacity = hasDelta ? Math.max(0.6, 0.70 + Math.sqrt(t) * 0.30) : 0.9;
+    const fill = hasDelta ? _scnDeltaRampColor(delta) : '#20202a';
+    const opacity = 1;
     const name = c ? c.name : ((f.properties && (f.properties.name || f.properties.NAME || f.properties.ADMIN)) || 'Unidentified map feature');
     return `<path d="${d}" fill="${fill}" fill-opacity="${opacity.toFixed(2)}" stroke="#050507" stroke-width=".42" vector-effect="non-scaling-stroke"><title>${esc(name)}${hasDelta ? ` · ${delta > 0 ? '+' : ''}${delta}` : ' · no scenario result'}</title></path>`;
   }).join('');
@@ -33852,7 +33833,7 @@ const INSTRUCTIONS = [
   },
   {
     icon: '⚖️', title: 'Country Comparison',
-    body: 'The <b>Compare</b> tab lets you select up to 4 countries and view them side-by-side. You get overlaid radar charts, a component breakdown table, and a shared modeled FDRS backcast from 2018 to 2025: all on one clean screen.'
+    body: 'The <b>Compare</b> tab lets you select up to 4 countries and view them side-by-side. You get overlaid radar charts, a component breakdown table, and a shared modeled FDRS backcast since 2018, anchored at the current data date.'
   },
   {
     icon: '🌾', title: 'Commodity Drill-Down',
@@ -33867,7 +33848,7 @@ const INSTRUCTIONS = [
     body: 'The <b>Live Data</b> tab is the market-benchmark layer: the FAO Food Price Index and the World Bank Pink Sheet commodity references, read from the JSON snapshots this build ships with. Both upstreams publish monthly; the data cron re-commits the snapshots and the page reloads them on each visit. Nothing is fetched from an API while you are looking at the tab, so there is no refresh button to press.'
   },
   {
-    icon: '📉', title: 'Modeled FDRS Backcast 2018–2025',
+    icon: '📉', title: 'Illustrative FDRS reconstruction since 2018',
     body: 'Country profiles carry a <b>modeled backcast</b> of the risk score from 2018 to today, reconstructed from the current score and known global shock years (2020 COVID-19, 2022 Ukraine war, 2023 El Niño), not observed historical FDRS values. It is labelled "modeled" everywhere in the UI.'
   },
   {
@@ -33895,7 +33876,7 @@ function renderInstructionsBody() {
     'Commodity Drill-Down': 'commodities',
     'Company Risk Tracker': 'companies',
     'Live Market Data': 'livedata',
-    'Modeled FDRS Backcast 2018–2025': 'country',
+    'Illustrative FDRS reconstruction since 2018': 'country',
   };
   el.innerHTML = INSTRUCTIONS.map((item, i) => {
     const tab = tabMap[item.title];
@@ -34734,72 +34715,76 @@ function mkRadar(id, c, title) {
   });
 }
 
-function mkProdChart(id, c, showForecast=false) {
-  const ctx=document.getElementById(id); if(!ctx) return;
-  const t=c&&c.trend;
-  if(!t||!Array.isArray(t.years)||!t.years.length) return;   // v30.11 — guard thin/missing trend data
-  const yrs=t.years.map(String);
-  return _safeChart(ctx,{
-    type:'line',
-    data:{labels:yrs,datasets:[
-      {label:'Production',data:t.production,borderColor:'#6ba36b',backgroundColor:'#6ba36b15',fill:true,tension:.4,borderWidth:2,pointRadius:0},
-      {label:'Consumption',data:t.consumption,borderColor:'#c44b3c',backgroundColor:'#c44b3c15',fill:true,tension:.4,borderWidth:2,pointRadius:0},
-    ]},
-    options:{...CHART_DEFAULTS,
-      plugins:{...CHART_DEFAULTS.plugins,
-        annotation:{annotations:{
-          gap:{type:'line',xMin:yrs.indexOf('2024'),xMax:yrs.indexOf('2024'),borderColor:'#8aa8c960',borderWidth:1,borderDash:[4,4],
-               label:{content:'Modeled →',display:true,color:'#6a685e',font:{size:9},position:'start'}}
-        }}
-      }
-    }
+// The embedded trend table has no upstream series citations. Do not call it observed.
+function countryTrendChart(id, c, series) {
+  var ctx = document.getElementById(id), t = c && c.trend;
+  if (!ctx || !t || !Array.isArray(t.years) || !t.years.length) return;
+  var years = t.years.map(Number), cutoff = 2024, datasets = [];
+  var historical = years.filter(function (y) { return y <= cutoff; });
+  var boundary = historical.length ? Math.max.apply(null, historical) : cutoff;
+  series.forEach(function (entry) {
+    if (!Array.isArray(entry.values)) return;
+    var points = years.map(function (y, i) { return { x: y, y: entry.values[i] == null ? null : entry.values[i] }; });
+    var base = { borderColor: entry.color, backgroundColor: entry.color, tension: 0, borderWidth: 2, pointRadius: 0, fill: false, spanGaps: false };
+    datasets.push(Object.assign({}, base, { label: entry.label + ' (curated)', data: points.filter(function (p) { return p.x <= cutoff; }) }));
+    if (years.some(function (y) { return y > cutoff; })) datasets.push(Object.assign({}, base, {
+      label: entry.label + ' (projection)', borderDash: [5, 4],
+      data: points.filter(function (p) { return p.x >= boundary; })
+    }));
   });
-}
-
-function mkTradeTrendChart(id,c) {
-  const ctx=document.getElementById(id); if(!ctx) return;
-  const t=c&&c.trend;
-  if(!t||!Array.isArray(t.years)||!t.years.length) return;   // v30.11 guard
-  // v30.10 — ECC honesty fix: years past the last SOURCED year (2024) are a
-  // modeled projection but were drawn as a solid line identical to sourced data.
-  // Render the projected tail (>2024) DASHED via Chart.js segment styling so the
-  // estimate reads as an estimate, not a fact.
-  const years = t.years.map(Number);
-  const lastSourcedIdx = (() => { let li = years.length-1; for (let i=0;i<years.length;i++){ if(years[i]>2024){ li=i-1; break; } } return Math.max(0, li); })();
-  const dashAfter = (palette) => ({
-    borderColor: palette, tension:.4, borderWidth:2, pointRadius:0,
-    segment: { borderDash: ctx2 => (ctx2.p1DataIndex > lastSourcedIdx ? [5,4] : undefined) },
-  });
-  const hasProjection = years.some(y=>y>2024);
-  return _safeChart(ctx,{
-    type:'line',
-    data:{labels:t.years.map(String),datasets:[
-      Object.assign({label:'Imports',data:t.imports}, dashAfter('#c44b3c')),
-      Object.assign({label:'Exports',data:t.exports}, dashAfter('#6ba36b')),
-    ]},
+  var rule = { id: 'countryProjectionBoundary', afterDatasetsDraw: function (chart) {
+    var xs = chart.scales.x, ys = chart.scales.y;
+    if (!xs || !ys || !years.some(function (y) { return y > cutoff; })) return;
+    var x = xs.getPixelForValue(boundary), pen = chart.ctx;
+    pen.save(); pen.strokeStyle = '#8aa8c9'; pen.lineWidth = 1; pen.setLineDash([5, 4]);
+    pen.beginPath(); pen.moveTo(x, ys.top); pen.lineTo(x, ys.bottom); pen.stroke();
+    pen.fillStyle = '#9a988f'; pen.font = '10px Geist Mono, monospace'; pen.textAlign = 'left';
+    pen.fillText('projection >', x + 5, ys.top + 12); pen.restore();
+  } };
+  var caption = document.getElementById(id + '-caption');
+  if (!caption) {
+    caption = document.createElement('div'); caption.id = id + '-caption'; caption.className = 'ctr-note';
+    ctx.parentNode.insertAdjacentElement('afterend', caption);
+  }
+  caption.textContent = 'Source: FoodShield curated country trend table; upstream series not cited. Data years ' +
+    (historical.length ? Math.min.apply(null, historical) + ' to ' + boundary : 'unavailable') +
+    '; projection years ' + (years.filter(function (y) { return y > cutoff; }).join(', ') || 'none') + '.';
+  return _safeChart(ctx, {
+    type: 'line', data: { datasets: datasets }, plugins: [rule],
     options: Object.assign({}, CHART_DEFAULTS, {
-      plugins: Object.assign({}, (CHART_DEFAULTS&&CHART_DEFAULTS.plugins)||{}, {
-        subtitle: hasProjection ? { display:true, text:'Solid = sourced (≤2024) · dashed = modeled projection', color:'#8a8a8a', font:{size:10, family:'Geist Mono'}, padding:{bottom:6} } : { display:false },
-      }),
+      scales: Object.assign({}, CHART_DEFAULTS.scales, {
+        x: Object.assign({}, CHART_DEFAULTS.scales.x, { type: 'linear',
+          ticks: Object.assign({}, CHART_DEFAULTS.scales.x.ticks, { precision: 0, callback: function (v) { return String(v); } }) })
+      })
     })
   });
 }
 
-function mkPopChart(id,c) {
-  const ctx=document.getElementById(id); if(!ctx) return;
-  const t=c&&c.trend;
-  if(!t||!Array.isArray(t.production)||!Array.isArray(t.pop)||!t.production.length) return;   // v30.11 guard
-  // Food supply index: production / population
-  const supply = t.production.map((p,i)=>Math.round(p/t.pop[i]*10)/10);
-  const popNorm = t.pop.map(p=>Math.round(p/t.pop[0]*100));
-  return _safeChart(ctx,{
-    type:'line',
-    data:{labels:t.years.map(String),datasets:[
-      {label:'Population (index)',data:popNorm,borderColor:'#8aa8c9',tension:.4,borderWidth:2,pointRadius:0},
-      {label:'Food supply / capita (index)',data:supply.map(s=>Math.round(s/supply[0]*100)),borderColor:'#5b9b8a',tension:.4,borderWidth:2,pointRadius:0},
-    ]},
-    options:CHART_DEFAULTS
-  });
+function mkProdChart(id, c, showForecast) {
+  var t = c && c.trend; if (!t) return;
+  return countryTrendChart(id, c, [
+    { label: 'Production', values: t.production, color: '#6ba36b' },
+    { label: 'Consumption', values: t.consumption, color: '#c44b3c' }
+  ]);
+}
+
+function mkTradeTrendChart(id, c) {
+  var t = c && c.trend; if (!t) return;
+  return countryTrendChart(id, c, [
+    { label: 'Imports', values: t.imports, color: '#c44b3c' },
+    { label: 'Exports', values: t.exports, color: '#6ba36b' }
+  ]);
+}
+
+function mkPopChart(id, c) {
+  var t = c && c.trend;
+  if (!t || !Array.isArray(t.production) || !Array.isArray(t.pop) || !t.production.length) return;
+  // Preserve the existing index formula; only the label and rendering change.
+  var supply = t.production.map(function (p, i) { return Math.round(p / t.pop[i] * 10) / 10; });
+  return countryTrendChart(id, c, [
+    { label: 'Population (index)', values: t.pop.map(function (p) { return Math.round(p / t.pop[0] * 100); }), color: '#8aa8c9' },
+    { label: 'Domestic production per capita (index)', values: supply.map(function (v) { return Math.round(v / supply[0] * 100); }), color: '#5b9b8a' }
+  ]);
 }
 
 // ════════════════════════════════════════════════════
@@ -37002,7 +36987,7 @@ function renderMethodologyTab() {
             {flag:'sourced',col:'#6ba36b',desc:'Verified against a public dataset with direct lineage: a query-level source URL (or, for bulk datasets with no stable per-query link, a machine-readable source_query_spec naming the exact filter + extraction script) plus as_of, basis and coverage. The most credible class: applies to FBS caloric shares, FAOSTAT TCL net trade, WDI bulk, WGI, ND-GAIN, Aqueduct, INFORM, USDA PSD, live HungerMap inflation, Eurostat HICP. Since v41, trade rows whose exact source query cannot be reconstructed are downgraded out of this class rather than kept on a homepage link.'},
             {flag:'partial',col:'#c9a957',desc:'Real cited data with incomplete lineage or coverage: truncated partner extracts (coverage: top_partner_only, e.g. a mirror query that surfaced one supplier), rows whose exact source query could not be reconstructed from their own metadata, or buffers blending stale input series (flagged stale_inputs). Rendered with reduced visual confidence; never dressed up as fully sourced.'},
             {flag:'manual',col:'#7c9fcf',desc:'Hand-maintained snapshot from an annual / static public release. Today this is Feeding America Map the Meal Gap (US state food-insecurity %), refreshed each May.'},
-            {flag:'modeled',col:'#c9a957',desc:'Computed at render time from sourced inputs or explicit structural assumptions. Includes the Supply-Chain Exposure component, 2018–2025 modeled backcast, the 2030 modeled-outlook persistent-shock overlay.'},
+            {flag:'modeled',col:'#c9a957',desc:'Computed at render time from sourced inputs or explicit structural assumptions. Includes the Supply-Chain Exposure component, illustrative reconstruction since 2018, the 2030 modeled-outlook persistent-shock overlay.'},
             {flag:'legacy_curated',col:'#d27a3e',desc:'Hand-authored heritage value from the May 2026 embedded dataset, not yet re-verified. Being re-sourced progressively: the field-level legacy ratio is now 17.6%, down from 83.7% at the original reviewer feedback. Trade snapshots, caloric shares and the food-inflation fallback have been re-sourced or correctly reclassified; what remains is a residual set of micro-territories and non-reporting countries genuinely outside FBS/trade-reporter coverage.'},
             {flag:'legacy_import_dependency',col:'#c44b3c',desc:'Heritage value where the field name suggests caloric share but the original meaning was import-dependency %. Tagged explicitly so the UI displays a red "import-dep · legacy" pill instead of mis-rendering it as caloric share. Cleared one country at a time as FBS coverage expands.'},
           ].map(b=>`
@@ -37177,7 +37162,7 @@ function renderMethodologyTab() {
           {icon:'✓',title:'Real Trade Volumes',body:'When the UN Comtrade refresh is configured, import/export arcs use actual bilateral trade in cereal staples (HS 1001 wheat, 1005 maize, 1006 rice, 1201 soybeans): tonnage and USD values, not estimated shares. Arc weight reflects real % of imports.'},
           {icon:'ℹ',title:'FDRS Remains a Composite Index',body:'FDRS is a ranked-position score, not a direct % of food-insecure population. The new <b>absolute anchors</b> address this by sitting next to it. A country at FDRS 50 is in the middle of the global distribution; the anchors tell you what 50 looks like in human terms.'},
           {icon:'ℹ',title:'Source Lag (Structural Layer Only)',body:'Annual data, FAOSTAT food balance sheets, USDA PSD production, still has 6–18 month lags inherent to those releases. The nowcast layer compensates by adjusting for live signals that the slow data cannot capture (active conflict, recent IPC declarations, current price shocks).'},
-          {icon:'ℹ',title:'Where the Numbers Come From · provenance classes',body:'Every panel labels its inputs by one of five classes (in order of trustworthiness). <b style="color:#6ba36b">SOURCED</b>: fetched live from a public pipeline (WFP HungerMap, FAO FFPI, Eurostat HICP, USDA PSD, WB WDI/Pink Sheet/Aqueduct/CCKP, ND-GAIN, INFORM, ReliefWeb, Open-Meteo, USGS, OpenAQ, UN Comtrade). <b style="color:#7c9fcf">MANUAL</b>: hand-maintained snapshot of an official public release (e.g. Feeding America Map the Meal Gap; updated each May). <b style="color:var(--accent)">MODELED</b>: computed at render time from sourced inputs (Supply-Chain Exposure, the 2018–2025 backcast, the 2030 persistent-shock overlay). <b style="color:#c47a3c">CURATED</b>: legacy heritage value awaiting re-derivation from a sourced feed; shown as <code style="font-size:10px;background:var(--bg1);padding:1px 4px;border-radius:3px;">CURATED · STATIC</code> or <code style="font-size:10px;background:var(--bg1);padding:1px 4px;border-radius:3px;">CURATED · IMPORT-DEP</code>. <b style="color:#c44b3c">ILLUSTRATIVE</b>, plausible example with no upstream data (e.g. company sourcing shares, traders don\'t publish per-country tonnage). The v21 nowcast composes 15 sub-signals from these inputs; the formula is open in /scripts/build_nowcast.py and the per-feed status is in the Data Status tab.'},
+          {icon:'ℹ',title:'Where the Numbers Come From · provenance classes',body:'Every panel labels its inputs by one of five classes (in order of trustworthiness). <b style="color:#6ba36b">SOURCED</b>: fetched live from a public pipeline (WFP HungerMap, FAO FFPI, Eurostat HICP, USDA PSD, WB WDI/Pink Sheet/Aqueduct/CCKP, ND-GAIN, INFORM, ReliefWeb, Open-Meteo, USGS, OpenAQ, UN Comtrade). <b style="color:#7c9fcf">MANUAL</b>: hand-maintained snapshot of an official public release (e.g. Feeding America Map the Meal Gap; updated each May). <b style="color:var(--accent)">MODELED</b>: computed at render time from sourced inputs (Supply-Chain Exposure, the illustrative reconstruction since 2018, the 2030 persistent-shock overlay). <b style="color:#c47a3c">CURATED</b>: legacy heritage value awaiting re-derivation from a sourced feed; shown as <code style="font-size:10px;background:var(--bg1);padding:1px 4px;border-radius:3px;">CURATED · STATIC</code> or <code style="font-size:10px;background:var(--bg1);padding:1px 4px;border-radius:3px;">CURATED · IMPORT-DEP</code>. <b style="color:#c44b3c">ILLUSTRATIVE</b>, plausible example with no upstream data (e.g. company sourcing shares, traders don\'t publish per-country tonnage). The v21 nowcast composes 15 sub-signals from these inputs; the formula is open in /scripts/build_nowcast.py and the per-feed status is in the Data Status tab.'},
         ].map(c=>`
           <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:3px;padding:14px 16px;">
             <div style="font-size:12.5px;font-weight:600;color:var(--t1);margin-bottom:6px;">${c.icon} ${c.title}</div>
@@ -38899,53 +38884,33 @@ window.renderDisturbancesTab = async function() {
 // v14 FEATURE 1: FDRS HISTORICAL DATA 2018–2025
 // ════════════════════════════════════════════════════════════════════════════
 
-// ── v20.4 modeled backcast (DETERMINISTIC) ──────────────────────────────────
-// Reconstructs an 8-year structural backcast from the country's current score,
-// its 2030 forecast, and three KNOWN global shock years (COVID 2020,
-// Ukraine 2022, El Niño 2023). The function contains NO randomness — same
-// inputs always produce the same output. This is a *modeled* backcast, not
-// observed FDRS history. Labels everywhere in the UI must say "modeled
-// backcast" not "history" to keep that distinction honest.
-//
-// Determinism: shock magnitudes are derived from each country's own components
-// (climate vulnerability c[4], conflict c[5], import-dep c[0]) and food
-// inflation c.fi. Direction of the COVID shock is set by ISO3 parity (a stable
-// pseudorandom function of the country code) instead of Math.random(), so the
-// page renders the same backcast on every reload.
+// Illustrative reconstruction only; shocks share a direction across all countries.
+function fdrsDataDate() {
+  var raw = typeof LIVE !== 'undefined' && LIVE.meta && LIVE.meta.loaded_at;
+  return raw && /^\d{4}-\d{2}-\d{2}/.test(raw) ? String(raw).slice(0, 10) : null;
+}
+function fdrsHistoryLabel(year) {
+  var date = fdrsDataDate();
+  return date && Number(year) === Number(date.slice(0, 4)) ? date + ' (current model)' : String(year);
+}
 function getFDRSHistory(c) {
-  if (!c) return {};
-  const current = c.fdrs;
-  const f2030 = c.f2030;
-  const delta = f2030 - current;
-  const annualFwd = delta / 5;
-  const annualBwd = -annualFwd * 0.7;
-
-  // Stable per-country sign for COVID shock (deterministic, not random).
-  const isoSum = (c.iso || '').split('').reduce((a, ch) => a + ch.charCodeAt(0), 0);
-  const covidSign = (isoSum % 2 === 0) ? 1 : -1;
-
-  const climateExposure = (c.c?.[4] || 0) / 100;
-  const conflictExposure = (c.c?.[5] || 0) / 100;
-  const importExposure  = (c.c?.[0] || 0);
-  const totalExposure = climateExposure + conflictExposure;
-
-  // Modeled global shock overlays — KNOWN events with magnitude proportional to
-  // each country's structural exposure on the relevant dimension.
-  const shocks = {
-    2020: totalExposure * 1.5 * covidSign,             // COVID supply-chain
-    2022: importExposure > 50 ? 4 : 1,                 // Ukraine wheat shock
-    2023: (c.fi || 0) > 20 ? 3 : 0.5,                  // food inflation peak / El Niño
+  var date = fdrsDataDate();
+  if (!c || !date) return {};
+  var current = c.fdrs, anchorYear = Number(date.slice(0, 4));
+  var annualFwd = (c.f2030 - current) / Math.max(1, 2030 - anchorYear);
+  var annualBwd = -annualFwd * 0.7;
+  var components = c.c || [];
+  var totalExposure = ((components[4] || 0) + (components[5] || 0)) / 100;
+  var shocks = {
+    2020: totalExposure * 1.5,             // COVID supply-chain pressure
+    2022: (components[0] || 0) > 50 ? 4 : 1, // Ukraine wheat shock
+    2023: (c.fi || 0) > 20 ? 3 : 0.5       // food inflation / El Niño
   };
-
-  const years = [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
-  const scores = {};
-  years.forEach(yr => {
-    const yearsBack = 2025 - yr;
-    const base = current + annualBwd * yearsBack;
-    const shock = shocks[yr] || 0;
-    scores[yr] = Math.min(99, Math.max(5, Math.round(base + shock)));
-  });
-  scores[2025] = current; // anchor: today's nowcast-adjusted score
+  var scores = {};
+  for (var year = 2018; year < anchorYear; year++) {
+    scores[year] = Math.min(99, Math.max(5, Math.round(current + annualBwd * (anchorYear - year) + (shocks[year] || 0))));
+  }
+  scores[anchorYear] = current;
   return scores;
 }
 
@@ -38958,13 +38923,13 @@ const GLOBAL_FOOD_EVENTS = {
   2022: 'Russia-Ukraine war: wheat & sunflower oil shock; record food prices',
   2023: 'Black Sea grain deal collapses; El Niño intensifies',
   2024: 'Red Sea shipping attacks; El Niño drought slashes Southern African maize (Zambia, Zimbabwe, Malawi emergencies)',
-  2025: 'Current assessment',
 };
 
 function mkFDRSHistoryChart(canvasId, c) {
   const ctx = document.getElementById(canvasId); if (!ctx) return null;
   const hist = getFDRSHistory(c);
   const years = Object.keys(hist).map(Number).sort();
+  if (!years.length) return null;
   const scores = years.map(y => hist[y]);
   const colors = scores.map(s => riskColor(s));
   const col = riskColor(c.fdrs);
@@ -38972,8 +38937,10 @@ function mkFDRSHistoryChart(canvasId, c) {
   return _safeChart(ctx, {
     type: 'line',
     data: {
-      labels: years.map(String),
+      labels: years.map(fdrsHistoryLabel),
       datasets: [{
+        label: 'Illustrative reconstruction, not observed',
+        borderDash: [5, 4],
         data: scores,
         borderColor: col,
         backgroundColor: col + '18',
@@ -38982,13 +38949,14 @@ function mkFDRSHistoryChart(canvasId, c) {
         pointRadius: 5,
         pointHoverRadius: 7,
         fill: true,
-        tension: 0.35,
+        tension: 0,
       }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
+        legend: { display: true },
+        subtitle: { display: true, text: 'Source: FoodShield reconstruction; current model as of ' + fdrsDataDate() },
         tooltip: {
           callbacks: {
             label: (ctx) => ` FDRS: ${ctx.parsed.y}`,
@@ -39017,7 +38985,7 @@ function renderFDRSEvents(containerId, c) {
   const hist = getFDRSHistory(c);
   const years = Object.keys(hist).map(Number).sort();
 
-  el.innerHTML = `<div style="font-size:10px;color:var(--t3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em;">Key events that shaped FDRS</div>` +
+  el.innerHTML = `<div style="font-size:10px;color:var(--t3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em;">Illustrative reconstruction, not observed; shock assumptions</div>` +
     years.filter(y => GLOBAL_FOOD_EVENTS[y]).map(y => {
       const score = hist[y];
       const col = riskColor(score);
@@ -39127,7 +39095,7 @@ async function fetchAINarrative(iso, forceRefresh, targetElId) {
   const prompt = `You are a food security analyst. Write a concise 3-sentence analysis (max 90 words) for ${c.name}:
 - Current FDRS score: ${c.fdrs}/100 (${riskLabel(c.fdrs)}): structural ${c._fdrsStructural||c.fdrs} ${adjStr !== '0' ? `with live nowcast ${adjStr}` : ''}
 - 2030 forecast: ${c.f2030}/100
-- Modeled FDRS backcast 2018-2025 (not observed history): ${histStr}
+- Illustrative reconstruction, not observed; current model as of ${fdrsDataDate()}: ${histStr}
 - Structural import dependencies: ${displayImportList(c).slice(0,3).join(', ')}
 - Structural suppliers: ${_aiSupNames.join(', ')}
 - Food inflation: ${c.fi}%/yr
@@ -40457,7 +40425,7 @@ function renderCompareTab() {
         return `<div class="card" style="text-align:center;padding:18px 14px;">
           <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:8px;">${c.name}</div>
           <div style="font-size:36px;font-weight:700;color:${col};font-family:'Geist Mono',monospace;line-height:1">${c.fdrs}</div>
-          <div style="font-size:10px;color:${dCol};margin-top:4px;font-family:'Geist Mono',monospace">${Math.abs(delta)<1?'stable':sign+delta+' vs last yr'}</div>
+          <div style="font-size:10px;color:${dCol};margin-top:4px;font-family:'Geist Mono',monospace">${Math.abs(delta)<1?'stable':sign+delta+' vs last yr'} · illustrative reconstruction, not observed</div>
           <div style="font-size:10px;color:var(--t3);margin-top:2px;">${riskLabel(c.fdrs)}</div>
           <div style="font-size:10px;color:${riskColor(c.f2030)};margin-top:6px;">2030: ${c.f2030} ${c.f2030>c.fdrs?'▲':'▼'}</div>
         </div>`;
@@ -40630,7 +40598,7 @@ function renderCompareTab() {
 
     <!-- FDRS modeled backcast overlay chart -->
     <div class="card">
-      <div class="card-title"><span class="card-marker"></span> Modeled FDRS Backcast 2018–2025
+      <div class="card-title"><span class="card-marker"></span> Illustrative FDRS reconstruction since 2018
         <span style="font-family:'Geist Mono',monospace;font-size:9.5px;color:var(--accent);background:var(--accent)18;padding:1px 6px;border-radius:3px;margin-left:8px;letter-spacing:.05em;text-transform:uppercase;">modeled</span>
       </div>
       <div style="height:220px;"><canvas id="cmp-hist-chart"></canvas></div>
@@ -40673,22 +40641,23 @@ function renderCompareTab() {
     destroyChart('cmp-hist-chart');
     const ctx2 = document.getElementById('cmp-hist-chart');
     if (!ctx2) return;
-    const histYears = [2018,2019,2020,2021,2022,2023,2024,2025];
+    var histYears = Object.keys(getFDRSHistory(selected[0])).map(Number).sort();
     chartInstances['cmp-hist-chart'] = _safeChart(ctx2, {
       type: 'line',
       data: {
-        labels: histYears,
+        labels: histYears.map(fdrsHistoryLabel),
         datasets: selected.map((c,i) => {
           const hist = getFDRSHistory(c);
           return {
-            label: c.name,
-            data: histYears.map(y => hist[y] || null),
+            label: c.name + ' · illustrative reconstruction, not observed',
+            borderDash: [5, 4],
+            data: histYears.map(y => hist[y] == null ? null : hist[y]),
             borderColor: cmpCols[i],
             backgroundColor: cmpCols[i] + '18',
             borderWidth: 2,
             pointRadius: 3,
             pointBackgroundColor: cmpCols[i],
-            tension: 0.3,
+            tension: 0,
             fill: false
           };
         })
@@ -40696,6 +40665,7 @@ function renderCompareTab() {
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: {
+          subtitle: { display: true, text: 'Source: FoodShield reconstruction; current model as of ' + (fdrsDataDate() || 'unavailable') },
           legend: { position:'bottom', labels:{ color:'#9a988f', font:{size:10,family:'Geist'}, usePointStyle:true, padding:12 } },
           tooltip: { backgroundColor:'#14141a', titleColor:'#ebe9e2', bodyColor:'#ebe9e2', borderColor:'#2a2a34', borderWidth:1 }
         },
@@ -40846,7 +40816,7 @@ function _cmSparkline(cmKey) {
 
 // v22 — concentration helper. Reads top-N exporter shares from
 // COMMODITY_TRADE_ROUTES and returns { score, story, topCountries, topShare }.
-// Score is the HHI-style concentration of the top-2 suppliers (0-100).
+// Score is 0.7 × CR2 + 0.3 × CR3, on percentage shares (0-100).
 // Story is the plain-English chokepoint sentence ("Indonesia + Malaysia = 86%").
 function commodityConcentration(cmKey) {
   const _cm = (typeof COMMODITY_META !== 'undefined') ? COMMODITY_META.find(mm => mm.key === cmKey) : null;
@@ -40860,12 +40830,13 @@ function commodityConcentration(cmKey) {
     const top3Share = exp.slice(0,3).reduce((s,e)=>s+e.share,0);
     const top2Names = top2.map(e => _nameFromISO(e.iso) || e.iso);
     // Score blends top-2 (weight 0.7) and top-3 (weight 0.3) shares,
-    // normalised so 100 ≈ all supply from a single country.
+    // left on its original percentage-share denominator.
     const score = Math.round(top2Share * 0.7 + top3Share * 0.3);
     const story = top2Share >= 60
       ? `<b>${top2Names.join(' + ')} = ${top2Share}%</b> of global exports`
       : `Top 3 exporters control <b>${top3Share}%</b> of global supply (${exp.slice(0,3).map(e=>_nameFromISO(e.iso)||e.iso).join(', ')})`;
-    return { score: Math.min(100, score), story, topShare: top2Share, top2Names };
+    return { score: Math.min(100, score), story, topShare: top2Share, top2Names,
+      basis: '0.7 × CR2 + 0.3 × CR3, the top-2 and top-3 exporter shares in percent. Denominator: global exports as stated in the curated route shares, not renormalised to the listed exporters. Source: this project’s curated trade routes; data year: ' + (route.year || 'not supplied') };
   }
   // v29 — fallback: compute concentration from the real curated commodity rankings
   // (covers the 30+ Wave 5-8 commodities the legacy route table never had).
@@ -40884,7 +40855,8 @@ function commodityConcentration(cmKey) {
       const story = top2Share >= 60
         ? `<b>${names.slice(0,2).join(' + ')} = ${top2Share}%</b> of cited exports`
         : `Top 3 exporters control <b>${top3Share}%</b> of cited supply (${names.join(', ')})`;
-      return { score, story, topShare: top2Share, top2Names: names.slice(0,2) };
+      return { score: score, story: story, topShare: top2Share, top2Names: names.slice(0,2),
+        basis: '0.7 × CR2 + 0.3 × CR3; CR2/CR3 = top 2/3 exporter shares (%). Denominator: ' + tot.toLocaleString() + ' kt, sum of listed exporters. Source: commodity atlas exporter rankings; data year: ' + (com.rankings.year || 'not supplied') };
     }
   } catch(e){}
   return null;
@@ -41140,8 +41112,9 @@ function renderCommodityGrid() {
       <div class="cmd-row-conc">
         <div class="cmd-row-pct" style="color:${bandColor}">${score != null ? score : '—'}<small>conc</small></div>
         <div class="cmd-row-concbody">
-          <div class="cmd-row-bar"><i style="width:${score != null ? Math.max(3, Math.min(100, score)) : 0}%;background:${bandColor}"></i></div>
+          <div class="cmd-row-bar"><i style="width:${score != null ? Math.max(0, Math.min(100, score)) : 0}%;background:${bandColor}"></i></div>
           <div class="cmd-row-story">${story}</div>
+          ${conc ? '<div class="ctr-note">' + _escFeed(conc.basis) + '</div>' : ''}
         </div>
       </div>
       <div class="cmd-row-price">
@@ -41993,7 +41966,7 @@ function showCommodityDetail(key) {
      correct encoding for them and the wrong one for the modelled layers. The
      legend says so, because the difference is the whole argument of the page. */
   var MODES_MODELLED = ['impact', 'crop', 'coverage'];
-  var MODES_LIVE = ['asap', 'gdacs', 'ipc', 'sst'];
+  var MODES_LIVE = ['asap', 'gdacs', 'ipc', 'rtfp', 'sst'];
 
   var LEVELS = [
     ['la_nina_strong',   -1.5, 'Strong La Niña'],
@@ -42118,7 +42091,7 @@ function showCommodityDetail(key) {
     S.oni = q.level != null && LEVELS.some(function (l) { return l[1] === q.level; })
       ? q.level : S.oniLive != null ? keyFor(S.oniLive)[1] : 1.5;
     S.mode = MODES_MODELLED.concat(MODES_LIVE, ['none']).indexOf(q.mode) >= 0 ? q.mode :
-      { elnino: 'sst', ensoharvest: 'impact', ensowater: 'none', ensomoney: 'ipc', ensolive: 'asap' }[S.sub] || 'sst';
+      { elnino: 'sst', ensoharvest: 'impact', ensowater: 'none', ensomoney: 'rtfp', ensolive: 'asap' }[S.sub] || 'sst';
   };
   var writeEnsoQuery = function () {
     if (typeof updateURL !== 'function') return;
@@ -43447,7 +43420,8 @@ function showCommodityDetail(key) {
                     ['coverage', 'Model coverage']];
     var liveModes = [['asap', 'Agricultural hotspots (JRC ASAP)'],
                      ['gdacs', 'Active drought & flood alerts (GDACS)'],
-                     ['ipc', 'Food insecurity, IPC phase 3+']]
+                     ['ipc', 'Food insecurity, IPC phase 3+'],
+                     ['rtfp', 'Food inflation']]
       .concat([['sst', 'Sea-surface temperature anomaly (NOAA OISST)']]);
     var opt = function (m) {
       return '<option value="' + m[0] + '"' + (m[0] === S.mode ? ' selected' : '') + '>' + esc(m[1]) + '</option>';
@@ -43459,7 +43433,7 @@ function showCommodityDetail(key) {
     /* Keyboard route to the detail panel. The map alone was mouse-only, which
        put the one thing actually being measured out of reach of a keyboard or
        screen-reader user. */
-    var countries = Object.keys((S.exp) || {}).sort();
+    var countries = Object.keys(S.exp || {}).concat(Object.keys(S.rtfp || {})).filter(function (iso, i, all) { return all.indexOf(iso) === i; }).sort();
     var cOpts = '<option value="">Select a country…</option>' + countries.map(function (iso) {
       return '<option value="' + esc(iso) + '"' + (iso === S.sel ? ' selected' : '') + '>' +
         esc(nameFor(iso)) + '</option>';
@@ -43484,7 +43458,7 @@ function showCommodityDetail(key) {
       '<label class="enso-native-label"><span class="enso-sr">Native country selection</span><select class="enso-native" id="enso-country">' + cOpts + '</select></label></div>' +
       '<div class="enso-instrument-row enso-layer-row"><div class="enso-layer-groups"><div class="enso-layer-group"><span class="enso-instrument-label">Modelled</span>' +
       buttons([['impact','Production shock'],['crop','Strongest crop'],['coverage','Coverage']]) + '</div>' +
-      '<div class="enso-layer-group"><span class="enso-instrument-label">Observed / reported</span>' + buttons([['asap','Hotspots'],['gdacs','Hazards'],['ipc','IPC'],['sst','Sea-surface']]) + '</div>' +
+      '<div class="enso-layer-group"><span class="enso-instrument-label">Observed / reported</span>' + buttons([['asap','Hotspots'],['gdacs','Hazards'],['ipc','IPC'],['rtfp','Food inflation'],['sst','Sea-surface']]) + '</div>' +
       buttons([['none','Unfilled land']]) + '<label class="enso-native-label"><span class="enso-sr">Native map layer</span><select class="enso-native" id="enso-mode">' + modeOpts + '</select></label></div>' +
       '<div class="enso-overlay-group" role="group" aria-label="Map overlays"><span class="enso-instrument-label">Overlays</span>' + overlays.map(function (o) {
         return '<label class="enso-overlay"><input class="enso-native" type="checkbox" id="enso-tog-' + o[0] + '"' + (o[3] ? ' checked' : '') + '><span class="enso-overlay-face"><i style="--swatch:' + o[2] + '"></i>' + o[1] + '</span></label>';
@@ -43563,21 +43537,48 @@ function showCommodityDetail(key) {
     return { label: centre[2], centre: centre[1], live: S.oniLive };
   }
 
+  /* Fixed cyan / warm grey / magenta anchors, separate from harvest and SST hues. */
+  function rtfpColor(value) {
+    if (typeof value !== 'number' || !isFinite(value)) return null;
+    var zero = [155, 149, 140], end = value < 0 ? [54, 167, 184] : [199, 82, 142];
+    var t = value < 0 ? Math.min(1, -value / 10) : Math.min(1, value / 30);
+    return '#' + zero.map(function (v, i) { var hex = Math.round(v + (end[i] - v) * t).toString(16); return hex.length < 2 ? '0' + hex : hex; }).join('');
+  }
+  function rtfpDateRange() {
+    var dates = Object.keys(S.rtfp || {}).map(function (iso) { return S.rtfp[iso].as_of; })
+      .filter(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d || ''); }).sort();
+    return dates.length ? dates[0] + ' to ' + dates[dates.length - 1] : 'unavailable';
+  }
+  function rtfpNote() {
+    /* One shared as_of reads as a date, not as a range from itself to itself; the
+       sentence template adds the final stop. */
+    var rng = String(rtfpDateRange()), ends = rng.split(' to ');
+    var when = ends.length === 2 && ends[0] === ends[1] ? 'as_of ' + ends[0] + ' for every country' : 'as_of differs by country, range ' + rng;
+    return 'Derived statistic: median across a country\'s monitored markets; ' + when + '. Not a national food CPI';
+  }
+  function rtfpReadout(iso) {
+    var r = S.rtfp && S.rtfp[iso];
+    return r && rtfpColor(r.food_inflation_pct) ? 'Observed domestic food inflation, year on year: ' + num(r.food_inflation_pct, 1) +
+      '% · ' + esc(r.markets) + ' monitored markets · as_of ' + esc(r.as_of) +
+      '<br>World Bank RTFP via HDX · derived median across monitored markets' : 'Domestic food inflation: no data · World Bank RTFP via HDX';
+  }
+
   function mapState() {
     var modelled = MODES_MODELLED.indexOf(S.mode) >= 0;
     var source = { impact: 'FAOSTAT yield fit, 1961–2024', crop: 'FAOSTAT yield fit, 1961–2024', coverage: 'FAOSTAT yield fit, 1961–2024',
-      asap: 'JRC ASAP assessments', gdacs: 'GDACS hazard reports', ipc: 'IPC/CH via WFP HungerMap', sst: 'NOAA OISST v2.1',
+      asap: 'JRC ASAP assessments', gdacs: 'GDACS hazard reports', ipc: 'IPC/CH via WFP HungerMap', rtfp: 'World Bank RTFP via HDX', sst: 'NOAA OISST v2.1',
       none: S.showLanes ? 'IMF PortWatch AIS transits, Panama Canal Authority advisories, lane evidence' : 'Natural Earth geography' }[S.mode];
     /* With no land fill the plate is named for what it does show: the lanes and
        chokepoints when they are on, otherwise the bare reference geography. */
     var title = { impact: 'Modelled production shock', crop: 'Strongest measured crop', coverage: 'Model coverage', asap: 'Agricultural hotspots',
-      gdacs: 'Drought and flood alerts', ipc: 'Food insecurity, IPC 3+', sst: 'Sea-surface anomaly',
+      gdacs: 'Drought and flood alerts', ipc: 'Food insecurity, IPC 3+', rtfp: 'Domestic food inflation, year on year', sst: 'Sea-surface anomaly',
       none: S.showLanes ? 'Shipping chokepoints and lanes' : 'Unfilled land' }[S.mode];
     var key = {impact:'exp',crop:'model',coverage:'model'}[S.mode] || S.mode;
-    var kind = modelled ? 'modelled' : S.mode === 'sst' ? 'observed' : S.mode === 'none' ? 'reference' : 'reported';
+    var kind = modelled ? 'modelled' : (S.mode === 'sst' || S.mode === 'rtfp') ? 'observed' : S.mode === 'none' ? 'reference' : 'reported';
     var date = S.mode === 'sst' && S.sst ? 'seven-day mean ' + S.sst.time_start + ' to ' + S.sst.time_end :
       S.mode === 'none' ? (S.showLanes ? 'land unfilled; transits collected ' + stamp(metaDate('portwatch')) + ', lane phases from published evidence' : 'no measured land quantity') :
       'collected ' + stamp(metaDate(key)) + (modelled ? '' : '; assessment periods vary by record');
+    if (S.mode === 'rtfp') date = rtfpNote();
     if (S.mode === 'sst' && !S.showSST) title += ' (backdrop hidden)';
     if (S.mode === 'sst' && !S.sst) date = 'source unavailable';
     return { kind: kind, title: title, source: source, date: date };
@@ -43606,7 +43607,7 @@ function showCommodityDetail(key) {
     row.querySelectorAll('.enso-legend-block').forEach(function (block) {
       var note = document.createElement('div'); note.className = 'enso-legend-note';
       var title = block.querySelector('.enso-legend-t').textContent;
-      note.textContent = /Sea-surface/.test(title) ? 'Seven-day mean; ±5 °C.' :
+      note.textContent = /Domestic food inflation/.test(title) ? 'Fixed anchors: −10%, 0%, +30%; beyond ends use end colours. as_of range ' + rtfpDateRange() + '.' : /Sea-surface/.test(title) ? 'Seven-day mean; ±5 °C.' :
         /teleconnection/.test(title) ? 'Published regional membership.' : /Shipping/.test(title) ? 'Phase association only.' :
         /Hazard/.test(title) ? 'Hazard report, not attribution.' :
         /shock|crop/.test(title) ? 'Ochre falls; green rises. ±15%.' + (S.oni < 0 ? ' Under La Niña the ONI is negative, so a positive slope is a fall.' : '') :
@@ -43653,6 +43654,15 @@ function showCommodityDetail(key) {
         [[RAMP[0], 'lower share'], [RAMP[2], 'mid'], [RAMP[4], 'higher share of population']],
         'IPC/CH via WFP HungerMap. This is an outcome, and it has many causes. ENSO is one of them.']
     };
+    if (S.mode === 'rtfp') {
+      var priceRamp = '';
+      for (var v = -10; v <= 30; v += 5) priceRamp += '<i style="background:' + rtfpColor(v) + '"></i>';
+      el.innerHTML = '<div class="enso-legend"><div class="enso-legend-block"><div class="enso-legend-t">Domestic food inflation, year on year · observed</div>' +
+        '<div class="enso-ramp">' + priceRamp + '</div><div class="ctr-note">Fixed anchors: −10% cyan (#36a7b8), 0% warm grey (#9b958c), +30% magenta (#c7528e). Values beyond the ends share the end colour. Dark grey (#1c1c22): no data.</div>' +
+        '<div class="ctr-note">World Bank RTFP via HDX. ' + esc(rtfpNote()) + '</div></div>' +
+        (S.showSST ? sstLegend() : '') + (S.showLanes ? laneLegend() : '') + (S.showAlerts ? alertLegend() : '') + '</div>';
+      compactLegend(); return;
+    }
     if (S.mode === 'none') {
       el.innerHTML = '<div class="enso-legend">' + (S.showLanes ? laneLegend() : '<div class="enso-legend-block"><div class="enso-legend-t">Unfilled land</div><div class="enso-legend-row"><span class="enso-sw" style="background:#1c1c22"></span>No land quantity painted</div><div class="ctr-note">IPC measures food insecurity, not prices. Price evidence appears below.</div></div>') + (S.showSST ? sstLegend() : '') + (S.showAlerts ? alertLegend() : '') + '</div>';
       compactLegend(); return;
@@ -43788,6 +43798,7 @@ function showCommodityDetail(key) {
     /* The ocean is the observation on this layer; land stays unfilled so the
        modelled colours cannot be read against it. */
     if (S.mode === 'sst' || S.mode === 'none') return null;
+    if (S.mode === 'rtfp') return rtfpColor(S.rtfp && S.rtfp[iso] ? S.rtfp[iso].food_inflation_pct : null);
     if (S.mode === 'asap') {
       var a = asapFor(iso);
       if (!a) return null;
@@ -43826,6 +43837,7 @@ function showCommodityDetail(key) {
 
   function tooltipFor(iso, nm) {
     var parts = ['<b>' + esc(nm || nameFor(iso)) + '</b>'];
+    if (S.mode === 'rtfp') return parts[0] + '<br>' + rtfpReadout(iso);
     var b = strongestCrop(iso);
     if (b) parts.push('measured · ' + esc(b.crop) + ' ' + num(cropEffect(b.c), 1) + '% at this scenario' +
       ' <span style="color:#8b8980">(' + num(cropSlope(b.c), 1) + ' %/ONI, ' + esc(phaseWord()) + ' slope)</span>' +
@@ -44336,6 +44348,7 @@ function showCommodityDetail(key) {
     var out = '<div style="margin-top:var(--sp-2);border-top:1px solid var(--b2);padding-top:12px;">' +
       '<div style="display:flex;flex-wrap:wrap;gap:20px;align-items:baseline;">' +
       '<div style="font-size:17px;color:var(--t1);font-weight:600;">' + esc(nm) + '</div>';
+    out += '<div class="ctr-note">' + rtfpReadout(iso) + '</div>';
     if (d) {
       /* While the file is production_ready:false the page says "direction only",
          so printing −34.24% invited exactly the quantitative use the caveat

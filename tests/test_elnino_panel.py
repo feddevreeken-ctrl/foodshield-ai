@@ -478,13 +478,18 @@ def main() -> int:
         open_panel(page, base)
         lens_results, headings, frames = [], [], []
         page.evaluate("window._stageAMap = document.getElementById('enso-map'); window._stageAMapId = window._stageAMap._leaflet_id")
-        for tab, mode in (("elnino", "sst"), ("ensoharvest", "impact"), ("ensowater", "none"), ("ensomoney", "ipc"), ("ensolive", "asap")):
+        for tab, mode in (("elnino", "sst"), ("ensoharvest", "impact"), ("ensowater", "none"), ("ensomoney", "rtfp"), ("ensolive", "asap")):
             page.evaluate("tab => showTab(tab)", tab)
             page.wait_for_selector(f'#subview-{tab}.active .enso-subview-meta')
             lens_results.append(page.input_value('#enso-mode') == mode
                 and page.is_checked('#enso-tog-sst') == (tab == 'elnino')
                 and page.is_checked('#enso-tog-lanes') == (tab == 'ensowater')
                 and page.is_checked('#enso-tog-alerts') == (tab == 'ensolive'))
+            if tab == "ensomoney":
+                dates = page.evaluate("async () => Object.values((await (await fetch('data/rtfp.json')).json()).data).map(r => r.as_of).filter(Boolean).sort()")
+                legend = page.locator('#enso-legend').text_content()
+                check("rtfp legend states fixed anchors and country as_of range",
+                      all(t in legend for t in ('Fixed anchors', '−10%', '0%', '+30%', 'beyond the ends', 'as_of', dates[0], dates[-1])))
             headings.append(page.locator('#tab-elnino h2:visible').count())
             frames.append(page.evaluate("""() => [...document.querySelectorAll('#tab-elnino .enso-plate[data-kind], #enso-mapwrap[data-kind]')].every(e =>
                 getComputedStyle(e).borderTopStyle === (['modelled','published'].includes(e.dataset.kind) ? 'dashed' : 'solid'))"""))
