@@ -137,15 +137,24 @@ def main() -> int:
         print("\nindex strip — comparability")
         open_panel(page, base)
         switcher = page.locator('#enso-view-nav')
-        # The switcher is the tab's persistent jump nav: first in the tab, sticky
-        # inside the scroller, ahead of the status header, the map and every view.
-        leads = switcher.evaluate("el => !!(el.compareDocumentPosition(document.getElementById('enso-hero')) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(el.compareDocumentPosition(document.getElementById('enso-map')) & Node.DOCUMENT_POSITION_FOLLOWING) && !!el.closest('#tab-elnino') && getComputedStyle(el).position === 'sticky' && el.getBoundingClientRect().bottom <= document.getElementById('enso-hero').getBoundingClientRect().top + 1")
+        # The switcher is the tab's jump nav: first in the tab, ahead of the status
+        # header, the map and every view. It is not sticky: the owner found a
+        # pinned bar in the way, and a view change scrolls back to it instead.
+        leads = switcher.evaluate("el => !!(el.compareDocumentPosition(document.getElementById('enso-hero')) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(el.compareDocumentPosition(document.getElementById('enso-map')) & Node.DOCUMENT_POSITION_FOLLOWING) && !!el.closest('#tab-elnino') && getComputedStyle(el).position !== 'sticky' && getComputedStyle(el).position !== 'fixed' && el.getBoundingClientRect().bottom <= document.getElementById('enso-hero').getBoundingClientRect().top + 1")
         visible_here = switcher.is_visible()
         page.evaluate("showTab('global')")
         hidden_elsewhere = not switcher.is_visible()
         page.evaluate("showTab('elnino')")
-        check("view switcher leads the tab, stays sticky, and only shows on its host tab",
+        check("view switcher leads the tab, is not pinned, and only shows on its host tab",
               leads and visible_here and hidden_elsewhere and switcher.is_visible())
+        # A view change lands the reader at the top of the tab, not mid-page.
+        page.evaluate("() => { const s = document.querySelector('#tab-elnino .content-page'); if (s) s.scrollTop = 1400; }")
+        page.evaluate("showTab('ensowater')")
+        page.wait_for_selector('#subview-ensowater.active .enso-subview-meta')
+        top_after = page.evaluate("() => { const s = document.querySelector('#tab-elnino .content-page'); return s ? s.scrollTop : window.scrollY; }")
+        page.evaluate("showTab('elnino')")
+        page.wait_for_selector('#subview-elnino.active .enso-subview-meta')
+        check("a view change starts at the top of the tab", top_after == 0, str(top_after))
         page.eval_on_selector_all(".enso-idx", "els => els.forEach(e => e.open = true)")
         kinds = page.eval_on_selector_all(
             ".enso-idx-grp-h b", "els => els.map(e => e.textContent)")

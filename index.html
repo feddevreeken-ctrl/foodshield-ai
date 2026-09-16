@@ -11302,7 +11302,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino #enso-status-home:empty { display:none; }
 #tab-elnino #enso-agency-status { font-size:14px; line-height:1.6; margin:12px 0 20px; }
 /* Stage A: shared instruments and the Ocean comparison plate. */
-#tab-elnino #enso-view-nav { position:sticky; top:0; z-index:6; margin:0 0 24px; padding:6px 0; gap:24px; background:var(--bg1); overflow:visible; }
+#tab-elnino #enso-view-nav { position:static; margin:0 0 24px; padding:6px 0; gap:24px; background:none; overflow:visible; }
 #tab-elnino #enso-view-nav .viewswitch-btn::after { display:none; }
 #tab-elnino #enso-view-nav .viewswitch-btn { padding:12px 0; font:500 14px/1.5 'Geist',sans-serif; }
 #tab-elnino .enso-ocean-heading { padding:24px 24px 0; }
@@ -43513,7 +43513,7 @@ function showCommodityDetail(key) {
       '<div class="enso-legend-row"><span class="enso-sw" style="background:#6a685e;transform:rotate(45deg);width:9px;height:9px;border-radius:1px"></span> no credible ENSO link</div></div>';
   }
   function alertLegend() {
-    return '<div class="enso-legend-block"><div class="enso-legend-t">Hazard alerts ' + badge('live', 'feeds') + '</div>' +
+    return '<div class="enso-legend-block"><div class="enso-legend-t">Hazard alerts · observed feeds</div>' +
       '<div class="enso-legend-row"><span class="enso-sw" style="background:#c44b3c;border-radius:50%;width:10px;height:10px"></span> GDACS drought / flood / cyclone</div>' +
       '<div class="enso-legend-row"><span class="enso-sw" style="background:#8aa6c4;border-radius:50%;width:10px;height:10px"></span> ReliefWeb humanitarian event</div>' +
       '<div class="ctr-note" style="max-width:32ch;margin-top:5px;">A marker says a hazard was reported. It says nothing about what caused it.</div></div>';
@@ -43606,7 +43606,9 @@ function showCommodityDetail(key) {
     row.querySelectorAll('.enso-legend-block').forEach(function (block) {
       var note = document.createElement('div'); note.className = 'enso-legend-note';
       var title = block.querySelector('.enso-legend-t').textContent;
-      note.textContent = /Domestic food inflation/.test(title) ? 'Fixed anchors: −10%, 0%, +30%; beyond ends use end colours. as_of range ' + rtfpDateRange() + '.' : /Sea-surface/.test(title) ? 'Seven-day mean; ±5 °C.' :
+      var rtfpRange = String(rtfpDateRange()), rtfpEnds = rtfpRange.split(' to ');
+      var rtfpWhen = rtfpEnds.length === 2 && rtfpEnds[0] === rtfpEnds[1] ? 'as_of ' + rtfpEnds[0] + ' for every country' : 'as_of range ' + rtfpRange;
+      note.textContent = /Domestic food inflation/.test(title) ? 'Fixed anchors: −10%, 0%, +30%; beyond ends use end colours. ' + rtfpWhen + '.' : /Sea-surface/.test(title) ? 'Seven-day mean; ±5 °C.' :
         /teleconnection/.test(title) ? 'Published regional membership.' : /Shipping/.test(title) ? 'Phase association only.' :
         /Hazard/.test(title) ? 'Hazard report, not attribution.' :
         /shock|crop/.test(title) ? 'Ochre falls; green rises. ±15%.' + (S.oni < 0 ? ' Under La Niña the ONI is negative, so a positive slope is a fall.' : '') :
@@ -43685,7 +43687,7 @@ function showCommodityDetail(key) {
       'This layer switches to the site’s <b>severity ramp</b>. A drought alert is unsigned. It is bad, or ' +
       'it is absent. The modelled layers are signed and cannot use that ramp. The difference is the point.</div>';
       el.innerHTML = '<div class="enso-legend">' +
-        '<div class="enso-legend-block"><div class="enso-legend-t">' + esc(lg[0]) + ' ' + badge('reported', 'reported') + '</div>' + body + '</div>' +
+        '<div class="enso-legend-block"><div class="enso-legend-t">' + esc(lg[0]) + ' · reported</div>' + body + '</div>' +
         (S.showSST !== false ? sstLegend() : '') + (S.showLanes ? laneLegend() : '') + (S.showAlerts ? alertLegend() : '') +
       '</div>' +
       '<div class="ctr-note" style="margin-top:8px;">Switch the <b>Solid fill</b> control back to a modelled layer to see what ENSO ' +
@@ -45272,8 +45274,15 @@ function showCommodityDetail(key) {
   };
 
   window.ensoInit = async function (sub) {
-    var mechanismAlias = sub === 'ensomech';
+    var mechanismAlias = sub === 'ensomech', prevSub = S.sub;
     S.sub = mechanismAlias ? 'elnino' : sub || 'elnino';
+    /* A new view starts at the top. The switcher is not pinned, so the reader
+       lands on the status line and the map rather than wherever the previous
+       view had been scrolled to. The mechanism alias scrolls to its own target. */
+    if (prevSub && prevSub !== S.sub && !mechanismAlias) {
+      var scroller = document.querySelector('#tab-elnino .content-page');
+      if (scroller) scroller.scrollTop = 0;
+    }
     var ensoRoot = document.getElementById('tab-elnino'); if (ensoRoot) ensoRoot.dataset.sub = S.sub;
     /* The Ocean entry and the index comparison are the ocean's own plates; the
        other lenses keep the status line and the map, not these. */
