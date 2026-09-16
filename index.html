@@ -42557,8 +42557,9 @@ function showCommodityDetail(key) {
           var v = sstCellAt(e.latlng);
           if (v == null) { ro.textContent = ''; return; }
           var la = e.latlng.lat, lo = e.latlng.lng;
-          ro.textContent = 'sea surface ' + num(v, 1) + ' °C · ' + Math.abs(Math.round(la)) + '°' + (la < 0 ? 'S' : 'N') +
-            ' ' + Math.abs(Math.round(lo)) + '°' + (lo < 0 ? 'W' : 'E') + ' · OISST 7-day mean to ' + (S.sst.time_end || '');
+          var rla = Math.round(la), rlo = Math.round(lo);
+          ro.textContent = 'sea surface ' + num(v, 1) + ' °C · ' + Math.abs(rla) + '°' + (rla === 0 ? '' : rla < 0 ? 'S' : 'N') +
+            ' ' + Math.abs(rlo) + '°' + (rlo === 0 ? '' : rlo < 0 ? 'W' : 'E') + ' · OISST 7-day mean to ' + (S.sst.time_end || '');
         });
         S.map.on('mouseout', function () { ro.textContent = ''; });
       }
@@ -45809,6 +45810,11 @@ function showCommodityDetail(key) {
     }
     S.map = null; S.base = null; S.layerBase = null; S.layerRegions = null;
     S.lanePins = []; S.laneLines = []; S.alertPins = []; S.sel = null;
+    /* v84 -- the ocean layer and its hover readout were bound to the map
+       instance just removed; drop them so buildMap wires fresh ones. */
+    S.sstLayer = null;
+    if (S.sstReadout && S.sstReadout.remove) { try { S.sstReadout.remove(); } catch (e) {} }
+    S.sstReadout = null;
     /* Chart.js instances are bound to canvases inside the sub-views that are
        about to be re-rendered; destroy them or they leak and refuse to rebind. */
     Object.keys(S.charts || {}).forEach(function (k) {
