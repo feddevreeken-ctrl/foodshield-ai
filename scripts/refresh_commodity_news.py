@@ -9,7 +9,7 @@ WHAT THIS IS
   Nothing here is observed data and nothing here should ever be charted.
 
 PUBLISHER FEEDS, ALL KEYLESS  (v46.1)
-  We read the outlets' OWN syndication feeds — 29 of them, listed further
+  We read the outlets' OWN syndication feeds — 57 of them, listed further
   down in TRADE_PRESS_FEEDS / WIRE_FEEDS / INSTITUTIONAL_FEEDS — plus GDELT
   as a supplementary source. None is a search-engine aggregator. Each feed is
   an unqueried firehose, so all commodity filtering happens locally in

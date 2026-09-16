@@ -1,6 +1,6 @@
 # FoodShield AI — Setup & Automated Data Refresh
 
-> ℹ️ **Feed count updated 2026-07-01.** The pipeline now has **33 `refresh_*.py` feed scripts** (plus the build/rebuild steps in `run_all.py`). One of the 33, `refresh_net_food_trade.FIXED.py`, is an unused duplicate of `refresh_net_food_trade.py` — `run_all.py` imports the non-`.FIXED` version. The "18 feeds" list below is an early subset kept for setup context — for the live, health-tracked inventory open the source-health pill in the app or read `data/source_manifest.json`. Authoritative status: **HANDOVER_2026-06-15.md**.
+> ℹ️ **Feed count updated 2026-07-01.** The pipeline now has **33 `refresh_*.py` feed scripts** (plus the build/rebuild steps in `run_all.py`). The "18 feeds" list below is an early subset kept for setup context — for the live, health-tracked inventory open the source-health pill in the app or read `data/source_manifest.json`. Authoritative status: **HANDOVER_2026-06-15.md**.
 
 This repo includes a GitHub Actions workflow that refreshes `data/` every 6 hours (cron `0 */6 * * *`: 00:00, 06:00, 12:00, 18:00 UTC), rebuilds the nowcast, writes a per-source health manifest, and redeploys the frontend.
 

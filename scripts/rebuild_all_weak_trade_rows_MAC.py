@@ -37,7 +37,7 @@ USAGE
 
 After it runs:
   python3 scripts/validate_data.py          # must show 0 metadata failures
-  # then regenerate the index.html embed + sync foodshield-v21.html as usual.
+  # then regenerate the index.html embed.
 """
 import argparse, json, os, sys, time, urllib.request, urllib.parse
 from datetime import datetime, timezone

@@ -593,7 +593,7 @@ def main():
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "source": (
                 "Composite: WFP HungerMap + IPC + ACLED + FAO FFPI + ReliefWeb + "
-                "Open-Meteo (weather/flood) + NASA FIRMS + OpenAQ + USGS Water + "
+                "Open-Meteo (weather/flood) + OpenAQ + USGS Water + "
                 "WFP per-country (FX/inflation) + Eurostat food HICP + FAOSTAT food CPI "
                 "+ FEWS NET forward projection + HDX HAPI internal displacement "
                 "+ INFORM risk + WB WGI rule of law "

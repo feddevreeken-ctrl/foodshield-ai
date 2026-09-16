@@ -33,7 +33,7 @@ USAGE
 
 After it runs:
   python3 scripts/validate_data.py
-  # then regenerate the index.html embed (window.__BEEF_DATA__) + sync foodshield-v21.html.
+  # then regenerate the index.html embed (window.__BEEF_DATA__).
 """
 import argparse, json, os, time, urllib.request, urllib.parse
 from datetime import datetime, timezone
