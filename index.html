@@ -35006,7 +35006,7 @@ function renderMapLayers(){
     <div class="mlp-row" onclick="mlToggleRestr(event)">
       ${chk(st.restrOn)}
       <span class="mlp-icon" style="color:#c9683c">⛔</span>
-      <span class="mlp-label">Export restrictions on record</span>
+      <span class="mlp-label">Export restrictions, current</span>
       <span class="mlp-count">${counts['restriction'] || 0}</span>
     </div>
     <div class="mlp-row" onclick="mlToggleFlows(event)">
@@ -35018,7 +35018,7 @@ function renderMapLayers(){
             onchange="toggleCommodityFlowOverlay(this.value)" style="${st.flowsOn ? '' : 'display:none'}">
       <option value="">Choose a commodity…</option>
     </select>
-    <div class="mlp-foot">Disturbances: GDACS · ReliefWeb · IPC · FEWS · Open-Meteo · USGS, plus wire headlines marked as claims. Export restrictions: IFPRI tracker entries on record; check current status before acting. Trade flows: cited bilateral corridors.</div>`;
+    <div class="mlp-foot">Disturbances: GDACS · ReliefWeb · IPC · FEWS · Open-Meteo · USGS, plus wire headlines marked as claims. Export restrictions: current entries only; entries on record from past years are in the Trade tab. Trade flows: cited bilateral corridors.</div>`;
   if (st.flowsOn && typeof populateCommodityFlowSelect === 'function') populateCommodityFlowSelect();
 }
 function mlToggleDist(ev){ ev.stopPropagation(); const st = window._mlState; st.distOn = !st.distOn; if (st.distOn) st.expanded = true; applyMapLayers(); renderMapLayers(); }
@@ -37958,6 +37958,10 @@ async function loadDisturbanceData() {
     const rlist = Array.isArray(LIVE.restrictions) ? LIVE.restrictions : [];
     rlist.forEach(r => {
       if (!r || !r.source_url || !r.iso || !r.commodity) return;
+      // v85 -- a 2021 quota on a layer inside a panel headed "Live disturbances"
+      // read like a live one; entries on record stay in the Trade tab, the
+      // country flag and the brief, where "on record" is spelled out.
+      if (r.status === 'historical') return;
       const exp = (typeof restrictionExposure === 'function') ? restrictionExposure(r.iso, r.commodity, 4) : [];
       const expTxt = exp.length
         ? ' Most exposed importers: ' + exp.map(e => `${e.name} ${e.share_pct}% (FDRS ${e.fdrs != null ? e.fdrs : '—'})`).join(', ') + '.'
@@ -42443,7 +42447,7 @@ function showCommodityDetail(key) {
           var la = e.latlng.lat, lo = e.latlng.lng;
           var rla = Math.round(la), rlo = Math.round(lo);
           ro.textContent = 'sea surface ' + num(v, 1) + ' °C · ' + Math.abs(rla) + '°' + (rla === 0 ? '' : rla < 0 ? 'S' : 'N') +
-            ' ' + Math.abs(rlo) + '°' + (rlo === 0 ? '' : rlo < 0 ? 'W' : 'E') + ' · OISST 7-day mean to ' + (S.sst.time_end || '');
+            ' ' + Math.abs(rlo) + '°' + (rlo === 0 ? '' : rlo < 0 ? 'W' : 'E') + ' · nearest 2° sample · OISST 7-day mean to ' + (S.sst.time_end || '');
         });
         S.map.on('mouseout', function () { ro.textContent = ''; });
       }
@@ -43583,7 +43587,9 @@ function showCommodityDetail(key) {
            observed value. */
         if (live) return '';
         var snap = scenarioSnap();
-        return '<span>· scenario ' + esc(keyFor(S.oni)[2]) + '</span>' +
+        var cpcBand = (S.enso && S.enso.latest) ? liveBand(S.enso.latest) : '';
+        return (cpcBand ? '<span>· ' + esc(cpcBand) + ', CPC’s band</span>' : '') +
+          '<span>· scenario ' + esc(keyFor(S.oni)[2]) + '</span>' +
           (snap ? '<span class="enso-tag-snap">nearest step to the observed ' +
             num(snap.live, 2) + '</span>' : '');
       })() +
