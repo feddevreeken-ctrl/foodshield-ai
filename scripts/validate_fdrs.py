@@ -18,9 +18,8 @@ There is not one FDRS per country, there are three, and they disagree:
   1. DISPLAYED       — what a user actually reads off the site. index.html computes
                        fdrsV2(c.c, liveSCE) and then applies the nowcast overlay at
                        index.html:16168 (`c.fdrs = clip(round(structural + adj), 0, 100)`).
-                       NOT REPRODUCIBLE OFFLINE: the live supply-chain-exposure input
-                       (component c[6]) is computed in the browser and never persisted
-                       to countries.json, so no script in this repo can recompute it.
+                       Published separately as countries.json fdrs_displayed since Stage E.
+                       This validator retains its existing structural/proxy metric tiers.
   2. STRUCTURAL      — countries.json `fdrs`. Clean, persisted, reproducible. This is
                        what earlier versions of this script validated, and it stays the
                        headline number for continuity.
@@ -195,9 +194,9 @@ CAVEATS = [
     "That is NOT the number the site displays. The displayed score adds live supply-chain "
     "exposure and the nowcast overlay, and every country differs between the two.",
     "The structural_plus_nowcast tier is an APPROXIMATION of the displayed score, not a "
-    "reconstruction: component c[6] (supply-chain exposure) is computed in the browser and "
-    "never persisted to countries.json, so the displayed score cannot be reproduced offline. "
-    "Expect a residual of roughly 2-7 points on high-scoring countries.",
+    "reconstruction: it omits live SCE, sourced replacements and the US-state blend. "
+    "Stage E publishes the exact displayed tier separately as fdrs_displayed, validated "
+    "against the shared browser scorer by validate_data.py.",
     "c7 (economic access, weight 0.12) has approximately ZERO-to-NEGATIVE rank correlation "
     "with realised IPC severity within monitored countries. The third-largest weight in the "
     "composite carries no measurable signal against this ground truth. State that plainly "
@@ -307,9 +306,8 @@ def main():
             "is_displayed_score": False,
             "approximates_displayed": True,
             "approximation_error_note": (
-                "Live supply-chain exposure (component c[6]) is computed in the browser and "
-                "never persisted to countries.json, so the displayed score cannot be "
-                "reproduced exactly offline."),
+                "This legacy proxy omits live SCE and sourced replacements. The exact "
+                "displayed snapshot is published separately as countries.json fdrs_displayed."),
             "n_countries_with_nowcast_adjustment": n_adjusted,
             "n_countries_differing_from_structural": n_diff,
             "mean_abs_delta_vs_structural": round(sum(deltas) / len(deltas), 2) if deltas else None,
@@ -318,12 +316,10 @@ def main():
         "displayed": {
             "label": "DISPLAYED — the score users actually see on the site",
             "is_displayed_score": True,
-            "status": "not_computable_offline",
-            "reason": ("index.html computes fdrsV2(c.c, liveSCE) with a browser-computed "
-                       "supply-chain-exposure input that is never written to countries.json, "
-                       "then applies the nowcast overlay at index.html:16168. No script in "
-                       "this repo can recompute it; structural_plus_nowcast is the closest "
-                       "offline proxy and is reported above as an approximation."),
+            "status": "published_separately",
+            "reason": ("countries.json fdrs_displayed is reproducible through js/fdrs.js. "
+                       "validate_data.py checks its arithmetic. This validator retains "
+                       "the structural and legacy proxy metric tiers for continuity."),
             "tests": None,
         },
     }
@@ -413,7 +409,7 @@ def main():
               f"{rho2(tt['spearman_fdrs_vs_fews_phase']['rho']):>9} "
               f"{as_pct(tt['precision_at_10']):>6} {as_pct(tt['precision_at_20']):>6} "
               f"{as_pct(tt['precision_at_30']):>6}")
-    print(f"  {'displayed':<22} {'not computable offline — see caveats'}")
+    print(f"  {'displayed':<22} {'published separately; parity checked by validate_data.py'}")
     print("  recall@N (structural / structural+nowcast):")
     for N in (10, 20, 30):
         print(f"    top-{N}: {as_pct(t[f'recall_at_{N}'])} / {as_pct(tests_nc[f'recall_at_{N}'])}")

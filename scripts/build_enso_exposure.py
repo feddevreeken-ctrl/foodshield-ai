@@ -214,6 +214,7 @@ def main() -> int:
             "ready_when": (
                 "Flip production_ready to true only when the aggregate has been scored "
                 "out-of-sample. The non-ENSO-specific pairs are already excluded."),
+            "scenario_levels": LEVELS,
             "index": "ONI (CPC oni.ascii.txt, ERSSTv6 lineage)",
             "index_note": (
                 "Scenario levels are ONI as published in CPC's oni.ascii.txt, the series "

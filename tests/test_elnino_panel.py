@@ -188,14 +188,14 @@ def main() -> int:
 
         check("Ocean defaults to observed SST with the backdrop enabled",
               page.input_value('#enso-mode') == 'sst' and page.is_checked('#enso-tog-sst')
-              and page.locator('.enso-tag-snap').count() == 0)
+              and page.locator('.enso-tag-interpolation').count() == 0)
         page.evaluate("showTab('ensoharvest')")
         page.wait_for_selector('#subview-ensoharvest.active .enso-cal')
         check("Harvests defaults to impact without the ocean backdrop",
               page.input_value('#enso-mode') == 'impact' and not page.is_checked('#enso-tog-sst'))
         print("\nscenario disclosure")
-        tag = page.locator(".enso-tag-snap")
-        check("modelled layer discloses the scenario it is painted at", tag.count() == 1)
+        tag = page.locator(".enso-tag-interpolation")
+        check("modelled layer discloses interpolation at the observed ONI", tag.count() == 1 and "interpolated between" in tag.text_content())
         # Read expected values from the feed rather than hardcoding them: CPC
         # publishes a new season every month, and this assertion is about the hero
         # agreeing with enso.json, not about any particular number.
@@ -203,7 +203,7 @@ def main() -> int:
         hero = page.locator("#enso-hero").text_content()
         band = feed["band"].replace("El Nino", "El Niño").replace("La Nina", "La Niña")
         val = ("%+.2f" % feed["anom"]).replace("-", "−")
-        check("hero prints the agency band, not the snapped one",
+        check("hero prints the observed agency band",
               band.lower() in hero.lower() and val.lower() in hero.lower(), "want %s / %s in: %s" % (band, val, hero[:110]))
 
         page.evaluate("showTab('elnino')")
@@ -291,8 +291,8 @@ def main() -> int:
               any("selected" in h and "La" in h for h in head_nina), str(head_nina))
         check("ranking changes with the phase", order_nino != order_nina,
               f"{order_nino} vs {order_nina}")
-        check("snap badge hidden once a scenario is chosen by hand",
-              page.locator(".enso-tag-snap").count() == 0)
+        check("explicit scenario replaces interpolation once chosen by hand",
+              "Explicit scenario:" in page.locator(".enso-tag-interpolation").text_content())
 
         print("\ncrop colour encodes the change, not the raw slope")
         # The coefficients are %/ONI slopes and ONI is negative under La Nina, so
@@ -563,7 +563,8 @@ def main() -> int:
         page.evaluate("showTab('ensoharvest')")
         page.wait_for_selector('#subview-ensoharvest.active #enso-harvest-fig')
         check("nine scenario rungs retain the observed marker and both instrument rows",
-              page.locator('[data-native="enso-level"]').count() == 9
+              page.locator('[data-native="enso-level"]:not([data-value="observed"])').count() == 9
+              and page.locator('[data-native="enso-level"][data-value="observed"]').count() == 1
               and page.locator('.is-observed-rung').count() == 1
               and page.locator('.enso-instrument-row').count() == 2)
         page.locator('[data-native="enso-level"][data-value="-1.5"]').click()

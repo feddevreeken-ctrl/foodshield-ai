@@ -36,6 +36,11 @@ def _nums(s):
     return [float(x) for x in re.findall(r"-?\d+\.?\d*", s)]
 
 html = open(HTML, encoding="utf-8").read()
+# Stage E moved the scorer into js/fdrs.js, loaded by the page as a plain
+# script; the runtime copies of the weights and the amplifier live there now.
+JS = os.path.join(ROOT, "js", "fdrs.js")
+if os.path.exists(JS):
+    html += "\n" + open(JS, encoding="utf-8").read()
 build = open(BUILD, encoding="utf-8").read()
 fix = json.load(open(FIX))
 
@@ -44,7 +49,9 @@ print("=== Formula-integrity audit ===\n")
 # 1) weights agree + sum to 1
 w_fix = fix["_meta"]["weights"]
 m_build = re.search(r"FDRS_V2_WEIGHTS\s*=\s*\[([^\]]+)\]", build)
-m_html = re.search(r"FDRS_V2_W\s*=\s*\[([^\]]+)\]", html)
+# The page aliases FDRS_V2_W from FoodShieldScore.weights; the literal itself
+# sits in js/fdrs.js as `var weights = [...]` (appended to `html` above).
+m_html = re.search(r"FDRS_V2_W\s*=\s*\[([^\]]+)\]", html) or re.search(r"var weights\s*=\s*\[([^\]]+)\]", html)
 w_build = _nums(m_build.group(1)) if m_build else None
 w_html = _nums(m_html.group(1)) if m_html else None
 print("--- 1. FDRS weights ---")

@@ -31,7 +31,7 @@ test('planting across New Year and second seasons remain bounded',()=>{
  const multi={plant:[2,3,8],harvest:[6,11]};assert.equal(api.calendarSeason(multi,7).stage,'between seasons');assert.equal(api.calendarSeason(multi,9).stage,'in the ground');assert(!api.calendarSeason(multi,9).djf);
 });
 test('La Nina positive slopes retain positive labels and fall colour',()=>{
- S.oni=-1.5;const out=api.harvestFigure('ZWE');assert(/hs-bar neg selected-phase[^>]*data-k="La Niña"/.test(out));assert(out.includes('+8.4'));assert(out.includes('La Niña reverses'));
+ S.explicitScenario=true;S.oni=-1.5;const out=api.harvestFigure('ZWE');assert(/hs-bar neg selected-phase[^>]*data-k="La Niña"/.test(out));assert(out.includes('+8.4'));assert(out.includes('La Niña reverses'));
 });
 test('country and scenario changes update both country surfaces',()=>{
  S.sel='USA';api.renderCoeffs();assert.equal(nodes['enso-harvest-fig']['data-iso'],'USA');assert(nodes['enso-detail'].innerHTML.includes('La Niña %/ONI <span'));
@@ -68,8 +68,9 @@ test('all eight limits and the entire rejected-claims register remain',()=>{
  api.renderLimits();const out=nodes['enso-limits'].innerHTML;assert.equal((out.match(/class="enso-lim"/g)||[]).length,8);
  assert.equal((out.match(/class="enso-reg-row"/g)||[]).length,S.econ.do_not_publish.rows.length);assert(out.includes('How to read'));assert(out.includes('id="enso-gate"'));
 });
-test('native controls coexist with nine rungs and labelled instruments',()=>{
- api.renderControls();const out=nodes['enso-controls'].innerHTML;assert.equal((out.match(/data-native="enso-level"/g)||[]).length,9);
+test('native controls coexist with observed mode, nine rungs and labelled instruments',()=>{
+ api.renderControls();const out=nodes['enso-controls'].innerHTML;assert.equal((out.match(/data-native="enso-level"/g)||[]).length,10);
+ assert.equal((out.match(/data-native="enso-level" data-value="observed"/g)||[]).length,1);
  assert.equal((out.match(/class="is-observed-rung"/g)||[]).length,1);
  for(const id of ['enso-level','enso-mode','enso-country','enso-tog-regions','enso-tog-lanes','enso-tog-alerts','enso-tog-sst'])assert(out.includes('id="'+id+'"'));
  assert.equal((out.match(/class="enso-instrument-row/g)||[]).length,2);assert(out.includes('type="search"'));assert(out.includes('Observed / reported'));

@@ -4,9 +4,9 @@
  *
  * Closes the gap left by scripts/test_fdrs_v2.py: that test validates a Python
  * RE-IMPLEMENTATION of the formula, but nothing exercised the actual JavaScript
- * `fdrsV2` that the live app ships. This script slices the ACTUAL `FDRS_V2_W`
- * weights and `fdrsV2` function text out of index.html and evaluates them, then
- * runs them against the same tests/fdrs_cases.json fixtures the Python test uses.
+ * `fdrsV2` that the live app ships. This imports the shared js/fdrs.js scorer,
+ * verifies that index.html loads and uses it, and runs the same pinned
+ * tests/fdrs_cases.json fixtures that the Python test uses.
  *
  * No DOM, no jsdom, no npm deps — fdrsV2 is a pure function of the component vector.
  *
@@ -21,43 +21,16 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const HTML = path.join(ROOT, 'index.html');
 const FIX = path.join(ROOT, 'tests', 'fdrs_cases.json');
 
-// Slice a brace-balanced block out of `src` starting at the first `{` at/after `from`.
-function sliceBalanced(src, from) {
-  const start = src.indexOf('{', from);
-  if (start < 0) throw new Error('no opening brace found');
-  let depth = 0;
-  for (let i = start; i < src.length; i++) {
-    const ch = src[i];
-    if (ch === '{') depth++;
-    else if (ch === '}') { depth--; if (depth === 0) return src.slice(start, i + 1); }
-  }
-  throw new Error('unbalanced braces');
-}
-
+import scorer from '../js/fdrs.js';
+import assert from 'node:assert/strict';
 function extractShippedFdrs(html) {
-  // FDRS_V2_W = [ ... ];
-  const wMatch = html.match(/const\s+FDRS_V2_W\s*=\s*(\[[^\]]*\])\s*;/);
-  if (!wMatch) throw new Error('could not extract FDRS_V2_W from index.html');
-  const weightsSrc = wMatch[1];
-
-  // window.fdrsV2 = function fdrsV2(cv, sceFallback) { ... };
-  const fnIdx = html.indexOf('window.fdrsV2 = function fdrsV2');
-  if (fnIdx < 0) throw new Error('could not locate fdrsV2 in index.html');
-  const paramsIdx = html.indexOf('(', fnIdx);
-  const params = html.slice(paramsIdx + 1, html.indexOf(')', paramsIdx));
-  const body = sliceBalanced(html, html.indexOf(')', paramsIdx) + 1);
-
-  // Build the real function from the shipped source. FDRS_V2_W is referenced by
-  // the body, so it must be in scope — inject its exact shipped literal.
-  const factory = new Function(
-    `const FDRS_V2_W = ${weightsSrc};` +
-    `return function fdrsV2(${params}) ${body};`
-  );
-  return { fdrsV2: factory(), weightsSrc };
+  if (!html.includes('<script src="js/fdrs.js"></script>') || !html.includes('window.fdrsV2 = FoodShieldScore.score')) throw new Error('page must use shared scorer');
+  return {fdrsV2:scorer.score, weightsSrc:JSON.stringify(scorer.weights)};
 }
 
 function main() {
   const html = fs.readFileSync(HTML, 'utf8');
+  assert(JSON.parse(fs.readFileSync(path.join(ROOT,'vercel.json'),'utf8')).builds.some(b=>b.src==='js/**'), 'deployment must ship shared scorer');
   const { fdrsV2, weightsSrc } = extractShippedFdrs(html);
   const fx = JSON.parse(fs.readFileSync(FIX, 'utf8'));
   const fixtureWeights = fx._meta.weights;
@@ -100,6 +73,22 @@ function main() {
     console.log(`  [FAIL] ceiling: all-max must clip to 100 (got ${allMax})`);
     failed++;
   }
+
+  for (const c of fx.cases) {
+    const d=scorer.decomposition(c.c);
+    assert(Math.abs(d.contributions.reduce((sum,v)=>sum+(v||0),0)-d.base)<1e-10);
+    assert.equal(d.score,scorer.score(c.c));
+    d.components.forEach((v,i)=>assert.equal(d.contributions[i]===null,v===null));
+  }
+  const c={iso:'US-XX',c:[50,50,50,50,50,50,50,50,50]};
+  const live={feeding_america:{'US-XX':{food_insecurity_pct:14}},nowcast:{'US-XX':{adjustment:.4}}};
+  const r=scorer.displayed(c,live,{imports:[],exports:[]});
+  assert.equal(r.structural,52);assert(Math.abs(r.base-54.1)<1e-10);
+  assert.equal(r.displayed,55);assert.equal(r.delta,r.displayed-r.base);
+  live.nowcast['US-XX'].adjustment=100;
+  assert.equal(scorer.displayed(c,live,{imports:[],exports:[]}).displayed,100);
+  assert.equal(scorer.decomposition([null,null,null]).observedWeight,0);
+  console.log('  [ok  ] decomposition sum/missingness, US blend rounding and clipping');
 
   console.log(`\n${fx.cases.length + 3} checks, ${failed} failed.`);
   if (failed) {

@@ -258,11 +258,41 @@ def validate_one(filename, spec):
     return True, "ok"
 
 
+def validate_displayed_scores():
+    from build_countries_dataset import displayed_snapshot
+    from datetime import datetime
+    failures = []
+    try:
+        snapshot = displayed_snapshot()
+        rows = json.loads((DATA_DIR / "countries.json").read_text())["data"]["countries"]
+        for iso, row in rows.items():
+            expected = snapshot["scores"][iso]
+            displayed, base, delta = (row.get(k) for k in
+                ("fdrs_displayed", "fdrs_displayed_base", "fdrs_nowcast_delta"))
+            if not isinstance(displayed, (int, float)) or not 0 <= displayed <= 100:
+                failures.append(f"{iso}: displayed score outside 0..100")
+            if displayed != expected["displayed"] or base != expected["base"]:
+                failures.append(f"{iso}: displayed/base differs from shared scorer")
+            if not isinstance(delta, (int, float)) or not isinstance(base, (int, float)) or delta != displayed - base:
+                failures.append(f"{iso}: delta differs from displayed minus base")
+            if row.get("fdrs_displayed_inputs") != snapshot["inputs"]:
+                failures.append(f"{iso}: displayed input versions differ from current files")
+            try:
+                if datetime.fromisoformat(row.get("fdrs_displayed_at", "")).tzinfo is None:
+                    raise ValueError("timezone required")
+            except (TypeError, ValueError):
+                failures.append(f"{iso}: displayed timestamp is not an ISO datetime with timezone")
+    except Exception as exc:
+        failures.append(f"displayed scorer failed: {exc}")
+    print(f"Displayed score parity/range/delta/versions: {len(failures)} failures")
+    return failures
+
+
 def main():
     print(f"=== Data integrity check ({len(EXPECTED_FILES)} files) ===")
     critical_failures = []
     # Honesty violations: any single one blocks. See HONESTY_BLOCKING above.
-    honesty_failures = []
+    honesty_failures = [("countries.json", message) for message in validate_displayed_scores()]
     soft_warnings = []
     ok_count = 0
     for filename in sorted(EXPECTED_FILES):

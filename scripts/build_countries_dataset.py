@@ -760,6 +760,31 @@ def main():
     print(f"[OK] wrote {OUT_PATH} ({len(ordered)} countries)")
 
 
+def displayed_snapshot():
+    """Calculate the displayed tier with the exact browser scorer via Node."""
+    import subprocess
+    result = subprocess.run(
+        ["node", str(Path(__file__).with_name("displayed_scores.mjs"))],
+        check=True, capture_output=True, text=True)
+    return json.loads(result.stdout)
+
+
+def publish_displayed():
+    """Run after nowcast; preserve structural fdrs and its history semantics."""
+    snapshot = displayed_snapshot()
+    envelope = json.loads(OUT_PATH.read_text())
+    at = datetime.now(timezone.utc).isoformat()
+    for iso, row in envelope["data"]["countries"].items():
+        score = snapshot["scores"][iso]
+        row["fdrs_displayed"] = score["displayed"]
+        row["fdrs_displayed_base"] = score["base"]
+        row["fdrs_nowcast_delta"] = score["delta"]
+        row["fdrs_displayed_at"] = at
+        row["fdrs_displayed_inputs"] = snapshot["inputs"]
+    OUT_PATH.write_text(json.dumps(envelope, indent=2, ensure_ascii=False))
+    print(f"[OK] published displayed scores for {len(snapshot['scores'])} countries")
+
+
 def _extract_legacy_rows():
     text = HTML_PATH.read_text()
     blocks = _country_blocks(text)
@@ -1331,4 +1356,8 @@ def _match_array(block: str, field: str):
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    if "--displayed-only" in sys.argv:
+        publish_displayed()
+    else:
+        main()

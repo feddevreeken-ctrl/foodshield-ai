@@ -169,6 +169,7 @@ STEPS = [
     # the downstream validate_data gate then catches any missing trade_scope.
     ("Trade lineage honesty (v41)", _trade_honesty_remediation.build, "countries.json"),
     ("Nowcast build",          build_nowcast.main,              "nowcast.json"),
+    ("Displayed FDRS",         build_countries_dataset.publish_displayed, "countries.json"),
     ("Daily summary",          build_daily_summary.main,        "daily_summary.json"),
     ("Source manifest",        build_source_manifest.main,      "source_manifest.json"),
     ("Companies aggregate",    build_companies.main,            "companies.json"),

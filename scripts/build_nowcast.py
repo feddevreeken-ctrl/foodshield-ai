@@ -40,6 +40,7 @@ Formula (extended May 2026, expanded May 2026 v20.27):
 """
 import json
 import math
+import calendar
 import re
 from pathlib import Path
 from datetime import datetime, timezone
@@ -51,7 +52,7 @@ _MONTHS = {m: i for i, m in enumerate(
     ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 1)}
 
 
-def _period_weight(period, full_days=365, zero_days=730):
+def _period_weight(period, full_days=30, zero_days=90):
     """Weight for a FEWS NET assessment period label such as 'Jun-Sep 2026' or
     'Apr-Apr 2023' (en dash or hyphen): 1.0 while the period ended within
     full_days, linear to 0.0 at zero_days, 0.0 when the label cannot be read.
@@ -60,21 +61,25 @@ def _period_weight(period, full_days=365, zero_days=730):
     period label is the only vintage the row carries; without this gate a
     2023 assessment gap-fills the crisis term as if it were this season.
     """
+    return _freshness_weight(_period_end(period), full_days, zero_days)
+
+
+def _period_end(period):
+    """Last calendar day of the final named month, or an explicit end date."""
     if not isinstance(period, str):
-        return 0.0
-    m = re.search(r"([A-Za-z]{3})[^A-Za-z0-9]+([A-Za-z]{3})\s+(\d{4})", period)
-    if not m:
-        return 0.0
-    mon = _MONTHS.get(m.group(2)[:3].title())
-    if not mon:
-        return 0.0
-    end = datetime(int(m.group(3)), mon, 28, tzinfo=timezone.utc)
-    age = (datetime.now(timezone.utc) - end).days
-    if age <= full_days:
-        return 1.0
-    if age >= zero_days:
-        return 0.0
-    return round(1.0 - (age - full_days) / float(zero_days - full_days), 3)
+        return None
+    dates = re.findall(r"\d{4}-\d{2}-\d{2}", period)
+    if dates:
+        return dates[-1]
+    months = re.findall(r"([A-Za-z]{3})[a-z]*\s+(\d{4})", period)
+    if not months:
+        return None
+    name, year = months[-1]
+    month = _MONTHS.get(name.title())
+    if month is None:
+        return None
+    year = int(year)
+    return f"{year:04d}-{month:02d}-{calendar.monthrange(year, month)[1]:02d}"
 
 
 def _age_days(as_of):
@@ -96,6 +101,17 @@ def _age_days(as_of):
             dt = dt.replace(tzinfo=timezone.utc)
         return (datetime.now(timezone.utc) - dt).days
     return None
+
+
+def _freshness_weight(observed_at, full_days=30, zero_days=90, outer_bound=0.0):
+    """Full weight through full_days, linear to zero_days; undated uses outer bound.
+
+    A collection timestamp is never an observation. Callers must pass None for it.
+    """
+    age = _age_days(observed_at)
+    if age is None:
+        return outer_bound
+    return max(0.0, min(1.0, (zero_days - age) / float(zero_days - full_days)))
 
 
 def load(name):
@@ -139,6 +155,17 @@ def main():
     # convention differs: fx_rates uses POSITIVE = depreciation (stated in its
     # own _meta.notes), WFP used NEGATIVE = depreciation.
     fx      = load("fx_rates.json")["data"]
+    # v87 -- these five collectors fetch a live value (today's rate, the current
+    # forecast window, the gauge reading now) and write no per-row date, so the
+    # file's own generated_at IS the observation time. Treating them as undated
+    # zeroed real signals in 55 countries. A FEWS-style stale payload behind a
+    # fresh fetch is not possible here: each fetch returns the current value.
+    def fetched_at(name):
+        return (load(name).get("_meta") or {}).get("generated_at")
+    LIVE_FETCH_BASIS = "live fetch: the file's generated_at is the observation time; no per-row date exists"
+    fx_at, om_at, fl_at, aq_at, usg_at = (fetched_at("fx_rates.json"), fetched_at("openmeteo.json"),
+                                          fetched_at("openmeteo_flood.json"), fetched_at("openaq.json"),
+                                          fetched_at("usgs_water.json"))
     # v20.27 — additional sourced inputs used for INFORM amp + governance drag + PSD shortfall
     inform  = load("inform_risk.json")["data"]
     wgi     = load("wgi.json")["data"]
@@ -156,6 +183,15 @@ def main():
             global_food_kick = 2
         elif mom > 1:
             global_food_kick = 1
+
+    ffpi_date = _period_end((ffpi.get("latest") or {}).get("month"))
+    # FFPI uses an ISO reporting month.
+    if not ffpi_date:
+        month = (ffpi.get("latest") or {}).get("month")
+        if isinstance(month, str) and re.fullmatch(r"\d{4}-\d{2}", month):
+            year, mon = map(int, month.split("-"))
+            ffpi_date = f"{month}-{calendar.monthrange(year, mon)[1]:02d}"
+    global_food_kick *= _freshness_weight(ffpi_date)
 
     # Index ReliefWeb events by ISO3
     rw_by_iso = {}
@@ -189,7 +225,7 @@ def main():
     if canonical_iso:
         all_iso = {iso for iso in all_iso if iso in canonical_iso}
     out = {}
-    for iso in all_iso:
+    for iso in sorted(all_iso):
         # v86 — use the percentage that is comparable ACROSS countries.
         #
         # The feed's phase3plus_pct is a share of the population the IPC analysis
@@ -229,7 +265,8 @@ def main():
             ipc_weight = max(0.0, 1.0 - (ipc_age_days - 365) / 365.0)
         else:
             ipc_weight = 1.0
-        ipc_stale = ipc_weight < 1.0
+        ipc_valid_until = _period_end(_ipc_row.get("period")) or _ipc_row.get("analysis_date")
+        ipc_weight = min(ipc_weight, _freshness_weight(ipc_valid_until))
         wfp_fcs  = (wfp.get(iso) or {}).get("fcs_pct") or 0
         # v23 — ACLED only counts as a LIVE nowcast signal when the feed is actually
         # live (is_live=true). On a 12-month-lagged access tier it's a STRUCTURAL
@@ -242,11 +279,13 @@ def main():
         if _hapi_row.get("is_live") and (
                 _hapi_row.get("intensity_score_pc") is not None
                 or _hapi_row.get("intensity_score") is not None):
+            conflict_row = _hapi_row
             # Per-capita where known — see the note in refresh_hapi_conflict.py.
             conflict = (_hapi_row.get("intensity_score_pc")
                         if _hapi_row.get("intensity_score_pc") is not None
                         else _hapi_row.get("intensity_score")) or 0
         else:
+            conflict_row = _acled_row
             conflict = (_acled_row.get("intensity_score") or 0) if _acled_row.get("is_live") else 0
         relief_n = len(rw_by_iso.get(iso, []))
         wc       = wfp_c.get(iso) or {}
@@ -254,6 +293,26 @@ def main():
         fl_row   = flood.get(iso) or {}
         aq_row   = aq.get(iso) or {}
         usg_row  = usgs.get(iso) or {}
+
+        # Each term records the date actually used, including unavailable vintages.
+        freshness = {}
+        def term_weight(term, date, full=30, zero=90, basis=None, outer=0.0):
+            weight = _freshness_weight(date, full, zero, outer)
+            freshness[term] = {"weight": weight, "date": date,
+                               "basis": basis or ("observation/window end" if date else
+                               "undated: only a collection date, if any, is available; outer bound 0")}
+            return weight
+        term_weight("ipc_pressure", ipc_valid_until, basis="assessment validity end or analysis_date; 365/730 analysis outer bound")
+        freshness["ipc_pressure"]["weight"] = ipc_weight
+        freshness["caseload_kick"] = dict(freshness["ipc_pressure"])
+        # HungerMap rows carry the analysis month as analysis_date (monthly at
+        # best, often older); there is no observation_date field, and reading one
+        # zeroed the term for every country.
+        _wfp_row = wfp.get(iso) or {}
+        wfp_weight = term_weight("wfp_pressure", _wfp_row.get("observation_date") or _wfp_row.get("analysis_date"),
+                                 basis="HungerMap analysis_date (analysis month); 30/90-day schedule")
+        conflict_weight = term_weight("conflict_kick", conflict_row.get("window_end")) if conflict_row.get("is_live") else term_weight("conflict_kick", None, basis="not live; excluded")
+        term_weight("global_food_kick", ffpi_date, basis="FFPI reporting month end")
 
         ipc_pressure  = round(min(12, ipc_p3 * 0.12) * ipc_weight, 2)
 
@@ -277,8 +336,8 @@ def main():
         _ipc_count = (_ipc_row.get("phase3plus_count")
                       if isinstance(_ipc_row.get("phase3plus_count"), (int, float)) else 0)
         caseload_kick = round(min(5.0, 2.5 * math.log10(1 + _ipc_count / 1_000_000.0)) * ipc_weight, 2) if _ipc_count > 0 else 0
-        wfp_pressure  = min(6, max(0, (wfp_fcs - 30) * 0.15))
-        conflict_kick = min(5, conflict * 0.05)
+        wfp_pressure  = min(6, max(0, (wfp_fcs - 30) * 0.15)) * wfp_weight
+        conflict_kick = min(5, conflict * 0.05) * conflict_weight
         # v85 -- ZEROED, field kept (as inflation_shock is). relief_n is the number
         # of ReliefWeb documents about a country inside a globally capped 50-item
         # window: publication volume, not response capacity, and it was
@@ -296,14 +355,12 @@ def main():
         #       worse than the current_phase, add a small kick regardless of IPC.
         # Capped at +6 so a projection can't dominate observed current conditions.
         fw_row      = fews.get(iso) or {}
-        # v86 -- the collector stamps as_of with the collection date, so the
-        # assessment period is the only honest vintage: full weight for a period
-        # that ended within a year, linear to zero at two years. On 2026-09-16
-        # twenty-four of twenty-eight rows still carried "Apr-Apr 2023".
-        fews_w      = _period_weight(fw_row.get("current_period"))
+        # Collection as_of is not a vintage: decay after current_period expires.
+        fews_w      = _period_weight(fw_row.get("current_period"), 30, 90)
+        term_weight("fews_kick", _period_end(fw_row.get("current_period")), basis="FEWS current_period end; collection as_of ignored")
         fews_cur    = fw_row.get("current_phase")
         fews_proj   = fw_row.get("projected_phase")
-        ipc_present = (ipc.get(iso) or {}).get("phase3plus_pct") is not None
+        ipc_present = _ipc_row.get("phase3plus_pct") is not None and ipc_weight > 0
         fews_kick   = 0
         fews_basis  = None
         if not ipc_present and isinstance(fews_cur, (int, float)) and fews_cur >= 3:
@@ -321,7 +378,7 @@ def main():
                 fews_kick  = min(6, fews_kick + 1)
                 fews_basis = fews_basis or "sustained_projection"
         if fews_kick and fews_w < 1.0:
-            fews_kick  = int(round(fews_kick * fews_w))
+            fews_kick  = round(fews_kick * fews_w, 2)
             fews_basis = (fews_basis or "fews") + ("_stale" if fews_w == 0 else "_aged")
 
         # v43 — internal displacement (HDX HAPI). Magnitude-banded on ABSOLUTE IDP
@@ -501,6 +558,21 @@ def main():
         elif worst_drop_pct >= 10:
             psd_shortfall = 1
 
+        fx_row = (fx.get(iso) or {}) if fx_src == "fx_rates" else wc
+        fx_shock *= term_weight("fx_shock", fx_row.get("window_end") or fx_row.get("observation_date") or (fx_at if fx_row else None),
+                                basis=None if (fx_row.get("window_end") or fx_row.get("observation_date")) else LIVE_FETCH_BASIS)
+        weather_kick *= term_weight("weather_kick", om_row.get("window_end") or (om_at if om_row else None), 7, 30,
+                                    basis=None if om_row.get("window_end") else LIVE_FETCH_BASIS)
+        flood_kick *= term_weight("flood_kick", fl_row.get("window_end") or (fl_at if fl_row else None), 7, 30,
+                                  basis=None if fl_row.get("window_end") else LIVE_FETCH_BASIS)
+        aq_kick *= term_weight("aq_kick", aq_row.get("observation_date") or (aq_at if aq_row else None), 7, 30,
+                               basis=None if aq_row.get("observation_date") else LIVE_FETCH_BASIS)
+        us_water_kick *= term_weight("us_water_kick", usg_row.get("observation_date") or (usg_at if usg_row else None), 7, 30,
+                                     basis=None if usg_row.get("observation_date") else LIVE_FETCH_BASIS)
+        freshness["displacement_kick"] = {"weight": idp_weight, "date": _idp_row.get("as_of"), "basis": "IDP snapshot; existing 548/1095 day cadence"}
+        for term in ("inform_amp", "governance_drag", "psd_shortfall"):
+            freshness[term] = {"weight": 1.0, "basis": "annual or marketing-year reporting cycle; no within-cycle decay"}
+
         # v43 — crisis-cluster cap. ipc_pressure, fews_kick, displacement_kick,
         # inform_amp and conflict_kick all load onto the SAME underlying acute-crisis
         # reality — a famine/conflict/displacement country trips all of them, and summed
@@ -538,9 +610,9 @@ def main():
         # so the UI can show it as provisional rather than authoritative.
         # Previously a missing signal silently became 0 ("no pressure"), which
         # made sparse-data countries look calmer and more certain than they are.
-        has_ipc = iso in ipc and (ipc.get(iso) or {}).get("phase3plus_pct") is not None and not ipc_stale
-        has_wfp = iso in wfp and (wfp.get(iso) or {}).get("fcs_pct") is not None
-        has_fews = isinstance(fews_cur, (int, float))   # v42 — FEWS is an authoritative crisis feed
+        has_ipc = iso in ipc and (ipc.get(iso) or {}).get("phase3plus_pct") is not None and ipc_weight > 0
+        has_wfp = iso in wfp and (wfp.get(iso) or {}).get("fcs_pct") is not None and wfp_weight > 0
+        has_fews = isinstance(fews_cur, (int, float)) and fews_w > 0   # v42 — FEWS is an authoritative crisis feed
         # v43 — significant displacement is an authoritative crisis signal, but
         # v79 requires it to be CURRENT: a 2018 snapshot says nothing about 2026,
         # and must not be the sole reason a country reads "high" confidence.
@@ -593,6 +665,7 @@ def main():
                 "relief_damp":     relief_damp,
                 "crisis_cluster_cap": -round(cluster_overage, 1),
             },
+            "freshness": freshness,
             "signals": {
                 "ipc_phase3plus_pct":   ipc_p3,
                 "wfp_fcs_pct":          wfp_fcs,
@@ -645,12 +718,12 @@ def main():
     #
     # Count the field each feed is scored on instead of the rows it happens to
     # contain. Same principle as validate_data's scored-field coverage rule.
-    def _n_scored(feed, field):
-        return sum(1 for v in (feed or {}).values()
-                   if isinstance(v, dict) and isinstance(v.get(field), (int, float)))
-
-    n_ipc_scored = _n_scored(ipc, "phase3plus_pct")
-    n_wfp_scored = _n_scored(wfp, "fcs_pct")
+    n_ipc_scored = sum(1 for iso, row in out.items()
+                       if (ipc.get(iso) or {}).get("phase3plus_pct") is not None
+                       and row["freshness"]["ipc_pressure"]["weight"] > 0)
+    n_wfp_scored = sum(1 for iso, row in out.items()
+                       if (wfp.get(iso) or {}).get("fcs_pct") is not None
+                       and row["freshness"]["wfp_pressure"]["weight"] > 0)
     ipc_live = n_ipc_scored > 0
     wfp_live = n_wfp_scored > 0
     crisis_feeds_live = ipc_live or wfp_live
@@ -705,7 +778,7 @@ def main():
                 "displacement_scored_countries": sum(
                     1 for v in out.values() if v["components"].get("displacement_kick", 0) > 0),
             },
-            "version": "v42",
+            "version": "stage-e-freshness-v1",
         },
         "data": out,
     }
