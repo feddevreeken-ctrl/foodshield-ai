@@ -155,6 +155,21 @@ def main() -> int:
         page.evaluate("showTab('elnino')")
         page.wait_for_selector('#subview-elnino.active .enso-subview-meta')
         check("a view change starts at the top of the tab", top_after == 0, str(top_after))
+        # A layer picked by hand belongs to the view it was picked on. Pressing
+        # "Food inflation" on Ocean must not paint Reported with it.
+        page.locator('[data-native="enso-mode"][data-value="rtfp"]').click()
+        page.wait_for_timeout(600)
+        picked_here = page.input_value('#enso-mode')
+        page.evaluate("showTab('ensolive')")
+        page.wait_for_selector('#subview-ensolive.active .enso-subview-meta')
+        page.wait_for_timeout(600)
+        after_switch = page.input_value('#enso-mode')
+        url_after = page.evaluate("() => location.search")
+        page.evaluate("showTab('elnino')")
+        page.wait_for_selector('#subview-elnino.active .enso-subview-meta')
+        check("a hand-picked layer stays on its view; the next view opens on its own lens",
+              picked_here == 'rtfp' and after_switch == 'asap' and 'enso_mode=rtfp' not in url_after,
+              f"{picked_here} -> {after_switch} {url_after}")
         page.eval_on_selector_all(".enso-idx", "els => els.forEach(e => e.open = true)")
         kinds = page.eval_on_selector_all(
             ".enso-idx-grp-h b", "els => els.map(e => e.textContent)")

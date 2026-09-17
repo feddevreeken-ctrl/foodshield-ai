@@ -42138,12 +42138,19 @@ function showCommodityDetail(key) {
     var mode = p.get('enso_mode');
     return { level: isFinite(level) ? level : null, mode: mode || null };
   };
-  var applyEnsoQuery = function () {
+  var LENS_DEFAULT = { elnino: 'sst', ensoharvest: 'impact', ensowater: 'none', ensomoney: 'rtfp', ensolive: 'asap' };
+  /* The scenario is a global what-if and follows the reader across views. The
+     layer is not: a deep link is honoured on arrival, a layer picked by hand
+     applies to the view it was picked on, and a view change returns to that
+     view's own lens. Before this, the page wrote every hand-picked layer into
+     the URL and then re-read it as an explicit choice on the next view, so one
+     press of "Food inflation" painted every lens with it. */
+  var applyEnsoQuery = function (honourLinkMode) {
     var q = readEnsoQuery();
     S.oni = q.level != null && LEVELS.some(function (l) { return l[1] === q.level; })
       ? q.level : S.oniLive != null ? keyFor(S.oniLive)[1] : 1.5;
-    S.mode = MODES_MODELLED.concat(MODES_LIVE, ['none']).indexOf(q.mode) >= 0 ? q.mode :
-      { elnino: 'sst', ensoharvest: 'impact', ensowater: 'none', ensomoney: 'rtfp', ensolive: 'asap' }[S.sub] || 'sst';
+    var valid = MODES_MODELLED.concat(MODES_LIVE, ['none']).indexOf(q.mode) >= 0;
+    S.mode = (honourLinkMode !== false && valid) ? q.mode : (LENS_DEFAULT[S.sub] || 'sst');
   };
   var writeEnsoQuery = function () {
     if (typeof updateURL !== 'function') return;
@@ -45417,7 +45424,9 @@ function showCommodityDetail(key) {
     /* The Ocean entry and the index comparison are the ocean's own plates; the
        other lenses keep the status line and the map, not these. */
     ['enso-hero', 'enso-indices'].forEach(function (id) { var n = document.getElementById(id); if (n) n.hidden = S.sub !== 'elnino'; });
-    applyEnsoQuery();
+    var viewChanged = !!(prevSub && prevSub !== S.sub);
+    applyEnsoQuery(!viewChanged);
+    if (viewChanged) writeEnsoQuery();
     S.showSST = S.mode === 'sst';
     S.showRegions = S.sub === 'ensoharvest';
     S.showLanes = S.sub === 'ensowater';
