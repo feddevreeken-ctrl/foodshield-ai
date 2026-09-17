@@ -140,7 +140,7 @@ def main() -> int:
         # The switcher is the tab's jump nav: first in the tab, ahead of the status
         # header, the map and every view, pinned as a translucent hairline bar
         # (the owner: "this should stick but elegantly").
-        leads = switcher.evaluate("el => !!(el.compareDocumentPosition(document.getElementById('enso-hero')) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(el.compareDocumentPosition(document.getElementById('enso-map')) & Node.DOCUMENT_POSITION_FOLLOWING) && !!el.closest('#tab-elnino') && getComputedStyle(el).position === 'sticky' && getComputedStyle(el).backgroundColor.startsWith('rgba') && el.getBoundingClientRect().bottom <= document.getElementById('enso-hero').getBoundingClientRect().top + 1")
+        leads = switcher.evaluate("el => !!(el.compareDocumentPosition(document.getElementById('enso-hero')) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(el.compareDocumentPosition(document.getElementById('enso-map')) & Node.DOCUMENT_POSITION_FOLLOWING) && !!el.closest('#tab-elnino') && getComputedStyle(el).position === 'sticky' && getComputedStyle(el).backgroundColor.startsWith('rgba') && getComputedStyle(el).backgroundColor.startsWith('rgba') && el.getBoundingClientRect().bottom <= document.getElementById('enso-hero').getBoundingClientRect().top + 1")
         visible_here = switcher.is_visible()
         page.evaluate("showTab('global')")
         hidden_elsewhere = not switcher.is_visible()

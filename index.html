@@ -11302,8 +11302,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino #enso-status-home:empty { display:none; }
 #tab-elnino #enso-agency-status { font-size:14px; line-height:1.6; margin:12px 0 20px; }
 /* Stage A: shared instruments and the Ocean comparison plate. */
-/* Pinned, but quietly: a translucent hairline bar the content scrolls under,
-   not a solid block sitting on the instruments. */
+/* The view switcher stays in document flow; changing views scrolls to the top. */
 #tab-elnino #enso-view-nav { position:sticky; top:0; z-index:6; margin:0 0 24px; padding:8px 0; gap:24px; background:rgba(15,15,18,.84); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-bottom:1px solid var(--grid); overflow:visible; }
 #tab-elnino .enso-map-why { display:block; margin-top:6px; color:var(--t2); max-width:96ch; }
 #tab-elnino .enso-country-list { display:flex; flex-wrap:wrap; gap:6px 8px; margin:10px 0 0; }
@@ -11437,6 +11436,38 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-harvest-pair .enso-coef-plate { margin:0; }
 #tab-elnino .enso-view-open { margin:32px 24px; }
 #tab-elnino :is(.enso-cols,.enso-open-q,.enso-flav-note,.enso-casc-w,.enso-casc-n) .enso-num { font-family:'Geist Mono',monospace!important; }
+
+/* Stage D: visible map keys and restrained HTML map labels. */
+#tab-elnino #enso-legend .enso-legend { flex-wrap:wrap; gap:16px 28px; }
+#tab-elnino #enso-legend .enso-legend-block { flex:1 1 240px; border:0; padding-top:0; }
+#tab-elnino .enso-legend-row { gap:9px; }
+#tab-elnino .enso-legend-row .enso-sw { flex-shrink:0; }
+#tab-elnino .enso-nino-lab > span, #tab-elnino .enso-choke-label { background:#10141b; border:1px solid #63758a; color:#b6b8be; padding:3px 5px; font:10px/1.4 'Geist Mono',monospace; white-space:nowrap; }
+#tab-elnino .enso-nino-lab { letter-spacing:0; opacity:1; }
+#tab-elnino .enso-choke i { position:absolute; left:6px; top:6px; width:12px; height:12px; animation:none; }
+#tab-elnino .enso-choke-label { position:absolute; left:25px; top:2px; border-color:var(--grid); }
+#tab-elnino .enso-choke-label.label-left { left:auto; right:25px; }
+#tab-elnino .enso-hotspot { background:#9b83c9; fill:#9b83c9; }
+#tab-elnino .enso-major-hotspot { background:#69439b; fill:#69439b; }
+#tab-elnino .enso-key-anchors { display:flex; justify-content:space-between; position:relative; width:150px; font:10px/1.5 'Geist Mono',monospace; }
+
+#tab-elnino .enso-key-anchors > span:nth-child(2) { position:absolute; left:25%; transform:translateX(-50%); }
+#tab-elnino #enso-mapwrap.is-published { border-style:dashed; }
+#tab-elnino .cal-c.p.fall { background-image:repeating-linear-gradient(45deg,var(--warm) 0 1.5px,transparent 1.5px 5px); }
+#tab-elnino .cal-c.p.rise { background-image:repeating-linear-gradient(45deg,var(--cool) 0 1.5px,transparent 1.5px 5px); }
+#tab-elnino .cal-key .k.djf { background:rgba(221,90,58,.10); }
+
+/* Diagram keys use the same marks as the plotted series. */
+#tab-elnino .enso-key-sw.is-line { height:0; background:none!important; border-top:2px solid currentColor; }
+#tab-elnino .enso-key-sw.is-bold { border-top-width:3px; }
+#tab-elnino .enso-key-sw.is-dot { width:8px; height:8px; border-radius:50%; }
+#tab-elnino .enso-key-sw.is-diamond { width:9px; height:9px; transform:rotate(45deg); }
+#tab-elnino .enso-key-sw.is-triangle { width:11px; height:11px; clip-path:polygon(50% 0,100% 100%,0 100%); }
+#tab-elnino .enso-key-sw.is-current-rule { width:0; height:12px; background:none!important; border-left:1px solid currentColor; }
+#tab-elnino .enso-key-sw.is-rule { width:0; height:12px; background:none!important; border-left:1px dashed currentColor; }
+#tab-elnino .enso-plate-key { padding-bottom:12px; line-height:1.6; }
+#tab-elnino .enso-plate-key > span { display:inline-block; }
+#tab-elnino .cal-key { margin:0; padding:8px 24px 12px; color:var(--t2); }
 </style>
 </head>
 <body>
@@ -41960,7 +41991,7 @@ function showCommodityDetail(key) {
 
   var S = {
     ready: false, map: null, base: null, layerBase: null, layerRegions: null,
-    lanePins: [], laneLines: [], nino34: null,
+    lanePins: [], laneLines: [], nino34: null, ninoLabel: null,
     oni: 1.5, mode: 'impact', showRegions: true, showLanes: true,
     enso: null, exp: null, model: null, regions: null, lanes: null,
     econ: null, mech: null, indices: null, portwatch: null, rtfp: null, ffpi: null,
@@ -41971,9 +42002,8 @@ function showCommodityDetail(key) {
 
   /* MODELLED modes are signed — El Niño helps some places and hurts others.
      OBSERVED modes are NOT signed: an agricultural hotspot or a drought alert
-     is unsigned severity, so those use the site's risk ramp, which is the
-     correct encoding for them and the wrong one for the modelled layers. The
-     legend says so, because the difference is the whole argument of the page. */
+     is unsigned severity. Hotspots use fixed purple assessment classes;
+     other severity layers use the site's risk ramp. Neither is a signed yield. */
   var MODES_MODELLED = ['impact', 'crop', 'coverage'];
   var MODES_LIVE = ['asap', 'gdacs', 'ipc', 'rtfp', 'sst'];
 
@@ -41989,14 +42019,20 @@ function showCommodityDetail(key) {
     ['el_nino_extreme',   2.5, 'Extreme El Niño']
   ];
 
-  /* River corridors are geographic reference, not data — the lane file carries
-     one representative point per chokepoint; these draw the reach that point
-     stands for so an inland waterway does not read as a single dot at sea. */
-  var CORRIDORS = {
-    amazon:      [[-8.76,-63.90],[-3.47,-62.20],[-3.14,-58.44],[-2.43,-54.72],[-1.45,-48.50]],
-    parana:      [[-27.45,-58.83],[-31.42,-60.10],[-32.97,-60.62],[-34.60,-58.40]],
-    mississippi: [[37.00,-89.18],[35.15,-90.05],[32.30,-90.90],[29.95,-90.07]]
-  };
+  /* Routes must come from the lane feed as GeoJSON, never inferred from a point. */
+  function laneGeometry(lane) {
+    var g = lane.geometry;
+    if (!g || (g.type !== 'LineString' && g.type !== 'MultiLineString')) return [];
+    var lines = g.type === 'LineString' ? [g.coordinates] : g.coordinates;
+    if (!Array.isArray(lines)) return [];
+    return lines.filter(function (line) {
+      return Array.isArray(line) && line.length > 1 && line.every(function (p) {
+        return Array.isArray(p) && typeof p[0] === 'number' && typeof p[1] === 'number' &&
+          isFinite(p[0]) && isFinite(p[1]) && Math.abs(p[0]) <= 180 && Math.abs(p[1]) <= 90;
+      });
+    }).map(function (line) { return line.map(function (p) { return [p[1], p[0]]; }); });
+  }
+  var HOTSPOT = '#9b83c9', MAJOR_HOTSPOT = '#69439b';
 
   /* NOAA's feed writes the band ASCII ("Moderate El Nino"). Restore the
      diacritics for display only — the stored value is left as published. */
@@ -42527,7 +42563,12 @@ function showCommodityDetail(key) {
     }
   }
   function toggleSST() {
-    if (!S.map || !S.sstLayer) return;
+    if (!S.map) return;
+    [S.nino34, S.ninoLabel].forEach(function (layer) {
+      if (!layer) return;
+      if (S.showSST) layer.addTo(S.map); else S.map.removeLayer(layer);
+    });
+    if (!S.sstLayer) return;
     if (S.showSST) { if (!S.map.hasLayer(S.sstLayer)) S.sstLayer.addTo(S.map); }
     else if (S.map.hasLayer(S.sstLayer)) S.map.removeLayer(S.sstLayer);
   }
@@ -42607,12 +42648,17 @@ function showCommodityDetail(key) {
     var ahead = A.events.filter(function (ev) { return typeof ev.path[lastI] === 'number' && cur[lastI] > ev.path[lastI]; }).length;
     return '<figure class="enso-plate enso-analog-plate enso-oni-plate is-observed">' + oceanHeading() +
       plateHead('ONI trajectories by season', 'ONI · NOAA CPC · centred 30-year base periods, 1991–2020 for current seasons · °C', stamp(metaDate('enso')), 'observed') +
+      plateKey([['is-line','var(--t3)','Grey: the five strongest past events'],
+        ['is-line is-bold','var(--warm)',A.current.label + ': through ' + (L2.season || '') + ' ' + (L2.year || '') + ', last published season'],
+        ['is-dash','var(--ink)','Dashed rules: ±0.5 °C thresholds'],
+        ['is-current-rule','var(--ink)','Solid vertical rule and dot: latest published season']]) +
       '<div class="enso-analog"><svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="ONI trajectories of the five strongest El Niño events since 1950 and the event now under way, aligned from MJJ of the onset year to AMJ after the peak. ' +
       esc(A.current.label) + ' reads ' + num(cur[lastI], 2) + ' in ' + esc(L2.season || '') + ', above ' + ahead + ' of the ' + A.events.length + ' past events at the same season.">' +
       '<g class="enso-y-axis">' + grid + '</g><line x1="' + x0 + '" x2="' + x0 + '" y1="' + top + '" y2="' + bot + '" stroke="var(--ink)"/>' + paths + '<g class="enso-analog-leaders">' + leaders + '</g>' + nowSvg + '</svg>' + labels + '<div class="enso-analog-endlabels">' + directLabels + '</div>' + nowLab + '</div>' +
       '<div class="enso-analog-ax">' + ax + '</div><div class="enso-analog-names">' + endLabels + '</div>' +
       (overflow.length ? '<p class="enso-overflow enso-meta">Beyond the fixed ±3 °C anchors: ' + esc(overflow.join('; ')) + '. Points at the edge exceed the scale.</p>' : '') +
       recordStrip(e.history || []) +
+      plateKey([['','var(--ink)','DJF strip: five marked analog winters'],['','var(--t3)','Other DJF winters']]) +
       '<figcaption class="enso-log">' + esc(A.selection || '') + ' Events are aligned on the calendar season, as CPC tables them: MJJ of the onset year to AMJ after the DJF peak; DJF carries the January year. Past events continue to AMJ; the current event stops at its last published season and is not a forecast.' +
       '</figcaption></figure>';
   }
@@ -42695,8 +42741,8 @@ function showCommodityDetail(key) {
     }).join('');
     el.innerHTML = '<figure class="enso-plate enso-cal-plate is-published">' +
       plateHead('Crop calendar · ' + MON[m0 - 1] + ' ' + now.getUTCFullYear(), 'USDA IPAD (FAO/GIEWS, FAS) · ' + rows.length + ' fitted pairs · slopes: FAOSTAT fit, read ' + stamp(metaDate('model')), stamp(metaDate('calendars')), 'published') +
+      '<div class="cal-key"><span><b class="k p"></b>Hatched: planting months</span><span><b class="k h fall"></b>Solid: harvest months</span><span><b class="k h fall"></b>Ochre: fitted El Niño slope falls</span><span><b class="k h rise"></b>Green: fitted El Niño slope rises</span><span><b class="k djf"></b>Tinted band: DJF</span><span><b class="k now"></b>Vertical rule: this month</span><span>“grows through DJF”: crop spans Dec–Feb</span></div>' +
       '<div class="enso-cal" aria-label="Planting and harvest calendar, Jan to Dec">' + head + body + '</div>' +
-      '<div class="cal-key"><span><b class="k p"></b>planting</span><span><b class="k h fall"></b>harvest, negative El Niño slope</span><span><b class="k h rise"></b>harvest, positive slope</span><span><b class="k djf"></b>DJF band</span><span><b class="k now"></b>this month</span></div>' +
       '<figcaption class="enso-log">Stages are derived from published calendars, not field observations; rows within each group rank by absolute El Niño slope, hover notes retain regional or second-season uncertainty, and “grows through DJF” marks planting at or before December with harvest at or after February.</figcaption></figure>';
   }
 
@@ -42726,7 +42772,7 @@ function showCommodityDetail(key) {
       idx.forEach(function (m, k) { var x = xs.getPixelForValue(m.i); ctx.beginPath(); ctx.moveTo(x, ys.top); ctx.lineTo(x, ys.bottom); ctx.stroke(); });
       ctx.restore();
     } };
-    mk(id, { keyNotes: ['vertical rules: advisory effective dates; the series covers only the date range in the heading'],
+    mk(id, { keyNotes: ['Points: observed daily transits; lines: trailing 7-day means; dashed vertical rules: published advisory effective dates. IMF PortWatch · ' + h.dates[0] + ' to ' + h.dates[h.dates.length - 1]],
       type: 'line',
       data: { labels: h.dates, datasets: [
         { label: 'all vessels, single day', data: h.total, showLine: false, pointRadius: 1.3, pointBackgroundColor: 'rgba(182,184,190,.38)', borderWidth: 0 },
@@ -42744,6 +42790,12 @@ function showCommodityDetail(key) {
         }
       })
     });
+  }
+
+  function plateKey(items) {
+    return '<div class="enso-plate-key">' + items.map(function (item) {
+      return '<span><i aria-hidden="true" class="enso-key-sw ' + item[0] + '" style="background:' + item[1] + ';color:' + item[1] + '"></i>' + esc(item[2]) + '</span>';
+    }).join('') + '</div>';
   }
 
   function plateHead(title, source, date, kind) {
@@ -43524,17 +43576,28 @@ function showCommodityDetail(key) {
     if (search && document.activeElement !== search) search.value = S.sel ? nameFor(S.sel) : '';
   }
 
+  function regionLegend() {
+    return '<div class="enso-legend-block"><div class="enso-legend-t">Published teleconnection · literature</div>' +
+          '<div class="enso-legend-row"><span class="enso-sw" style="background:repeating-linear-gradient(45deg,#c9773a,#c9773a 2px,transparent 2px,transparent 5px)"></span> El Niño reduces output here</div>' +
+          '<div class="enso-legend-row"><span class="enso-sw" style="background:repeating-linear-gradient(45deg,#6ba36b,#6ba36b 2px,transparent 2px,transparent 5px)"></span> El Niño raises output here</div>' +
+          '<div class="enso-legend-note">Hatch opacity: published confidence, faint to strong.</div>' +
+          '<div class="ctr-note" style="max-width:32ch;margin-top:5px;">Hatching marks regional membership from published literature, read ' + esc(stamp(metaDate('regions'))) + '. The solid modelled fills, when selected, are this project’s own.</div></div>';
+  }
+
   function laneLegend() {
     return '<div class="enso-legend-block"><div class="enso-legend-t">Shipping chokepoints</div>' +
       '<div class="enso-legend-row"><span class="enso-sw" style="background:#d2693a;transform:rotate(45deg);width:9px;height:9px;border-radius:1px"></span> degraded on the El Niño side</div>' +
       '<div class="enso-legend-row"><span class="enso-sw" style="background:#4a86b3;transform:rotate(45deg);width:9px;height:9px;border-radius:1px"></span> degraded on the La Niña side</div>' +
-      '<div class="enso-legend-row"><span class="enso-sw" style="background:#6a685e;transform:rotate(45deg);width:9px;height:9px;border-radius:1px"></span> no credible ENSO link</div></div>';
+      '<div class="enso-legend-row"><span class="enso-sw" style="background:#6a685e;transform:rotate(45deg);width:9px;height:9px;border-radius:1px"></span> no credible ENSO link</div>' +
+      (((S.lanes && S.lanes.lanes) || []).some(function (ln) { return laneGeometry(ln).length; }) ? '<div class="enso-legend-row"><span class="enso-sw" style="height:0;border-top:3px solid #d2693a"></span>Lane geometry, same phase colours as diamonds</div>' : '') +
+      '<div class="ctr-note">Published lane evidence, read ' + esc(stamp(metaDate('lanes'))) + '. Geometry unavailable, point only: ' +
+      esc(((S.lanes && S.lanes.lanes) || []).filter(function (ln) { return !laneGeometry(ln).length; }).map(function (ln) { return ln.name; }).join('; ') || 'none') + '.</div></div>';
   }
   function alertLegend() {
-    return '<div class="enso-legend-block"><div class="enso-legend-t">Hazard alerts · observed feeds</div>' +
-      '<div class="enso-legend-row"><span class="enso-sw" style="background:#c44b3c;border-radius:50%;width:10px;height:10px"></span> GDACS drought / flood / cyclone</div>' +
-      '<div class="enso-legend-row"><span class="enso-sw" style="background:#8aa6c4;border-radius:50%;width:10px;height:10px"></span> ReliefWeb humanitarian event</div>' +
-      '<div class="ctr-note" style="max-width:32ch;margin-top:5px;">A marker says a hazard was reported. It says nothing about what caused it.</div></div>';
+    return '<div class="enso-legend-block"><div class="enso-legend-t">Hazard alerts · reported feeds</div>' +
+      '<div class="enso-legend-row"><span class="enso-sw" style="background:rgba(210,122,62,.35);border:1.4px solid #d27a3e;border-radius:50%;width:10px;height:10px"></span> GDACS drought / flood / cyclone</div>' +
+      '<div class="enso-legend-row"><span class="enso-sw" style="background:rgba(138,166,196,.28);border:1.2px solid #8aa6c4;border-radius:50%;width:8px;height:8px"></span> ReliefWeb humanitarian event</div>' +
+      '<div class="ctr-note" style="max-width:32ch;margin-top:5px;">GDACS collected ' + esc(stamp(metaDate('gdacs'))) + '; ReliefWeb collected ' + esc(stamp(metaDate('relief'))) + '. A marker says a hazard was reported. It says nothing about what caused it.</div></div>';
   }
 
   /* The modelled layers are only published at the ladder centres, so a live ONI
@@ -43592,7 +43655,7 @@ function showCommodityDetail(key) {
       gdacs: 'Drought and flood alerts', ipc: 'Food insecurity, IPC 3+', rtfp: 'Domestic food inflation, year on year', sst: 'Sea-surface anomaly',
       none: S.showLanes ? 'Shipping chokepoints and lanes' : 'No land layer' }[S.mode];
     var key = {impact:'exp',crop:'model',coverage:'model'}[S.mode] || S.mode;
-    var kind = modelled ? 'modelled' : (S.mode === 'sst' || S.mode === 'rtfp') ? 'observed' : S.mode === 'none' ? 'reference' : 'reported';
+    var kind = modelled ? 'modelled' : (S.mode === 'sst' || S.mode === 'rtfp') ? 'observed' : S.mode === 'none' ? (S.showLanes ? 'published' : 'reference') : 'reported';
     var date = S.mode === 'sst' && S.sst ? 'seven-day mean ' + S.sst.time_start + ' to ' + S.sst.time_end :
       S.mode === 'none' ? (S.showLanes ? 'land unfilled; transits collected ' + stamp(metaDate('portwatch')) + ', lane phases from published evidence' : 'reference geography only; choose a layer above to paint the land, and add overlays to any of them') :
       'collected ' + stamp(metaDate(key)) + (modelled ? '' : '; assessment periods vary by record');
@@ -43605,7 +43668,7 @@ function showCommodityDetail(key) {
     var el = document.getElementById('enso-maptag'); if (!el) return;
     var m = mapState(), snap = m.kind === 'modelled' ? scenarioSnap() : null;
     var frame = document.getElementById('enso-mapwrap');
-    if (frame) { frame.classList.toggle('is-modelled', m.kind === 'modelled'); frame.dataset.kind = m.kind; }
+    if (frame) { frame.classList.toggle('is-modelled', m.kind === 'modelled'); frame.classList.toggle('is-published', m.kind === 'published'); frame.dataset.kind = m.kind; }
     /* "Modelled: Modelled production shock" said the kind twice; a title that
        already opens with its kind stands alone. */
     var lead = m.title.toLowerCase().indexOf(m.kind) === 0 ? m.title : m.kind.charAt(0).toUpperCase() + m.kind.slice(1) + ': ' + m.title;
@@ -43621,7 +43684,7 @@ function showCommodityDetail(key) {
     if (why) el.insertAdjacentHTML('beforeend', '<span class="enso-map-why">' + esc(why) + '</span>');
   }
   var MAP_WHY = {
-    sst: 'Why it is here: the warm water is the observation every other layer on this tab is traced back to. The dashed box is Niño 3.4, where CPC measures it.',
+    sst: 'Why it is here: the warm water is the observation every other layer on this tab is traced back to. The slate box is Niño 3.4, where CPC measures it.',
     impact: 'Why it is here: the colour is the fitted yield response at the chosen scenario, weighted by production, so it says where a season like this has moved harvests in the record.',
     crop: 'Why it is here: the single crop with the largest fitted response in each country, to show what the country total is made of.',
     coverage: 'Why it is here: the share of a country’s production the fit covers. A pale country is one the model barely sees, not one that is safe.',
@@ -43635,6 +43698,17 @@ function showCommodityDetail(key) {
 
   function compactLegend() {
     var el = document.getElementById('enso-legend'), row = el && el.querySelector('.enso-legend'); if (!row) return;
+    var reference = document.createElement('div'); reference.className = 'enso-legend-block';
+    reference.innerHTML = '<div class="enso-legend-t">Reference marks</div>' +
+      (S.showSST ? '<div class="enso-legend-row"><span class="enso-sw" style="background:none;border:1px solid #63758a"></span>Niño 3.4 box</div>' : '') +
+      '<div class="enso-legend-row"><span class="enso-sw" style="height:0;border-top:1px solid #8aa6c4"></span>Equator</div>' +
+      '<div class="enso-legend-row"><span class="enso-sw" style="height:0;border-top:1px dashed #8aa6c4"></span>Tropics</div>' +
+      (S.sel && S.sub === 'ensoharvest' ? '<div class="enso-legend-row"><span class="enso-sw" style="background:none;border:2px solid #ebe9e2"></span>Selected country</div>' : '') +
+      (S.sub === 'ensoharvest' || S.sub === 'ensowater' ? '<div class="enso-legend-row"><span class="enso-sw" style="border:1px solid #e6e3da;border-radius:50%;background:#0b1017;width:6px;height:6px"></span>Callout location and leader</div>' : '') +
+      '<div class="enso-legend-row"><span class="enso-sw" style="background:#1c1c22"></span>' +
+      (S.mode === 'sst' || S.mode === 'none' ? 'Unfilled reference land' : S.mode === 'asap' ? 'Not assessed' : MODES_MODELLED.indexOf(S.mode) >= 0 ? 'No measured signal' : 'No data') + '</div>';
+    if (S.showRegions && ['sst','impact','crop','coverage'].indexOf(S.mode) < 0) row.insertAdjacentHTML('beforeend', regionLegend());
+    row.appendChild(reference);
     var fold = document.createElement('details'); fold.className = 'enso-how';
     fold.innerHTML = '<summary>How to read</summary>';
     row.querySelectorAll('.enso-legend-block').forEach(function (block) {
@@ -43646,26 +43720,14 @@ function showCommodityDetail(key) {
         /teleconnection/.test(title) ? 'Published regional membership.' : /Shipping/.test(title) ? 'Phase association only.' :
         /Hazard/.test(title) ? 'Hazard report, not attribution.' :
         /shock|crop/.test(title) ? 'Ochre falls; green rises. ±15%.' + (S.oni < 0 ? ' Under La Niña the ONI is negative, so a positive slope is a fall.' : '') :
-        /coverage/i.test(title) ? 'Share with a detected signal.' : 'Reported severity only.';
+        /coverage/i.test(title) ? 'Share with a detected signal.' : title === 'Reference marks' ? 'Geographic reference.' : 'Reported severity only.';
       var notes = block.querySelectorAll('.ctr-note');
       if (notes.length) {
         var group = document.createElement('div'); group.className = 'enso-legend-explain';
         var heading = document.createElement('b'); heading.textContent = title; group.appendChild(heading);
         notes.forEach(function (n) { n.removeAttribute('style'); group.appendChild(n); }); fold.appendChild(group);
       }
-      var rows = block.querySelectorAll('.enso-legend-row');
-      if (rows.length) {
-        var key = document.createElement('div'); key.className = 'enso-legend-key';
-        var meanings = document.createElement('div'); meanings.className = 'enso-legend-explain';
-        /* One heading per block in the fold: the notes group above already carries it. */
-        if (!notes.length) { var label = document.createElement('b'); label.textContent = title; meanings.appendChild(label); }
-        rows.forEach(function (r) {
-          var swatch = r.querySelector('.enso-sw');
-          if (swatch) { var sample = swatch.cloneNode(true); sample.title = r.textContent.trim(); key.appendChild(sample); }
-          meanings.appendChild(r);
-        });
-        block.appendChild(key); fold.appendChild(meanings);
-      }
+      /* Symbol meanings stay beside their swatches; only long notes enter the fold. */
       block.appendChild(note);
     });
     Array.prototype.slice.call(el.children).forEach(function (n) { if (n !== row) fold.appendChild(n); });
@@ -43680,7 +43742,7 @@ function showCommodityDetail(key) {
     for (var i = -15; i <= 15; i += 2.5) ramp += '<i style="background:' + (impactColor(i, 1) || '#2a2a2a') + '"></i>';
     var LIVE_LEG = {
       asap: ['Agricultural hotspots, now',
-        [['#2b3a2b', 'assessed, no hotspot'], [RAMP[1], 'hotspot'], [RAMP[3], 'major hotspot']],
+        [['#2b3a2b', 'assessed, no hotspot'], [HOTSPOT, 'hotspot'], [MAJOR_HOTSPOT, 'major hotspot']],
         'JRC ASAP, assessed monthly from biomass and rainfall. Unfilled means not assessed.'],
       gdacs: ['Active drought & flood alerts',
         [[RAMP[2], 'Orange alert'], [RAMP[4], 'Red alert']],
@@ -43693,7 +43755,7 @@ function showCommodityDetail(key) {
       var priceRamp = '';
       for (var v = -10; v <= 30; v += 5) priceRamp += '<i style="background:' + rtfpColor(v) + '"></i>';
       el.innerHTML = '<div class="enso-legend"><div class="enso-legend-block"><div class="enso-legend-t">Domestic food inflation, year on year · observed</div>' +
-        '<div class="enso-ramp">' + priceRamp + '</div><div class="ctr-note">Fixed anchors: −10% cyan (#36a7b8), 0% warm grey (#9b958c), +30% magenta (#c7528e). Values beyond the ends share the end colour. Dark grey (#1c1c22): no data.</div>' +
+        '<div class="enso-ramp">' + priceRamp + '</div><div class="enso-key-anchors"><span>−10%</span><span>0%</span><span>+30%</span></div><div class="enso-legend-note">Cyan: falling prices · warm grey: zero · magenta: rising prices</div><div class="ctr-note">Fixed anchors: −10% cyan (#36a7b8), 0% warm grey (#9b958c), +30% magenta (#c7528e). Values beyond the ends share the end colour. Dark grey (#1c1c22): no data.</div>' +
         '<div class="ctr-note">World Bank RTFP via HDX. ' + esc(rtfpNote()) + '</div></div>' +
         (S.showSST ? sstLegend() : '') + (S.showLanes ? laneLegend() : '') + (S.showAlerts ? alertLegend() : '') + '</div>';
       compactLegend(); return;
@@ -43703,9 +43765,8 @@ function showCommodityDetail(key) {
       compactLegend(); return;
     }
     if (S.mode === 'sst') {
-      el.innerHTML = '<div class="enso-legend">' + sstLegend() +
-        (S.showRegions ? '<div class="enso-legend-block"><div class="enso-legend-t">Published teleconnection ' + badge('published', 'literature') + '</div>' +
-          '<div class="enso-legend-row"><span class="enso-sw" style="background:repeating-linear-gradient(45deg,#c9773a,#c9773a 2px,transparent 2px,transparent 5px)"></span>Published teleconnection</div><div class="ctr-note" style="max-width:32ch;margin-top:5px;">Hatching marks findings published elsewhere; land carries no modelled fill on this layer.</div></div>' : '') +
+      el.innerHTML = '<div class="enso-legend">' + (S.showSST ? sstLegend() : '') +
+        (S.showRegions ? regionLegend() : '') +
         (S.showLanes ? laneLegend() : '') + (S.showAlerts ? alertLegend() : '') +
       '</div>' +
       '<div class="ctr-note" style="margin-top:8px;">The ocean is the observation here and the land is left unfilled. Switch the <b>Map layer</b> back to a modelled layer to see where the fitted harvest response lands.</div>';
@@ -43714,11 +43775,11 @@ function showCommodityDetail(key) {
     if (LIVE_LEG[S.mode]) {
       var lg = LIVE_LEG[S.mode];
       var body = lg[1].map(function (p) {
-        return '<div class="enso-legend-row"><span class="enso-sw" style="background:' + p[0] + '"></span> ' + esc(p[1]) + '</div>';
+        return '<div class="enso-legend-row"><span class="enso-sw' + (S.mode === 'asap' && p[1] === 'hotspot' ? ' enso-hotspot' : S.mode === 'asap' && p[1] === 'major hotspot' ? ' enso-major-hotspot' : '') + '" style="background:' + p[0] + '"></span> ' + esc(p[1]) + '</div>';
       }).join('') +
       '<div class="ctr-note" style="max-width:34ch;margin-top:5px;">' + esc(lg[2]) + '</div>' +
       '<div class="ctr-note" style="max-width:34ch;margin-top:6px;border-left:2px solid #5b9b8a;padding-left:8px;">' +
-      'This layer switches to the site’s <b>severity ramp</b>. A drought alert is unsigned. It is bad, or ' +
+      (S.mode === 'asap' ? 'Hotspot: lavender (#9b83c9); major hotspot: violet (#69439b). These fixed assessment classes are separate from fitted yield colours. ' : 'This layer uses the site’s severity ramp. ') + 'A reported hazard is unsigned. It is present, or ' +
       'it is absent. The modelled layers are signed and cannot use that ramp. The difference is the point.</div>';
       el.innerHTML = '<div class="enso-legend">' +
         '<div class="enso-legend-block"><div class="enso-legend-t">' + esc(lg[0]) + ' · reported</div>' + body + '</div>' +
@@ -43750,13 +43811,9 @@ function showCommodityDetail(key) {
     el.innerHTML =
       '<div class="enso-legend">' +
         '<div class="enso-legend-block"><div class="enso-legend-t">' + esc(solidT) + ' · modelled here</div>' + solidBody + '</div>' +
-        (S.showRegions ? '<div class="enso-legend-block"><div class="enso-legend-t">Published teleconnection · literature</div>' +
-          '<div class="enso-legend-row"><span class="enso-sw" style="background:repeating-linear-gradient(45deg,#c9773a,#c9773a 2px,transparent 2px,transparent 5px)"></span> El Niño reduces output here</div>' +
-          '<div class="enso-legend-row"><span class="enso-sw" style="background:repeating-linear-gradient(45deg,#6ba36b,#6ba36b 2px,transparent 2px,transparent 5px)"></span> El Niño raises output here</div>' +
-          '<div class="ctr-note" style="max-width:32ch;margin-top:5px;">Hatching marks findings <b>published elsewhere</b>. The solid fills are this project’s own.</div></div>' : '') +
+        (S.showRegions ? regionLegend() : '') +
         (S.showSST !== false ? sstLegend() : '') + (S.showLanes ? laneLegend() : '') + (S.showAlerts ? alertLegend() : '') +
-      '</div>' +
-      '<div class="ctr-note" style="margin-top:8px;">Niño 3.4, the box CPC actually reads (5°N–5°S, 170°W–120°W), is drawn on the Pacific in slate.</div>';
+      '</div>';
     compactLegend();
   }
 
@@ -43837,7 +43894,7 @@ function showCommodityDetail(key) {
     if (S.mode === 'asap') {
       var a = asapFor(iso);
       if (!a) return null;
-      return a.hotspot_code === 2 ? RAMP[3] : a.hotspot_code === 1 ? RAMP[1] : '#2b3a2b';
+      return a.hotspot_code === 2 ? MAJOR_HOTSPOT : a.hotspot_code === 1 ? HOTSPOT : '#2b3a2b';
     }
     if (S.mode === 'gdacs') {
       var hits = gdacsFor(iso);
@@ -43913,11 +43970,16 @@ function showCommodityDetail(key) {
     var rippling = !reduced();
     S.layerBase.eachLayer(function (lyr) {
       var iso = isoOf(lyr.feature);
-      var col = fillFor(iso);
+      var col = fillFor(iso), path = lyr.getElement();
+      if (path) {
+        var assessment = S.mode === 'asap' && asapFor(iso);
+        path.classList.toggle('enso-hotspot', !!assessment && assessment.hotspot_code === 1);
+        path.classList.toggle('enso-major-hotspot', !!assessment && assessment.hotspot_code === 2);
+      }
       var style = col
         ? { fillColor: col, fillOpacity: 1, color: '#0b0b0d', weight: 0.3 }
         : { fillColor: '#1c1c22', fillOpacity: 1, color: '#0b0b0d', weight: 0.3 };
-      if (iso && iso === S.sel) { style.color = '#ebe9e2'; style.weight = 1.7; }
+      if (S.sub === 'ensoharvest' && iso && iso === S.sel) { style.color = '#ebe9e2'; style.weight = 1.7; }
       if (!rippling) { lyr.setStyle(style); if (iso === S.sel) lyr.bringToFront(); return; }
       /* One anomaly radiating outward: countries repaint in order of distance
          from the Niño 3.4 box, so the Pacific rim moves before the Sahel. */
@@ -43989,13 +44051,13 @@ function showCommodityDetail(key) {
     lanes.forEach(function (ln) {
       var phaseCls = ln.phase === 'el_nino' ? 'p-el' : ln.phase === 'la_nina' ? 'p-la' : 'p-no';
       var stroke = ln.phase === 'el_nino' ? '#d2693a' : ln.phase === 'la_nina' ? '#4a86b3' : '#6a685e';
-      var corr = CORRIDORS[ln.id];
-      if (corr) {
-        var pl = L.polyline(corr, {
-          color: stroke, weight: 1.6, opacity: 0.75, dashArray: '2 6', className: 'enso-lane'
-        });
-        S.laneLines.push(pl);
-      }
+      laneGeometry(ln).forEach(function (corr) {
+        S.laneLines.push(L.polyline(corr, {
+          color: stroke, weight: 3, opacity: 0.9, className: 'enso-lane'
+        }));
+      });
+      var shortNames = { panama:'Panama', amazon:'Amazon', parana:'Paraná', mississippi:'Mississippi',
+        malacca:'Malacca', rhine:'Rhine', suez:'Suez', bab_el_mandeb:'Bab el-Mandeb', bosporus:'Turkish Straits' };
       var pw = laneStatus(ln);
       var live = pw
         ? '<br>' + pw.transits_per_day.total.toFixed(1) + ' transits/day, ' +
@@ -44005,7 +44067,7 @@ function showCommodityDetail(key) {
       var mk = L.marker([ln.lat, ln.lng], {
         icon: L.divIcon({
           className: 'enso-choke ' + phaseCls + ' a-' + esc(ln.attribution),
-          html: '<i></i>', iconSize: [24, 24], iconAnchor: [12, 12]
+          html: '<i></i><span class="enso-choke-label' + (ln.id === 'rhine' || ln.id === 'suez' ? ' label-left' : '') + '">' + esc(shortNames[ln.id] || ln.name) + '</span>', iconSize: [24, 24], iconAnchor: [12, 12]
         }),
         keyboard: true, title: ln.name
       });
@@ -44266,12 +44328,12 @@ function showCommodityDetail(key) {
 
     /* The instrument, not the data: the box CPC actually reads. */
     S.nino34 = L.rectangle([[5, -170], [-5, -120]], {
-      color: '#8aa6c4', weight: 1, dashArray: '4 3', fill: false, interactive: false
+      color: '#63758a', weight: 1, fill: false, interactive: false
     }).addTo(S.map);
-    L.marker([-6.5, -170], {
+    S.ninoLabel = L.marker([-6.5, -170], {
       interactive: false,
       icon: L.divIcon({ className: 'enso-nino-lab',
-        html: 'NIÑO 3.4 · THE BOX CPC READS', iconSize: [190, 12], iconAnchor: [0, 0] })
+        html: '<span>Niño 3.4 box</span>', iconSize: [120, 20], iconAnchor: [0, 0] })
     }).addTo(S.map);
 
     drawGraticule();
@@ -44312,10 +44374,9 @@ function showCommodityDetail(key) {
     for (var k in g) {
       var e = g[k];
       if (!e || !e.is_current || typeof e.lat !== 'number') continue;
-      var red = e.alert_level === 'Red';
       var m = L.circleMarker([e.lat, e.lng], {
-        radius: red ? 7 : 5, color: red ? '#c44b3c' : '#d27a3e', weight: 1.4,
-        fillColor: red ? '#c44b3c' : '#d27a3e', fillOpacity: .35
+        radius: 5, color: '#d27a3e', weight: 1.4,
+        fillColor: '#d27a3e', fillOpacity: .35
       });
       m.bindTooltip('<b>' + esc(e.event_type_label) + ' · ' + esc(e.alert_level) + '</b><br>' +
         esc(e.country || '') + '<br>' + esc(e.title || '') +
@@ -44494,6 +44555,8 @@ function showCommodityDetail(key) {
     el.innerHTML = '<figure class="enso-plate enso-coef-plate is-modelled" data-kind="modelled">' +
       plateHead('Crop coefficients and coverage', 'FAOSTAT yields 1961–2024 · ' + harvestRows().length + ' fitted signals · ' +
         Object.keys(S.isoIndex || {}).length + ' linked countries · ' + (counts.pairs_fitted == null ? 'unavailable' : counts.pairs_fitted) + ' pairs tested', stamp(metaDate('model')), 'modelled') +
+      plateKey([['','var(--warm)','Ochre: yield falls'],['','var(--cool)','Green: yield rises']]) +
+      '<p class="enso-log">Slope-column colour uses each phase sign: El Niño slope × positive ONI; La Niña slope × negative ONI. Numbers remain signed % yield per ONI.</p>' +
       '<div id="enso-detail" aria-live="polite"></div>' +
       '<figcaption class="enso-log">The model fits detrended yields to calendar-aligned winter ONI with Newey–West errors and Benjamini–Hochberg q below 0.10; country totals divide detected crop responses by all production, exclude shared-IOD pairs and remain directional pending validation.</figcaption></figure>';
     renderDetail();
@@ -44551,12 +44614,14 @@ function showCommodityDetail(key) {
     if (peaks.length) {
       var max = Math.max.apply(null, peaks.map(function (q) { return Math.max(Math.abs(q.prev6m || 0), Math.abs(q.yoy || 0)); }).concat([1]));
       out += '<figure class="enso-plate is-published">' + plateHead('Agricultural prices around seven El Niño peaks', rec.source || 'World Bank Commodity Markets Outlook', readOn, 'published') +
+        plateKey([['','var(--cool)','Green: prices fall'],['','var(--warm)','Ochre: prices rise']]) +
+        '<p class="enso-log">Six-month average leading to each peak, compared with the previous six months and the same six months a year earlier; bar length is absolute % change.</p>' +
         '<div id="enso-c-record" class="enso-event-grid" role="group" aria-label="Seven event comparisons, shared percent-change scale">' + peaks.map(function (q) {
           return '<div class="enso-event"><h3>' + esc(q.episode) + '</h3>' + [['Previous six months',q.prev6m],['Same six months a year earlier',q.yoy]].map(function (v) {
             return '<div class="enso-event-bar"><span>' + v[0] + '</span><div class="hs-bar ' + (v[1] > 0 ? 'warm' : 'cool') + '"><b style="width:' + (Math.abs(v[1]) / max * 100).toFixed(1) + '%"></b><i>' + num(v[1],1) + '%</i></div></div>';
           }).join('') + '</div>';
         }).join('') + '</div><div class="plate-body"><details class="enso-evidence-note"><summary>Event-study method and source wording</summary><p>' + esc(rec.figure || '') + '</p><blockquote>“' + esc(rec.quote || '') + '”</blockquote><p>' + esc(rec.method || '') + '</p><p>' + esc(rec.tension || '') + '</p></details></div>' +
-        '<figcaption class="enso-log">These published event comparisons share one absolute percentage scale, with warm bars for rises and cool bars for falls; coincidence around a peak is not an estimate of ENSO causation.</figcaption></figure>';
+        '<figcaption class="enso-log">These published event comparisons share one absolute percentage scale, with ochre bars for rises and green bars for falls; coincidence around a peak is not an estimate of ENSO causation.</figcaption></figure>';
     }
     if (E.ffpi && E.ffpi.series) {
       out += '<figure class="enso-plate">' + plateHead('FAO Food Price Index: peak years and latest month', 'FAO · annual nominal and real averages · 2014–2016 = 100', readOn, 'observed') +
@@ -44881,7 +44946,7 @@ function showCommodityDetail(key) {
       var maj = hot.filter(function (h) { return h.a.hotspot_code === 2; }).length;
       rail += '<figure class="enso-plate">' + plateHead('Agricultural hotspots', 'JRC ASAP · biomass below normal', stamp(metaDate('asap')), 'reported') +
         '<div class="plate-body"><ul class="enso-rail-list">' + hot.slice(0, 10).map(function (h) {
-          return '<li><button class="enso-chip" onclick="ensoFocus(\'' + esc(h.iso) + '\')">' + esc(nameFor(h.iso)) + '</button><span style="color:' + (h.a.hotspot_code === 2 ? RAMP[3] : RAMP[1]) + '">' + esc(h.a.hotspot_label) + '</span></li>';
+          return '<li><button class="enso-chip" onclick="ensoFocus(\'' + esc(h.iso) + '\')">' + esc(nameFor(h.iso)) + '</button><span style="color:' + (h.a.hotspot_code === 2 ? MAJOR_HOTSPOT : HOTSPOT) + '">' + esc(h.a.hotspot_label) + '</span></li>';
         }).join('') + '</ul></div><figcaption class="enso-log">' + maj + ' major, ' + (hot.length - maj) + ' standard, of ' + Object.keys(S.asap || {}).length + ' assessed. A hotspot is an assessment of agricultural stress, not an attribution.</figcaption></figure>';
     }
     if (gd.length) {
@@ -44977,10 +45042,15 @@ function showCommodityDetail(key) {
          (vertical rules, step lines). */
       cfg.data.datasets.forEach(function (ds, i) {
         var button = document.createElement('button'); button.type = 'button';
-        var col = ds.borderColor || ds.backgroundColor || ds.pointBackgroundColor || '#b6b8be';
-        if (Object.prototype.toString.call(col) === '[object Array]') col = col[0];
-        var sw = document.createElement('i'); sw.className = 'enso-key-sw' + (ds.borderDash && ds.borderDash.length ? ' is-dash' : '');
-        sw.style.background = String(col); sw.style.color = String(col);
+        var col = ds.showLine === false && ds.pointBackgroundColor ? ds.pointBackgroundColor : ds.borderColor || ds.backgroundColor || '#b6b8be';
+        var multi = Object.prototype.toString.call(col) === '[object Array]';
+        if (multi) col = '#9b958c';
+        var shape = ds.pointStyle === 'triangle' ? 'is-triangle' : ds.pointStyle === 'rectRot' ? 'is-diamond' :
+          cfg.type === 'scatter' || ds.showLine === false ? 'is-dot' : cfg.type === 'bar' ? '' :
+          ds.borderDash && ds.borderDash.length ? 'is-dash' : 'is-line';
+        var sw = document.createElement('i'); sw.className = 'enso-key-sw ' + shape;
+        sw.setAttribute('aria-hidden', 'true');
+        sw.style.background = multi ? 'linear-gradient(90deg,#36a7b8,#9b958c,#c7528e)' : String(col); sw.style.color = String(col);
         button.appendChild(sw); button.appendChild(document.createTextNode(ds.label || ''));
         button.setAttribute('aria-pressed', 'true');
         button.onclick = function () {
@@ -45015,6 +45085,7 @@ function showCommodityDetail(key) {
          out of eleven points. Points on a true time axis say only what is
          known. */
       mk('enso-c-ffpi', {
+        keyNotes: ['Circles: annual nominal peak-year averages; triangles: annual real peak-year averages; diamond: latest monthly nominal' + (lt ? ' · ' + lt.month : '') + '. FAO; averaging windows differ.'],
         type: 'scatter',
         data: {
           datasets: [
@@ -45088,7 +45159,7 @@ function showCommodityDetail(key) {
         var marks = pan && pan.live_2026 && pan.live_2026.steps ? pan.live_2026.steps.map(function (st) { return { date: st.effective, label: 'slots ' + st.total + '/day' }; }) : [];
         dailyChart('panama', 'enso-c-panama-daily', marks);
       })();
-      mk('enso-c-panama', { keyNotes: ['step line: the published slot limit per day; steps are in order, not to scale in time'],
+      mk('enso-c-panama', { keyNotes: ['Orange step line: published 2023–24 limit, slots/day; pale diamonds: 2026 advisory limits. Ordinal steps, not to scale in time.'],
         type: 'line',
         data: {
           labels: labels,
@@ -45116,11 +45187,12 @@ function showCommodityDetail(key) {
       .sort(function (a, b) { return b.v - a.v; }).slice(0, 18);
     if (rows.length) {
       mk('enso-c-rtfp', {
+        keyNotes: ['Bar length: food inflation, % year on year. Hue: −10% cyan, 0% warm grey, +30% magenta; end colours beyond anchors. World Bank RTFP via HDX · as_of ' + rtfpDateRange()],
         type: 'bar',
         data: {
           labels: rows.map(function (r) { return nameFor(r.iso); }),
           datasets: [{ label: 'Food inflation, % y/y', data: rows.map(function (r) { return r.v; }),
-            backgroundColor: rows.map(function (r) { return r.v < 0 ? '#4a86b3' : '#dd5a3a'; }),
+            backgroundColor: rows.map(function (r) { return rtfpColor(r.v); }),
             borderWidth: 0 }]
         },
         options: defaults({
@@ -45279,7 +45351,7 @@ function showCommodityDetail(key) {
     S.lanePins = []; S.laneLines = []; S.alertPins = []; S.sel = null;
     /* v84 -- the ocean layer and its hover readout were bound to the map
        instance just removed; drop them so buildMap wires fresh ones. */
-    S.sstLayer = null;
+    S.sstLayer = null; S.nino34 = null; S.ninoLabel = null;
     if (S.sstReadout && S.sstReadout.remove) { try { S.sstReadout.remove(); } catch (e) {} }
     S.sstReadout = null;
     /* Chart.js instances are bound to canvases inside the sub-views that are
