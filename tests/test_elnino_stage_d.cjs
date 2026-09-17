@@ -7,7 +7,7 @@ class Element {
   get children() { return this.childNodes.filter(n => n instanceof Element); }
   set className(v) { this.attrs.class = v; } get className() { return this.attrs.class || ''; }
   get classList() { return { contains: c => this.className.split(/\s+/).includes(c), toggle: (c,on) => { const a=this.className.split(/\s+/).filter(x=>x&&x!==c); if(on)a.push(c); this.className=a.join(' '); } }; }
-  setAttribute(k,v) { this.attrs[k] = String(v); } getAttribute(k) { return this.attrs[k]; } removeAttribute(k) { delete this.attrs[k]; }
+  setAttribute(k,v) { this.attrs[k] = String(v); if(k.startsWith('data-'))this.dataset[k.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=String(v); } getAttribute(k) { return this.attrs[k]; } removeAttribute(k) { delete this.attrs[k]; }
   appendChild(n) { if (n.parent) n.parent.childNodes=n.parent.childNodes.filter(x=>x!==n); n.parent=this; this.childNodes.push(n); return n; }
   insertBefore(n,b) { this.appendChild(n);this.childNodes.splice(this.childNodes.indexOf(n),1);this.childNodes.splice(Math.max(0,this.childNodes.indexOf(b)),0,n); }
   get textContent() { return this.childNodes.map(n=>n.textContent).join(''); }
@@ -26,7 +26,7 @@ class Element {
     }
   }
   get innerHTML() { return this.childNodes.map(n=>n instanceof Element ? '<'+n.tagName+Object.entries(n.attrs).map(([k,v])=>' '+k+'="'+v+'"').join('')+'>'+n.innerHTML+'</'+n.tagName+'>' : n.textContent).join(''); }
-  querySelectorAll(selector) { const out=[]; const match=n=>selector[0]==='.'?n.classList.contains(selector.slice(1)):selector[0]==='#'?n.attrs.id===selector.slice(1):n.tagName===selector; const visit=n=>n.children.forEach(c=>{if(match(c))out.push(c);visit(c);});visit(this);return out; }
+  querySelectorAll(selector) { const out=[]; const match=n=>selector[0]==='[' ? (()=>{const m=selector.match(/^\[([^=]+)="([^"]*)"\]$/);return m&&n.getAttribute(m[1])===m[2];})() : selector[0]==='.'?n.classList.contains(selector.slice(1)):selector[0]==='#'?n.attrs.id===selector.slice(1):n.tagName===selector; const visit=n=>n.children.forEach(c=>{if(match(c))out.push(c);visit(c);});visit(this);return out; }
   querySelector(s) { return this.querySelectorAll(s)[0]||null; }
   insertAdjacentHTML(_,value) { const n=new Element();n.innerHTML=value;n.childNodes.slice().forEach(c=>this.appendChild(c)); }
 }
@@ -44,7 +44,7 @@ const pending=[];
 const ctx=vm.createContext({console,Date,URL,URLSearchParams,Event,L,charts:{},RAMP:['#1','#2','#3','#4','#5'],setTimeout:fn=>pending.push(fn),clearTimeout(){},window:{location:{href:'http://localhost/index.html',search:''},matchMedia(){return {matches:true};}},document:{getElementById:node,querySelector:s=>s==='#tab-elnino .content-page'?node('scroller'):null,querySelectorAll(){return [];},createElement:t=>new Element(t),createElementNS:(_,t)=>new Element(t),addEventListener(){}}});
 const start=html.indexOf('(function () {',html.indexOf('   THE MAP USES A DIVERGING')),end=html.indexOf('\n})();',start);
 vm.runInContext(html.slice(start,end)+`
-  globalThis.api={S,renderLegend,drawLanes,laneGeometry,corridorGeometry,fillFor,rtfpColor,renderWater,renderMoney,renderCoeffs,renderCalendar,analogPlate,drawCharts,paint,toggleSST,buildDefs};
+  globalThis.api={S,renderMapRanking,rankedPrices,rankedHotspots,priceMapSentence,mapState,renderControls,syncInstruments,selectCountry,flyTo,drawAlerts,alertLegend,corridorChipCandidates,placeCorridorChips,renderLegend,drawLanes,laneGeometry,corridorGeometry,fillFor,rtfpColor,renderWater,renderMoney,renderCoeffs,renderCalendar,analogPlate,drawCharts,paint,toggleSST,buildDefs};
   mk=function(id,cfg){ if(!S._chartFilter || S._chartFilter.indexOf(id)>=0) globalThis.charts[id]=cfg; };
   syncInstruments=renderMapTag=renderControls=renderDetail=renderFailures=wireTabKeys=syncTabRoving=wireRasterPlates=finishPlates=renderSubviewMeta=function(){};
 })();`,ctx);
@@ -78,7 +78,7 @@ test('Shipping draws nine sourced schematic corridors, chips and destination che
   const lane=S.lanes.lanes.find(l=>l.id===c.lane),line=S.corridorLines[i];
   assert.equal(c.phase,lane.phase);assert.equal(line.options.color,{el_nino:'#d2693a',la_nina:'#4a86b3',none:'#6a685e'}[c.phase]);
   assert.equal(line.options.weight,2);assert.equal(line.options.opacity,.75);
-  assert.equal(S.corridorLabels[i].options.icon.className,'enso-corridor-chip');
+  assert.equal(S.corridorLabels[i].options.icon.className,'enso-corridor-chip'+(c.phase==='el_nino'?'':' enso-corridor-secondary'));
   for(const text of [c.name,c.basis,'schematic corridor through named waypoints, not vessel tracks',...c.commodities,...c.sources])assert(line.tooltip.includes(text.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')));
  });
  assert(S.lanePins.every(p=>p.options.zIndexOffset>S.corridorLabels[0].options.zIndexOffset));
@@ -92,6 +92,56 @@ test('long ocean legs curve and split at the dateline without a world-spanning c
  assert.equal(path[0].at(-1)[1],-180);assert.equal(path[1][0][1],180);
  assert(Math.max(...path.flat().map(p=>p[0]))>35.44);
  assert.equal(api.corridorGeometry([[0,0],[100,0]]).length,0);
+});
+test('Stage H price ranking is finite, descending, dated and honest about sparse coverage',()=>{
+ const saved=S.rtfp, oldMode=S.mode;S.mode='rtfp';
+ api.renderMapRanking();const list=node('enso-map-ranking');
+ const expected=Object.keys(saved).filter(k=>Number.isFinite(saved[k].food_inflation_pct)).sort((a,b)=>saved[b].food_inflation_pct-saved[a].food_inflation_pct).slice(0,12);
+ assert.deepEqual(list.querySelectorAll('button').map(b=>b.getAttribute('data-map-country')),expected);
+ expected.forEach(k=>{assert(list.textContent.includes(saved[k].as_of));assert(list.textContent.includes(saved[k].markets+' markets'));});
+ assert.equal(api.mapState().title,'Where food prices are rising fastest');assert(api.priceMapSentence().includes('as of August 2026'));
+ S.rtfp={ZWE:{food_inflation_pct:0,markets:2,as_of:'2026-07-01'},USA:{food_inflation_pct:-2,markets:3,as_of:'2026-08-01'},BAD:{food_inflation_pct:null},NAN:{food_inflation_pct:NaN}};
+ api.renderMapRanking();assert.equal(list.querySelectorAll('button').length,2);assert(list.textContent.includes('Only 2 countries carry a value'));
+ assert(api.priceMapSentence().includes('July 2026 to August 2026'));
+ S.rtfp={};api.renderMapRanking();assert(list.textContent.includes('Only 0 countries'));assert(api.priceMapSentence().includes('reporting date unavailable'));
+ S.rtfp=saved;S.mode=oldMode;
+});
+test('Stage H ASAP ranks major before hotspot and exposes assessment months',()=>{
+ const saved=S.asap,oldMode=S.mode;S.mode='asap';
+ S.asap={ZWE:{hotspot_code:2,assessment_date:'2026-08-11'},USA:{hotspot_code:1,assessment_date:'2026-07-11'},NO:{hotspot_code:0},NA:{hotspot_code:null}};
+ api.renderMapRanking();const list=node('enso-map-ranking');
+ assert.deepEqual(list.querySelectorAll('button').map(b=>b.getAttribute('data-map-country')),['ZWE','USA']);
+ assert(list.textContent.includes('Major hotspot · August 2026'));assert(list.textContent.includes('Hotspot · July 2026'));
+ assert.equal(api.mapState().title,'Where crops are under stress this season');
+ S.asap=saved;S.mode=oldMode;
+});
+test('Stage H ranked-country taps stay in their lens and pan without zoom',()=>{
+ const pan=[];S.map.panTo=(center,options)=>pan.push({center,options});
+ for(const [sub,mode] of [['ensomoney','rtfp'],['ensolive','asap']]) {
+  S.sub=sub;S.mode=mode;api.renderMapRanking();const button=node('enso-map-ranking').querySelectorAll('button')[0];
+  button.onclick();assert.equal(S.sel,button.getAttribute('data-map-country'));assert.equal(S.sub,sub);assert.equal(S.mode,mode);
+  api.selectCountry('ZWE',{fly:true});assert.equal(country.options.color,'#ebe9e2');
+ }
+ assert.equal(pan.length,2);assert(pan.every(p=>p.options.animate===false));S.sub='elnino';
+});
+test('Stage H alert keys count only mapped reports and rings contrast with both purples',()=>{
+ const oldG=S.gdacs,oldR=S.relief,oldPins=S.alertPins;
+ S.alertPins=[];S.gdacs={yes:{is_current:true,lat:1,lng:2},no:{is_current:false,lat:1,lng:2},bad:{is_current:true,lat:NaN,lng:2}};
+ S.relief={events:[{iso3:'ZWE'},{iso3:'WLD'}]};api.drawAlerts();
+ assert.equal(S.alertPins.length,2);assert(api.alertLegend().includes('GDACS 1'));assert(api.alertLegend().includes('ReliefWeb 1'));
+ function luminance(hex){const rgb=hex.match(/[0-9a-f]{2}/gi).map(h=>parseInt(h,16)/255).map(v=>v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4));return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;}
+ for(const p of S.alertPins)for(const purple of ['#8866ad','#51316f'])assert((luminance(p.options.color)+.05)/(luminance(purple)+.05)>3);
+ assert(S.alertPins.every(p=>p.options.fillColor==='#11161e'&&p.options.fillOpacity===1));
+ S.gdacs=oldG;S.relief=oldR;S.alertPins=oldPins;
+});
+test('Stage H corridor labels clear Panama and Amazon and only three chips remain on phones',()=>{
+ assert.equal(S.corridorLabels.filter(l=>!l.options.icon.className.includes('secondary')).length,3);
+ for(const id of ['panama','amazon']) {
+  const i=S.corridors.corridors.findIndex(c=>c.lane===id),at=S.corridorLabels[i].coords;
+  const ln=S.lanes.lanes.find(l=>l.id===id);
+  assert(Math.hypot(at[0]-ln.lat,at[1]-ln.lng)>8, id+' label must move off the diamond');
+ }
+ assert.equal(S.corridorLines[0].coords.length,2);assert(S.corridorLines[0].coords.every(arc=>arc.length>1));
 });
 test('Explore instrument preserves controls and dates modelled paint from displayed metadata',()=>{
  const elements={};const get=id=>elements[id]||(elements[id]=new Element());
@@ -134,6 +184,34 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
  for(const c of ['#c9773a','#6ba36b'])assert(key.includes('repeating-linear-gradient(45deg,'+c));
 });
 (async()=>{
+ // Exercise buildMap and the real plate handlers with a bounded Leaflet double.
+ const zoomNodes={},zoomNode=id=>zoomNodes[id]||(zoomNodes[id]=new Element());
+ const zoomL=Object.assign({},L,{
+  map(host,options){
+   const m={options,layers:new Set(),panes:{},events:{},zoom:2,
+    setView(center,z){this.center=center;return this.setZoom(z);},setZoom(z){this.zoom=z;if(this.events.zoomend)this.events.zoomend();return this;},
+    getZoom(){return this.zoom;},getMinZoom(){return options.minZoom;},getMaxZoom(){return options.maxZoom;},
+    on(name,fn){this.events[name]=fn;},createPane(n){return this.panes[n]={style:{}};},getPane(n){return this.panes[n];}};
+   for(const k of ['scrollWheelZoom','doubleClickZoom','touchZoom','boxZoom','keyboard','dragging'])m[k]={enabled:()=>options[k]!==false};
+   return m;
+  },geoJSON:()=>new Layer(),rectangle:(c,o)=>new Layer(c,o)
+ });
+ const zoomCtx=vm.createContext({L:zoomL,console,Date,window:{location:{search:''}},document:{getElementById:zoomNode,createElement:t=>new Element(t),addEventListener(){}}});
+ vm.runInContext(html.slice(start,end)+`
+ globalThis.api={S,buildMap};
+ drawWorldPlate=drawGraticule=addSSTLayer=drawLanes=drawAnnotations=buildDefs=paint=function(){};
+ })();`,zoomCtx);
+ zoomCtx.api.S.features=[];zoomCtx.api.S.showRegions=false;zoomCtx.api.S.showLanes=false;
+ await zoomCtx.api.buildMap();
+ test('Stage H map disables gesture and keyboard zoom while its plate buttons change zoom',()=>{
+  const m=zoomCtx.api.S.map;
+  for(const k of ['scrollWheelZoom','doubleClickZoom','touchZoom','boxZoom','keyboard']){assert.equal(m.options[k],false);assert(!m[k].enabled());}
+  assert(m.dragging.enabled());
+  const buttons=zoomNode('enso-mapwrap').querySelectorAll('button'),[plus,minus,reset]=buttons;
+  assert.equal(buttons.length,3);assert(minus.disabled);plus.onclick();assert.equal(m.getZoom(),3);assert(!minus.disabled);
+  minus.onclick();assert.equal(m.getZoom(),2);plus.onclick();reset.onclick();assert.equal(m.getZoom(),2);
+  for(let i=0;i<4;i++)plus.onclick();assert(plus.disabled);reset.onclick();assert(!plus.disabled);
+ });
  const expected={elnino:'sst',ensoharvest:'impact',ensowater:'none',ensomoney:'rtfp',ensolive:'asap'};
  for(let cycle=0;cycle<2;cycle++) for(const [view,mode] of Object.entries(expected)) {
   node('scroller').scrollTop=1400;
@@ -145,7 +223,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    for(const l of S.lanePins.concat(S.laneLines,S.corridorLines,S.corridorLabels,S.corridorArrows))assert.equal(S.map.hasLayer(l),view==='ensowater');
    for(const l of S.alertPins)assert.equal(S.map.hasLayer(l),view==='ensolive');
    assert.equal(S.annoLayers.length,view==='ensoharvest'?6:view==='ensowater'?3:0);
-   assert.equal(country.options.color,view==='ensoharvest'?'#ebe9e2':'#0b0b0d');
+   assert.equal(country.options.color,['ensoharvest','ensomoney','ensolive'].includes(view)?'#ebe9e2':'#0b0b0d');
    if(view!=='ensolive')assert(!country.element.classList.contains('enso-hotspot')&&!country.element.classList.contains('enso-major-hotspot'));
    const legend=node('enso-legend'),visible=legend.querySelector('.enso-legend'),key=visible.textContent;
    assert.equal(legend.querySelectorAll('details').length,1);assert.equal(visible.querySelectorAll('details').length,0);
@@ -163,8 +241,8 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
   });
  }
  test('hotspot classes and price no-data preserve distinct palettes',()=>{
-  S.mode='asap';const saved=S.asap;S.asap={ZWE:{hotspot_code:1}};api.paint();assert.equal(api.fillFor('ZWE'),'#9b83c9');assert(country.element.classList.contains('enso-hotspot'));
-  S.asap.ZWE.hotspot_code=2;api.paint();assert.equal(api.fillFor('ZWE'),'#69439b');assert(country.element.classList.contains('enso-major-hotspot'));assert(!country.element.classList.contains('enso-hotspot'));
+  S.mode='asap';const saved=S.asap;S.asap={ZWE:{hotspot_code:1}};api.paint();assert.equal(api.fillFor('ZWE'),'#8866ad');assert(country.element.classList.contains('enso-hotspot'));
+  S.asap.ZWE.hotspot_code=2;api.paint();assert.equal(api.fillFor('ZWE'),'#51316f');assert(country.element.classList.contains('enso-major-hotspot'));assert(!country.element.classList.contains('enso-hotspot'));
   S.mode='rtfp';api.paint();assert(!country.element.classList.contains('enso-major-hotspot'));assert.notEqual(api.rtfpColor(0),'#1c1c22');assert.equal(api.rtfpColor(null),null);S.asap=saved;
  });
  test('diagram keys describe actual marks, windows and dated series',()=>{
@@ -176,7 +254,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
   api.drawCharts('ensowater');assert(ctx.charts['enso-c-panama'].keyNotes[0].includes('pale diamonds'));
   const ais=ctx.charts['enso-c-panama-daily'].keyNotes[0],dates=S.pwhist.chokepoints.panama.dates;for(const t of ['Points: observed daily','7-day means','advisory effective dates',dates[0],dates[dates.length-1]])assert(ais.includes(t));
   api.drawCharts('ensomoney');const ffpi=ctx.charts['enso-c-ffpi'].keyNotes[0];for(const t of ['Circles','triangles','diamond',S.ffpi.latest.month])assert(ffpi.includes(t));
-  const bars=ctx.charts['enso-c-rtfp'];assert(bars.keyNotes[0].includes('as_of'));bars.data.datasets[0].data.forEach((v,i)=>assert.equal(bars.data.datasets[0].backgroundColor[i],api.rtfpColor(v)));
+  const bars=ctx.charts['enso-c-rtfp'];assert(bars.keyNotes[0].includes('as of'));bars.data.datasets[0].data.forEach((v,i)=>assert.equal(bars.data.datasets[0].backgroundColor[i],api.rtfpColor(v)));
  });
  console.log(passed+'/'+passed+' Stage D non-browser checks passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -9,7 +9,7 @@ function node(id) { return nodes[id] || (nodes[id] = { innerHTML:'', value:'', s
 const ctx = vm.createContext({window:{location:{href:'http://localhost/index.html',search:''}}, document:{getElementById:node,querySelectorAll(){return [];},addEventListener(){}}, URL,console,Date,setTimeout,clearTimeout,Event, URLSearchParams, charts:{}});
 vm.runInContext(html.slice(start,end)+`
   mk = function(id,cfg) { if (!S._chartFilter || S._chartFilter.indexOf(id)>=0) globalThis.charts[id]=cfg; };
-  globalThis.api={S,calendarSeason,harvestFigure,renderLandHead,renderDetail,renderCoeffs,renderCalendar,renderWater,renderMoney,renderPeople,renderLimits,renderControls,drawCharts,selectCountry};
+  globalThis.api={S,calendarSeason,harvestFigure,renderLandHead,renderDetail,renderCoeffs,renderCalendar,renderWater,renderMoney,renderPeople,renderLimits,renderControls,syncInstruments,drawCharts,selectCountry};
 })();`, ctx);
 const api = ctx.api, S=api.S;
 for (const [key,file] of Object.entries({model:'enso_model',calendars:'crop_calendars',enso:'enso',lanes:'enso_lanes',econ:'enso_econ',exp:'enso_exposure',portwatch:'portwatch',pwhist:'portwatch_history',rtfp:'rtfp',ffpi:'fao_ffpi'})) {
@@ -74,6 +74,16 @@ test('native controls coexist with observed mode, nine rungs and labelled instru
  assert.equal((out.match(/class="is-observed-rung"/g)||[]).length,1);
  for(const id of ['enso-level','enso-mode','enso-country','enso-tog-regions','enso-tog-lanes','enso-tog-alerts','enso-tog-sst'])assert(out.includes('id="'+id+'"'));
  assert.equal((out.match(/class="enso-instrument-row/g)||[]).length,2);assert(out.includes('type="search"'));assert(out.includes('Observed / reported'));
+});
+test('Stage H scenario expands on request and stays fully visible for modelled paint',()=>{
+ const mode=S.mode,expanded=S.scenarioExpanded;S.mode='rtfp';S.scenarioExpanded=false;
+ api.renderControls();api.syncInstruments();
+ assert(nodes['enso-controls'].innerHTML.includes('id="enso-scenario-rungs" hidden'));
+ assert(nodes['enso-scenario-rungs'].hidden);assert(!nodes['enso-scenario-toggle'].hidden);
+ nodes['enso-scenario-toggle'].onclick();assert(!nodes['enso-scenario-rungs'].hidden);assert.equal(nodes['enso-scenario-toggle']['aria-expanded'],'true');
+ nodes['enso-scenario-toggle'].onclick();assert(nodes['enso-scenario-rungs'].hidden);
+ for(const m of ['impact','crop','coverage']){S.mode=m;api.syncInstruments();assert(!nodes['enso-scenario-rungs'].hidden);assert(nodes['enso-scenario-toggle'].hidden);}
+ S.mode=mode;S.scenarioExpanded=expanded;
 });
 test('humanitarian need is labelled reported',()=>{
  api.renderPeople();const out=nodes['enso-people'].innerHTML;assert(out.includes('data-kind="reported"'));assert(!out.includes('<h2'));assert.equal((out.match(/<tbody>/g)||[]).length,1);

@@ -518,7 +518,7 @@ def main() -> int:
                 dates = page.evaluate("async () => Object.values((await (await fetch('data/rtfp.json')).json()).data).map(r => r.as_of).filter(Boolean).sort()")
                 legend = page.locator('#enso-legend').text_content()
                 check("rtfp legend states fixed anchors and country as_of range",
-                      all(t in legend for t in ('Fixed anchors', '−10%', '0%', '+30%', 'beyond the ends', 'as_of', dates[0], dates[-1])))
+                      all(t in legend for t in ('Fixed anchors', '−10%', '0%', '+30%', 'beyond the ends', 'as of', dates[0], dates[-1])))
             headings.append(page.locator('#tab-elnino h2:visible').count())
             frames.append(page.evaluate("""() => [...document.querySelectorAll('#tab-elnino .enso-plate[data-kind], #enso-mapwrap[data-kind]')].every(e =>
                 getComputedStyle(e).borderTopStyle === (['modelled','published'].includes(e.dataset.kind) ? 'dashed' : 'solid'))"""))
@@ -640,6 +640,114 @@ def main() -> int:
               'Everything on this board is observed' not in page.locator('#enso-live').inner_text()
               and page.locator('#enso-live .enso-wire-plate').get_attribute('data-kind') == 'published'
               and page.locator('#enso-live .enso-live-rail figure[data-kind="reported"]').count() >= 1)
+
+        print("\nstage H map interactions and ranked readings")
+        # Capture the actual rebuilt Leaflet instance without adding a production test API.
+        page.evaluate("""async () => {
+            const create = L.map;
+            L.map = function(host, options) {
+                const map = create.call(this, host, options);
+                if (host.id === 'enso-map') window._stageHMap = map;
+                return map;
+            };
+            try { await ensoRetry(); } finally { L.map = create; }
+        }""")
+        check("Stage H map instance disables gesture and keyboard zoom but retains dragging", page.evaluate("""() => {
+            const m = window._stageHMap;
+            return ['scrollWheelZoom','doubleClickZoom','touchZoom','boxZoom','keyboard'].every(k =>
+                m.options[k] === false && !m[k].enabled()) && m.dragging.enabled();
+        }"""))
+        page.locator('#enso-mapwrap [data-z="0"]').click()
+        initial_zoom = page.evaluate("_stageHMap.getZoom()")
+        page.locator('#enso-mapwrap [data-z="1"]').click()
+        zoomed = page.evaluate("_stageHMap.getZoom()")
+        page.locator('#enso-mapwrap [data-z="-1"]').click()
+        zoomed_out = page.evaluate("_stageHMap.getZoom()")
+        page.locator('#enso-mapwrap [data-z="1"]').click()
+        page.locator('#enso-mapwrap [data-z="0"]').click()
+        check("Stage H plate buttons zoom in, zoom out and reset", zoomed == initial_zoom + 1
+              and zoomed_out == initial_zoom and page.evaluate("_stageHMap.getZoom()") == 2)
+        check("Stage H fold explains button zoom and page scrolling",
+              'so the page can scroll over it' in page.locator('#enso-legend details').text_content())
+        collapse = []
+        for tab in ('elnino', 'ensowater', 'ensomoney', 'ensolive'):
+            page.evaluate("tab => showTab(tab)", tab)
+            page.wait_for_selector(f'#subview-{tab}.active .enso-subview-meta')
+            collapse.append(not page.locator('#enso-scenario-rungs').is_visible()
+                            and page.locator('#enso-scenario-toggle').is_visible())
+        page.locator('#enso-scenario-toggle').click()
+        expanded = page.locator('#enso-scenario-rungs').is_visible()
+        page.locator('[data-native="enso-level"][data-value="-1.5"]').click()
+        explicit = page.input_value('#enso-level') == '-1.5' and 'enso_level=-1.5' in page.url
+        page.evaluate("showTab('ensoharvest')")
+        check("Stage H scenario is quiet on observed lenses and expands without losing deep links",
+              all(collapse) and expanded and explicit and page.locator('#enso-scenario-rungs').is_visible()
+              and not page.locator('#enso-scenario-toggle').is_visible()
+              and page.input_value('#enso-level') == '-1.5')
+        ranked = []
+        for tab, feed in (('ensomoney', 'rtfp'), ('ensolive', 'asap')):
+            page.evaluate("tab => showTab(tab)", tab)
+            page.wait_for_selector('#enso-map-ranking button')
+            valid = page.evaluate("""async feed => {
+                const data = (await (await fetch('data/' + feed + '.json')).json()).data;
+                const buttons = [...document.querySelectorAll('#enso-map-ranking button')];
+                const rows = buttons.map(b => data[b.dataset.mapCountry]);
+                const expected = Object.values(data).filter(r => feed === 'rtfp'
+                    ? Number.isFinite(r.food_inflation_pct) : [1,2].includes(r.hotspot_code));
+                const key = feed === 'rtfp' ? 'food_inflation_pct' : 'hotspot_code';
+                const top = expected.map(r => r[key]).sort((a,b) => b-a).slice(0, feed === 'rtfp' ? 12 : expected.length);
+                const m = document.getElementById('enso-map').getBoundingClientRect();
+                const a = document.getElementById('enso-map-ranking').getBoundingClientRect();
+                return JSON.stringify(rows.map(r => r[key])) === JSON.stringify(top)
+                    && rows.every((r,i) => feed === 'rtfp'
+                        ? buttons[i].textContent.includes(r.markets + ' markets') && buttons[i].textContent.includes(r.as_of)
+                        : buttons[i].textContent.includes(new Date(r.assessment_date).toLocaleDateString('en-US', {month:'long',year:'numeric',timeZone:'UTC'})))
+                    && a.left >= m.right - 1;
+            }""", feed)
+            first = page.locator('#enso-map-ranking button').first
+            iso = first.get_attribute('data-map-country')
+            before_zoom = page.evaluate('_stageHMap.getZoom()')
+            first.click()
+            ranked.append(valid and page.locator(f'#subview-{tab}').evaluate("e => e.classList.contains('active')")
+                          and page.input_value('#enso-country') == iso and first.get_attribute('aria-pressed') == 'true'
+                          and page.evaluate('_stageHMap.getZoom()') == before_zoom)
+        check("Stage H ranked lists retain values, dates, order and lens when selecting a country", all(ranked))
+        check("Stage H alert keys count the actual mapped GDACS and ReliefWeb reports", page.evaluate("""() => {
+            const counts = {gdacs:0,relief:0};
+            _stageHMap.eachLayer(l => { if (l.options && l.options.ensoSource in counts) counts[l.options.ensoSource]++; });
+            const key = document.getElementById('enso-legend').textContent;
+            return key.includes('GDACS ' + counts.gdacs) && key.includes('ReliefWeb ' + counts.relief);
+        }"""))
+        page.set_viewport_size({'width':390,'height':844})
+        stacked = []
+        for tab in ('ensomoney','ensolive'):
+            page.evaluate("tab => showTab(tab)", tab)
+            stacked.append(page.evaluate("""() => document.getElementById('enso-map-ranking').getBoundingClientRect().top >=
+                document.getElementById('enso-map').getBoundingClientRect().bottom - 1"""))
+        check("Stage H both ranked lists stack below the map on phones", all(stacked))
+        page.evaluate("showTab('ensowater')")
+        check("Stage H phones show only three El Nino corridor chips and retain all routes in the fold",
+              page.locator('.enso-corridor-chip:visible').count() == 3
+              and page.locator('.enso-corridor-secondary:visible').count() == 0
+              and 'all corridors are listed here' in page.locator('#enso-legend details').text_content())
+        page.set_viewport_size({'width':1440,'height':1000})
+        page.locator('#enso-mapwrap [data-z="0"]').click()
+        check("Stage H Panama renders two dateline arcs without a world-spanning chord", page.evaluate("""() => {
+            let found = false;
+            _stageHMap.eachLayer(l => {
+                if (l.options.className !== 'enso-corridor' || !l.getTooltip().getContent().includes('US Gulf grain to East Asia')) return;
+                const arcs = l.getLatLngs();
+                found = arcs.length === 2 && arcs.every(a => a.length > 1 && a.every((p,i) => !i || Math.abs(p.lng-a[i-1].lng) <= 180))
+                    && arcs[0][arcs[0].length-1].lng === -180 && arcs[1][0].lng === 180;
+            });
+            return found;
+        }"""))
+        check("Stage H Panama and Amazon corridor chips clear chokepoint chips", page.evaluate("""() => {
+            const overlap = (a,b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+            const chips = [...document.querySelectorAll('.enso-corridor-chip > span')].filter(e => /Gulf to East Asia|Amazon northern arc/.test(e.textContent));
+            const chokes = [...document.querySelectorAll('.enso-choke-label')].map(e => e.getBoundingClientRect());
+            return chips.length === 2 && chips.every(c => chokes.every(b => !overlap(c.getBoundingClientRect(),b)));
+        }"""))
 
         check("no console errors", not errors, "; ".join(errors[:2]))
         browser.close()

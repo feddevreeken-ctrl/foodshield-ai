@@ -49,7 +49,17 @@ class FreshnessTest(unittest.TestCase):
             self.assertEqual(rows[iso]["confidence"],"none")
         self.assertEqual(rows["DATED"]["components"]["wfp_pressure"],3)
         self.assertEqual(rows["DATED"]["confidence"],"high")
-        self.assertIn("collection date",rows["UNDATED"]["freshness"]["weather_kick"]["basis"])
+        # Open-Meteo is a live fetch: every row is read when the file is written,
+        # so the file's generated_at is the observation time and no per-row date
+        # exists. This fixture's file carries no generated_at, so the term must
+        # be weighted out entirely rather than counted as fresh. The earlier
+        # expectation ("collection date") described the reading this project
+        # corrected when the live-fetch feeds were re-dated.
+        weather=rows["UNDATED"]["freshness"]["weather_kick"]
+        self.assertIn("live fetch",weather["basis"])
+        self.assertIsNone(weather["date"])
+        self.assertEqual(weather["weight"],0)
+        self.assertEqual(rows["UNDATED"]["components"]["weather_kick"],0)
 
 if __name__ == '__main__':
     unittest.main()
