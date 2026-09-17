@@ -35,7 +35,7 @@ function node(id) { return nodes[id] || (nodes[id]=new Element()); }
 class Layer {
   constructor(coords,opts={}) { this.coords=coords;this.options=opts;this.element=new Element('path'); }
   addTo(map) { map.layers.add(this);return this; }
-  on(){return this;} bindTooltip(){return this;} bringToFront(){return this;}
+  on(){return this;} bindTooltip(html){this.tooltip=html;return this;} bringToFront(){return this;}
   getElement(){return this.element;} setStyle(s){Object.assign(this.options,s);}
   getBounds(){return {getCenter(){return {lat:0,lng:0};}};}
 }
@@ -44,12 +44,12 @@ const pending=[];
 const ctx=vm.createContext({console,Date,URL,URLSearchParams,Event,L,charts:{},RAMP:['#1','#2','#3','#4','#5'],setTimeout:fn=>pending.push(fn),clearTimeout(){},window:{location:{href:'http://localhost/index.html',search:''},matchMedia(){return {matches:true};}},document:{getElementById:node,querySelector:s=>s==='#tab-elnino .content-page'?node('scroller'):null,querySelectorAll(){return [];},createElement:t=>new Element(t),createElementNS:(_,t)=>new Element(t),addEventListener(){}}});
 const start=html.indexOf('(function () {',html.indexOf('   THE MAP USES A DIVERGING')),end=html.indexOf('\n})();',start);
 vm.runInContext(html.slice(start,end)+`
-  globalThis.api={S,renderLegend,drawLanes,laneGeometry,fillFor,rtfpColor,renderWater,renderMoney,renderCoeffs,renderCalendar,analogPlate,drawCharts,paint,toggleSST,buildDefs};
+  globalThis.api={S,renderLegend,drawLanes,laneGeometry,corridorGeometry,fillFor,rtfpColor,renderWater,renderMoney,renderCoeffs,renderCalendar,analogPlate,drawCharts,paint,toggleSST,buildDefs};
   mk=function(id,cfg){ if(!S._chartFilter || S._chartFilter.indexOf(id)>=0) globalThis.charts[id]=cfg; };
   syncInstruments=renderMapTag=renderControls=renderDetail=renderFailures=wireTabKeys=syncTabRoving=wireRasterPlates=finishPlates=renderSubviewMeta=function(){};
 })();`,ctx);
 const api=ctx.api,S=api.S;
-for(const [key,file] of Object.entries({model:'enso_model',calendars:'crop_calendars',enso:'enso',lanes:'enso_lanes',econ:'enso_econ',exp:'enso_exposure',portwatch:'portwatch',pwhist:'portwatch_history',rtfp:'rtfp',ffpi:'fao_ffpi',asap:'asap',gdacs:'gdacs',relief:'reliefweb_alerts',sst:'sst_anomaly'})){
+for(const [key,file] of Object.entries({model:'enso_model',calendars:'crop_calendars',enso:'enso',lanes:'enso_lanes',corridors:'enso_corridors',econ:'enso_econ',exp:'enso_exposure',portwatch:'portwatch',pwhist:'portwatch_history',rtfp:'rtfp',ffpi:'fao_ffpi',asap:'asap',gdacs:'gdacs',relief:'reliefweb_alerts',sst:'sst_anomaly'})){
  const data=JSON.parse(fs.readFileSync('data/'+file+'.json','utf8'));S[key]=data.data;S.meta[key]=data._meta;
 }
 let passed=0;
@@ -72,6 +72,58 @@ test('lane geometry is data-only, validated and phase coloured',()=>{
  assert.equal(api.laneGeometry({geometry:{type:'LineString',coordinates:[[999,20],[0,0]]}}).length,0);
  S.lanes=original;S.lanePins=[];S.laneLines=[];api.drawLanes();
 });
+test('Shipping draws nine sourced schematic corridors, chips and destination chevrons',()=>{
+ assert.equal(S.corridorLines.length,9);assert.equal(S.corridorLabels.length,9);assert.equal(S.corridorArrows.length,9);
+ S.corridors.corridors.forEach((c,i)=>{
+  const lane=S.lanes.lanes.find(l=>l.id===c.lane),line=S.corridorLines[i];
+  assert.equal(c.phase,lane.phase);assert.equal(line.options.color,{el_nino:'#d2693a',la_nina:'#4a86b3',none:'#6a685e'}[c.phase]);
+  assert.equal(line.options.weight,2);assert.equal(line.options.opacity,.75);
+  assert.equal(S.corridorLabels[i].options.icon.className,'enso-corridor-chip');
+  for(const text of [c.name,c.basis,'schematic corridor through named waypoints, not vessel tracks',...c.commodities,...c.sources])assert(line.tooltip.includes(text.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')));
+ });
+ assert(S.lanePins.every(p=>p.options.zIndexOffset>S.corridorLabels[0].options.zIndexOffset));
+ const old=S.corridorLines.concat(S.corridorLabels,S.corridorArrows);old.forEach(l=>l.addTo(S.map));api.drawLanes();
+ assert(old.every(l=>!S.map.hasLayer(l)));assert.equal(S.corridorLines.length,9);
+});
+test('long ocean legs curve and split at the dateline without a world-spanning chord',()=>{
+ const path=api.corridorGeometry(S.corridors.corridors[0].waypoints);
+ assert.equal(path.length,2);assert(path.flat().length>50);
+ for(const segment of path)for(let i=1;i<segment.length;i++)assert(Math.abs(segment[i][1]-segment[i-1][1])<=180);
+ assert.equal(path[0].at(-1)[1],-180);assert.equal(path[1][0][1],180);
+ assert(Math.max(...path.flat().map(p=>p[0]))>35.44);
+ assert.equal(api.corridorGeometry([[0,0],[100,0]]).length,0);
+});
+test('Explore instrument preserves controls and dates modelled paint from displayed metadata',()=>{
+ const elements={};const get=id=>elements[id]||(elements[id]=new Element());
+ const live={countries_overlay:JSON.parse(fs.readFileSync('data/countries.json')).data.countries};
+ const main=vm.createContext({document:{getElementById:get},LIVE:live,window:{_mlState:{distOn:false,sstOn:false,flowsOn:false,expanded:false,hidden:new Set()},matchMedia(){return {matches:true};}},ML_TYPES:[{t:'drought',l:'Drought',c:'#c47a3c'}],_mlCounts(){return {drought:3};}});
+ const begin=html.indexOf('function exploreScoreDate()'),finish=html.indexOf('// Backward-compatible wrapper',begin);
+ vm.runInContext(html.slice(begin,finish),main);vm.runInContext('renderMapLayers()',main);
+ assert(get('map-state').textContent.includes('Modelled: displayed FDRS'));
+ assert(get('map-legend-date').textContent.includes(live.countries_overlay.AFG.fdrs_displayed_at.slice(0,10)));
+ for(const label of ['Live disturbances','Sea temperature','Trade flows'])assert(get('map-layers').textContent.includes(label));
+ for(const handler of ['mlToggleDist','mlToggleSST','mlToggleFlows','mlToggleExpand'])assert(get('map-layers').innerHTML.includes(handler+'(event)'));
+ assert(get('map-layers').querySelector('#map-commodity-flows'));
+ assert.equal(get('map-layers').querySelector('details').getAttribute('open'),undefined);
+ live.countries_overlay={A:{fdrs_displayed_at:'2026-01-01T00:00:00Z'},B:{fdrs_displayed_at:'2026-01-02T00:00:00Z'}};
+ assert.equal(vm.runInContext('exploreScoreDate()',main),'2026-01-01 to 2026-01-02');
+ live.countries_overlay={};assert.equal(vm.runInContext('exploreScoreDate()',main),'unavailable');
+ main._scnPaintOn=true;vm.runInContext('renderExploreMapState()',main);assert(get('map-state').textContent.includes('scenario FDRS change'));
+});
+test('Explore land blocks SST below unchanged bands and has a distinct opaque unscored fill',()=>{
+ const pane={style:{}},drawn=[];
+ const main=vm.createContext({map:{getPane(){return null;},createPane(name){assert.equal(name,'exploreLand');return pane;}},L:{geoJSON(data,options){drawn.push(options);return {addTo(){}};}},data:{},LAND_TONE:'#0c0c0e',BORDER_LINE:'#aaa',lookupCountry:f=>f.country,mapRiskColor:()=> '#band',_scnPaintOn:false});
+ const begin=html.indexOf("        var landPane = map.getPane('exploreLand')"),finish=html.indexOf('        G.countryLayer =',begin);
+ vm.runInContext(html.slice(begin,finish),main);
+ assert.equal(pane.style.zIndex,390);assert.equal(drawn[0].style.fillOpacity,1);assert.equal(drawn[0].pane,'exploreLand');
+ const styleBegin=html.indexOf('  function styleFeature(f)'),styleEnd=html.indexOf('  function onEachFeature',styleBegin);
+ vm.runInContext(html.slice(styleBegin,styleEnd),main);
+ const unscored=vm.runInContext('styleFeature({})',main);assert.equal(unscored.fillOpacity,1);assert.equal(unscored.fillColor,'#343b46');
+ assert.equal(vm.runInContext('styleFeature({country:{fdrs:null}}).fillColor',main),unscored.fillColor);
+ for(const score of [12,38,63,82,95]){const paint=vm.runInContext('styleFeature({country:{fdrs:'+score+'}})',main);assert.equal(paint.fillColor,'#band');assert.equal(paint.fillOpacity,.18+Math.pow(score/100,.85)*.78);}
+ const legend=html.slice(html.indexOf('<div id="map-legend"'),html.indexOf('</div><!-- /#map-canvas -->'));
+ for(const label of ['0–25','26–50','51–75','76–88','89–100','Unscored','map-legend-date'])assert(legend.includes(label));
+});
 test('hatch SVG strokes match visible ochre and green samples',()=>{
  const svg=new Element('svg'), query=ctx.document.querySelectorAll;
  ctx.document.querySelectorAll=s=>s==='#enso-map svg'?[svg]:[];
@@ -90,7 +142,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    assert.equal(S.mode,mode);
    for(const l of [S.nino34,S.ninoLabel,S.sstLayer])assert.equal(S.map.hasLayer(l),view==='elnino');
    assert.equal(S.map.hasLayer(S.layerRegions),view==='ensoharvest');
-   for(const l of S.lanePins.concat(S.laneLines))assert.equal(S.map.hasLayer(l),view==='ensowater');
+   for(const l of S.lanePins.concat(S.laneLines,S.corridorLines,S.corridorLabels,S.corridorArrows))assert.equal(S.map.hasLayer(l),view==='ensowater');
    for(const l of S.alertPins)assert.equal(S.map.hasLayer(l),view==='ensolive');
    assert.equal(S.annoLayers.length,view==='ensoharvest'?6:view==='ensowater'?3:0);
    assert.equal(country.options.color,view==='ensoharvest'?'#ebe9e2':'#0b0b0d');
@@ -101,6 +153,8 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    assert.equal(key.includes('El Niño reduces output here'),view==='ensoharvest');
    assert.equal(key.includes('El Niño raises output here'),view==='ensoharvest');
    assert.equal(key.includes('degraded on the La Niña side'),view==='ensowater');
+   assert.equal(key.includes('corridor: schematic route through named ports and chokepoints'),view==='ensowater');
+   if(view==='ensowater'){assert.equal(S.corridorLines.filter(l=>S.map.hasLayer(l)).length,9);assert.equal(S.corridorLabels.filter(l=>S.map.hasLayer(l)).length,9);for(const c of S.corridors.corridors){assert(legend.querySelector('details').textContent.includes(c.basis.replace(/'/g,'&#39;')));}}
    assert.equal(key.includes('GDACS drought'),view==='ensolive');
    if(view==='ensolive')for(const label of ['hotspot','major hotspot','ReliefWeb humanitarian event'])assert(key.includes(label));
    if(view==='ensowater')for(const l of S.lanes.lanes)assert(legend.querySelector('details').textContent.includes(l.name));

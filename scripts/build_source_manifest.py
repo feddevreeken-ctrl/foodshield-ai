@@ -289,6 +289,14 @@ SOURCES = [
         "mode": "manual",
     },
     {
+        "key": "enso_corridors",
+        "file": "enso_corridors.json",
+        "label": "Grain corridors, published schematic routes through named waypoints",
+        "cadence": "manual, review every 365 days",
+        "review_days": 365,
+        "mode": "manual",
+    },
+    {
         "key": "enso_lanes",
         "file": "enso_lanes.json",
         "label": "Shipping lanes by ENSO phase, curated (ACP advisories, PortWatch joins)",
@@ -432,6 +440,8 @@ def read_envelope(path: Path):
 
 
 def payload_count(key, payload):
+    if key == "enso_corridors" and isinstance(payload, dict):
+        return len(payload.get("corridors") or [])
     if isinstance(payload, list):
         return len(payload)
     if not isinstance(payload, dict):
@@ -519,6 +529,8 @@ def infer_status(spec, envelope, count, period):
     # and a stale download URL. A script that knows why it failed should say
     # so in a field, and that field should be believed.
     explicit = str(meta.get("status") or "").lower()
+    if explicit == "manual":
+        return ("manual", f"curated snapshot; {spec['cadence']}") if count else ("degraded", "manual source has no rows")
     if explicit == "auth_failed":
         return "setup_required", "API key rejected by upstream — re-provision the secret"
     if explicit == "degraded_fallback":
@@ -626,6 +638,8 @@ def main():
             "latest_period": period,
             "age_days": (TODAY - dt).days if dt else None,
         }
+        if "review_days" in spec:
+            rows[spec["key"]]["review_days"] = spec["review_days"]
         # v38 — flag stale (refresh overdue). Exempt manual/annual snapshots and
         # static deep-link helpers, which are expected to be old by design.
         _age = rows[spec["key"]]["age_days"]
