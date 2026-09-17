@@ -36779,12 +36779,16 @@ function renderMethodologyTab() {
             const comp=[0,1,2,3,4,5,6,7,8].map(k=>{
               const v=ex.c[k];
               if (typeof v==='number'&&isFinite(v)) return v;
-              return k===6?sce:0;
+              return (k===6 && typeof ex._sce==='number' && isFinite(ex._sce)) ? sce : null;
             });
-            let base=0; const rows=comp.map((v,k)=>{ const t=W[k]*v; base+=t;
-              return `<div style="display:flex;justify-content:space-between;gap:10px;"><span style="color:var(--t3)">${names[k]}</span><span>${(typeof ex.c[k]==='number'||k===6)?Math.round(v):'— (0)'} × ${W[k]} = <b style="color:var(--t1)">${t.toFixed(1)}</b></span></div>`; }).join('');
-            const amp=Math.min(6*(comp[0]/100)*(comp[7]/100),6);
-            const total=Math.max(0,Math.min(100,Math.round(base+amp)));
+            /* Same arithmetic as the scorer (fdrsV2): a missing component drops out and
+               the observed weights are renormalised, instead of a missing input counting
+               as zero risk; the amplifier needs both of its inputs or it is omitted. */
+            let base=0, wObs=0; const rows=comp.map((v,k)=>{ const t=v===null?0:W[k]*v; if (v!==null){ base+=t; wObs+=W[k]; }
+              return `<div style="display:flex;justify-content:space-between;gap:10px;"><span style="color:var(--t3)">${names[k]}</span><span>${v!==null?Math.round(v):'— (no data, omitted)'} × ${W[k]} = <b style="color:var(--t1)">${v!==null?t.toFixed(1):'—'}</b></span></div>`; }).join('');
+            if (wObs>0 && wObs<1) base=base/wObs;
+            const amp=(comp[0]!==null&&comp[7]!==null)?Math.min(6*(comp[0]/100)*(comp[7]/100),6):0;
+            const total=wObs>0?Math.max(0,Math.min(100,Math.round(base+amp))):0;
             return `
         <div style="margin-top:10px;padding:12px 14px;background:var(--bg0);border:1px solid var(--b1);border-radius:6px;font-family:'Geist Mono',monospace;font-size:11px;line-height:1.9;">
           <div style="font-family:'Geist',sans-serif;font-size:10px;color:var(--accent);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;">Worked example: ${ex.name}, computed live from the data on this page</div>
@@ -38116,6 +38120,9 @@ async function loadDisturbanceData() {
       // read like a live one; entries on record stay in the Trade tab, the
       // country flag and the brief, where "on record" is spelled out.
       if (r.status === 'historical') return;
+      // A measure with a published end date leaves the live layer the day after it
+      // lapses (India's sugar prohibition runs to 30 Sep 2026); it stays on record.
+      if (r.ends_date && Date.parse(r.ends_date + 'T23:59:59Z') < Date.now()) return;
       const exp = (typeof restrictionExposure === 'function') ? restrictionExposure(r.iso, r.commodity, 4) : [];
       const expTxt = exp.length
         ? ' Most exposed importers: ' + exp.map(e => `${e.name} ${e.share_pct}% (FDRS ${e.fdrs != null ? e.fdrs : '—'})`).join(', ') + '.'
@@ -44968,7 +44975,8 @@ function showCommodityDetail(key) {
     if (tr.length) {
       /* The tracker's statuses are official, reported and historical; anything
          not historical is a measure in force or reported in force. */
-      var active = tr.filter(function (r) { return r.status !== 'historical'; }).length;
+      var inForce = function (r) { return r.status !== 'historical' && !(r.ends_date && Date.parse(r.ends_date + 'T23:59:59Z') < Date.now()); };
+      var active = tr.filter(inForce).length;
       policyPlate = '<figure class="enso-plate">' + plateHead('Export restrictions on record', 'IFPRI Export Restrictions Tracker · ' + (active ? active + ' active' : 'no current measure'), stamp(metaDate('restrictions')), 'published') +
         '<div class="plate-body"><ul class="enso-rail-list">' + tr.slice(0, 10).map(function (r) {
           return '<li><button class="enso-chip" onclick="ensoFocus(\'' + esc(r.iso) + '\')">' + esc(r.country) + '</button><span>' + esc(r.commodity) + ' · ' + esc(r.measure) + ' <em style="font-style:normal;color:' + (r.status !== 'historical' ? RAMP[3] : 'var(--t3)') + '">' + esc(r.status === 'historical' ? 'on record' : r.status) + '</em></span></li>';

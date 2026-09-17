@@ -12,7 +12,7 @@ Writes: data/nowcast.json
 Formula (extended May 2026, expanded May 2026 v20.27):
   Nowcast adjustment (range: -10 to +35 points) =
       ipc_pressure       (0-12)  — share of population in IPC Phase 3+
-    + fews_kick          (0-6)   — FEWS NET forward projection: gap-fills the crisis
+    + fews_kick          (0-6)   — FEWS NET forward projection, weighted by the age of its assessment period (v86): gap-fills the crisis
                                    level where IPC is absent, plus a deterioration nudge
                                    when the near-term projection is worse than current
     + wfp_pressure       (0-6)   — FCS prevalence above 30%
@@ -40,10 +40,41 @@ Formula (extended May 2026, expanded May 2026 v20.27):
 """
 import json
 import math
+import re
 from pathlib import Path
 from datetime import datetime, timezone
 
 DATA = Path(__file__).resolve().parent.parent / "data"
+
+
+_MONTHS = {m: i for i, m in enumerate(
+    ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 1)}
+
+
+def _period_weight(period, full_days=365, zero_days=730):
+    """Weight for a FEWS NET assessment period label such as 'Jun-Sep 2026' or
+    'Apr-Apr 2023' (en dash or hyphen): 1.0 while the period ended within
+    full_days, linear to 0.0 at zero_days, 0.0 when the label cannot be read.
+
+    v86 -- the FEWS collector writes the collection date into as_of, so the
+    period label is the only vintage the row carries; without this gate a
+    2023 assessment gap-fills the crisis term as if it were this season.
+    """
+    if not isinstance(period, str):
+        return 0.0
+    m = re.search(r"([A-Za-z]{3})[^A-Za-z0-9]+([A-Za-z]{3})\s+(\d{4})", period)
+    if not m:
+        return 0.0
+    mon = _MONTHS.get(m.group(2)[:3].title())
+    if not mon:
+        return 0.0
+    end = datetime(int(m.group(3)), mon, 28, tzinfo=timezone.utc)
+    age = (datetime.now(timezone.utc) - end).days
+    if age <= full_days:
+        return 1.0
+    if age >= zero_days:
+        return 0.0
+    return round(1.0 - (age - full_days) / float(zero_days - full_days), 3)
 
 
 def _age_days(as_of):
@@ -265,6 +296,11 @@ def main():
         #       worse than the current_phase, add a small kick regardless of IPC.
         # Capped at +6 so a projection can't dominate observed current conditions.
         fw_row      = fews.get(iso) or {}
+        # v86 -- the collector stamps as_of with the collection date, so the
+        # assessment period is the only honest vintage: full weight for a period
+        # that ended within a year, linear to zero at two years. On 2026-09-16
+        # twenty-four of twenty-eight rows still carried "Apr-Apr 2023".
+        fews_w      = _period_weight(fw_row.get("current_period"))
         fews_cur    = fw_row.get("current_phase")
         fews_proj   = fw_row.get("projected_phase")
         ipc_present = (ipc.get(iso) or {}).get("phase3plus_pct") is not None
@@ -284,6 +320,9 @@ def main():
                 # double-counting IPC's current-phase reading.
                 fews_kick  = min(6, fews_kick + 1)
                 fews_basis = fews_basis or "sustained_projection"
+        if fews_kick and fews_w < 1.0:
+            fews_kick  = int(round(fews_kick * fews_w))
+            fews_basis = (fews_basis or "fews") + ("_stale" if fews_w == 0 else "_aged")
 
         # v43 — internal displacement (HDX HAPI). Magnitude-banded on ABSOLUTE IDP
         # count (countries.json has no population, so this is not per-capita — a

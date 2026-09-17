@@ -40,6 +40,7 @@ No third-party stats libs: Spearman ρ and ROC-AUC (Mann–Whitney) are implemen
 Usage: python3 scripts/validate_fdrs.py   → prints report, writes data/fdrs_validation.json
 """
 import json
+import math
 from pathlib import Path
 
 from _common import DATA_DIR, write_json
@@ -284,7 +285,8 @@ def main():
     for iso, f in fdrs.items():
         adj = (nowcast.get(iso) or {}).get("adjustment") if isinstance(nowcast.get(iso), dict) else None
         if isinstance(adj, (int, float)):
-            fdrs_nc[iso] = max(0, min(100, round(f + adj)))
+            # floor(x + 0.5) matches the browser's Math.round; Python's round() ties to even.
+            fdrs_nc[iso] = max(0, min(100, math.floor(f + adj + 0.5)))
             n_adjusted += 1
         else:
             fdrs_nc[iso] = f
