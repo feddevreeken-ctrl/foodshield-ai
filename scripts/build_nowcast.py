@@ -265,6 +265,12 @@ def main():
             ipc_weight = max(0.0, 1.0 - (ipc_age_days - 365) / 365.0)
         else:
             ipc_weight = 1.0
+        # Two gates, both must pass: the analysis date within 365 days (linear to
+        # zero at 730) above, and here the assessment's own validity: full weight
+        # while the stated period runs, then a 30-to-90-day decay after it ends.
+        # This second gate is the one that moves Syria, DR Congo and Somalia when
+        # their analyses lapse; it follows the formula review's Q2 and is the
+        # owner's to soften (for example 90/180) if lapsed IPC should linger.
         ipc_valid_until = _period_end(_ipc_row.get("period")) or _ipc_row.get("analysis_date")
         ipc_weight = min(ipc_weight, _freshness_weight(ipc_valid_until))
         wfp_fcs  = (wfp.get(iso) or {}).get("fcs_pct") or 0
@@ -302,7 +308,7 @@ def main():
                                "basis": basis or ("observation/window end" if date else
                                "undated: only a collection date, if any, is available; outer bound 0")}
             return weight
-        term_weight("ipc_pressure", ipc_valid_until, basis="assessment validity end or analysis_date; 365/730 analysis outer bound")
+        term_weight("ipc_pressure", ipc_valid_until, basis="full weight through the assessment's validity end (or analysis_date), then 30/90-day decay; analysis_date must also be within 365 days (zero at 730)")
         freshness["ipc_pressure"]["weight"] = ipc_weight
         freshness["caseload_kick"] = dict(freshness["ipc_pressure"])
         # HungerMap rows carry the analysis month as analysis_date (monthly at
