@@ -158,7 +158,7 @@ def main() -> int:
             "region": N34, "baseline": REL_BASE,
             "threshold": 0.8,
             "note": "BoM's operational ocean index since Sept 2025, and it uses a higher "
-                    "threshold (+0.8) than CPC (+0.5) -- the same water clears a different bar.",
+                    "threshold (+0.8) than CPC (+0.5): the same water clears a different bar.",
             "url": BOM_RNINO_URL,
         }
 
@@ -197,11 +197,11 @@ def main() -> int:
     # file exists to prevent. So the invariant is derived from the rows.
     FIELDS = ("agency", "region", "baseline", "window")
     READINGS = {
-        "baseline": "A like-for-like comparison. The whole gap is the choice of baseline -- "
+        "baseline": "A like-for-like comparison. The whole gap is the choice of baseline: "
                     "removing the tropical-mean warming trend, nothing else.",
         "window": "NOT a disagreement. The gap is arithmetic: one number has been averaged "
                   "down over a longer period and the other has not.",
-        "agency": "Same water, same window, same baseline -- the gap is two agencies' "
+        "agency": "Same water, same window, same baseline: the gap is two agencies' "
                   "processing chains, not two different climates.",
         "region": "Different boxes of ocean. The gap is where you look, not how you measure.",
     }

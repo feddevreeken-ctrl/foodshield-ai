@@ -128,7 +128,7 @@ def main() -> int:
         "index": "ONI (CPC oni.ascii.txt)",
         "index_note": (
             "ONI as published by CPC. CPC's OFFICIAL headline index is now RONI, and BoM "
-            "uses a relative Nino3.4 with a higher threshold -- the same ocean reads "
+            "uses a relative Ni\u00f1o 3.4 with a higher threshold: the same ocean reads "
             "differently on each. Do not compare this value against another agency's."),
         "latest": {
             "season": latest["season"], "year": latest["year"],
@@ -147,7 +147,7 @@ def main() -> int:
         "history": [{"season": r["season"], "year": r["year"], "anom": r["anom"]}
                     for r in oni if r["season"] == "DJF"],
         "history_note": (
-            "One point per ENSO year, taken at the DJF peak -- the season the event is "
+            "One point per ENSO year, taken at the DJF peak: the season the event is "
             "conventionally named for and the one CPC's own event tables use. The current "
             "season is shown separately because this event has not reached its DJF yet."),
         "weekly_nino34": {
@@ -155,7 +155,7 @@ def main() -> int:
             "nino12_anom": w["nino12_anom"],
             "east_based": bool(w["nino12_anom"] > w["nino34_anom"]),
             "east_based_note": (
-                "Nino1+2 running warmer than Nino3.4 indicates an EAST-BASED event, which "
+                "Ni\u00f1o 1+2 running warmer than Ni\u00f1o 3.4 indicates an EAST-BASED event, which "
                 "matters most for coastal Peru and Ecuador. Note: no published source was "
                 "found linking this structure to a distinct global crop-teleconnection "
                 "footprint, so the dashboard does not model one."),
