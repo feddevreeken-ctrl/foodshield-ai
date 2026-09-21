@@ -43858,7 +43858,11 @@ function showCommodityDetail(key) {
       : '<div class="enso-ramp">' + ramp + '</div>' +
         '<div style="display:flex;justify-content:space-between;font-family:\'Geist Mono\',monospace;font-size:9px;color:var(--t3);width:150px;margin-top:3px;">' +
         '<span>−15%</span><span>0</span><span>+15%</span></div>' +
-        '<div class="ctr-note" style="max-width:34ch;margin-top:5px;">Ochre: the fitted yield falls. Green: it rises. No fill means <b>no measured signal</b>, which is not the same as no effect.</div>' +
+        /* The ramp clamps at 15%, so Zimbabwe at −34% and South Africa at −25%
+           take the same paint as −15%. Every other ramp on this tab says where
+           it stops; this one did not, so the darkest ochre read as a value
+           rather than as a floor. */
+        '<div class="ctr-note" style="max-width:34ch;margin-top:5px;">Ochre: the fitted yield falls. Green: it rises. Fixed anchors at −15%, 0 and +15%: anything beyond them carries the end colour, so the deepest ochre is <b>15% or worse</b>, not 15%. No fill means <b>no measured signal</b>, which is not the same as no effect.</div>' +
         (S.mode === 'crop'
           ? '<div class="ctr-note" style="max-width:34ch;margin-top:5px;">The crop\u2019s fitted slope <b>times the ONI of the ' +
             'current model setting</b> (' + esc(modelStateSentence()) + '), so the colour ' +
@@ -44026,6 +44030,10 @@ function showCommodityDetail(key) {
     syncInstruments();
     var ranking = document.getElementById('enso-map-ranking');
     if (ranking) ranking.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-map-country') === S.sel)); });
+    /* Callouts are a function of the painted layer, so they are re-evaluated
+       whenever the layer changes. Before this they were drawn once per map
+       build and survived every mode switch. */
+    drawAnnotations();
     if (!S.layerBase) return;
     /* A native <select> fires change on every arrow-key step. Without this a
        user scrubbing the nine ONI levels triggers a fresh 680ms globe-wide
@@ -44486,7 +44494,15 @@ function showCommodityDetail(key) {
     if (!S.map) return;
     (S.annoLayers || []).forEach(function (l) { try { S.map.removeLayer(l); } catch (e) {} });
     S.annoLayers = [];
-    ANNOTATIONS.filter(function (a) { return !a.lens || a.lens.indexOf(S.sub) >= 0; }).forEach(function (a) {
+    /* Both remaining callouts state an El Niño yield slope from the fit, so
+       they belong to a modelled layer painted on the El Niño side and nowhere
+       else. Filtering on the lens alone left them floating over Food inflation
+       and Sea-surface, modelled numbers in a solid frame over observed paint,
+       and over a La Niña rung whose slope is the other one. */
+    var modelled = MODES_MODELLED.indexOf(S.mode) >= 0 && modelOni() > 0;
+    ANNOTATIONS.filter(function (a) {
+      return (!a.lens || a.lens.indexOf(S.sub) >= 0) && modelled;
+    }).forEach(function (a) {
       S.annoLayers.push(L.polyline([a.label, a.at], {
         color: '#e6e3da', weight: 0.7, opacity: .55, interactive: false
       }).addTo(S.map));
@@ -45132,7 +45148,8 @@ function showCommodityDetail(key) {
   ];
 
   function moreRecords(total, shown) {
-    return total > shown ? '<p class="enso-rail-more">' + (total - shown) + ' more records in this feed.</p>' : '';
+    var n = total - shown;
+    return n > 0 ? '<p class="enso-rail-more">' + n + ' more record' + (n === 1 ? '' : 's') + ' in this feed.</p>' : '';
   }
 
   function renderLive() {
@@ -45152,8 +45169,13 @@ function showCommodityDetail(key) {
     var gdDropped = gdAll.length - gd.length;
     gd.sort(function (a, b) { return (b.severity_score || 0) - (a.severity_score || 0); });
     var relAll = (S.relief && S.relief.events) || [];
-    var rel = relAll.filter(function (e) { return linkedIso[e.iso3]; }).slice(0, 12);
-    var relDropped = relAll.length - relAll.filter(function (e) { return linkedIso[e.iso3]; }).length;
+    /* relMatched, not the sliced list, is what "n more records in this feed"
+       has to count. Reading rel.length after the slice made the line report
+       the cap rather than the feed, so it said "9 more" whatever the real
+       remainder was. */
+    var relMatched = relAll.filter(function (e) { return linkedIso[e.iso3]; });
+    var rel = relMatched.slice(0, 12);
+    var relDropped = relAll.length - relMatched.length;
     var hot = [];
     for (var iso in (S.asap || {})) {
       var a = S.asap[iso];
@@ -45311,7 +45333,7 @@ function showCommodityDetail(key) {
       rail += '<figure class="enso-plate">' + plateHead('Humanitarian events', 'ReliefWeb · teleconnection countries', stamp(metaDate('relief')), 'reported') +
         '<div class="plate-body"><ul class="enso-rail-list enso-rail-links">' + rel.slice(0, 3).map(function (ev) {
           return '<li><a href="' + esc(safeUrl(ev.url)) + '" target="_blank" rel="noopener">' + esc(ev.title) + '</a><span>' + esc(ev.country || ev.iso3) + ' · ' + esc(ago(ev.date) || String(ev.date || '').slice(0, 10)) + '</span></li>';
-        }).join('') + '</ul>' + moreRecords(rel.length, 3) + '</div><figcaption class="enso-log">Appeals and assessments are reported need, not counted need.' + (relDropped ? ' ' + relDropped + ' other live events sit outside these countries.' : '') + '</figcaption></figure>';
+        }).join('') + '</ul>' + moreRecords(relMatched.length, 3) + '</div><figcaption class="enso-log">Appeals and assessments are reported need, not counted need.' + (relDropped ? ' ' + relDropped + ' other live events sit outside these countries.' : '') + '</figcaption></figure>';
     }
     /* Policy sits under the wire, not in the rail: it is the one feed that is
        a decision rather than an observation, and the left column carries the
