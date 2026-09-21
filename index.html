@@ -10921,6 +10921,8 @@ table.enso-tbl thead th:first-child { z-index:3; }
 }
 #tab-elnino *, #tab-elnino *::before, #tab-elnino *::after {
   border-radius:0!important; animation:none; transition:none!important;
+  /* see .enso-sw-round below: the square-corner reset was also flattening the
+     swatches that stand for round marks, so the key stopped matching the map */
   letter-spacing:0!important; text-transform:none!important; font-variant-numeric:tabular-nums;
 }
 #tab-elnino.active { animation:none; }
@@ -11509,6 +11511,15 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 .enso-transit-key { display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:8px 0; }
 .enso-transit-key > span { display:flex;align-items:center;gap:5px; }
 .enso-transit-key i { display:inline-block;flex:none;border:1.5px solid #e6e3da;border-radius:50%;box-sizing:border-box; }
+/* The key for a round mark is drawn as an SVG circle, not a rounded box. The
+   tab's square-corner rule is real and gated ("every element in the El Nino
+   tab has square corners"), and `border-radius:0!important` on every
+   descendant beats a class rule and an inline style alike, so a CSS circle
+   here came out square while the map drew circles and the key described marks
+   that were not on it. An SVG circle has no border radius to reset. */
+#tab-elnino .enso-transit-key svg,
+#tab-elnino .enso-sw-round { display:inline-block; flex:none; vertical-align:middle; }
+#tab-elnino .enso-legend-row .enso-sw-round { margin-right:2px; }
 #tab-elnino .enso-hotspot { background:#8866ad; fill:#8866ad; }
 #tab-elnino .enso-major-hotspot { background:#51316f; fill:#51316f; }
 #tab-elnino .enso-key-anchors { display:flex; justify-content:space-between; position:relative; width:150px; font:10px/1.5 'Geist Mono',monospace; }
@@ -43477,8 +43488,8 @@ function showCommodityDetail(key) {
     var counts = {gdacs:0, relief:0};
     S.alertPins.forEach(function (m) { if (counts[m.options.ensoSource] != null) counts[m.options.ensoSource]++; });
     return '<div class="enso-legend-block"><div class="enso-legend-t">Hazard alerts · reported feeds</div>' +
-      '<div class="enso-legend-row"><span class="enso-sw" style="background:#11161e;border:2px solid #ffd080;border-radius:50%;width:10px;height:10px"></span> GDACS drought / flood / cyclone · GDACS ' + counts.gdacs + '</div>' +
-      '<div class="enso-legend-row"><span class="enso-sw" style="background:#11161e;border:2px solid #b8edf2;border-radius:50%;width:8px;height:8px"></span> ReliefWeb humanitarian event · ReliefWeb ' + counts.relief + '</div>' +
+      '<div class="enso-legend-row"><svg class="enso-sw-round" aria-hidden="true" width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" fill="#11161e" stroke="#ffd080" stroke-width="2"/></svg> GDACS drought / flood / cyclone · GDACS ' + counts.gdacs + '</div>' +
+      '<div class="enso-legend-row"><svg class="enso-sw-round" aria-hidden="true" width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.5" fill="#11161e" stroke="#b8edf2" stroke-width="2"/></svg> ReliefWeb humanitarian event · ReliefWeb ' + counts.relief + '</div>' +
       (S.alertCounts && S.alertCounts.reliefUnplaced
         ? '<div class="enso-legend-note">' + S.alertCounts.reliefUnplaced + ' of ' + S.alertCounts.reliefTotal +
           ' ReliefWeb reports carry no country shape this map can place, including world-level entries, and are not drawn.</div>'
@@ -44098,7 +44109,9 @@ function showCommodityDetail(key) {
       esc(periods.length ? periods.join('; ') : 'no measured transit change available') + '; collected ' + esc(stamp(metaDate('portwatch'))) + '.</div>' +
       '<div class="enso-transit-key" aria-label="Ring size guide, absolute year-on-year change">' + [0,25,50].map(function (pct) {
         var size = transitRadius(pct) * 2;
-        return '<span><i aria-hidden="true" style="width:' + size + 'px;height:' + size + 'px"></i>' + (pct ? '±' : '') + pct + '%</span>';
+        return '<span><svg aria-hidden="true" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' +
+          '<circle cx="' + (size/2) + '" cy="' + (size/2) + '" r="' + (size/2 - 0.75) + '" fill="none" stroke="#e6e3da" stroke-width="1.5"/></svg>' +
+          (pct ? '±' : '') + pct + '%</span>';
       }).join('') + '</div><div class="enso-legend-note">Ring radius grows with absolute change, capped at 100%; − means fewer transits, + means more. Hue is the published ENSO tag, not the measured change.</div>' +
       (missing.length ? '<div class="enso-legend-note enso-transit-missing">Hollow diamond, no ring: no PortWatch transit change available for ' + esc(missing.join(', ')) + '.</div>' : '') +
       /* The measured cause behind the Panama ring, read from the lane's own
