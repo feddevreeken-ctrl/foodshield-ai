@@ -44,7 +44,7 @@ const pending=[];
 const ctx=vm.createContext({console,Date,URL,URLSearchParams,Event,L,charts:{},RAMP:['#1','#2','#3','#4','#5'],setTimeout:fn=>pending.push(fn),clearTimeout(){},window:{location:{href:'http://localhost/index.html',search:''},matchMedia(){return {matches:true};}},document:{getElementById:node,querySelector:s=>s==='#tab-elnino .content-page'?node('scroller'):null,querySelectorAll(){return [];},createElement:t=>new Element(t),createElementNS:(_,t)=>new Element(t),addEventListener(){}}});
 const start=html.indexOf('(function () {',html.indexOf('   THE MAP USES A DIVERGING')),end=html.indexOf('\n})();',start);
 vm.runInContext(html.slice(start,end)+`
-  globalThis.api={S,renderMapRanking,rankedPrices,rankedHotspots,priceMapSentence,mapState,renderControls,syncInstruments,selectCountry,flyTo,drawAlerts,alertLegend,corridorChipCandidates,placeCorridorChips,renderLegend,drawLanes,laneGeometry,corridorGeometry,fillFor,rtfpColor,renderWater,renderMoney,renderCoeffs,renderCalendar,analogPlate,drawCharts,paint,toggleSST,buildDefs};
+  globalThis.api={S,laneMeasurement,transitKey,renderMapRanking,rankedPrices,rankedHotspots,priceMapSentence,mapState,renderControls,syncInstruments,selectCountry,flyTo,drawAlerts,alertLegend,corridorChipCandidates,placeCorridorChips,renderLegend,drawLanes,laneGeometry,corridorGeometry,fillFor,rtfpColor,renderWater,renderMoney,renderCoeffs,renderCalendar,analogPlate,drawCharts,paint,toggleSST,buildDefs};
   mk=function(id,cfg){ if(!S._chartFilter || S._chartFilter.indexOf(id)>=0) globalThis.charts[id]=cfg; };
   syncInstruments=renderMapTag=renderControls=renderDetail=renderFailures=wireTabKeys=syncTabRoving=wireRasterPlates=finishPlates=renderSubviewMeta=function(){};
 })();`,ctx);
@@ -72,18 +72,43 @@ test('lane geometry is data-only, validated and phase coloured',()=>{
  assert.equal(api.laneGeometry({geometry:{type:'LineString',coordinates:[[999,20],[0,0]]}}).length,0);
  S.lanes=original;S.lanePins=[];S.laneLines=[];api.drawLanes();
 });
-test('Shipping draws nine sourced schematic corridors, chips and destination chevrons',()=>{
+test('Shipping draws nine sourced schematic corridors, chips and destination triangles',()=>{
  assert.equal(S.corridorLines.length,9);assert.equal(S.corridorLabels.length,9);assert.equal(S.corridorArrows.length,9);
  S.corridors.corridors.forEach((c,i)=>{
   const lane=S.lanes.lanes.find(l=>l.id===c.lane),line=S.corridorLines[i];
   assert.equal(c.phase,lane.phase);assert.equal(line.options.color,{el_nino:'#d2693a',la_nina:'#4a86b3',none:'#6a685e'}[c.phase]);
-  assert.equal(line.options.weight,2);assert.equal(line.options.opacity,.75);
+  assert.equal(line.options.weight,c.phase==='el_nino'?2:1);assert.equal(line.options.opacity,c.phase==='el_nino'?.75:.35);
+  assert.equal(line.options.dashArray,'6 4');
+  assert(S.corridorArrows[i].options.icon.html.includes('<svg'));assert(S.corridorArrows[i].options.icon.html.includes('<path'));
   assert.equal(S.corridorLabels[i].options.icon.className,'enso-corridor-chip'+(c.phase==='el_nino'?'':' enso-corridor-secondary'));
   for(const text of [c.name,c.basis,'schematic corridor through named waypoints, not vessel tracks',...c.commodities,...c.sources])assert(line.tooltip.includes(text.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')));
  });
  assert(S.lanePins.every(p=>p.options.zIndexOffset>S.corridorLabels[0].options.zIndexOffset));
- const old=S.corridorLines.concat(S.corridorLabels,S.corridorArrows);old.forEach(l=>l.addTo(S.map));api.drawLanes();
+ const old=S.corridorLines.concat(S.corridorLabels,S.corridorArrows,S.corridorEdges);old.forEach(l=>l.addTo(S.map));api.drawLanes();
  assert(old.every(l=>!S.map.hasLayer(l)));assert.equal(S.corridorLines.length,9);
+});
+test('Stage I transit rings join actual lane values and distinguish zero, missing and increases',()=>{
+ S.lanes.lanes.forEach((ln,i)=>{
+  const m=api.laneMeasurement(ln),html=S.lanePins[i].options.icon.html,pw=S.portwatch[ln.portwatch_key];
+  if(!pw){assert.equal(m,null);assert(html.includes('no transit data'));assert(!html.includes('enso-transit-ring'));}
+  else {assert.equal(m.pct,pw.yoy.total_pct);assert.equal(m.total,pw.transits_per_day.total);assert(html.includes('data-yoy="'+pw.yoy.total_pct+'"'));}
+ });
+ const original=S.portwatch,ln={portwatch_key:'fixture'};
+ try {
+  for(const pct of [-100,-25,0,25,100,150]){
+   S.portwatch={fixture:{yoy:{total_pct:pct},transits_per_day:{total:0}}};
+   const m=api.laneMeasurement(ln);assert.equal(m.pct,pct);assert.equal(m.radius,9+Math.min(Math.abs(pct),100)*.24);
+  }
+  for(const pw of [{},{yoy:{total_pct:null},transits_per_day:{total:1}},{yoy:{total_pct:'2'},transits_per_day:{total:1}},
+    {yoy:{total_pct:Infinity},transits_per_day:{total:1}},{yoy:{total_pct:2},transits_per_day:{total:null}}]){
+   S.portwatch={fixture:pw};assert.equal(api.laneMeasurement(ln),null);
+  }
+ } finally {S.portwatch=original;}
+ assert(api.transitKey().includes('IMF PortWatch'));assert(api.transitKey().includes('28-day mean'));
+});
+test('Stage I Panama continuation names occupy both dateline endpoints',()=>{
+ assert.equal(S.corridorEdges.length,2);assert.deepEqual(S.corridorEdges.map(l=>l.coords[1]),[-180,180]);
+ assert(S.corridorEdges.every(l=>l.options.icon.html.includes('↔ Gulf to East Asia')&&l.options.icon.html.includes('us_gulf_panama_east_asia')));
 });
 test('long ocean legs curve and split at the dateline without a world-spanning chord',()=>{
  const path=api.corridorGeometry(S.corridors.corridors[0].waypoints);
@@ -93,18 +118,37 @@ test('long ocean legs curve and split at the dateline without a world-spanning c
  assert(Math.max(...path.flat().map(p=>p[0]))>35.44);
  assert.equal(api.corridorGeometry([[0,0],[100,0]]).length,0);
 });
-test('Stage H price ranking is finite, descending, dated and honest about sparse coverage',()=>{
- const saved=S.rtfp, oldMode=S.mode;S.mode='rtfp';
+/* Rewritten for the owner's "prices one dont show all countries of the el nino".
+   The rail used to rank the twelve highest inflations in the whole RTFP feed,
+   so it could run without naming one teleconnection country, while 22 of the 37
+   it does name carry no monitored market and appeared nowhere. It now lists
+   every teleconnection country, valued first and descending, then the ones with
+   no value, then the monitored countries outside the layer. */
+test('Stage I price rail lists every teleconnection country, valued first, and names the rest',()=>{
+ const saved=S.rtfp, oldMode=S.mode, oldIdx=S.isoIndex;S.mode='rtfp';
  api.renderMapRanking();const list=node('enso-map-ranking');
- const expected=Object.keys(saved).filter(k=>Number.isFinite(saved[k].food_inflation_pct)).sort((a,b)=>saved[b].food_inflation_pct-saved[a].food_inflation_pct).slice(0,12);
- assert.deepEqual(list.querySelectorAll('button').map(b=>b.getAttribute('data-map-country')),expected);
- expected.forEach(k=>{assert(list.textContent.includes(saved[k].as_of));assert(list.textContent.includes(saved[k].markets+' markets'));});
+ const tele=Object.keys(oldIdx||{});
+ const shown=list.querySelectorAll('button').map(b=>b.getAttribute('data-map-country'));
+ tele.forEach(k=>assert(shown.includes(k),k+' must be listed'));
+ const valued=k=>Number.isFinite((saved[k]||{}).food_inflation_pct);
+ Object.keys(saved).filter(valued).forEach(k=>assert(shown.includes(k),k+' is painted, so it must be listed'));
+ const teleShown=shown.filter(k=>tele.includes(k)), teleValued=teleShown.filter(valued);
+ assert.deepEqual(teleShown.slice(0,teleValued.length),teleValued,'valued teleconnection rows lead');
+ teleValued.forEach((k,i)=>{if(i)assert(saved[teleValued[i-1]].food_inflation_pct>=saved[k].food_inflation_pct);});
+ teleValued.forEach(k=>{assert(list.textContent.includes(saved[k].as_of));assert(list.textContent.includes(saved[k].markets+' markets'));});
+ if(teleShown.length>teleValued.length)assert(list.textContent.includes('No monitored market'));
  assert.equal(api.mapState().title,'Where food prices are rising fastest');assert(api.priceMapSentence().includes('as of August 2026'));
+ S.isoIndex={ZWE:[{}],KEN:[{}]};
  S.rtfp={ZWE:{food_inflation_pct:0,markets:2,as_of:'2026-07-01'},USA:{food_inflation_pct:-2,markets:3,as_of:'2026-08-01'},BAD:{food_inflation_pct:null},NAN:{food_inflation_pct:NaN}};
- api.renderMapRanking();assert.equal(list.querySelectorAll('button').length,2);assert(list.textContent.includes('Only 2 countries carry a value'));
+ api.renderMapRanking();
+ assert.deepEqual(list.querySelectorAll('button').map(b=>b.getAttribute('data-map-country')),['ZWE','KEN','USA']);
+ assert(list.textContent.includes('No monitored market'));
+ assert(list.textContent.includes('1 monitored countries outside the layer'));
  assert(api.priceMapSentence().includes('July 2026 to August 2026'));
- S.rtfp={};api.renderMapRanking();assert(list.textContent.includes('Only 0 countries'));assert(api.priceMapSentence().includes('reporting date unavailable'));
- S.rtfp=saved;S.mode=oldMode;
+ S.rtfp={};api.renderMapRanking();
+ assert.deepEqual(list.querySelectorAll('button').map(b=>b.getAttribute('data-map-country')),['KEN','ZWE'],'with no values at all both fall back to name order');
+ assert(api.priceMapSentence().includes('reporting date unavailable'));
+ S.rtfp=saved;S.mode=oldMode;S.isoIndex=oldIdx;
 });
 test('Stage H ASAP ranks major before hotspot and exposes assessment months',()=>{
  const saved=S.asap,oldMode=S.mode;S.mode='asap';
@@ -220,9 +264,10 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    assert.equal(S.mode,mode);
    for(const l of [S.nino34,S.ninoLabel,S.sstLayer])assert.equal(S.map.hasLayer(l),view==='elnino');
    assert.equal(S.map.hasLayer(S.layerRegions),view==='ensoharvest');
-   for(const l of S.lanePins.concat(S.laneLines,S.corridorLines,S.corridorLabels,S.corridorArrows))assert.equal(S.map.hasLayer(l),view==='ensowater');
+   for(const l of S.lanePins.concat(S.laneLines,S.corridorLines,S.corridorLabels,S.corridorArrows,S.corridorEdges))assert.equal(S.map.hasLayer(l),view==='ensowater');
    for(const l of S.alertPins)assert.equal(S.map.hasLayer(l),view==='ensolive');
-   assert.equal(S.annoLayers.length,view==='ensoharvest'?6:view==='ensowater'?3:0);
+   /* Shipping has no callout any more: the Gatun card was the largest object on a map whose subject is the marks under it, and its numbers moved into the fold. Harvests keeps its two (three layers each). */
+   assert.equal(S.annoLayers.length,view==='ensoharvest'?6:0);
    assert.equal(country.options.color,['ensoharvest','ensomoney','ensolive'].includes(view)?'#ebe9e2':'#0b0b0d');
    if(view!=='ensolive')assert(!country.element.classList.contains('enso-hotspot')&&!country.element.classList.contains('enso-major-hotspot'));
    const legend=node('enso-legend'),visible=legend.querySelector('.enso-legend'),key=visible.textContent;
@@ -231,7 +276,8 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    assert.equal(key.includes('El Niño reduces output here'),view==='ensoharvest');
    assert.equal(key.includes('El Niño raises output here'),view==='ensoharvest');
    assert.equal(key.includes('degraded on the La Niña side'),view==='ensowater');
-   assert.equal(key.includes('corridor: schematic route through named ports and chokepoints'),view==='ensowater');
+   assert.equal(key.includes('solid: observed transits at the chokepoint'),view==='ensowater');
+   assert.equal(key.includes('dashed: published schematic corridor through named ports'),view==='ensowater');
    if(view==='ensowater'){assert.equal(S.corridorLines.filter(l=>S.map.hasLayer(l)).length,9);assert.equal(S.corridorLabels.filter(l=>S.map.hasLayer(l)).length,9);for(const c of S.corridors.corridors){assert(legend.querySelector('details').textContent.includes(c.basis.replace(/'/g,'&#39;')));}}
    assert.equal(key.includes('GDACS drought'),view==='ensolive');
    if(view==='ensolive')for(const label of ['hotspot','major hotspot','ReliefWeb humanitarian event'])assert(key.includes(label));

@@ -688,21 +688,41 @@ def main() -> int:
         for tab, feed in (('ensomoney', 'rtfp'), ('ensolive', 'asap')):
             page.evaluate("tab => showTab(tab)", tab)
             page.wait_for_selector('#enso-map-ranking button')
+            # The price rail no longer ranks the twelve highest inflations in the
+            # whole RTFP feed. The owner asked for "all countries of the el nino",
+            # so it lists every country the published teleconnection layer names,
+            # valued ones first in descending order, then those with no monitored
+            # market, then the monitored countries outside the layer.
             valid = page.evaluate("""async feed => {
                 const data = (await (await fetch('data/' + feed + '.json')).json()).data;
                 const buttons = [...document.querySelectorAll('#enso-map-ranking button')];
-                const rows = buttons.map(b => data[b.dataset.mapCountry]);
-                const expected = Object.values(data).filter(r => feed === 'rtfp'
-                    ? Number.isFinite(r.food_inflation_pct) : [1,2].includes(r.hotspot_code));
-                const key = feed === 'rtfp' ? 'food_inflation_pct' : 'hotspot_code';
-                const top = expected.map(r => r[key]).sort((a,b) => b-a).slice(0, feed === 'rtfp' ? 12 : expected.length);
+                const isos = buttons.map(b => b.dataset.mapCountry);
                 const m = document.getElementById('enso-map').getBoundingClientRect();
                 const a = document.getElementById('enso-map-ranking').getBoundingClientRect();
-                return JSON.stringify(rows.map(r => r[key])) === JSON.stringify(top)
-                    && rows.every((r,i) => feed === 'rtfp'
-                        ? buttons[i].textContent.includes(r.markets + ' markets') && buttons[i].textContent.includes(r.as_of)
-                        : buttons[i].textContent.includes(new Date(r.assessment_date).toLocaleDateString('en-US', {month:'long',year:'numeric',timeZone:'UTC'})))
-                    && a.left >= m.right - 1;
+                if (a.left < m.right - 1) return false;
+                if (feed !== 'rtfp') {
+                    const rows = isos.map(i => data[i]);
+                    const expected = Object.values(data).filter(r => [1,2].includes(r.hotspot_code));
+                    const top = expected.map(r => r.hotspot_code).sort((x,y) => y-x);
+                    return JSON.stringify(rows.map(r => r.hotspot_code)) === JSON.stringify(top)
+                        && rows.every((r,i) => buttons[i].textContent.includes(
+                            new Date(r.assessment_date).toLocaleDateString('en-US', {month:'long',year:'numeric',timeZone:'UTC'})));
+                }
+                const regions = (await (await fetch('data/enso_regions.json')).json()).data.regions;
+                const tele = [...new Set(regions.flatMap(r => r.iso3 || []))];
+                const valuedOf = i => Number.isFinite((data[i] || {}).food_inflation_pct);
+                if (!tele.every(i => isos.includes(i))) return false;
+                const outside = Object.keys(data).filter(i => valuedOf(i) && !tele.includes(i));
+                if (!outside.every(i => isos.includes(i))) return false;
+                const teleRows = isos.filter(i => tele.includes(i));
+                const teleValued = teleRows.filter(valuedOf);
+                if (teleRows.slice(0, teleValued.length).some(i => !valuedOf(i))) return false;
+                const vals = teleValued.map(i => data[i].food_inflation_pct);
+                if (vals.some((v,i) => i && v > vals[i-1])) return false;
+                return isos.every((iso,i) => valuedOf(iso)
+                    ? buttons[i].textContent.includes(data[iso].markets + ' markets')
+                      && buttons[i].textContent.includes(data[iso].as_of)
+                    : buttons[i].textContent.includes('No monitored market'));
             }""", feed)
             first = page.locator('#enso-map-ranking button').first
             iso = first.get_attribute('data-map-country')
@@ -727,8 +747,8 @@ def main() -> int:
         check("Stage H both ranked lists stack below the map on phones", all(stacked))
         page.evaluate("showTab('ensowater')")
         check("Stage H phones show only three El Nino corridor chips and retain all routes in the fold",
-              page.locator('.enso-corridor-chip:visible').count() == 3
-              and page.locator('.enso-corridor-secondary:visible').count() == 0
+              page.locator('.enso-corridor-chip > span:visible').count() == 3
+              and page.locator('.enso-corridor-secondary > span:visible').count() == 0
               and 'all corridors are listed here' in page.locator('#enso-legend details').text_content())
         page.set_viewport_size({'width':1440,'height':1000})
         page.locator('#enso-mapwrap [data-z="0"]').click()
@@ -747,6 +767,108 @@ def main() -> int:
             const chips = [...document.querySelectorAll('.enso-corridor-chip > span')].filter(e => /Gulf to East Asia|Amazon northern arc/.test(e.textContent));
             const chokes = [...document.querySelectorAll('.enso-choke-label')].map(e => e.getBoundingClientRect());
             return chips.length === 2 && chips.every(c => chokes.every(b => !overlap(c.getBoundingClientRect(),b)));
+        }"""))
+
+        print("\nStage I shipping marks and measurements")
+        check("Stage I corridor polylines are dashed and lane polylines remain solid", page.evaluate("""() => {
+            const corridors = [], lanes = [];
+            _stageHMap.eachLayer(l => {
+                if (l.options.className === 'enso-corridor') corridors.push(l);
+                if (l.options.className === 'enso-lane') lanes.push(l);
+            });
+            // The supplied lanes have no line geometry; Stage D exercises solid lane fixtures.
+            return corridors.length === 9 && corridors.every(l => l.options.dashArray === '6 4'
+                && l.getElement().getAttribute('stroke-dasharray') === '6 4')
+                && lanes.every(l => !l.options.dashArray && !l.getElement().hasAttribute('stroke-dasharray'));
+        }"""))
+        visible_key = page.locator('#enso-legend > .enso-legend').inner_text()
+        check("Stage I visible key distinguishes observed transits from published schematic corridors",
+              'solid: observed transits at the chokepoint' in visible_key
+              and 'dashed: published schematic corridor through named ports' in visible_key)
+        check("Stage I magnitude joins each lane to PortWatch and names missing values", page.evaluate("""async () => {
+            const lanes = (await (await fetch('data/enso_lanes.json')).json()).data.lanes;
+            const feed = await (await fetch('data/portwatch.json')).json();
+            const rings = document.querySelectorAll('.enso-choke .enso-transit-ring');
+            const key = document.querySelector('#enso-legend > .enso-legend').innerText;
+            const date = s => new Date(s).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
+            let measured = 0, missing = 0;
+            return lanes.every(ln => {
+                const label = document.querySelector('.enso-choke-label[data-lane="' + ln.id + '"]');
+                if (!label) return false;
+                const pin = label.closest('.enso-choke'), ring = pin.querySelector('.enso-transit-ring');
+                const pw = feed.data[ln.portwatch_key], pct = pw && pw.yoy && pw.yoy.total_pct;
+                if (!pw || !Number.isFinite(pct) || !Number.isFinite(pw.transits_per_day.total)) {
+                    missing++;
+                    return !ring && pin.classList.contains('no-transit') && label.textContent.includes('no transit data')
+                        && key.includes('no PortWatch transit change available')
+                        && key.includes(label.firstChild.textContent);
+                }
+                measured++;
+                const expected = 2 * (9 + Math.min(Math.abs(pct),100) * .24);
+                const signed = (pct > 0 ? '+' : pct < 0 ? '−' : '') + Math.abs(pct).toFixed(1) + '% y/y';
+                return ring && Number(ring.dataset.yoy) === pct
+                    && Math.abs(parseFloat(ring.style.width) - expected) < .001
+                    && ring.style.width === ring.style.height && label.textContent.includes(signed)
+                    && !pin.classList.contains('no-transit')
+                    && key.includes(pw.window_days + '-day mean to ' + date(pw.latest_date))
+                    && pin.getAttribute('aria-label').includes(pw.transits_per_day.total.toFixed(1) + ' transits/day');
+            }) && measured === rings.length && measured > 0 && missing > 0
+                && key.includes('mean transits per day against a year earlier, IMF PortWatch')
+                && key.includes('collected ' + date(feed._meta.generated_at))
+                && key.includes('Ring radius grows with absolute change, capped at 100%');
+        }"""))
+        check("Stage I both Panama arcs carry a visible matching continuation name", page.evaluate("""() => {
+            const markers = [];
+            _stageHMap.eachLayer(l => {
+                if ((l.options.icon && l.options.icon.options.className || '').includes('enso-corridor-edge')) markers.push(l);
+            });
+            return markers.length === 2 && markers.map(l => l.getLatLng().lng).sort((a,b)=>a-b).join(',') === '-180,180'
+                && markers.every(l => {
+                    const span = l.getElement().querySelector('span'), box = span.getBoundingClientRect();
+                    return span.dataset.corridor === 'us_gulf_panama_east_asia'
+                        && span.textContent === '↔ Gulf to East Asia' && getComputedStyle(span).visibility === 'visible'
+                        && box.width > 0 && box.height > 0;
+                });
+        }"""))
+        check("Stage I nine routes and chips remain focusable with only three chips at rest", page.evaluate("""async () => {
+            const feed = (await (await fetch('data/enso_corridors.json')).json()).data.corridors;
+            const lines = [...document.querySelectorAll('path.enso-corridor')];
+            const chips = [...document.querySelectorAll('.enso-corridor-chip')];
+            const shown = e => getComputedStyle(e.querySelector('span')).visibility === 'visible';
+            return lines.length === 9 && chips.length === 9 && chips.filter(shown).length === 3
+                && feed.every(c => {
+                    const line = lines.find(e => e.dataset.corridor === c.id), chip = chips.find(e => e.dataset.corridor === c.id);
+                    const primary = c.phase === 'el_nino';
+                    return line && chip && line.tabIndex === 0 && chip.tabIndex === 0 && shown(chip) === primary
+                        && Number(line.getAttribute('stroke-width')) === (primary ? 2 : 1)
+                        && Number(line.getAttribute('stroke-opacity')) === (primary ? .75 : .35)
+                        && document.querySelector('#enso-legend details').textContent.includes(c.name);
+                });
+        }"""))
+        context_chips = page.locator('.enso-corridor-secondary')
+        focus_results = []
+        for i in range(context_chips.count()):
+            chip = context_chips.nth(i)
+            chip.focus()
+            focus_results.append(chip.evaluate("e => e === document.activeElement && getComputedStyle(e.querySelector('span')).visibility === 'visible'"))
+            chip.evaluate('e => e.blur()')
+            focus_results.append(not chip.locator('span').is_visible())
+        check("Stage I context chips reveal on keyboard focus and return to quiet on blur", len(focus_results) == 12 and all(focus_results))
+        context_id = context_chips.first.get_attribute('data-corridor')
+        context_path = page.locator(f'path.enso-corridor[data-corridor="{context_id}"]')
+        context_path.dispatch_event('mouseover')
+        hovered = context_chips.first.locator('span').is_visible()
+        context_path.dispatch_event('mouseout')
+        check("Stage I hovering a context route reveals its chip", hovered and not context_chips.first.locator('span').is_visible())
+        check("Stage I direction marks are seven pixel SVG triangles in the route hue", page.evaluate("""() => {
+            const arrows = [...document.querySelectorAll('.enso-corridor-arrow')], lines = [];
+            _stageHMap.eachLayer(l => { if (l.options.className === 'enso-corridor') lines.push(l); });
+            return arrows.length === 9 && arrows.every((el,i) => {
+                const svg = el.querySelector('svg'), path = svg && svg.querySelector('path');
+                return svg && svg.getAttribute('width') === '7' && svg.getAttribute('height') === '7'
+                    && path.getAttribute('d') === 'M0 0 L7 3.5 L0 7 Z' && !el.textContent.includes('›')
+                    && path.getAttribute('fill') === lines[i].options.color && svg.style.transform.startsWith('rotate(');
+            });
         }"""))
 
         check("no console errors", not errors, "; ".join(errors[:2]))
