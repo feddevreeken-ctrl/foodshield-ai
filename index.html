@@ -42089,6 +42089,15 @@ function showCommodityDetail(key) {
     var i = S.ipc && S.ipc[iso];
     return (i && typeof i.phase3plus_pct === 'number') ? i : null;
   }
+  /* "of 79 assessed" counted the rows in the payload. Eight of them carry
+     hotspot_code null, which is ASAP saying it has no assessment for that
+     country this month, not that it assessed and found nothing. Only the
+     numeric codes were assessed. */
+  function assessedCount() {
+    var a = S.asap || {}, n = 0;
+    for (var k in a) { if (a[k] && typeof a[k].hotspot_code === 'number') n++; }
+    return n;
+  }
   /* The country tooltip counted stories through newsFor(), which was never
      written: every hover threw before it could print. It went unseen while
      nothing but a map click reached that line, and stage H's ranked lists
@@ -42685,9 +42694,21 @@ function showCommodityDetail(key) {
   }
   function oceanHeading() {
     var e = S.enso, L = e.latest, w = e.weekly_nino34 || {}, band = liveBand(L);
-    return '<div class="enso-ocean-heading"><h2>' + esc(band) + ' in the central Pacific</h2>' +
+    /* "in the central Pacific" was written into the headline and contradicted
+       the reading underneath it: this event is east-based, Niño 1+2 at +4.5
+       against Niño 3.4 at +2.9, and the feed says so in `east_based`. The
+       basin phrase is derived from that flag now. The feed's own note is
+       explicit that no published source ties an east-based structure to a
+       distinct crop footprint, so the sentence says where the warmth sits and
+       claims nothing about harvests from it. */
+    var eastBased = w.east_based === true;
+    var where = eastBased ? 'in the eastern Pacific' : 'in the central Pacific';
+    return '<div class="enso-ocean-heading"><h2>' + esc(band) + ' ' + esc(where) + '</h2>' +
       '<p id="enso-agency-status">NOAA CPC’s ONI band is ' + esc(band) + ': <span class="enso-num">' + num(L.anom, 2) + ' °C</span> for ' + esc(L.season + ' ' + L.year) +
-      '; weekly Niño 3.4 is <span class="enso-num">' + num(w.anom, 1) + ' °C</span>, ' + esc(weeklyDate(w.date)) + '.</p>' +
+      '; weekly Niño 3.4 is <span class="enso-num">' + num(w.anom, 1) + ' °C</span>, ' + esc(weeklyDate(w.date)) + '.' +
+      (eastBased && typeof w.nino12_anom === 'number'
+        ? ' Niño 1+2 is warmer still at <span class="enso-num">' + num(w.nino12_anom, 1) + ' °C</span>, so the event is east-based; the page models no separate crop response for that structure.'
+        : '') + '</p>' +
       '<span class="enso-badge">Collected ' + esc(stamp(metaDate('enso'))) + '</span> · <a href="#enso-mech" onclick="showTab(\'ensomech\');return false">What is El Niño?</a></div>';
   }
   function renderHero() {
@@ -43476,7 +43497,14 @@ function showCommodityDetail(key) {
       '<div class="enso-legend-row"><span class="enso-sw" style="background:#d2693a;transform:rotate(45deg);width:9px;height:9px"></span> degraded on the El Niño side</div>' +
       '<div class="enso-legend-row"><span class="enso-sw" style="background:#4a86b3;transform:rotate(45deg);width:9px;height:9px"></span> degraded on the La Niña side</div>' +
       '<div class="enso-legend-row"><span class="enso-sw" style="background:#6a685e;transform:rotate(45deg);width:9px;height:9px"></span> no credible ENSO link</div>' +
-      '<div class="enso-legend-row"><span class="enso-sw" style="height:0;border-top:2px solid #e6e3da"></span>solid: observed transits at the chokepoint</div>' +
+      /* This row used to show a solid line against "solid: observed transits at
+         the chokepoint". No lane in data/enso_lanes.json carries a geometry, so
+         S.laneLines is always empty and that solid line is never drawn: the key
+         described a mark the map does not have. The observed mark here is the
+         diamond and its ring, which the rows above and the ring key below
+         already carry, so the contrast is stated in words against the dashed
+         corridor instead of with a swatch for nothing. */
+      '<div class="enso-legend-row"><span class="enso-sw" aria-hidden="true" style="width:9px;height:9px;transform:rotate(45deg);background:#11161e;border:1.5px solid #e6e3da"></span>diamond and ring: observed, measured at the chokepoint</div>' +
       (corridors.length ? '<div class="enso-legend-row"><span class="enso-sw" style="height:0;border-top:2px dashed #d2693a"></span>dashed: published schematic corridor through named ports</div>' : '') +
       transitKey() +
       '<div class="ctr-note">Diamonds: chokepoint locations; IMF PortWatch transits where available, collected ' + esc(stamp(metaDate('portwatch'))) + '. Inland waterways have no PortWatch transit count. Published lane phases reviewed ' + esc(stamp(metaDate('lanes'))) + ': ' +
@@ -43729,7 +43757,10 @@ function showCommodityDetail(key) {
       '<div class="enso-legend-row"><span class="enso-sw" style="height:0;border-top:1px solid #8aa6c4"></span>Equator</div>' +
       '<div class="enso-legend-row"><span class="enso-sw" style="height:0;border-top:1px dashed #8aa6c4"></span>Tropics</div>' +
       (S.sel && (S.sub === 'ensoharvest' || S.mode === 'rtfp' || S.mode === 'asap') ? '<div class="enso-legend-row"><span class="enso-sw" style="background:none;border:2px solid #ebe9e2"></span>Selected country</div>' : '') +
-      (S.sub === 'ensoharvest' || S.sub === 'ensowater' ? '<div class="enso-legend-row"><span class="enso-sw" style="border:1px solid #e6e3da;border-radius:50%;background:#0b1017;width:6px;height:6px"></span>Callout location and leader</div>' : '') +
+      /* Keyed off the callouts actually drawn, not off the lens. Shipping lost
+         its callout when the Gatun card came off the map, and this row went on
+         keying a dot that was no longer there. */
+      ((S.annoLayers || []).length ? '<div class="enso-legend-row"><svg class="enso-sw-round" aria-hidden="true" width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3" fill="#0b1017" stroke="#e6e3da" stroke-width="1"/></svg>Callout location and leader</div>' : '') +
       '<div class="enso-legend-row"><span class="enso-sw" style="background:#1c1c22"></span>' +
       (S.mode === 'sst' || S.mode === 'none' ? 'Unfilled reference land' : S.mode === 'asap' ? 'Not assessed' : MODES_MODELLED.indexOf(S.mode) >= 0 ? 'No measured signal' : 'No data') + '</div>';
     if (S.showRegions && ['sst','impact','crop','coverage'].indexOf(S.mode) < 0) row.insertAdjacentHTML('beforeend', regionLegend());
@@ -44432,8 +44463,13 @@ function showCommodityDetail(key) {
      defend, sited on the place it belongs to — the map should argue, not just
      colour in. Hidden on narrow screens where they would collide. */
   var ANNOTATIONS = [
+    /* The abandonment figure is not from the FAOSTAT fit this plate is sourced
+       to, so it carried no citation a reader could follow. It is the NOAA
+       Climate Program Office finding recorded in enso_regions.json under
+       us_southern_plains, and it says so now. The yield slope beside it is the
+       fit, and stays labelled as such. */
     { at: [38.5, -98.4], label: [40, -128], side: 'left', t: 'Kansas', lens: ['ensoharvest'],
-      d: 'El Niño cuts winter-wheat abandonment 3pp. US wheat +4.4%/ONI, the most statistically significant result in the panel (q<0.0001), though not the largest.' },
+      d: 'El Niño cuts winter-wheat abandonment 3pp in the southern Plains (NOAA Climate Program Office). In the fit, US wheat is +4.4%/ONI, the most statistically significant result in the panel (q<0.0001), though not the largest.' },
     { at: [-28.6, 26.2], label: [-33, 58], side: 'right', t: 'Free State', lens: ['ensoharvest'],
       d: 'South African maize −21%/ONI. Zimbabwe −27.6%. The best-evidenced El Niño food signal there is.' },
     /* The Gatún callout is gone from the Shipping lens. A 176px card floating
@@ -45263,7 +45299,7 @@ function showCommodityDetail(key) {
       rail += '<figure class="enso-plate">' + plateHead('Agricultural hotspots', 'JRC ASAP · biomass below normal', stamp(metaDate('asap')), 'reported') +
         '<div class="plate-body"><ul class="enso-rail-list">' + hot.slice(0, 4).map(function (h) {
           return '<li><button class="enso-chip" onclick="ensoFocus(\'' + esc(h.iso) + '\')">' + esc(nameFor(h.iso)) + '</button><span style="color:' + (h.a.hotspot_code === 2 ? MAJOR_HOTSPOT : HOTSPOT) + '">' + esc(h.a.hotspot_label) + '</span></li>';
-        }).join('') + '</ul>' + moreRecords(hot.length, 4) + '</div><figcaption class="enso-log">' + maj + ' major, ' + (hot.length - maj) + ' standard, of ' + Object.keys(S.asap || {}).length + ' assessed. A hotspot is an assessment of agricultural stress, not an attribution.</figcaption></figure>';
+        }).join('') + '</ul>' + moreRecords(hot.length, 4) + '</div><figcaption class="enso-log">' + maj + ' major, ' + (hot.length - maj) + ' standard, of ' + assessedCount() + ' assessed. A hotspot is an assessment of agricultural stress, not an attribution.</figcaption></figure>';
     }
     if (gd.length) {
       rail += '<figure class="enso-plate">' + plateHead('Drought, flood and cyclone alerts', 'GDACS · teleconnection countries', stamp(metaDate('gdacs')), 'reported') +

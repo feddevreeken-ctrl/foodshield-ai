@@ -276,7 +276,8 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    assert.equal(key.includes('El Niño reduces output here'),view==='ensoharvest');
    assert.equal(key.includes('El Niño raises output here'),view==='ensoharvest');
    assert.equal(key.includes('degraded on the La Niña side'),view==='ensowater');
-   assert.equal(key.includes('solid: observed transits at the chokepoint'),view==='ensowater');
+   /* The solid-line swatch keyed a mark the map never draws: no lane in enso_lanes.json carries a geometry, so S.laneLines is always empty. The observed mark is the diamond and its ring. */
+   assert.equal(key.includes('diamond and ring: observed, measured at the chokepoint'),view==='ensowater');
    assert.equal(key.includes('dashed: published schematic corridor through named ports'),view==='ensowater');
    if(view==='ensowater'){assert.equal(S.corridorLines.filter(l=>S.map.hasLayer(l)).length,9);assert.equal(S.corridorLabels.filter(l=>S.map.hasLayer(l)).length,9);for(const c of S.corridors.corridors){assert(legend.querySelector('details').textContent.includes(c.basis.replace(/'/g,'&#39;')));}}
    assert.equal(key.includes('GDACS drought'),view==='ensolive');

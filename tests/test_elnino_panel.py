@@ -782,8 +782,12 @@ def main() -> int:
                 && lanes.every(l => !l.options.dashArray && !l.getElement().hasAttribute('stroke-dasharray'));
         }"""))
         visible_key = page.locator('#enso-legend > .enso-legend').inner_text()
+        # The key used to show a solid-line swatch for "observed transits". No
+        # lane in enso_lanes.json carries a geometry, so that line is never
+        # drawn and the key described a mark the map does not have. The observed
+        # mark is the diamond and its ring.
         check("Stage I visible key distinguishes observed transits from published schematic corridors",
-              'solid: observed transits at the chokepoint' in visible_key
+              'diamond and ring: observed, measured at the chokepoint' in visible_key
               and 'dashed: published schematic corridor through named ports' in visible_key)
         check("Stage I magnitude joins each lane to PortWatch and names missing values", page.evaluate("""async () => {
             const lanes = (await (await fetch('data/enso_lanes.json')).json()).data.lanes;
