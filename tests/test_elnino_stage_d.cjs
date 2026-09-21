@@ -49,6 +49,9 @@ vm.runInContext(html.slice(start,end)+`
   syncInstruments=renderMapTag=renderControls=renderDetail=renderFailures=wireTabKeys=syncTabRoving=wireRasterPlates=finishPlates=renderSubviewMeta=function(){};
 })();`,ctx);
 const api=ctx.api,S=api.S;
+// The chart now shares the rail's published-country filter; load its real index.
+S.isoIndex={};
+JSON.parse(fs.readFileSync('data/enso_regions.json','utf8')).data.regions.forEach(r=>r.iso3.forEach(iso=>(S.isoIndex[iso] ||= []).push(r)));
 for(const [key,file] of Object.entries({model:'enso_model',calendars:'crop_calendars',enso:'enso',lanes:'enso_lanes',corridors:'enso_corridors',econ:'enso_econ',exp:'enso_exposure',portwatch:'portwatch',pwhist:'portwatch_history',rtfp:'rtfp',ffpi:'fao_ffpi',asap:'asap',gdacs:'gdacs',relief:'reliefweb_alerts',sst:'sst_anomaly'})){
  const data=JSON.parse(fs.readFileSync('data/'+file+'.json','utf8'));S[key]=data.data;S.meta[key]=data._meta;
 }
@@ -128,6 +131,7 @@ test('Stage I price rail lists every teleconnection country, valued first, and n
  const saved=S.rtfp, oldMode=S.mode, oldIdx=S.isoIndex;S.mode='rtfp';
  api.renderMapRanking();const list=node('enso-map-ranking');
  const tele=Object.keys(oldIdx||{});
+ assert(tele.length>0,'the teleconnection fixture must not be empty');
  const shown=list.querySelectorAll('button').map(b=>b.getAttribute('data-map-country'));
  tele.forEach(k=>assert(shown.includes(k),k+' must be listed'));
  const valued=k=>Number.isFinite((saved[k]||{}).food_inflation_pct);

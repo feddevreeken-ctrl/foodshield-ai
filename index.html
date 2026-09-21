@@ -10315,8 +10315,11 @@ table.enso-tbl thead th:first-child { z-index:3; }
 }
 .enso-idx-lab b { display:block; font-size:var(--enso-fs-body); color:var(--t1); font-weight:600; }
 .enso-idx-lab i { display:block; font-style:normal; font-size:var(--enso-fs-chip); color:var(--t3); margin-top:1px; }
-.enso-idx-bar { height:8px; background:var(--bg3); border-radius:1px; overflow:hidden; }
-.enso-idx-bar span { display:block; height:100%; }
+.enso-idx-bar { position:relative; height:8px; background:var(--bg3); margin:6px 0 24px; }
+.enso-idx-bar > span { display:block; height:100%; }
+.enso-idx-tick { position:absolute; top:-3px; height:14px; border-left:1px solid var(--t2); font:9px/1.4 'Geist Mono',monospace; font-style:normal; }
+.enso-idx-tick b { position:absolute; top:15px; font-weight:400; white-space:nowrap; }
+.enso-idx-unscaled { font:10px/1.5 'Geist Mono',monospace; color:var(--t2); }
 .enso-idx-val {
   font-family:'Geist Mono',monospace; font-size:var(--enso-fs-lead); color:var(--t1);
   text-align:right; font-variant-numeric:tabular-nums;
@@ -10327,8 +10330,7 @@ table.enso-tbl thead th:first-child { z-index:3; }
 .enso-idx-note a { color:var(--accent); text-decoration:none; }
 .enso-idx-note a:hover { text-decoration:underline; }
 
-/* Window groups. Bars are scaled within a group, never across one — the layout
-   itself has to refuse the comparison the prose warns about. */
+/* Window groups retain the source windows; each bar uses its own threshold. */
 .enso-idx-grp { margin-top:14px; }
 .enso-idx-grp:first-of-type { margin-top:4px; }
 .enso-idx-grp-h { padding-bottom:6px; border-bottom:1px solid var(--b2); }
@@ -11501,7 +11503,6 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-nino-lab { letter-spacing:0; opacity:1; }
 #tab-elnino .enso-choke i { position:absolute; left:6px; top:6px; width:12px; height:12px; animation:none; }
 #tab-elnino .enso-choke-label { position:absolute; left:25px; top:2px; border-color:var(--grid); }
-#tab-elnino .enso-choke-label.label-left { left:auto; right:25px; }
 #tab-elnino .enso-transit-ring { position:absolute;left:12px;top:12px;transform:translate(-50%,-50%);border:1.5px solid #e6e3da;border-radius:50%;box-sizing:border-box;pointer-events:none; }
 #tab-elnino .enso-choke.no-transit i { background:#11161e;border:1.5px solid currentColor;box-shadow:none; }
 #tab-elnino .enso-choke.no-transit.p-el { color:#d2693a; }
@@ -42526,7 +42527,7 @@ function showCommodityDetail(key) {
     for (var k = 1; k < ends.length; k++) if (ends[k].y - ends[k - 1].y < 14) ends[k].y = ends[k - 1].y + 14;
     var endLabels = ends.map(function (o) { return '<span class="enso-analog-lab">' + esc(o.text) + '</span>'; }).join('');
     var leaders = ends.map(function (o) {
-      return '<line x1="' + x1 + '" y1="' + o.yEnd + '" x2="' + (x1 + 20) + '" y2="' + o.y + '" stroke="var(--t3)" opacity=".55"/>';
+      return '<line x1="' + x1 + '" y1="' + o.yEnd + '" x2="' + W + '" y2="' + o.y + '" stroke="var(--t3)" opacity=".55"/>';
     }).join('');
     var directLabels = ends.map(function (o) {
       return '<span class="enso-analog-lab" style="top:' + pct(o.y) + '">' + esc(o.text) + '</span>';
@@ -43237,21 +43238,26 @@ function showCommodityDetail(key) {
     var groupHTML = GROUPS.map(function (g) {
       var set = rows.filter(function (r) { return r.window_kind === g.kind; });
       if (!set.length) return '';
-      /* scale within the group only */
-      var peak = Math.max.apply(null, set.map(function (r) { return Math.abs(r.value); })) || 1;
       return '<div class="enso-idx-grp">' +
         '<div class="enso-idx-grp-h"><b>' + esc(g.title) + '</b><i>' + esc(g.sub) + '</i></div>' +
         '<div class="enso-idx-rows">' + set.map(function (r) {
           var warm = r.unit === '°C';
-          return '<div class="enso-idx-row">' +
+          var threshold = r.threshold, bar = '<div class="enso-idx-unscaled">No published weekly threshold; value only.</div>';
+          if (typeof threshold === 'number' && threshold !== 0) {
+            var ratio = Math.abs(r.value / threshold), extent = Math.max(4, Math.ceil(ratio));
+            bar = '<div class="enso-idx-bar" data-threshold="' + threshold + '" aria-label="Magnitude relative to ' + esc(r.agency) + ' threshold; track spans 0 to ' + extent + ' times the threshold">' +
+              '<span style="width:' + (ratio / extent * 100).toFixed(2) + '%;background:' +
+              (warm ? (r.value >= 0 ? '#d2693a' : '#4a86b3') : '#8f7bb0') + '"></span>' +
+              '<i class="enso-idx-tick" style="left:0"><b>0</b></i>' +
+              '<i class="enso-idx-tick" style="left:' + (100 / extent) + '%"><b>' + (threshold > 0 ? '+' : '−') + Math.abs(threshold) + ' ' + esc(r.unit) + '</b></i></div>';
+          }
+          return '<div class="enso-idx-row" data-index="' + esc(r.key) + '">' +
             '<div class="enso-idx-lab"><b>' + esc(r.label) + '</b><i>' + esc(r.agency) + '</i></div>' +
-            '<div class="enso-idx-bar"><span style="width:' +
-              Math.round(Math.min(1, Math.abs(r.value) / peak) * 100) + '%;background:' +
-              (warm ? (r.value >= 0 ? '#d2693a' : '#4a86b3') : '#8f7bb0') + '"></span></div>' +
+            bar +
             '<div class="enso-idx-val">' + (r.value > 0 ? '+' : '') + r.value.toFixed(2) +
               '<i>' + esc(warm ? '°C' : '') + '</i></div>' +
             '<div class="enso-idx-win">' + esc(r.window) + '</div>' +
-            '<div class="enso-idx-note">' + esc(r.note) +
+            '<div class="enso-idx-note">' + esc(r.region) + ' · ' + esc(r.baseline) + '. ' + esc(r.note) +
               ' <a href="' + esc(r.url) + '" target="_blank" rel="noopener">source ↗</a></div>' +
           '</div>';
         }).join('') + '</div></div>';
@@ -43305,7 +43311,7 @@ function showCommodityDetail(key) {
           '<p class="ctr-note">Positive ONI means warmer water against centred 30-year base periods, 1991–2020 for current seasons; on its own it says nothing about food. NOAA CPC publishes weekly Niño 3.4 on Mondays and ONI monthly; this page collects both every six hours. Collection dates are not observation dates.</p>' +
           '<div class="ctr-note" style="max-width:82ch;margin-bottom:12px;">' +
             esc((S.meta.indices || {}).notes || '') + '</div>' +
-          groupHTML +
+          '<p class="ctr-note">Bar length measures magnitude against that index’s own agency threshold, not against the other indices; ticks mark zero and the threshold. Signs remain in the values. Weekly Niño 3.4 has no published threshold of its own and is shown as a number only.</p>' + groupHTML +
           (cmpHTML || badHTML ? '<div class="enso-idx-cmps"><div class="enso-idx-grp-h">' +
             '<b>What can actually be compared</b><i>Only pairs holding everything constant but one ' +
             'variable.</i></div>' + cmpHTML + badHTML + '</div>' : '') +
@@ -43615,6 +43621,10 @@ function showCommodityDetail(key) {
       return nameFor(a).localeCompare(nameFor(b));
     });
   }
+  function rankedTelePrices() {
+    var tele = ensoTeleIsos();
+    return rankedPrices().filter(function (iso) { return tele.indexOf(iso) >= 0; });
+  }
   function priceRow(iso) {
     var r = S.rtfp && S.rtfp[iso], has = r && rtfpColor(r.food_inflation_pct);
     return '<li><button type="button" data-map-country="' + esc(iso) + '" aria-pressed="' + (S.sel === iso) + '">' +
@@ -43650,8 +43660,7 @@ function showCommodityDetail(key) {
       if (prices) {
         var tele = ensoTeleIsos();
         var teleSet = {}; tele.forEach(function (i) { teleSet[i] = 1; });
-        var valued = tele.filter(function (i) { return all.indexOf(i) >= 0; })
-          .sort(function (a, b) { return all.indexOf(a) - all.indexOf(b); });
+        var valued = rankedTelePrices();
         var unvalued = tele.filter(function (i) { return all.indexOf(i) < 0; });
         var outside = all.filter(function (i) { return !teleSet[i]; });
         el.innerHTML = '<div class="enso-legend-t">Food inflation · El Niño teleconnection countries</div>' +
@@ -43858,8 +43867,10 @@ function showCommodityDetail(key) {
     var solidT = S.mode === 'coverage' ? 'Model coverage' :
                  S.mode === 'crop' ? 'Strongest measured crop, % yield change'
                                    : 'Modelled production shock';
+    var coverageRamp = '';
+    for (var c = 0; c <= 20; c++) coverageRamp += '<i style="background:' + (coverageColor(c / 20) || '#1c1c22') + '"></i>';
     var solidBody = S.mode === 'coverage'
-      ? '<div class="enso-legend-row"><span class="enso-sw" style="background:' + coverageColor(1) + '"></span>Higher model coverage</div><div class="ctr-note" style="max-width:34ch">Share of a country’s production with a detectable ENSO signal. Dark means nobody measured there.</div>'
+      ? '<div class="enso-ramp enso-coverage-ramp">' + coverageRamp + '</div><div class="enso-key-anchors"><span>0%</span><span>50%</span><span>100%</span></div><div class="ctr-note" style="max-width:34ch">Share of a country’s production with a detectable ENSO signal. Dark means nobody measured there.</div>'
       : '<div class="enso-ramp">' + ramp + '</div>' +
         '<div style="display:flex;justify-content:space-between;font-family:\'Geist Mono\',monospace;font-size:9px;color:var(--t3);width:150px;margin-top:3px;">' +
         '<span>−15%</span><span>0</span><span>+15%</span></div>' +
@@ -44260,10 +44271,11 @@ function showCommodityDetail(key) {
   function placeCorridorChips() {
     /* The node harnesses drive this file against a stub Leaflet with no DOM, so
        the pixel pass is skipped there and the degree-space seed stands. */
-    if (!S.map || !S.showLanes || !S.corridorLabels.length) return;
+    if (!S.map || !S.showLanes) return;
     if (typeof S.map.getContainer !== 'function' || typeof S.map.latLngToContainerPoint !== 'function') return;
     var host = S.map.getContainer(), box = host.getBoundingClientRect(), W = box.width, H = box.height;
-    var obstacles = [], els = host.querySelectorAll('.enso-choke, .enso-choke-label, .enso-transit-ring, .enso-corridor-arrow, .enso-corridor-edge > span, .enso-anno');
+    if (!W || !H) return;
+    var obstacles = [], els = host.querySelectorAll('.enso-choke, .enso-transit-ring, .enso-corridor-arrow, .enso-corridor-edge > span, .enso-anno, .enso-grat-lab');
     for (var i = 0; i < els.length; i++) {
       var r = els[i].getBoundingClientRect();
       if (r.width) obstacles.push({ left: r.left - box.left, top: r.top - box.top, right: r.right - box.left, bottom: r.bottom - box.top });
@@ -44272,6 +44284,35 @@ function showCommodityDetail(key) {
       var dx = Math.max(b.left - a.right, a.left - b.right), dy = Math.max(b.top - a.bottom, a.top - b.bottom);
       if (dx < 0 && dy < 0) return Math.max(dx, dy);
       return Math.sqrt(Math.max(dx, 0) * Math.max(dx, 0) + Math.max(dy, 0) * Math.max(dy, 0));
+    }
+    /* Measure both sides of every label before placing route chips. Clamping
+       keeps even a pin near the plate edge readable; vertical candidates clear
+       graticule text and earlier labels without hiding any transit values. */
+    var chokeLabels = host.querySelectorAll('.enso-choke-label');
+    for (var li = 0; li < chokeLabels.length; li++) {
+      var label = chokeLabels[li], offset = Number(label.getAttribute('data-offset')) || 25, bestLabel = null;
+      label.style.transform = '';
+      ['left', 'right'].forEach(function (side, si) {
+        label.style.left = side === 'left' ? offset + 'px' : 'auto';
+        label.style.right = side === 'right' ? offset + 'px' : 'auto';
+        var measured = label.getBoundingClientRect();
+        if (!measured.width) return;
+        var baseX = measured.left - box.left, baseY = measured.top - box.top;
+        [0, -1, 1, -2, 2, -3, 3].forEach(function (step) {
+          var x = Math.max(4, Math.min(W - measured.width - 4, baseX));
+          var y = Math.max(4, Math.min(H - measured.height - 4, baseY + step * (measured.height + 6)));
+          var rect = { left:x, top:y, right:x + measured.width, bottom:y + measured.height }, clear = 6;
+          obstacles.forEach(function (ob) { clear = Math.min(clear, gap(rect, ob)); });
+          var score = clear * 1000 - Math.abs(x - baseX) * 10 - Math.abs(y - baseY) - si;
+          if (!bestLabel || score > bestLabel.score) bestLabel = { score:score, side:side, dx:x - baseX, dy:y - baseY, rect:rect };
+        });
+      });
+      if (bestLabel) {
+        label.style.left = bestLabel.side === 'left' ? offset + 'px' : 'auto';
+        label.style.right = bestLabel.side === 'right' ? offset + 'px' : 'auto';
+        label.style.transform = 'translate(' + bestLabel.dx + 'px,' + bestLabel.dy + 'px)';
+        obstacles.push(bestLabel.rect);
+      }
     }
     var ANCHORS = [];
     [10, 22].forEach(function (d) {
@@ -44394,12 +44435,11 @@ function showCommodityDetail(key) {
       var live = '<br>' + esc(observation);
       var diameter = measured ? measured.radius * 2 : 0;
       var ring = measured ? '<span class="enso-transit-ring" aria-hidden="true" data-yoy="' + measured.pct + '" style="width:' + diameter + 'px;height:' + diameter + 'px"></span>' : '';
-      var labelSide = ln.id === 'rhine' || ln.id === 'suez' ? 'right' : 'left';
       var labelOffset = Math.max(25, measured ? measured.radius + 16 : 25);
       var mk = L.marker([ln.lat, ln.lng], {
         icon: L.divIcon({
           className: 'enso-choke ' + phaseCls + ' a-' + esc(ln.attribution) + (measured ? '' : ' no-transit'),
-          html: '<i></i>' + ring + '<span data-lane="' + esc(ln.id) + '" class="enso-choke-label' + (labelSide === 'right' ? ' label-left' : '') + '" style="' + labelSide + ':' + labelOffset + 'px">' + esc(laneName(ln)) +
+          html: '<i></i>' + ring + '<span data-lane="' + esc(ln.id) + '" class="enso-choke-label" data-offset="' + labelOffset + '" style="left:' + labelOffset + 'px">' + esc(laneName(ln)) +
             '<b class="enso-transit-change">' + (measured ? num(measured.pct, 1) + '% y/y' : 'no transit data') + '</b></span>', iconSize: [24, 24], iconAnchor: [12, 12]
         }),
         keyboard: true, alt: ln.name + '; ' + observation, zIndexOffset: 500
@@ -44628,7 +44668,7 @@ function showCommodityDetail(key) {
     /* Chip clearance is a pixel quantity, so it is recomputed whenever the
        pixel frame changes: a zoom, and a resize such as a phone rotating or a
        window widening, after which the old offsets belong to the old size. */
-    S.map.on('zoomend resize', placeCorridorChips);
+    S.map.on('zoomend moveend resize', placeCorridorChips);
 
     /* The vector basemap the site's global map already uses. Its absence is
        why this panel used to look like flat grey shapes on black. */
@@ -44960,7 +45000,7 @@ function showCommodityDetail(key) {
       if (pr) {
         out += '<figure class="enso-plate is-published">' + plateHead('Panama published slot limits since 2023', 'Panama Canal Authority advisories · slots per day', readOn, 'published') +
           '<div class="plate-body"><div class="enso-chart"><canvas id="enso-c-panama"></canvas></div>' +
-          '<div class="enso-chart-cap">Ordinal steps are in order, <b>not to scale in time</b>; labels give elapsed intervals and the normal baseline retains its published range.</div>' +
+          '<div class="enso-chart-cap">Ordinal steps are in order, <b>not to scale in time</b>; labels give elapsed intervals. No single normal-transit value is supplied in this record, so no reference rule is drawn.</div>' +
           '<details class="enso-evidence-note"><summary>Advisories and operating context</summary><p>' + esc(pr.grain) + '</p><p>' + esc(pr.lake) + '</p><p>' + esc(pr.queue) + '</p><p>' + esc(pr.outturn) + '</p>' +
           (pr.urls || []).map(function (url, i) { return '<a href="' + esc(safeUrl(url)) + '" target="_blank" rel="noopener">2023 record source ' + (i + 1) + '</a> '; }).join('') +
           (lv ? '<p><a href="' + esc(safeUrl(lv.url)) + '" target="_blank" rel="noopener">' + esc(lv.advisory) + '</a> · ' + esc(lv.advisory_date) + ' · ' + esc(lv.signed) + '</p><p>' + esc(lv.date_note) + '</p>' +
@@ -45028,10 +45068,12 @@ function showCommodityDetail(key) {
       }).join('') + '</details></div><figcaption class="enso-log">These are conditional estimates from published models whose methods and even effect signs disagree, not this project’s forecasts.</figcaption></figure>';
     var rt = S.rtfp || {}, rows = Object.keys(rt).map(function (iso) { return { iso: iso, r: rt[iso] }; }).filter(function (x) { return x.r && typeof x.r.food_inflation_pct === 'number'; }).sort(function (a,b) { return b.r.food_inflation_pct - a.r.food_inflation_pct; });
     if (rows.length) {
-      out += '<figure class="enso-plate">' + plateHead('Domestic food inflation now', 'World Bank Real-Time Food Prices via HDX · % year on year', stamp(metaDate('rtfp')), 'observed') +
+      var telePrices = rankedTelePrices(), teleCount = ensoTeleIsos().length;
+      out += '<figure class="enso-plate">' + plateHead('Food inflation in teleconnection countries', 'World Bank Real-Time Food Prices via HDX · % year on year', stamp(metaDate('rtfp')), 'observed') +
         '<div class="plate-body"><div class="enso-chart"><canvas id="enso-c-rtfp"></canvas></div>' +
-        '<details class="enso-evidence-note"><summary>All country readings and reporting dates</summary><p>The chart shows the highest eighteen readings; this table includes all reporting countries.</p><div class="enso-tblwrap"><table class="enso-tbl"><thead><tr><th>Country</th><th>Food inflation</th><th>As of</th><th>Source</th></tr></thead><tbody>' + rows.map(function (x) {
-          return '<tr><td>' + esc(nameFor(x.iso)) + '</td><td class="num">' + num(x.r.food_inflation_pct,1) + '%</td><td class="num">' + esc(x.r.as_of || 'date unavailable') + '</td><td><a href="' + esc(safeUrl(x.r.source_url)) + '" target="_blank" rel="noopener">World Bank RTFP</a></td></tr>';
+        '<p class="enso-chart-cap">All ' + telePrices.length + ' teleconnection countries with monitored values, highest first; no cap. The ' + (teleCount - telePrices.length) + ' teleconnection countries without values have no bar; ' + (rows.length - telePrices.length) + ' monitored countries outside the published layer are excluded from the chart. All monitored readings remain in the source table.</p>' +
+        '<details class="enso-evidence-note"><summary>All country readings and reporting dates</summary><div class="enso-tblwrap"><table class="enso-tbl"><thead><tr><th>Country</th><th>Food inflation</th><th>Markets</th><th>As of</th><th>Source</th></tr></thead><tbody>' + rows.map(function (x) {
+          return '<tr data-price-iso="' + esc(x.iso) + '"><td>' + esc(nameFor(x.iso)) + '</td><td class="num">' + esc(x.r.food_inflation_pct) + '%</td><td class="num">' + esc(x.r.markets == null ? 'Unknown' : x.r.markets) + '</td><td class="num">' + esc(x.r.as_of || 'date unavailable') + '</td><td><a href="' + esc(safeUrl(x.r.source_url)) + '" target="_blank" rel="noopener">World Bank RTFP</a></td></tr>';
         }).join('') + '</tbody></table></div></details>' +
         '<details class="enso-evidence-note"><summary>Historical local prices and policy context</summary>' + (loc.cases || []).map(function (c) { return '<p><b>' + esc(c.place) + ' · ' + esc(c.window) + '.</b> ' + esc(c.metric) + ' ' + esc(c.note || '') + '</p>'; }).join('') + '<p>' + esc(loc.source || '') + ' · read ' + esc(readOn) + '</p>' +
         (loc.policy_amplifier ? '<p>' + esc(loc.policy_amplifier.claim) + ' ' + esc(loc.policy_amplifier.evidence) + ' <a href="' + esc(safeUrl(loc.policy_amplifier.url)) + '" target="_blank" rel="noopener">' + esc(loc.policy_amplifier.source) + '</a></p>' : '') + '<p>' + esc(loc.conditioning || '') + '</p></details></div>' +
@@ -45412,9 +45454,9 @@ function showCommodityDetail(key) {
     'enso-c-record': 'Bar chart: change in the agricultural price index around the seven ENSO peaks the World Bank annotates: 1982-83, 1986-87, 1991-92, 1997-98, 2002-03, 2009-10 and the 2015-16 event ongoing at press, in two windows. Only 2002-03 is clearly positive on both.',
     'enso-c-ffpi': 'Scatter plot: FAO Food Price Index annual nominal and real peak-year averages and the latest monthly nominal reading, with distinct markers on a true year axis and no connecting lines.',
     'enso-c-ffpilive': 'Line chart: FAO Food Price Index headline, cereals and vegetable oils over the available monthly observations.',
-    'enso-c-panama': 'Step chart: Panama Canal daily transit slots from dated advisories. The normal baseline is labelled with the published value or range. Horizontal positions show the order of advisories; labels state the elapsed intervals.',
+    'enso-c-panama': 'Step chart: Panama Canal daily transit slots from dated advisories. No single normal-transit value is supplied in this record. Horizontal positions show the order of advisories; labels state the elapsed intervals.',
     'enso-c-panama-daily': 'Line chart: Panama Canal daily vessel transits over the last year from IMF PortWatch, all vessels and dry bulk as seven-day means, single days as points, with the 2026 advisory dates ruled.',
-    'enso-c-rtfp': 'Horizontal bar chart: the highest eighteen latest country readings of median market food-price inflation in World Bank RTFP; all reporting dates and readings are listed in the fold below.'
+    'enso-c-rtfp': 'Horizontal bar chart: all published teleconnection countries with monitored median market food-price inflation in World Bank RTFP, highest first with no cap; reporting dates, market counts and readings are listed in the fold below.'
   };
   function mk(id, cfg) {
     if (S._chartFilter && S._chartFilter.indexOf(id) < 0) return;
@@ -45436,7 +45478,7 @@ function showCommodityDetail(key) {
         axis.ticks.maxRotation = 0;
       } else { axis.ticks.autoSkip = false; }
     });
-    if (id === 'enso-c-rtfp') cv.parentElement.style.height = '540px';
+    if (id === 'enso-c-rtfp') cv.parentElement.style.height = Math.max(300, cfg.data.labels.length * 30 + 60) + 'px';
     if (CHART_ALT[id]) { cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', CHART_ALT[id]); }
     /* A canvas inside a display:none sub-view has zero size; Chart.js would
        lock that in. Defer until its view is actually shown. */
@@ -45468,13 +45510,14 @@ function showCommodityDetail(key) {
         var button = document.createElement('button'); button.type = 'button';
         var col = ds.showLine === false && ds.pointBackgroundColor ? ds.pointBackgroundColor : ds.borderColor || ds.backgroundColor || '#b6b8be';
         var multi = Object.prototype.toString.call(col) === '[object Array]';
+        var swColors = multi ? col : null;
         if (multi) col = '#9b958c';
         var shape = ds.pointStyle === 'triangle' ? 'is-triangle' : ds.pointStyle === 'rectRot' ? 'is-diamond' :
           cfg.type === 'scatter' || ds.showLine === false ? 'is-dot' : cfg.type === 'bar' ? '' :
           ds.borderDash && ds.borderDash.length ? 'is-dash' : 'is-line';
         var sw = document.createElement('i'); sw.className = 'enso-key-sw ' + shape;
         sw.setAttribute('aria-hidden', 'true');
-        sw.style.background = multi ? 'linear-gradient(90deg,#36a7b8,#9b958c,#c7528e)' : String(col); sw.style.color = String(col);
+        sw.style.background = multi ? (swColors.length > 1 ? 'linear-gradient(90deg,' + swColors.join(',') + ')' : swColors[0]) : String(col); sw.style.color = String(col);
         button.appendChild(sw); button.appendChild(document.createTextNode(ds.label || ''));
         button.setAttribute('aria-pressed', 'true');
         button.onclick = function () {
@@ -45571,12 +45614,10 @@ function showCommodityDetail(key) {
              : n >= 60  ? '  +' + Math.round(n / 30) + ' mo'
                         : '  +' + n + ' d';
       };
-      var baseline = pan.precedent_2023.normal_transits_per_day;
-      var range = (pan.precedent_2023.headline || '').match(/\d+[–−-]\d+(?= transits)/);
-      var labels = ['normal · ' + (typeof baseline === 'number' ? baseline : range ? range[0] + ' (published range)' : 'not quantified')].concat(st.map(function (x, i) {
+      var labels = st.map(function (x, i) {
         return shortDate(x.date) + (i ? gapLabel(gapDays(st[i - 1].date, x.date)) : '');
-      }));
-      var vals = [typeof baseline === 'number' ? baseline : null].concat(st.map(function (x) { return x.total; }));
+      });
+      var vals = st.map(function (x) { return x.total; });
       var currentSteps = pan.live_2026 && pan.live_2026.steps || [];
       currentSteps.forEach(function (step, i) {
         var previous = i ? currentSteps[i - 1].effective : st[st.length - 1].date;
@@ -45610,22 +45651,32 @@ function showCommodityDetail(key) {
     }
     /* 5 — live domestic food inflation */
     var rt = S.rtfp || {};
-    var rows = Object.keys(rt).map(function (iso) { return { iso: iso, v: rt[iso] && rt[iso].food_inflation_pct }; })
-      .filter(function (x) { return typeof x.v === 'number'; })
-      .sort(function (a, b) { return b.v - a.v; }).slice(0, 18);
+    var rows = rankedTelePrices().map(function (iso) { return { iso:iso, v:rt[iso].food_inflation_pct }; });
     if (rows.length) {
+      var hues = [];
+      if (rows.some(function (r) { return r.v < 0; })) hues.push('Cyan tones: falling prices');
+      if (rows.some(function (r) { return r.v === 0; })) hues.push('Warm grey: zero change');
+      if (rows.some(function (r) { return r.v > 0; })) hues.push('Magenta tones: rising prices');
+      var dates = rows.map(function (r) { return rt[r.iso].as_of || 'unavailable'; }).sort();
       mk('enso-c-rtfp', {
-        keyNotes: ['Bar length: food inflation, % year on year. Hue: −10% cyan, 0% warm grey, +30% magenta; end colours beyond anchors. World Bank RTFP via HDX · as of ' + rtfpDateRange()],
+        keyNotes: ['Bar length: food inflation, % year on year. ' + hues.join('; ') + '. World Bank RTFP via HDX · as of ' + dates[0] + (dates[0] === dates[dates.length - 1] ? '' : ' to ' + dates[dates.length - 1])],
         type: 'bar',
         data: {
           labels: rows.map(function (r) { return nameFor(r.iso); }),
           datasets: [{ label: 'Food inflation, % y/y', data: rows.map(function (r) { return r.v; }),
+            iso3: rows.map(function (r) { return r.iso; }),
             backgroundColor: rows.map(function (r) { return rtfpColor(r.v); }),
             borderWidth: 0 }]
         },
         options: defaults({
           indexAxis: 'y',
-          plugins: { legend: { display: false } },
+          plugins: { legend: { display: false }, tooltip: { callbacks: {
+            label: function (item) {
+              var r = rt[rows[item.dataIndex].iso];
+              return r.food_inflation_pct + '% y/y · ' + (r.markets == null ? 'Unknown' : r.markets) + ' markets · as of ' + (r.as_of || 'unavailable');
+            },
+            afterLabel: function (item) { var r = rt[rows[item.dataIndex].iso]; return r.source + ' · ' + r.source_url; }
+          } } },
           scales: { x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#6a685e', font: { size: 10, family: 'Geist Mono' },
             callback: function (v) { return v + '%'; } }, border: { display: false } },
             y: { grid: { display: false }, ticks: { color: '#9a988f', font: { size: 10, family: 'Geist' } }, border: { display: false } } }
@@ -45643,6 +45694,20 @@ function showCommodityDetail(key) {
     return keys.length ? names[keys[0]] + ' has the highest latest sub-index, ' + lt[keys[0]].toFixed(1) +
       ' in ' + lt.month + ' (2014–2016 = 100).' : 'Latest sub-indices unavailable.';
   }
+  function alignAnalogLeaders() {
+    var plot = document.querySelector('.enso-analog'); if (!plot) return;
+    var svg = plot.querySelector('svg'), labels = plot.querySelectorAll('.enso-analog-endlabels .enso-analog-lab');
+    var lines = plot.querySelectorAll('.enso-analog-leaders line'), box = svg && svg.getBoundingClientRect();
+    if (!box || !box.width || !box.height) return;
+    for (var i = 0; i < lines.length && i < labels.length; i++) {
+      var label = labels[i].getBoundingClientRect(); if (!label.width) continue;
+      lines[i].setAttribute('x2', (label.left - box.left) / box.width * 1000);
+      lines[i].setAttribute('y2', (label.top + label.height / 2 - box.top) / box.height * 300);
+    }
+  }
+  if (typeof window.addEventListener === 'function') window.addEventListener('resize', alignAnalogLeaders);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(alignAnalogLeaders);
+
   function finishPlates() {
     var panel = document.getElementById('subview-' + S.sub); if (!panel) return;
     var figures = {
@@ -45699,6 +45764,7 @@ function showCommodityDetail(key) {
     });
     document.querySelectorAll('#tab-elnino .enso-plate').forEach(syncPlateKind);
     instrumentNumbers(document.getElementById('tab-elnino'));
+    alignAnalogLeaders();
   }
   function syncPlateKind(plate) {
     var head = plate.querySelector('.enso-plate-h'), kind = head && head.getAttribute('data-kind');

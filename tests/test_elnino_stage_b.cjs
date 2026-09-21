@@ -51,7 +51,7 @@ test('shipping leads with published ordinal limits and separate dated AIS',()=>{
 });
 test('Panama chart retains all dated slot advisories and real gaps',()=>{
  api.drawCharts('ensowater');const c=ctx.charts['enso-c-panama'],p=S.lanes.lanes.find(l=>l.id==='panama');
- assert.equal(c.data.labels.length,1+p.precedent_2023.steps.length+p.live_2026.steps.length);assert(c.data.labels.some(l=>l.includes('yr')));assert(c.data.labels.filter(l=>l.includes('+')).length>=4);
+ assert.equal(c.data.labels.length,p.precedent_2023.steps.length+p.live_2026.steps.length);assert(!c.data.labels.some(l=>l.includes('normal')));assert(c.data.labels.some(l=>l.includes('yr')));assert(c.data.labels.filter(l=>l.includes('+')).length>=4);
  assert.deepEqual(Array.from(c.data.datasets[1].data.slice(-p.live_2026.steps.length)),p.live_2026.steps.map(x=>x.total));
  assert(ctx.charts['enso-c-panama-daily'].plugins[0].id==='ensoRules');
 });

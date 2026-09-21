@@ -174,11 +174,21 @@ def main() -> int:
         kinds = page.eval_on_selector_all(
             ".enso-idx-grp-h b", "els => els.map(e => e.textContent)")
         check("rows are grouped by averaging window", len(kinds) >= 3, str(kinds))
-        # no bar may be scaled against a bar in a different group
-        widths = page.evaluate("""() => [...document.querySelectorAll('.enso-idx-grp')].map(g =>
-            [...g.querySelectorAll('.enso-idx-bar span')].map(s => parseFloat(s.style.width)))""")
-        check("each window group has its own 100% bar",
-              all((not w) or abs(max(w) - 100) < 0.6 for w in widths), str(widths))
+        # Stage J replaced the shared per-group peak with each index's own
+        # published threshold, so there is deliberately no 100% bar any more and
+        # nothing is scaled against a different index. The bar carries its
+        # threshold and a track that spans a whole number of thresholds. The
+        # selector takes the fill span directly: the page's number walker wraps
+        # digits in spans, and the tick labels now hold digits.
+        bars = page.evaluate("""() => [...document.querySelectorAll('.enso-idx-grp')].map(g =>
+            [...g.querySelectorAll('.enso-idx-bar')].map(b => ({
+                threshold: Number(b.dataset.threshold),
+                width: parseFloat((b.querySelector(':scope > span') || {style:{}}).style.width),
+                ticks: b.querySelectorAll('.enso-idx-tick').length})))""")
+        check("every index bar is scaled to its own published threshold, not a shared peak",
+              bool(bars) and any(g for g in bars) and all(
+                  b["threshold"] and b["ticks"] == 2 and b["width"] == b["width"] and 0 <= b["width"] <= 100
+                  for g in bars for b in g), str(bars))
         frees = page.eval_on_selector_all(
             ".enso-idx-cmp:not(.enso-idx-cmp-bad) .enso-idx-cmp-v", "els => els.map(e => e.textContent)")
         check("every published pair names exactly one free variable",
@@ -873,6 +883,102 @@ def main() -> int:
                     && path.getAttribute('d') === 'M0 0 L7 3.5 L0 7 Z' && !el.textContent.includes('›')
                     && path.getAttribute('fill') === lines[i].options.color && svg.style.transform.startsWith('rotate(');
             });
+        }"""))
+
+        print("\nStage J chart and geometry gates")
+        page.set_viewport_size({"width": 390, "height": 1000})
+        page.evaluate("showTab('ensowater')")
+        page.locator('#enso-mapwrap [data-z="0"]').click()
+        page.wait_for_timeout(350)
+        check("Stage J all chokepoint labels fit the plate at 390px", page.evaluate("""() => {
+            const box = document.getElementById('enso-map').getBoundingClientRect();
+            const labels = [...document.querySelectorAll('.enso-choke-label')];
+            return labels.length === 9 && labels.every(e => {
+                const r = e.getBoundingClientRect();
+                return r.width > 0 && r.left >= box.left && r.right <= box.right
+                    && r.top >= box.top && r.bottom <= box.bottom;
+            });
+        }"""))
+        check("Stage J Panama has dated advisories without an empty normal category", page.evaluate("""async () => {
+            const c = Chart.getChart(document.getElementById('enso-c-panama'));
+            const p = (await (await fetch('data/enso_lanes.json')).json()).data.lanes.find(l => l.id === 'panama');
+            return c.data.labels.length === p.precedent_2023.steps.length + p.live_2026.steps.length
+                && c.data.labels.every((label,i) => !label.includes('normal') && c.data.datasets.some(ds => ds.data[i] != null));
+        }"""))
+        page.set_viewport_size({"width": 1440, "height": 1000})
+        page.locator('#enso-mapwrap [data-z="0"]').click()
+        page.wait_for_timeout(350)
+        check("Stage J default Amazon label clears graticule text", page.evaluate("""() => {
+            const r = document.querySelector('.enso-choke-label[data-lane="amazon"]').getBoundingClientRect();
+            const labs = [...document.querySelectorAll('.enso-grat-lab')];
+            return labs.length > 0 && labs.every(e => {
+                const g = e.getBoundingClientRect();
+                return r.right <= g.left || r.left >= g.right || r.bottom <= g.top || r.top >= g.bottom;
+            });
+        }"""))
+        page.evaluate("showTab('elnino')")
+        page.wait_for_selector('.enso-analog-endlabels', state='visible')
+        check("Stage J five visible analog connectors meet their label edges at 1440px", page.evaluate("""() => {
+            const plot = document.querySelector('.enso-analog'), svg = plot.querySelector('svg');
+            const lines = [...plot.querySelectorAll('.enso-analog-leaders line')];
+            const labels = [...plot.querySelectorAll('.enso-analog-endlabels .enso-analog-lab')];
+            return lines.length === 5 && lines.every((line,i) => {
+                const pt = svg.createSVGPoint(); pt.x = line.x2.baseVal.value; pt.y = line.y2.baseVal.value;
+                const p = pt.matrixTransform(svg.getScreenCTM()), r = labels[i].getBoundingClientRect();
+                return line.getBoundingClientRect().width > 0 && r.width > 0
+                    && Math.abs(p.x-r.left) < 1 && Math.abs(p.y-(r.top+r.height/2)) < 1;
+            });
+        }"""))
+        page.locator('#enso-indices details').evaluate('e => e.open = true')
+        check("Stage J indices use own thresholds and SOI is not the longest bar", page.evaluate("""() => {
+            const row = key => document.querySelector('[data-index="'+key+'"]');
+            const bar = key => row(key).querySelector('.enso-idx-bar');
+            const width = key => parseFloat(bar(key).querySelector('span').style.width);
+            return !bar('wk34') && row('wk34').textContent.includes('value only')
+                && [['oni',.5],['roni',.5],['bom_rel',.8],['soi',-7]].every(([key,t]) =>
+                    Number(bar(key).dataset.threshold) === t && bar(key).querySelectorAll('.enso-idx-tick').length === 2)
+                && width('soi') < width('oni') && width('soi') < width('bom_rel');
+        }"""))
+        page.evaluate("showTab('ensoharvest')")
+        page.locator('[data-native="enso-mode"][data-value="coverage"]').click()
+        # paint() throttles a layer change behind a burst guard and a globe-wide
+        # ripple, so reading fillColor in the same tick reads the previous layer.
+        page.wait_for_selector('.enso-coverage-ramp')
+        page.wait_for_timeout(1500)
+        check("Stage J coverage shows three anchors and distinct USA and ZAF fills", page.evaluate("""() => {
+            const ramp = document.querySelector('.enso-coverage-ramp'), fills = {};
+            // The basemap does not always carry ISO_A3; the page falls back
+            // through ADM0_A3, iso_a3 and id, so the check must too. More than
+            // one layer can carry the same country's feature (the teleconnection
+            // overlay holds unfilled copies), so keep the painted one rather
+            // than whichever eachLayer happens to reach last.
+            const isoOf = f => { const p = (f && f.properties) || {};
+                return p.ISO_A3 || p.ADM0_A3 || p.iso_a3 || p.id || ''; };
+            _stageHMap.eachLayer(layer => {
+                const iso = isoOf(layer.feature);
+                if ((iso === 'USA' || iso === 'ZAF') && layer.options.fillColor) fills[iso] = layer.options.fillColor;
+            });
+            return ramp && ramp.nextElementSibling.textContent === '0%50%100%'
+                && fills.USA && fills.ZAF && fills.USA !== fills.ZAF;
+        }"""))
+        page.evaluate("showTab('ensomoney')")
+        page.wait_for_selector('#enso-c-rtfp', state='visible')
+        check("Stage J every price bar is a valued teleconnection country with unchanged data", page.evaluate("""async () => {
+            const regions = (await (await fetch('data/enso_regions.json')).json()).data.regions;
+            const rt = (await (await fetch('data/rtfp.json')).json()).data;
+            const tele = new Set(regions.flatMap(r => r.iso3));
+            const ds = Chart.getChart(document.getElementById('enso-c-rtfp')).data.datasets[0];
+            const expected = Object.keys(rt).filter(iso => tele.has(iso) && Number.isFinite(rt[iso].food_inflation_pct));
+            return ds.iso3.length === expected.length && new Set(ds.iso3).size === expected.length
+                && ds.iso3.every((iso,i) => expected.includes(iso) && ds.data[i] === rt[iso].food_inflation_pct
+                    && (!i || ds.data[i-1] >= ds.data[i]));
+        }"""))
+        check("Stage J price key names only hues present in the plot", page.evaluate("""() => {
+            const cv = document.getElementById('enso-c-rtfp'), values = Chart.getChart(cv).data.datasets[0].data;
+            const key = cv.closest('.enso-plate').querySelector('.enso-chart-notes').textContent;
+            return key.includes('Cyan') === values.some(v => v < 0)
+                && key.includes('Magenta') === values.some(v => v > 0)
+                && key.includes('Warm grey') === values.some(v => v === 0);
         }"""))
 
         check("no console errors", not errors, "; ".join(errors[:2]))
