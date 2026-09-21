@@ -43677,6 +43677,7 @@ function showCommodityDetail(key) {
     /* One sentence on why this layer sits on a food-security page. The status
        mirror above is taken before it is added, so the header keeps the facts. */
     var why = MAP_WHY[S.mode === 'none' ? (S.showLanes ? 'lanes' : 'none') : S.mode];
+    if (typeof why === 'function') why = why();
     if (why) el.insertAdjacentHTML('beforeend', '<span class="enso-map-why">' + esc(why) + '</span>');
   }
   var MAP_WHY = {
@@ -43684,7 +43685,20 @@ function showCommodityDetail(key) {
     impact: 'Why it is here: the colour is the fitted yield response at the chosen scenario, weighted by production, so it says where a season like this has moved harvests in the record.',
     crop: 'Why it is here: the single crop with the largest fitted response in each country, to show what the country total is made of.',
     coverage: 'Why it is here: the share of a country’s production the fit covers. A pale country is one the model barely sees, not one that is safe.',
-    lanes: 'Why it is here: published schematic grain corridors show which food routes depend on each chokepoint; observed transit changes show where traffic has shifted, while published ENSO tags describe a possible mechanism, not the cause of that change.',
+    /* The Shipping lens named no ENSO condition at all, on a tab about one: the
+       phase tags were the only link and they read as decoration. The observed
+       ONI is stated first, with its season and source, so the reader knows which
+       side of the oscillation the tagged lanes refer to. The tag itself stays
+       published evidence about such years, never a claim about this month's
+       transits, which is what the closing clause protects. */
+    lanes: function () {
+      var l = (S.enso && S.enso.latest) || {}, phase = typeof l.anom === 'number' ? (l.anom < 0 ? 'La Niña' : 'El Niño') : null;
+      return (phase ? 'Why it is here: the ocean is in its ' + phase + ' phase now, ONI ' + num(l.anom, 1) +
+        ' for ' + (l.season || 'the latest season') + ' ' + (l.year || '') + ', NOAA CPC. ' : 'Why it is here: ') +
+        'Published schematic grain corridors show which food routes depend on each chokepoint, and the lanes tagged ' +
+        (phase || 'El Niño') + ' side are the ones published evidence says degrade in such years. Observed transit changes show where traffic has ' +
+        'actually shifted; the tag describes a possible mechanism, not the cause of that change.';
+    },
     none: 'No land layer is painted. Choose a layer above; the overlays can be added to any of them.',
     rtfp: 'This is where a harvest or freight shock reaches households; the map reports local prices without attributing them to El Niño.',
     asap: 'Why it is here: hotspots are this season’s first observed sign of crop stress. The page does not attribute them to El Niño.',
