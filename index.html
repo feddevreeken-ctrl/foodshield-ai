@@ -43479,6 +43479,10 @@ function showCommodityDetail(key) {
     return '<div class="enso-legend-block"><div class="enso-legend-t">Hazard alerts · reported feeds</div>' +
       '<div class="enso-legend-row"><span class="enso-sw" style="background:#11161e;border:2px solid #ffd080;border-radius:50%;width:10px;height:10px"></span> GDACS drought / flood / cyclone · GDACS ' + counts.gdacs + '</div>' +
       '<div class="enso-legend-row"><span class="enso-sw" style="background:#11161e;border:2px solid #b8edf2;border-radius:50%;width:8px;height:8px"></span> ReliefWeb humanitarian event · ReliefWeb ' + counts.relief + '</div>' +
+      (S.alertCounts && S.alertCounts.reliefUnplaced
+        ? '<div class="enso-legend-note">' + S.alertCounts.reliefUnplaced + ' of ' + S.alertCounts.reliefTotal +
+          ' ReliefWeb reports carry no country shape this map can place, including world-level entries, and are not drawn.</div>'
+        : '') +
       '<div class="ctr-note" style="max-width:32ch;margin-top:5px;">GDACS collected ' + esc(stamp(metaDate('gdacs'))) + '; ReliefWeb collected ' + esc(stamp(metaDate('relief'))) + '. Counts are mapped reports, not affected countries; overlapping reports share a location. ReliefWeb uses up to 40 records with a country centroid. Amber rings (#ffd080): GDACS; pale cyan rings (#b8edf2): ReliefWeb, both with dark centres (#11161e). A marker says a hazard was reported. It says nothing about what caused it.</div></div>';
   }
 
@@ -44674,9 +44678,17 @@ function showCommodityDetail(key) {
         { direction: 'top', opacity: .96 });
       S.alertPins.push(m);
     }
+    /* Every report the feed holds is offered to the map. The old `slice(0, 40)`
+       silently discarded ten of fifty, and the key counted only the rings that
+       survived, so the page reported 36 with nothing to say the other 14 ever
+       existed. What cannot be placed is now counted and named in the key: a
+       world-level entry has no country shape, and neither does a country this
+       basemap does not carry. */
     var rel = (S.relief && S.relief.events) || [];
-    rel.slice(0, 40).forEach(function (ev) {
-      var c = centroidOf(ev.iso3); if (!c) return;
+    S.alertCounts = { reliefTotal: rel.length, reliefUnplaced: 0 };
+    rel.forEach(function (ev) {
+      var c = centroidOf(ev.iso3);
+      if (!c) { S.alertCounts.reliefUnplaced++; return; }
       var m = L.circleMarker(c, { radius: 4, color: '#b8edf2', weight: 2, ensoSource: 'relief',
         fillColor: '#11161e', fillOpacity: 1 });
       m.bindTooltip('<b>' + esc(ev.country || ev.iso3) + '</b><br>' + esc(ev.title || '') +
