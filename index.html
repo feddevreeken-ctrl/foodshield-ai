@@ -44822,7 +44822,14 @@ function showCommodityDetail(key) {
          forbids. Rounded to the whole percent, which is all the flag supports. */
       out += '<div><span class="enso-stat-l">Production shock, ' + esc(modelStateSentence()) + '</span>' +
         '<div class="enso-stat-v" style="color:' + (impactColor(d.lv.production_shock_pct, 1) || 'var(--t1)') + '">' +
-        (typeof d.lv.production_shock_pct !== 'number' ? 'Unavailable' : S.meta.exp && S.meta.exp.production_ready === false
+        /* Coverage 0 means the fit sees none of this country's production, so
+           its shock is 0 by construction, not by measurement. Twenty-two rows
+           printed "≈0%" beside "Coverage 0%", which reads as "measured, no
+           effect" and is the opposite of what it means. The map already leaves
+           these unfilled; the readout says the same thing now. */
+        (typeof d.lv.production_shock_pct !== 'number' ? 'Unavailable'
+          : !d.cov ? 'Not measured'
+          : S.meta.exp && S.meta.exp.production_ready === false
           ? '≈' + num(Math.round(d.lv.production_shock_pct), 0) + '%'
           : num(d.lv.production_shock_pct, 2) + '%') + '</div></div>' +
         '<div><span class="enso-stat-l">Coverage</span><div class="enso-stat-v">' +
@@ -44903,8 +44910,18 @@ function showCommodityDetail(key) {
             (r.scope_note ? '<div class="ctr-note" style="margin-top:4px;color:#c9a957;">' + esc(r.scope_note) + '</div>' : '') +
             '<div style="font-size:10.5px;color:var(--t3);margin-top:4px;">Damage season ' + esc(r.damage_season) +
               ' · lag ' + esc(r.lag_months) + ' · La Niña: ' + esc(r.la_nina_reverses) + '</div>' +
-            (r.sources || []).filter(function (s) { return s.url; }).map(function (s) {
-              return '<div style="font-size:10.5px;margin-top:3px;"><a href="' + esc(s.url) + '" target="_blank" rel="noopener" style="color:var(--accent)">' + esc(s.label) + '</a></div>';
+            /* A source with no URL used to be filtered out entirely, which left
+               five regions printing a quantified claim with no attribution at
+               all: the Sahel millet line, Indonesian rice, Argentine soy and
+               maize, Brazil's Centre-West and the US Corn Belt. A missing link
+               is not a missing source. It is named as text now, so the reader
+               can see where the number comes from even when it is a working
+               note rather than a published page. */
+            (r.sources || []).filter(function (s) { return s.label; }).map(function (s) {
+              var label = esc(s.label);
+              return '<div style="font-size:10.5px;margin-top:3px;">' + (s.url
+                ? '<a href="' + esc(s.url) + '" target="_blank" rel="noopener" style="color:var(--accent)">' + label + '</a>'
+                : '<span style="color:var(--t3)">' + label + ' (working note, no public link)</span>') + '</div>';
             }).join('') + '</div>';
         }).join('') + '</div>';
     }
