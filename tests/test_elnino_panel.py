@@ -683,15 +683,18 @@ def main() -> int:
         for tab in ('elnino', 'ensowater', 'ensomoney', 'ensolive'):
             page.evaluate("tab => showTab(tab)", tab)
             page.wait_for_selector(f'#subview-{tab}.active .enso-subview-meta')
+            # 2026-09-22: the "Scenario" toggle that expanded the modelled rungs on
+            # observed lenses is gone; a control that paints nothing on the lens it
+            # sits on was one of the parts the owner asked to take away. The rungs
+            # live on Harvests only, and the deep link still lands there.
             collapse.append(not page.locator('#enso-scenario-rungs').is_visible()
-                            and page.locator('#enso-scenario-toggle').is_visible())
-        page.locator('#enso-scenario-toggle').click()
-        expanded = page.locator('#enso-scenario-rungs').is_visible()
+                            and not page.locator('#enso-scenario-toggle').is_visible())
+        page.evaluate("showTab('ensoharvest')")
+        page.wait_for_selector('#subview-ensoharvest.active .enso-subview-meta')
         page.locator('[data-native="enso-level"][data-value="-1.5"]').click()
         explicit = page.input_value('#enso-level') == '-1.5' and 'enso_level=-1.5' in page.url
-        page.evaluate("showTab('ensoharvest')")
-        check("Stage H scenario is quiet on observed lenses and expands without losing deep links",
-              all(collapse) and expanded and explicit and page.locator('#enso-scenario-rungs').is_visible()
+        check("Stage H scenario is absent on observed lenses and lives on Harvests without losing deep links",
+              all(collapse) and explicit and page.locator('#enso-scenario-rungs').is_visible()
               and not page.locator('#enso-scenario-toggle').is_visible()
               and page.input_value('#enso-level') == '-1.5')
         ranked = []

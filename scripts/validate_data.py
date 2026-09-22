@@ -118,6 +118,9 @@ EXPECTED_FILES = {
     # scores off it. The shape check is backed by validate_commodity_news()
     # below, which enforces the item schema hard.
     'commodity_news.json':        ('soft',     'dict_or_empty'),
+    # El Niño wire: the same kind of feed (third-party claims with links); the
+    # El Niño tab's Reported view reads it. Empty on a quiet cycle is honest.
+    'enso_news.json':             ('soft',     'dict_or_empty'),
     # Build-time commodity interpretation. SOFT, and additionally listed in
     # OPTIONAL_FILES below: on a repo that has never run the step (no provider key
     # and no prior build) the file legitimately does not exist yet.

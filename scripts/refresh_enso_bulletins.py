@@ -102,11 +102,18 @@ def iri_monthly() -> dict:
     if not m:
         raise RuntimeError("IRI 'Quick Look' heading not found -- page shape changed")
     month, year = m.group(1).lower(), int(m.group(2))
-    d = re.search(r"\b(\d{1,2})\s+(" + "|".join(MONTHS) + r")\s+(20\d\d)\b", text, re.I)
-    if d and d.group(2).lower() == month:
-        pub = datetime(int(d.group(3)), MONTHS.index(month) + 1, int(d.group(1)), tzinfo=timezone.utc)
+    # IRI dates the page "Published: September 21, 2026". The "21 September 2026"
+    # form is kept as a fallback; with neither, the first of the month stands in,
+    # which is how the September issue was carried as 1 Sep for three weeks.
+    d = re.search(r"Published:\s*(" + "|".join(MONTHS) + r")\s+(\d{1,2}),\s*(20\d\d)", text, re.I)
+    if d and d.group(1).lower() == month:
+        pub = datetime(int(d.group(3)), MONTHS.index(month) + 1, int(d.group(2)), tzinfo=timezone.utc)
     else:
-        pub = datetime(year, MONTHS.index(month) + 1, 1, tzinfo=timezone.utc)
+        d = re.search(r"\b(\d{1,2})\s+(" + "|".join(MONTHS) + r")\s+(20\d\d)\b", text, re.I)
+        if d and d.group(2).lower() == month:
+            pub = datetime(int(d.group(3)), MONTHS.index(month) + 1, int(d.group(1)), tzinfo=timezone.utc)
+        else:
+            pub = datetime(year, MONTHS.index(month) + 1, 1, tzinfo=timezone.utc)
     return {
         "agency": "IRI / Columbia",
         "kind": "monthly",
@@ -149,6 +156,63 @@ def wmo_news(limit: int = 3) -> list[dict]:
     if not items:
         raise RuntimeError("no dated WMO item found")
     return items[:limit]
+
+
+JMA_URL = "https://www.data.jma.go.jp/tcc/tcc/products/elnino/outlook.html"
+
+
+def jma_monthly() -> dict:
+    """JMA's monthly El Niño Outlook, issued around the tenth. The page dates
+    itself ("Last Updated: 9 September 2026") and states its conclusion in the
+    first sentences after that line."""
+    text = re.sub(r"\s+", " ", strip_tags(get(JMA_URL)))
+    m_t = re.search(r"El Ni[ñn]o Outlook\s*\(\s*([A-Za-z]+ 20\d\d)\s*-\s*([A-Za-z]+ 20\d\d)\s*\)", text)
+    m_d = re.search(r"Last Updated:\s*(\d{1,2}) (" + "|".join(MONTHS) + r") (20\d\d)", text, re.I)
+    if not (m_t and m_d):
+        raise RuntimeError("JMA outlook page shape changed")
+    pub = datetime(int(m_d.group(3)), MONTHS.index(m_d.group(2).lower()) + 1, int(m_d.group(1)),
+                   tzinfo=timezone.utc)
+    m_s = re.search(r"\)\s*((?:El Ni[ñn]o|La Ni[ñn]a|ENSO)[^.]*\.(?:[^.]*\.)?)", text[m_d.end():])
+    return {
+        "agency": "JMA",
+        "kind": "monthly",
+        "title": "El Niño Outlook, " + m_t.group(1) + " to " + m_t.group(2),
+        "summary": ((m_s.group(1).strip() + " ") if m_s else "") + "Japan's monthly outlook, issued around the tenth.",
+        "published": pub.isoformat(),
+        "url": JMA_URL,
+    }
+
+
+ENFEN_URL = "https://enfen.imarpe.gob.pe/"
+ES_MONTHS = {"enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6, "julio": 7,
+             "agosto": 8, "septiembre": 9, "setiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12}
+
+
+def enfen_monthly() -> dict:
+    """Peru's ENSO committee, the desk that rates the coastal El Niño an east-based
+    event lands on first. Its home page lists the official communiqués with their
+    dates ("Comunicado Oficial Enfen N° 16-2026 … | 14 Septiembre, 2026"); the
+    alert level is read from the newest post headline that states one."""
+    html = get(ENFEN_URL)
+    text = re.sub(r"\s+", " ", strip_tags(html))
+    m = re.search(r"Comunicado Oficial Enfen N[°º]\s*(\d+)\s*-\s*(20\d\d)\s+[\d.,]+\s*[KM]B\s*\|\s*(\d{1,2})\s+("
+                  + "|".join(ES_MONTHS) + r"),?\s*(20\d\d)", text, re.I)
+    if not m:
+        raise RuntimeError("ENFEN page shape changed")
+    n, yr = m.group(1), m.group(2)
+    pub = datetime(int(m.group(5)), ES_MONTHS[m.group(4).lower()], int(m.group(3)), tzinfo=timezone.utc)
+    state = re.search(r"Estado de(?:l)? sistema de alerta:\s*([^.]*?)(?:\s+(?:La|Tras)\b|\s*\.)", text, re.I)
+    link = re.search(r'href="([^"]*comunicado-oficial-enfen-n-' + n + r'-' + yr + r'[^"]*)"', html)
+    return {
+        "agency": "ENFEN (Peru)",
+        "kind": "monthly",
+        "title": "Comunicado Oficial ENFEN N° " + n + "-" + yr,
+        "summary": ("Peru's multisectoral ENSO committee; the communiqué sets the coastal El Niño alert level"
+                    + (", stated as “" + state.group(1).strip() + "” in the newest post on the site" if state else "")
+                    + ". Coastal Peru is where an east-based event lands first."),
+        "published": pub.isoformat(),
+        "url": unescape(link.group(1)) if link else ENFEN_URL,
+    }
 
 
 CPC_DISC = "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml"
@@ -202,6 +266,8 @@ def main() -> int:
     attempt("cpc_monthly", cpc_monthly)
     attempt("bom_weekly", bom_weekly)
     attempt("iri_monthly", iri_monthly)
+    attempt("jma_monthly", jma_monthly)
+    attempt("enfen_monthly", enfen_monthly)
     attempt("wmo_news", wmo_news, many=True)
 
     # climate.gov is probed, reported, and deliberately NOT wired in.
@@ -239,7 +305,7 @@ def main() -> int:
         "enso_bulletins.json",
         {"bulletins": items, "unavailable": unavailable,
          "stale_after_days": STALE_DAYS},
-        source="NOAA CPC; BoM Australia; IRI/Columbia; WMO",
+        source="NOAA CPC; BoM Australia; IRI/Columbia; JMA; ENFEN (Peru); WMO",
         notes=("Agency products, not press coverage — the news view keeps them in their own "
                "strip. Every item carries the date its agency published it, parsed from the "
                "page; an undated item is dropped rather than stamped with the collection "

@@ -430,6 +430,13 @@ SOURCES = [
         "cadence": "6h fetch / continuous upstream",
         "mode": "live",
     },
+    {
+        "key": "enso_news",
+        "file": "enso_news.json",
+        "label": "El Niño newswire (ReliefWeb reports, publisher RSS, GDELT), stories naming the event",
+        "cadence": "6h fetch / continuous upstream",
+        "mode": "live",
+    },
 ]
 
 
@@ -456,7 +463,7 @@ def payload_count(key, payload):
     # list plus per-commodity status, so the generic key count would report "3"
     # (items/commodity_status/sources) instead of the number of HEADLINES. The
     # Data Status page counts stories here, not commodities.
-    if key == "commodity_news":
+    if key in ("commodity_news", "enso_news"):
         return len(payload.get("items") or [])
     # The atlas's unit is the corridor, not the commodity: a bare key count would
     # publish "46" on the Data Status page for a file that ships 4,000+ flows.

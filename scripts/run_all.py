@@ -74,6 +74,7 @@ import refresh_fews
 import refresh_hapi_idps   # v43 — HDX HAPI internal displacement (new nowcast signal)
 import refresh_trade_restrictions
 import refresh_commodity_news   # v46 — GDELT + EC RSS commodity headlines (claims, not data)
+import refresh_enso_news        # El Niño wire: headlines that name the event (claims, not data)
 import build_countries_dataset
 import snapshot_fdrs
 import validate_fdrs
@@ -150,6 +151,9 @@ STEPS = [
     # GDELT throttles (routine under CI egress), so it's in EMPTY_OK; the script
     # preserves last-good items rather than blanking them on a zero-item run.
     ("Commodity news",         refresh_commodity_news.main,     "commodity_news.json"),
+    # El Niño wire: ReliefWeb reports, the same publisher feeds, one GDELT query,
+    # all asked for the event by name. Keeps last-good items across a bad run.
+    ("El Niño news",           refresh_enso_news.main,          "enso_news.json"),
     ("Countries dataset",      build_countries_dataset.main,    "countries.json"),
     # v40 — daily point-in-time snapshot of the structural FDRS (idempotent/preserve-safe);
     # builds the immutable history the hindcast/validation needs. Reads the fresh countries.json.
@@ -205,7 +209,7 @@ FAIL_THRESHOLD = 4
 #   commodity_news.json     GDELT throttles per-IP under CI egress; a fully
 #                           throttled run legitimately yields zero items (v46)
 EMPTY_OK = {"openaq.json", "acled.json", "ndgain.json",
-            "trade_restrictions.json", "commodity_news.json"}
+            "trade_restrictions.json", "commodity_news.json", "enso_news.json"}
 
 # Outputs that legitimately do not exist at all on a first run. v46: the
 # interpretation step does NOT skip when no provider key is set — it degrades
