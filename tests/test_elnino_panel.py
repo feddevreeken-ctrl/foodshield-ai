@@ -140,12 +140,14 @@ def main() -> int:
         # The switcher is the tab's jump nav: first in the tab, ahead of the status
         # header, the map and every view, pinned as a translucent hairline bar
         # (the owner: "this should stick but elegantly").
-        leads = switcher.evaluate("el => !!(el.compareDocumentPosition(document.getElementById('enso-hero')) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(el.compareDocumentPosition(document.getElementById('enso-map')) & Node.DOCUMENT_POSITION_FOLLOWING) && !!el.closest('#tab-elnino') && getComputedStyle(el).position === 'sticky' && getComputedStyle(el).backgroundColor.startsWith('rgba') && getComputedStyle(el).backgroundColor.startsWith('rgba') && el.getBoundingClientRect().bottom <= document.getElementById('enso-hero').getBoundingClientRect().top + 1")
+        leads = switcher.evaluate("el => !!(el.compareDocumentPosition(document.getElementById('enso-hero')) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(el.compareDocumentPosition(document.getElementById('enso-map')) & Node.DOCUMENT_POSITION_FOLLOWING) && !!el.closest('#tab-elnino') && getComputedStyle(el).position === 'sticky' && getComputedStyle(el).backgroundColor !== 'rgba(0, 0, 0, 0)' && el.getBoundingClientRect().bottom <= document.getElementById('enso-hero').getBoundingClientRect().top + 1")
         visible_here = switcher.is_visible()
         page.evaluate("showTab('global')")
         hidden_elsewhere = not switcher.is_visible()
         page.evaluate("showTab('elnino')")
-        check("view switcher leads the tab, pins as a translucent bar, and only shows on its host tab",
+        # 2026-09-22: the bar is opaque and docks flush under the site nav (owner:
+        # content bleeding through the translucent bar read as a gap).
+        check("view switcher leads the tab, pins as an opaque docked bar, and only shows on its host tab",
               leads and visible_here and hidden_elsewhere and switcher.is_visible())
         check("view bar has five equal cells with descriptors and an orange top rule",
               switcher.evaluate("""el => {
@@ -153,7 +155,7 @@ def main() -> int:
                 const widths = tabs.map(t => t.getBoundingClientRect().width);
                 return tabs.length === 5 && tabs.every(t => t.querySelector('.enso-view-desc')?.textContent)
                     && Math.max(...widths) - Math.min(...widths) < 1
-                    && el.getBoundingClientRect().height <= 56
+                    && el.getBoundingClientRect().height === 40
                     && getComputedStyle(el.querySelector('[aria-selected="true"]')).borderTopColor === 'rgb(201, 119, 58)';
               }"""))
         # Like the other content tabs, .content-page alone scrolls; #main is clipped.
@@ -162,6 +164,10 @@ def main() -> int:
             s.scrollTop = 1400;
             return getComputedStyle(document.getElementById('main')).overflowY === 'hidden' ? s.scrollTop : 0;
         }""")
+        check("switcher pins flush below site navigation without a shadow", switcher.evaluate("""el => {
+            const r = el.getBoundingClientRect(), nav = document.getElementById('nav').getBoundingClientRect();
+            return Math.abs(r.top-nav.bottom) <= 1 && getComputedStyle(el).boxShadow === 'none';
+        }"""))
         page.evaluate("showTab('ensowater')")
         page.wait_for_selector('#subview-ensowater.active .enso-subview-meta')
         top_after = page.evaluate("() => { const s = document.querySelector('#tab-elnino .content-page'); return s ? s.scrollTop : window.scrollY; }")
@@ -553,26 +559,49 @@ def main() -> int:
               and page.locator('#enso-step-upwelling').is_visible()
               and page.locator('#enso-ruler-figure').get_attribute('data-state') == 'elnino')
         labels = []
-        for state in ('normal', 'elnino', 'lanina'):
+        for state in ('elnino', 'lanina'):
             page.locator(f'[data-ruler-state="{state}"]').click()
-            labels.append(page.locator('#enso-ruler-figure [role="img"]').get_attribute('aria-label'))
-        check("one cross-section switches between three distinct states",
-              len(set(labels)) == 3 and all(labels)
-              and page.locator('#enso-ruler-figure .enso-ruler-highlight').is_visible())
+            labels.append(page.locator('#enso-ruler-figure svg').get_attribute('aria-label'))
+        check("Normal stays beside two distinct comparison states",
+              len(set(labels)) == 2 and all(labels)
+              and page.locator('.enso-pacific-pair svg').count() == 2
+              and page.locator('#enso-ruler-normal > b').inner_text() == 'Normal')
+        ticks.nth(2).click()
+        page.wait_for_timeout(300)
+        check("step three highlights warm water in both panels", page.evaluate("""() =>
+            [...document.querySelectorAll('.enso-pacific-pair .g-warmpool')]
+                .every(g => getComputedStyle(g).opacity === '1')"""))
         ticks.first.click()
         check("a manual Pacific state survives step selection and updates the caption",
               page.locator('#enso-ruler-figure').get_attribute('data-state') == 'lanina'
-              and page.locator('#enso-ruler-caption').inner_text().startswith('La Niña:'))
+              and 'La Niña:' in page.locator('#enso-ruler-caption').inner_text())
+        page.emulate_media(reduced_motion='reduce')
+        ticks.nth(2).click()
+        # Reduced motion keeps the 200ms opacity crossfade (it aids comprehension)
+        # and drops the loops and slides, so only CSS animations are counted, after
+        # the crossfade has finished.
+        page.wait_for_timeout(700)
+        check("reduced motion leaves no running animations in the mechanism", page.evaluate("""() =>
+            document.querySelector('.enso-mechanism-plate').getAnimations({subtree:true})
+              .filter(a => a instanceof CSSAnimation && a.playState === 'running').length === 0"""))
+        page.emulate_media(reduced_motion='no-preference')
         for width, height in ((1440, 900), (1280, 800)):
             page.set_viewport_size({"width": width, "height": height})
-            check(f"mechanism fits a laptop plate at {width}px with text beside the engraving",
+            check(f"mechanism fits a laptop plate at {width}px with reading below the pair",
                   page.evaluate("""() => {
                     const plate = document.querySelector('.enso-mechanism-plate').getBoundingClientRect();
-                    const fig = document.getElementById('enso-ruler-figure').getBoundingClientRect();
+                    const left = document.getElementById('enso-ruler-normal').getBoundingClientRect();
+                    const right = document.getElementById('enso-ruler-figure').getBoundingClientRect();
                     const text = document.querySelector('.enso-mechanism-reading').getBoundingClientRect();
-                    return plate.height <= 820 && text.left >= fig.right && Math.abs(fig.top-text.top) < 2
-                        && document.getElementById('enso-view-nav').getBoundingClientRect().height <= 56;
+                    return plate.height <= 820 && right.left >= left.right && Math.abs(left.top-right.top) < 2
+                        && text.top >= right.bottom && document.getElementById('enso-view-nav').getBoundingClientRect().height === 40;
                   }"""))
+        page.set_viewport_size({"width":390,"height":844})
+        check("phone switcher stays one 36px row and the pair stacks without overflow", page.evaluate("""() => {
+            const root = document.querySelector('#tab-elnino .content-page'), bar = document.getElementById('enso-view-nav');
+            const left = document.getElementById('enso-ruler-normal').getBoundingClientRect(), right = document.getElementById('enso-ruler-figure').getBoundingClientRect();
+            return bar.getBoundingClientRect().height === 36 && right.top >= left.bottom && root.scrollWidth <= root.clientWidth;
+        }"""))
         page.set_viewport_size({"width": 1440, "height": 1000})
         page.locator('#viewbtn-ensowater').click()
         page.wait_for_selector('#subview-ensowater.active #enso-c-panama')
@@ -706,6 +735,18 @@ def main() -> int:
         check("published Panama limits lead observed AIS with its actual coverage",
               water['lead'] and water['slot'] == 'published' and water['ais'] == 'observed'
               and history[0] in water['source'] and history[-1] in water['source'])
+        board_slots = page.evaluate("async () => (await (await fetch('data/enso_lanes.json')).json()).data.lanes.find(l => l.id === 'panama').live_2026.steps.at(-1).total")
+        check("Shipping leads with nine lane answers sourced from the current JSON",
+              page.locator('.enso-status-table tbody tr').count() == 9
+              and f'{board_slots} slots/day' in page.locator('[data-board-lane="panama"]').inner_text())
+        check("Panama charts share one plate and sit side by side on laptop", page.evaluate("""() => {
+            const pair = document.querySelector('.enso-panama-pair'), panels = pair.querySelectorAll(':scope > figure');
+            return panels.length === 2 && panels[1].getBoundingClientRect().left >= panels[0].getBoundingClientRect().right;
+        }"""))
+        page.locator('[data-open-lane="rhine"]').click()
+        check("lane board opens the matching folded record",
+              page.locator('#enso-lane-record-rhine details').get_attribute('open') is not None
+              and page.locator('.enso-lanes-more').get_attribute('open') is not None)
         # 2026-09-22: three lanes lead, the rest sit in a "N more lanes" fold with
         # the same two-column table, so rows are counted across both tables.
         check("one two-column lane record retains every lane",
@@ -767,6 +808,24 @@ def main() -> int:
         page.wait_for_selector('#subview-elnino.active .enso-subview-meta')
         check("Stage H fold explains button zoom and page scrolling",
               'so the page can scroll over it' in page.locator('#enso-legend details').text_content())
+        page.locator('#enso-map').scroll_into_view_if_needed()
+        pacific = page.evaluate("""() => {
+            const m = window._stageHMap, box = m.getContainer().getBoundingClientRect();
+            const p = m.latLngToContainerPoint([0,-150]);
+            return {x:box.left+p.x,y:box.top+p.y};
+        }""")
+        page.mouse.move(pacific['x'], pacific['y'])
+        check("Ocean sea-cell hover follows the cursor and shows an anomaly",
+              page.locator('.enso-sst-readout').is_visible()
+              and '°C' in page.locator('.enso-sst-readout').inner_text())
+        land = page.evaluate("""() => {
+            const m = window._stageHMap, box = m.getContainer().getBoundingClientRect();
+            const p = m.latLngToContainerPoint([0,20]); return {x:box.left+p.x,y:box.top+p.y};
+        }""")
+        page.mouse.move(land['x'],land['y'])
+        check("SST readout hides over land", not page.locator('.enso-sst-readout').is_visible())
+        page.mouse.move(1,1)
+        check("SST readout hides on pointer leave", not page.locator('.enso-sst-readout').is_visible())
         collapse = []
         for tab in ('elnino', 'ensowater', 'ensomoney', 'ensolive'):
             page.evaluate("tab => showTab(tab)", tab)

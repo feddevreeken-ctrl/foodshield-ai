@@ -6,7 +6,7 @@ const start = html.indexOf('(function () {', html.indexOf('   THE MAP USES A DIV
 const end = html.indexOf('\n})();',start);
 const nodes = {};
 function node(id) { return nodes[id] || (nodes[id] = { innerHTML:'', value:'', style:{}, setAttribute(k,v){this[k]=v;}, querySelectorAll(){return [];}, classList:{toggle(){}, contains(){return false;}} }); }
-const ctx = vm.createContext({window:{location:{href:'http://localhost/index.html',search:''}}, document:{getElementById:node,querySelectorAll(){return [];},addEventListener(){}}, URL,console,Date,setTimeout,clearTimeout,Event, URLSearchParams, charts:{}});
+const ctx = vm.createContext({window:{location:{href:'http://localhost/index.html',search:''}}, matchMedia(){return {matches:false,addEventListener(){},removeEventListener(){}};},IntersectionObserver:class {observe(){} disconnect(){}}, document:{getElementById:node,querySelector(){return node('scroller');},querySelectorAll(){return [];},addEventListener(){}}, URL,console,Date,setTimeout,clearTimeout,Event, URLSearchParams, charts:{}});
 vm.runInContext(html.slice(start,end)+`
   mk = function(id,cfg) { if (!S._chartFilter || S._chartFilter.indexOf(id)>=0) globalThis.charts[id]=cfg; };
   globalThis.api={S,feedIssue,renderFailures,calendarSeason,calendarBasis,wireRuler,renderLandHead,renderDetail,renderCoeffs,renderCalendar,renderWater,renderMoney,renderPeople,renderLimits,renderControls,syncInstruments,drawCharts,selectCountry};
@@ -18,30 +18,43 @@ for (const [key,file] of Object.entries({model:'enso_model',calendars:'crop_cale
 S.oniLive=S.enso.latest.anom;
 let passed=0;
 function test(name,fn){fn();passed++;console.log('ok',name);}
-test('longitude ruler supports arrow wrap, Home/End, panels and state switching',()=>{
- const saved={...nodes};let focused=null;
+test('paired longitude ruler supports arrow wrap, Home/End, shared highlighting and persistent comparison state',()=>{
+ const saved={...nodes};let focused=null, observe;
+ const realTimer=ctx.setTimeout,realClear=ctx.clearTimeout;const timers=new Map();let timerId=0;
+ ctx.setTimeout=(fn,ms)=>{assert.equal(ms,4000);timers.set(++timerId,fn);return timerId;};ctx.clearTimeout=id=>timers.delete(id);
+ ctx.IntersectionObserver=class {constructor(fn){observe=fn;}observe(){}disconnect(){}};
+ const advance=()=>{const [id,fn]=timers.entries().next().value;timers.delete(id);fn();};
  const stops=['trades','soi','warm_water','convection','upwelling'];
- S.rulerStops=stops.map((id,i)=>[id,'','',[i,10,40+i,60]]);
+ S.rulerStops=stops.map(id=>[id,'','',[]]);
  const ticks=stops.map(id=>({attrs:{'aria-controls':'enso-step-'+id},setAttribute(k,v){this.attrs[k]=v;},getAttribute(k){return this.attrs[k];},focus(){focused=id;}}));
- const states=['normal','elnino','lanina'].map(state=>({attrs:{'data-ruler-state':state},setAttribute(k,v){this.attrs[k]=v;},getAttribute(k){return this.attrs[k];}}));
- const spot={style:{}};const raster={querySelector(){return spot;}};
- nodes['enso-ruler-figure']={innerHTML:'',getAttribute(k){return this[k];},setAttribute(k,v){this[k]=v;},querySelector(){return raster;}};
- nodes['enso-mech']={querySelectorAll(q){return q==='[data-ruler]'?ticks:q==='[data-ruler-state]'?states:[];}};
+ const states=['elnino','lanina'].map(state=>({dataset:{rulerState:state},attrs:{},setAttribute(k,v){this.attrs[k]=v;}}));
+ const groups=['g-trades','g-walker','g-warmpool','g-thermocline','g-cloud','g-rain','g-upwelling'].flatMap(name=>[0,1].map(()=>({name,selected:false,classList:{contains(c){return c===name;},toggle(c,on){this.owner.selected=on;}}})));
+ groups.forEach(g=>g.classList.owner=g);
+ const svg={dataset:{},setAttribute(k,v){this[k]=v;}};
+ const handlers={};
+ const plate={querySelectorAll(){return groups;},addEventListener(k,fn){handlers[k]=fn;},classList:{toggle(){}}};
+ nodes['enso-ruler-figure']={dataset:{},querySelector(){return svg;}};
+ nodes['enso-mech']={querySelector(){return plate;},querySelectorAll(q){return q==='[data-ruler]'?ticks:q==='[data-ruler-state]'?states:[];}};
  api.wireRuler();assert.equal(ticks[0].attrs['aria-selected'],'true');
- assert.equal(nodes['enso-ruler-figure']['data-state'],'normal');
- assert(nodes['enso-ruler-caption'].textContent.startsWith('Neutral:'));
- ticks[1].onclick();assert.equal(nodes['enso-ruler-figure']['data-state'],'normal');
+ assert.equal(nodes['enso-ruler-figure'].dataset.state,'elnino');
+ assert(nodes['enso-ruler-caption'].textContent.startsWith('Normal:'));
+ ticks[1].onclick();assert.equal(nodes['enso-ruler-figure'].dataset.state,'elnino');
  let prevented=false;ticks[0].onkeydown({key:'ArrowLeft',preventDefault(){prevented=true;}});
  assert(prevented);assert.equal(focused,'upwelling');assert.equal(ticks[4].attrs['aria-selected'],'true');assert.equal(nodes['enso-step-upwelling'].hidden,false);assert.equal(nodes['enso-step-trades'].hidden,true);
- assert.equal(nodes['enso-ruler-figure']['data-state'],'elnino');
- assert(nodes['enso-ruler-caption'].textContent.startsWith('El Niño:'));
  ticks[4].onkeydown({key:'Home',preventDefault(){}});assert.equal(focused,'trades');
- assert.equal(nodes['enso-ruler-figure']['data-state'],'normal');
  ticks[0].onkeydown({key:'End',preventDefault(){}});assert.equal(focused,'upwelling');
- ticks[2].onclick();assert.equal(ticks[2].attrs['aria-selected'],'true');assert.equal(spot.style.left,'2%');
- states[2].onclick();assert.equal(states[2].attrs['aria-pressed'],'true');assert.equal(states[0].attrs['aria-pressed'],'false');assert(nodes['enso-ruler-figure'].innerHTML.includes('La Niña Pacific state'));
- ticks[0].onclick();assert.equal(nodes['enso-ruler-figure']['data-state'],'lanina');
- assert(nodes['enso-ruler-caption'].textContent.startsWith('La Niña:'));
+ ticks[2].onclick();assert.equal(ticks[2].attrs['aria-selected'],'true');
+ assert(groups.filter(g=>g.name==='g-warmpool').every(g=>g.selected));assert(groups.filter(g=>g.name==='g-trades').every(g=>!g.selected));
+ states[1].onclick();assert.equal(states[1].attrs['aria-pressed'],'true');assert.equal(states[0].attrs['aria-pressed'],'false');assert(svg['aria-label'].includes('La Niña'));
+ ticks[0].onclick();assert.equal(nodes['enso-ruler-figure'].dataset.state,'lanina');
+ assert(nodes['enso-ruler-caption'].textContent.includes('La Niña:'));
+ observe([{isIntersecting:true}]);
+ const play=nodes['enso-ruler-play'];play.onclick();assert.equal(ticks[0].attrs['aria-selected'],'true');
+ for(let i=1;i<5;i++){advance();assert.equal(ticks[i].attrs['aria-selected'],'true');}
+ assert.equal(timers.size,0);assert.equal(play['aria-pressed'],'false');
+ for(const event of ['pointerenter','focusin','keydown']){play.onclick();assert.equal(timers.size,1);handlers[event]();assert.equal(timers.size,0);}
+ play.onclick();observe([{isIntersecting:false}]);assert.equal(timers.size,0);
+ S.rulerCleanup();S.rulerCleanup=null;ctx.setTimeout=realTimer;ctx.clearTimeout=realClear;
  for(const k of Object.keys(nodes))delete nodes[k];Object.assign(nodes,saved);
 });
 test('partial agency feeds stay usable; stale and failed collectors still warn',()=>{
@@ -83,8 +96,12 @@ test('calendar retains eligible crop rows, month names, and stage groups',()=>{
  assert.equal((out.match(/data-st=/g)||[]).length,Math.min(30,expected));assert.equal((out.match(/class="cal-group"/g)||[]).length,4);
  for(const m of ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'])assert(out.includes('>'+m+'</i>'));
 });
-test('shipping leads with published ordinal limits and separate dated AIS',()=>{
+test('shipping leads with nine lane answers and paired published limits and dated AIS',()=>{
  api.renderWater();const out=nodes['enso-water'].innerHTML;assert(out.indexOf('id="enso-c-panama"')<out.indexOf('id="enso-c-panama-daily"'));
+ assert(out.indexOf('enso-lane-board')<out.indexOf('enso-panama-pair'));
+ assert.equal((out.match(/data-board-lane=/g)||[]).length,9);
+ const pan=S.lanes.lanes.find(l=>l.id==='panama');assert(out.includes(pan.live_2026.steps.at(-1).total+' slots/day from'));
+ for (const id of ['amazon','rhine','mississippi']) { const row=out.match(new RegExp('data-board-lane="'+id+'"[\\s\\S]*?</tr>'))[0]; assert(row.includes('2026'),id+' has a dated September observation'); }
  api.drawCharts('ensowater');const key=ctx.charts['enso-c-panama'].keyNotes.join(' ');
  assert(key.includes('Ordinal steps'));assert(key.includes('not to scale in time'));assert(out.includes('2025-09'));assert(out.includes('2026-09'));
  assert.equal((out.match(/data-lane=/g)||[]).length,S.lanes.lanes.length);
