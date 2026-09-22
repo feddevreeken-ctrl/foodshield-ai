@@ -42,7 +42,7 @@ PANAMA_PROBE = """() => {
     const cv = document.getElementById('enso-c-panama');
     const ch = cv && window.Chart && Chart.getChart ? Chart.getChart(cv) : null;
     if (!ch) return null;
-    const cap = document.querySelector('.enso-chart-cap');
+    const cap = cv.closest('.enso-plate').querySelector('.enso-chart-notes');
     return {labels: ch.data.labels, cap: cap ? cap.textContent : ''};
 }"""
 
@@ -147,14 +147,36 @@ def main() -> int:
         page.evaluate("showTab('elnino')")
         check("view switcher leads the tab, pins as a translucent bar, and only shows on its host tab",
               leads and visible_here and hidden_elsewhere and switcher.is_visible())
-        # A view change lands the reader at the top of the tab, not mid-page.
-        page.evaluate("() => { const s = document.querySelector('#tab-elnino .content-page'); if (s) s.scrollTop = 1400; }")
+        check("view bar has five equal cells with descriptors and an orange top rule",
+              switcher.evaluate("""el => {
+                const tabs = [...el.querySelectorAll('[role="tab"]')];
+                const widths = tabs.map(t => t.getBoundingClientRect().width);
+                return tabs.length === 5 && tabs.every(t => t.querySelector('.enso-view-desc')?.textContent)
+                    && Math.max(...widths) - Math.min(...widths) < 1
+                    && el.getBoundingClientRect().height <= 56
+                    && getComputedStyle(el.querySelector('[aria-selected="true"]')).borderTopColor === 'rgb(201, 119, 58)';
+              }"""))
+        # Like the other content tabs, .content-page alone scrolls; #main is clipped.
+        top_before = page.evaluate("""() => {
+            const s = document.querySelector('#tab-elnino .content-page');
+            s.scrollTop = 1400;
+            return getComputedStyle(document.getElementById('main')).overflowY === 'hidden' ? s.scrollTop : 0;
+        }""")
         page.evaluate("showTab('ensowater')")
         page.wait_for_selector('#subview-ensowater.active .enso-subview-meta')
         top_after = page.evaluate("() => { const s = document.querySelector('#tab-elnino .content-page'); return s ? s.scrollTop : window.scrollY; }")
         page.evaluate("showTab('elnino')")
         page.wait_for_selector('#subview-elnino.active .enso-subview-meta')
-        check("a view change starts at the top of the tab", top_after == 0, str(top_after))
+        check("a view change resets the sole content-page scroller", top_before > 0 and top_after == 0,
+              f"{top_before} -> {top_after}")
+        page.locator('#enso-map').scroll_into_view_if_needed()
+        page.locator('#enso-map').hover(position={"x": 120, "y": 100})
+        wheel_before = page.eval_on_selector('#tab-elnino .content-page', 'e => e.scrollTop')
+        page.mouse.wheel(0, 240)
+        page.wait_for_timeout(250)
+        wheel_after = page.eval_on_selector('#tab-elnino .content-page', 'e => e.scrollTop')
+        check("a wheel over the map scrolls the content page", wheel_after > wheel_before,
+              f"{wheel_before} -> {wheel_after}")
         # A layer picked by hand belongs to the view it was picked on. Pressing
         # "Food inflation" on Ocean must not paint Reported with it.
         page.locator('[data-native="enso-mode"][data-value="rtfp"]').click()
@@ -420,6 +442,15 @@ def main() -> int:
         check("more than one agency is represented", len(set(ags)) >= 2, str(set(ags)))
         check("the frozen climate.gov feed is named and excluded",
               "climate gov" in page.locator(".enso-bul-skip").inner_text().lower())
+        check("unreached agencies are named locally without a partial-feed warning",
+              page.evaluate("""async () => {
+                const feed = await (await fetch('data/enso_bulletins.json')).json();
+                const names = {jma_monthly:'JMA', enfen_monthly:'ENFEN', iri_monthly:'IRI', bom_weekly:'BoM', cpc_monthly:'NOAA CPC', wmo_news:'WMO'};
+                const skip = document.querySelector('.enso-bul-skip').textContent;
+                return (feed.data.unavailable || []).filter(u => u.key !== 'climate_gov_enso_blog')
+                    .every(u => skip.includes((names[u.key] || u.key.replaceAll('_', ' ')) + ' not reached this cycle'))
+                    && !document.querySelector('#enso-failures').textContent.includes('source reports partial');
+              }"""))
         hrefs = page.eval_on_selector_all(
             ".enso-news-t", "e => e.map(x => x.getAttribute('href') || '')")
         check("no feed link escapes the http(s) allow-list",
@@ -487,6 +518,11 @@ def main() -> int:
                 return selectors.filter(s => [...document.querySelectorAll(s)].some(e =>
                     e.clientWidth && e.scrollWidth > e.clientWidth + 1));
             }""")
+            inner_scrollers = page.evaluate("""() => [...document.querySelectorAll('#tab-elnino .content-page *')]
+                .filter(e => e.tagName !== 'SELECT' && e.getClientRects().length
+                    && /auto|scroll/.test(getComputedStyle(e).overflowY))
+                .map(e => e.id || e.className)""")
+            check(f"{tab} has no inner vertical scroll containers", not inner_scrollers, str(inner_scrollers))
             print(f"  390px {tab}: " + (", ".join(overflow) if overflow else "no horizontal overflow"))
             mobile_overflow.extend(f"{tab}: {s}" for s in overflow)
         check("no horizontal overflow", desktop_ok and not mobile_overflow, "; ".join(mobile_overflow))
@@ -502,8 +538,9 @@ def main() -> int:
               and abs(page.locator('#enso-mech').bounding_box()['y']
                       - page.locator('#tab-elnino .content-page').bounding_box()['y'] - 120) < 5)
         ticks = page.locator('#enso-mech [data-ruler]')
-        check("five geographic stops replace the scroll tour", ticks.count() == 5
-              and page.locator('.tour-step').count() == 0)
+        check("five named longitude ticks replace the scroll tour", ticks.count() == 5
+              and page.locator('.tour-step').count() == 0
+              and ticks.evaluate_all("els => els.every(e => e.title && e.querySelector('.enso-ruler-longitude') && e.querySelector('.enso-ruler-name'))"))
         ticks.first.focus()
         page.keyboard.press('ArrowRight')
         check("ruler arrow key updates focus and visible text",
@@ -513,7 +550,8 @@ def main() -> int:
         page.keyboard.press('End')
         check("ruler End key selects eastern upwelling",
               ticks.last.get_attribute('aria-selected') == 'true'
-              and page.locator('#enso-step-upwelling').is_visible())
+              and page.locator('#enso-step-upwelling').is_visible()
+              and page.locator('#enso-ruler-figure').get_attribute('data-state') == 'elnino')
         labels = []
         for state in ('normal', 'elnino', 'lanina'):
             page.locator(f'[data-ruler-state="{state}"]').click()
@@ -521,6 +559,21 @@ def main() -> int:
         check("one cross-section switches between three distinct states",
               len(set(labels)) == 3 and all(labels)
               and page.locator('#enso-ruler-figure .enso-ruler-highlight').is_visible())
+        ticks.first.click()
+        check("a manual Pacific state survives step selection and updates the caption",
+              page.locator('#enso-ruler-figure').get_attribute('data-state') == 'lanina'
+              and page.locator('#enso-ruler-caption').inner_text().startswith('La Niña:'))
+        for width, height in ((1440, 900), (1280, 800)):
+            page.set_viewport_size({"width": width, "height": height})
+            check(f"mechanism fits a laptop plate at {width}px with text beside the engraving",
+                  page.evaluate("""() => {
+                    const plate = document.querySelector('.enso-mechanism-plate').getBoundingClientRect();
+                    const fig = document.getElementById('enso-ruler-figure').getBoundingClientRect();
+                    const text = document.querySelector('.enso-mechanism-reading').getBoundingClientRect();
+                    return plate.height <= 820 && text.left >= fig.right && Math.abs(fig.top-text.top) < 2
+                        && document.getElementById('enso-view-nav').getBoundingClientRect().height <= 56;
+                  }"""))
+        page.set_viewport_size({"width": 1440, "height": 1000})
         page.locator('#viewbtn-ensowater').click()
         page.wait_for_selector('#subview-ensowater.active #enso-c-panama')
         page.locator('#viewbtn-ensowater').focus()
@@ -653,10 +706,12 @@ def main() -> int:
         check("published Panama limits lead observed AIS with its actual coverage",
               water['lead'] and water['slot'] == 'published' and water['ais'] == 'observed'
               and history[0] in water['source'] and history[-1] in water['source'])
+        # 2026-09-22: three lanes lead, the rest sit in a "N more lanes" fold with
+        # the same two-column table, so rows are counted across both tables.
         check("one two-column lane record retains every lane",
               page.locator('.enso-lanes-table tbody tr').count() == lane_count
               and page.locator('#enso-lane-story').count() == 0
-              and page.locator('.enso-lanes-table th').count() == 2)
+              and page.locator('.enso-lanes-table').first.locator('th').count() == 2)
         page.evaluate("showTab('ensomoney')")
         page.wait_for_selector('#subview-ensomoney.active #enso-c-ffpi')
         ffpi = page.evaluate("""() => {
@@ -706,6 +761,10 @@ def main() -> int:
         page.locator('#enso-mapwrap [data-z="0"]').click()
         check("Stage H plate buttons zoom in, zoom out and reset", zoomed == initial_zoom + 1
               and zoomed_out == initial_zoom and page.evaluate("_stageHMap.getZoom()") == 2)
+        # The controls sentence lives in the Ocean fold only (2026-09-22); the
+        # other views carry a shorter "Map sources" fold.
+        page.evaluate("showTab('elnino')")
+        page.wait_for_selector('#subview-elnino.active .enso-subview-meta')
         check("Stage H fold explains button zoom and page scrolling",
               'so the page can scroll over it' in page.locator('#enso-legend details').text_content())
         collapse = []

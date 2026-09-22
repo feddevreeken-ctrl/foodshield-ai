@@ -37,7 +37,7 @@ test('coverage ramp has three anchors and different USA and ZAF fills',()=>{
  S.mode='coverage';api.renderLegend();const out=node('enso-legend').innerHTML;
  assert(out.includes('enso-ramp enso-coverage-ramp'));
  for(const n of ['0%','50%','100%'])assert(out.includes('<span>'+n+'</span>'));
- assert(out.includes('Dark means nobody measured there'));
+ assert(out.includes('Dark: no fitted signal.'));
  assert.notEqual(api.fillFor('USA'),api.fillFor('ZAF'));
  assert(out.includes(api.coverageColor(.5)));assert(out.includes(api.coverageColor(1)));
 });
@@ -89,7 +89,7 @@ test('prices include every valued teleconnection country in descending order wit
   assert.equal(ds.backgroundColor[i],api.rtfpColor(r.food_inflation_pct));
   const tip=c.options.plugins.tooltip.callbacks;assert(tip.label({dataIndex:i}).includes(r.markets+' markets · as of '+r.as_of));assert(tip.afterLabel({dataIndex:i}).includes(r.source_url));
  });
- api.renderMoney();const out=node('enso-money').innerHTML;assert(out.includes('no cap'));assert(!out.includes('highest eighteen'));
+ api.renderMoney();const out=node('enso-money').innerHTML;assert(out.includes('Bars: '+expected.length+' teleconnection countries'));assert(!out.includes('highest eighteen'));
  for(const iso of expected){const r=S.rtfp[iso];assert(out.includes('data-price-iso="'+iso+'"'));assert(out.includes(r.as_of));}
 });
 test('price key never names a hue absent from positive-only, negative-only or zero-only plots',()=>{

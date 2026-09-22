@@ -9,7 +9,7 @@ function node(id) { return nodes[id] || (nodes[id] = { innerHTML:'', value:'', s
 const ctx = vm.createContext({window:{location:{href:'http://localhost/index.html',search:''}}, document:{getElementById:node,querySelectorAll(){return [];},addEventListener(){}}, URL,console,Date,setTimeout,clearTimeout,Event, URLSearchParams, charts:{}});
 vm.runInContext(html.slice(start,end)+`
   mk = function(id,cfg) { if (!S._chartFilter || S._chartFilter.indexOf(id)>=0) globalThis.charts[id]=cfg; };
-  globalThis.api={S,calendarSeason,calendarBasis,wireRuler,renderLandHead,renderDetail,renderCoeffs,renderCalendar,renderWater,renderMoney,renderPeople,renderLimits,renderControls,syncInstruments,drawCharts,selectCountry};
+  globalThis.api={S,feedIssue,renderFailures,calendarSeason,calendarBasis,wireRuler,renderLandHead,renderDetail,renderCoeffs,renderCalendar,renderWater,renderMoney,renderPeople,renderLimits,renderControls,syncInstruments,drawCharts,selectCountry};
 })();`, ctx);
 const api = ctx.api, S=api.S;
 for (const [key,file] of Object.entries({model:'enso_model',calendars:'crop_calendars',enso:'enso',lanes:'enso_lanes',econ:'enso_econ',exp:'enso_exposure',portwatch:'portwatch',pwhist:'portwatch_history',rtfp:'rtfp',ffpi:'fao_ffpi'})) {
@@ -20,21 +20,40 @@ let passed=0;
 function test(name,fn){fn();passed++;console.log('ok',name);}
 test('longitude ruler supports arrow wrap, Home/End, panels and state switching',()=>{
  const saved={...nodes};let focused=null;
- const stops=['trades','soi','convection','warm_water','upwelling'];
+ const stops=['trades','soi','warm_water','convection','upwelling'];
  S.rulerStops=stops.map((id,i)=>[id,'','',[i,10,40+i,60]]);
  const ticks=stops.map(id=>({attrs:{'aria-controls':'enso-step-'+id},setAttribute(k,v){this.attrs[k]=v;},getAttribute(k){return this.attrs[k];},focus(){focused=id;}}));
  const states=['normal','elnino','lanina'].map(state=>({attrs:{'data-ruler-state':state},setAttribute(k,v){this.attrs[k]=v;},getAttribute(k){return this.attrs[k];}}));
  const spot={style:{}};const raster={querySelector(){return spot;}};
- nodes['enso-ruler-figure']={innerHTML:'',setAttribute(k,v){this[k]=v;},querySelector(){return raster;}};
+ nodes['enso-ruler-figure']={innerHTML:'',getAttribute(k){return this[k];},setAttribute(k,v){this[k]=v;},querySelector(){return raster;}};
  nodes['enso-mech']={querySelectorAll(q){return q==='[data-ruler]'?ticks:q==='[data-ruler-state]'?states:[];}};
  api.wireRuler();assert.equal(ticks[0].attrs['aria-selected'],'true');
+ assert.equal(nodes['enso-ruler-figure']['data-state'],'normal');
+ assert(nodes['enso-ruler-caption'].textContent.startsWith('Neutral:'));
+ ticks[1].onclick();assert.equal(nodes['enso-ruler-figure']['data-state'],'normal');
  let prevented=false;ticks[0].onkeydown({key:'ArrowLeft',preventDefault(){prevented=true;}});
  assert(prevented);assert.equal(focused,'upwelling');assert.equal(ticks[4].attrs['aria-selected'],'true');assert.equal(nodes['enso-step-upwelling'].hidden,false);assert.equal(nodes['enso-step-trades'].hidden,true);
+ assert.equal(nodes['enso-ruler-figure']['data-state'],'elnino');
+ assert(nodes['enso-ruler-caption'].textContent.startsWith('El Niño:'));
  ticks[4].onkeydown({key:'Home',preventDefault(){}});assert.equal(focused,'trades');
+ assert.equal(nodes['enso-ruler-figure']['data-state'],'normal');
  ticks[0].onkeydown({key:'End',preventDefault(){}});assert.equal(focused,'upwelling');
  ticks[2].onclick();assert.equal(ticks[2].attrs['aria-selected'],'true');assert.equal(spot.style.left,'2%');
  states[2].onclick();assert.equal(states[2].attrs['aria-pressed'],'true');assert.equal(states[0].attrs['aria-pressed'],'false');assert(nodes['enso-ruler-figure'].innerHTML.includes('La Niña Pacific state'));
+ ticks[0].onclick();assert.equal(nodes['enso-ruler-figure']['data-state'],'lanina');
+ assert(nodes['enso-ruler-caption'].textContent.startsWith('La Niña:'));
  for(const k of Object.keys(nodes))delete nodes[k];Object.assign(nodes,saved);
+});
+test('partial agency feeds stay usable; stale and failed collectors still warn',()=>{
+ const saved={data:S.bulletins,meta:S.meta.bulletins,names:S.feedNames,failed:S.failed};
+ S.bulletins={bulletins:[{agency:'NOAA CPC'}]};
+ S.meta.bulletins={status:'partial',generated_at:new Date().toISOString()};
+ S.feedNames={bulletins:'enso_bulletins'};S.failed=[];
+ assert.equal(api.feedIssue('bulletins'),'');api.renderFailures();assert.equal(nodes['enso-failures'].innerHTML,'');
+ S.meta.bulletins.stale=true;assert(api.feedIssue('bulletins').includes('stale'));
+ S.meta.bulletins.stale=false;S.meta.bulletins.status='error';assert(api.feedIssue('bulletins').includes('error'));
+ S.meta.bulletins.status='partial';S.meta.bulletins.generated_at='2000-01-01';assert(api.feedIssue('bulletins').includes('collector has not run'));
+ S.bulletins=saved.data;S.meta.bulletins=saved.meta;S.feedNames=saved.names;S.failed=saved.failed;
 });
 test('winter-crossing crop has a bounded growing season',()=>{
  const c={plant:[10,11],harvest:[3,4]};
@@ -66,7 +85,8 @@ test('calendar retains eligible crop rows, month names, and stage groups',()=>{
 });
 test('shipping leads with published ordinal limits and separate dated AIS',()=>{
  api.renderWater();const out=nodes['enso-water'].innerHTML;assert(out.indexOf('id="enso-c-panama"')<out.indexOf('id="enso-c-panama-daily"'));
- assert(out.includes('Ordinal steps'));assert(out.includes('not to scale in time'));assert(out.includes('2025-09'));assert(out.includes('2026-09'));
+ api.drawCharts('ensowater');const key=ctx.charts['enso-c-panama'].keyNotes.join(' ');
+ assert(key.includes('Ordinal steps'));assert(key.includes('not to scale in time'));assert(out.includes('2025-09'));assert(out.includes('2026-09'));
  assert.equal((out.match(/data-lane=/g)||[]).length,S.lanes.lanes.length);
  for(const l of S.lanes.lanes){if(l.counter_evidence) assert(out.includes(l.counter_evidence.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')));}
 });
