@@ -140,13 +140,13 @@ test('Stage I price rail lists every teleconnection country, valued first, and n
  assert.deepEqual(teleShown.slice(0,teleValued.length),teleValued,'valued teleconnection rows lead');
  teleValued.forEach((k,i)=>{if(i)assert(saved[teleValued[i-1]].food_inflation_pct>=saved[k].food_inflation_pct);});
  teleValued.forEach(k=>{assert(list.textContent.includes(saved[k].as_of));assert(list.textContent.includes(saved[k].markets+' markets'));});
- if(teleShown.length>teleValued.length)assert(list.textContent.includes('No monitored market'));
+ if(teleShown.length>teleValued.length)assert(list.textContent.includes('have no monitored market:'));
  assert.equal(api.mapState().title,'Where food prices are rising fastest');assert(api.priceMapSentence().includes('as of August 2026'));
  S.isoIndex={ZWE:[{}],KEN:[{}]};
  S.rtfp={ZWE:{food_inflation_pct:0,markets:2,as_of:'2026-07-01'},USA:{food_inflation_pct:-2,markets:3,as_of:'2026-08-01'},BAD:{food_inflation_pct:null},NAN:{food_inflation_pct:NaN}};
  api.renderMapRanking();
  assert.deepEqual(list.querySelectorAll('button').map(b=>b.getAttribute('data-map-country')),['ZWE','KEN','USA']);
- assert(list.textContent.includes('No monitored market'));
+ assert(list.textContent.includes('have no monitored market:'));
  assert(list.textContent.includes('1 monitored countries outside the layer'));
  assert(api.priceMapSentence().includes('July 2026 to August 2026'));
  S.rtfp={};api.renderMapRanking();
@@ -300,8 +300,9 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
   const analog=api.analogPlate();for(const label of ['five strongest past events','last published season','±0.5','five marked analog winters'])assert(analog.includes(label));
   api.renderCalendar();for(const label of ['Hatched: planting','Solid: harvest','El Niño slope falls','El Niño slope rises','Tinted band: DJF','Vertical rule: this month','grows through DJF'])assert(node('enso-calendar').textContent.includes(label));
   assert(node('enso-calendar').innerHTML.indexOf('cal-key')<node('enso-calendar').innerHTML.indexOf('class="enso-cal"'));
-  api.renderCoeffs();assert(node('enso-coeffs').textContent.includes('La Niña slope × negative ONI'));
-  api.renderMoney();assert(node('enso-money').querySelector('#enso-c-record'));for(const label of ['Green: prices fall','Ochre: prices rise','previous six months','same six months a year earlier'])assert(node('enso-money').textContent.includes(label));
+  // The sign rule moved into renderDetail (stubbed in this harness); the browser gate reads it from #enso-detail.
+  S.sel='ZWE';api.renderCoeffs();assert(node('enso-coeffs').textContent.includes('Fitted crop responses'));assert(node('enso-coeffs').querySelector('#enso-detail'));
+  api.renderMoney();assert(node('enso-money').querySelector('#enso-c-record'));for(const label of ['Hatched: prices fall','Solid: prices rise','previous six months','same six months a year earlier'])assert(node('enso-money').textContent.includes(label));
   api.drawCharts('ensowater');assert(ctx.charts['enso-c-panama'].keyNotes[0].includes('pale diamonds'));
   const ais=ctx.charts['enso-c-panama-daily'].keyNotes[0],dates=S.pwhist.chokepoints.panama.dates;for(const t of ['Points: observed daily','7-day means','advisory effective dates',dates[0],dates[dates.length-1]])assert(ais.includes(t));
   api.drawCharts('ensomoney');const ffpi=ctx.charts['enso-c-ffpi'].keyNotes[0];for(const t of ['Circles','triangles','diamond',S.ffpi.latest.month])assert(ffpi.includes(t));

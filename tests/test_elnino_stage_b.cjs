@@ -9,7 +9,7 @@ function node(id) { return nodes[id] || (nodes[id] = { innerHTML:'', value:'', s
 const ctx = vm.createContext({window:{location:{href:'http://localhost/index.html',search:''}}, document:{getElementById:node,querySelectorAll(){return [];},addEventListener(){}}, URL,console,Date,setTimeout,clearTimeout,Event, URLSearchParams, charts:{}});
 vm.runInContext(html.slice(start,end)+`
   mk = function(id,cfg) { if (!S._chartFilter || S._chartFilter.indexOf(id)>=0) globalThis.charts[id]=cfg; };
-  globalThis.api={S,calendarSeason,harvestFigure,renderLandHead,renderDetail,renderCoeffs,renderCalendar,renderWater,renderMoney,renderPeople,renderLimits,renderControls,syncInstruments,drawCharts,selectCountry};
+  globalThis.api={S,calendarSeason,calendarBasis,wireRuler,renderLandHead,renderDetail,renderCoeffs,renderCalendar,renderWater,renderMoney,renderPeople,renderLimits,renderControls,syncInstruments,drawCharts,selectCountry};
 })();`, ctx);
 const api = ctx.api, S=api.S;
 for (const [key,file] of Object.entries({model:'enso_model',calendars:'crop_calendars',enso:'enso',lanes:'enso_lanes',econ:'enso_econ',exp:'enso_exposure',portwatch:'portwatch',pwhist:'portwatch_history',rtfp:'rtfp',ffpi:'fao_ffpi'})) {
@@ -18,6 +18,24 @@ for (const [key,file] of Object.entries({model:'enso_model',calendars:'crop_cale
 S.oniLive=S.enso.latest.anom;
 let passed=0;
 function test(name,fn){fn();passed++;console.log('ok',name);}
+test('longitude ruler supports arrow wrap, Home/End, panels and state switching',()=>{
+ const saved={...nodes};let focused=null;
+ const stops=['trades','soi','convection','warm_water','upwelling'];
+ S.rulerStops=stops.map((id,i)=>[id,'','',[i,10,40+i,60]]);
+ const ticks=stops.map(id=>({attrs:{'aria-controls':'enso-step-'+id},setAttribute(k,v){this.attrs[k]=v;},getAttribute(k){return this.attrs[k];},focus(){focused=id;}}));
+ const states=['normal','elnino','lanina'].map(state=>({attrs:{'data-ruler-state':state},setAttribute(k,v){this.attrs[k]=v;},getAttribute(k){return this.attrs[k];}}));
+ const spot={style:{}};const raster={querySelector(){return spot;}};
+ nodes['enso-ruler-figure']={innerHTML:'',setAttribute(k,v){this[k]=v;},querySelector(){return raster;}};
+ nodes['enso-mech']={querySelectorAll(q){return q==='[data-ruler]'?ticks:q==='[data-ruler-state]'?states:[];}};
+ api.wireRuler();assert.equal(ticks[0].attrs['aria-selected'],'true');
+ let prevented=false;ticks[0].onkeydown({key:'ArrowLeft',preventDefault(){prevented=true;}});
+ assert(prevented);assert.equal(focused,'upwelling');assert.equal(ticks[4].attrs['aria-selected'],'true');assert.equal(nodes['enso-step-upwelling'].hidden,false);assert.equal(nodes['enso-step-trades'].hidden,true);
+ ticks[4].onkeydown({key:'Home',preventDefault(){}});assert.equal(focused,'trades');
+ ticks[0].onkeydown({key:'End',preventDefault(){}});assert.equal(focused,'upwelling');
+ ticks[2].onclick();assert.equal(ticks[2].attrs['aria-selected'],'true');assert.equal(spot.style.left,'2%');
+ states[2].onclick();assert.equal(states[2].attrs['aria-pressed'],'true');assert.equal(states[0].attrs['aria-pressed'],'false');assert(nodes['enso-ruler-figure'].innerHTML.includes('La Niña Pacific state'));
+ for(const k of Object.keys(nodes))delete nodes[k];Object.assign(nodes,saved);
+});
 test('winter-crossing crop has a bounded growing season',()=>{
  const c={plant:[10,11],harvest:[3,4]};
  assert.equal(api.calendarSeason(c,1).stage,'in the ground');assert.equal(api.calendarSeason(c,9).stage,'between seasons');
@@ -30,10 +48,13 @@ test('planting across New Year and second seasons remain bounded',()=>{
  const c={plant:[11,12,1],harvest:[3]};assert.equal(api.calendarSeason(c,2).stage,'in the ground');assert(api.calendarSeason(c,2).djf);
  const multi={plant:[2,3,8],harvest:[6,11]};assert.equal(api.calendarSeason(multi,7).stage,'between seasons');assert.equal(api.calendarSeason(multi,9).stage,'in the ground');assert(!api.calendarSeason(multi,9).djf);
 });
-test('La Nina positive slopes retain positive labels and fall colour',()=>{
- S.explicitScenario=true;S.oni=-1.5;const out=api.harvestFigure('ZWE');assert(/hs-bar neg selected-phase[^>]*data-k="La Niña"/.test(out));assert(out.includes('+8.4'));assert(out.includes('La Niña reverses'));
+test('La Nina slopes are printed once with phase direction recorded',()=>{
+ S.sel='ZWE';S.explicitScenario=true;S.oni=-1.5;api.renderDetail();const out=nodes['enso-detail'].innerHTML;
+ assert(out.includes('data-direction="fall">+8.'));assert(out.includes('La Niña reverses'));
+ assert(!out.includes('hs-bar'));assert(out.includes('Fitted production change'));assert(!out.includes('q='));
+ assert.equal(api.calendarBasis('harvest months [5, 6]'),'Harvest: May, Jun');
 });
-test('country and scenario changes update both country surfaces',()=>{
+test('country and scenario changes update the single fitted table',()=>{
  S.sel='USA';api.renderCoeffs();assert.equal(nodes['enso-harvest-fig']['data-iso'],'USA');assert(nodes['enso-detail'].innerHTML.includes('La Niña %/ONI <span'));
  S.sel='ZWE';S.oni=1.5;api.renderDetail();assert.equal(nodes['enso-harvest-fig']['data-iso'],'ZWE');assert(nodes['enso-detail'].innerHTML.includes('El Niño %/ONI <span'));
 });
@@ -49,9 +70,9 @@ test('shipping leads with published ordinal limits and separate dated AIS',()=>{
  assert.equal((out.match(/data-lane=/g)||[]).length,S.lanes.lanes.length);
  for(const l of S.lanes.lanes){if(l.counter_evidence) assert(out.includes(l.counter_evidence.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')));}
 });
-test('Panama chart retains all dated slot advisories and real gaps',()=>{
+test('Panama chart retains every slot advisory with plain dates',()=>{
  api.drawCharts('ensowater');const c=ctx.charts['enso-c-panama'],p=S.lanes.lanes.find(l=>l.id==='panama');
- assert.equal(c.data.labels.length,p.precedent_2023.steps.length+p.live_2026.steps.length);assert(!c.data.labels.some(l=>l.includes('normal')));assert(c.data.labels.some(l=>l.includes('yr')));assert(c.data.labels.filter(l=>l.includes('+')).length>=4);
+ assert.equal(c.data.labels.length,p.precedent_2023.steps.length+p.live_2026.steps.length);assert(!c.data.labels.some(l=>l.includes('normal')));assert(c.data.labels.every(l=>/\d/.test(l)&&!l.includes('+')&&!l.includes('yr')));assert(c.data.labels.at(-1).includes('26'));
  assert.deepEqual(Array.from(c.data.datasets[1].data.slice(-p.live_2026.steps.length)),p.live_2026.steps.map(x=>x.total));
  assert(ctx.charts['enso-c-panama-daily'].plugins[0].id==='ensoRules');
 });
@@ -86,6 +107,6 @@ test('Stage H scenario expands on request and stays fully visible for modelled p
  S.mode=mode;S.scenarioExpanded=expanded;
 });
 test('humanitarian need is labelled reported',()=>{
- api.renderPeople();const out=nodes['enso-people'].innerHTML;assert(out.includes('data-kind="reported"'));assert(!out.includes('<h2'));assert.equal((out.match(/<tbody>/g)||[]).length,1);
+ api.renderPeople();const out=nodes['enso-people-evidence'].innerHTML;assert(out.includes('data-kind="reported"'));assert(!out.includes('<h2'));assert.equal((out.match(/<tbody>/g)||[]).length,1);
 });
 console.log(passed+'/'+passed+' non-browser runtime checks passed');

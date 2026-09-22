@@ -210,7 +210,9 @@ def main() -> int:
         # publishes a new season every month, and this assertion is about the hero
         # agreeing with enso.json, not about any particular number.
         feed = page.evaluate("async () => (await (await fetch('data/enso.json')).json()).data.latest")
-        hero = page.locator("#enso-hero").text_content()
+        # The state sentence sits in the hero on Ocean and in the status row on
+        # every other view (2026-09-22), so read both.
+        hero = page.locator("#enso-hero").text_content() + page.locator("#enso-status-home").text_content()
         band = feed["band"].replace("El Nino", "El Niño").replace("La Nina", "La Niña")
         val = ("%+.2f" % feed["anom"]).replace("-", "−")
         check("hero prints the observed agency band",
@@ -238,7 +240,8 @@ def main() -> int:
               bool(marker) and abs(marker["offset"]) <= 3, str(marker))
 
         axis = page.evaluate("""() => {
-            const h = document.querySelector('#enso-hero');
+            // The ONI plate lives in the Ocean view since 2026-09-22; the hero keeps the heading.
+            const h = document.querySelector('.enso-oni-plate') || document.querySelector('#enso-hero');
             return !!h.querySelector('svg .enso-y-axis') &&
               [...h.querySelectorAll('.enso-threshold-label')].some(e => e.textContent.includes('+0.5 El Niño threshold')) &&
               [...h.querySelectorAll('.enso-threshold-label')].some(e => e.textContent.includes('−0.5 La Niña threshold'));
@@ -320,18 +323,18 @@ def main() -> int:
         page.select_option("#enso-country", "USA")
         page.wait_for_timeout(300)
         cell = page.locator("#enso-detail tbody tr td.num").nth(0)
-        sl, colour = slope_of(cell), cell.evaluate(PALETTE)
-        check("El Nino: positive change uses green and negative change uses ochre",
+        sl, colour = slope_of(cell), cell.get_attribute('data-direction')
+        check("El Nino: table records the implied yield direction",
               colour == ("rise" if sl > 0 else "fall"), f"slope {sl}, colour={colour}")
 
         page.select_option("#enso-level", "-1.5")
         page.wait_for_timeout(300)
         cell = page.locator("#enso-detail tbody tr td.num").nth(1)
-        sl, colour = slope_of(cell), cell.evaluate(PALETTE)
-        check("La Nina: positive slope uses ochre for the yield fall",
+        sl, colour = slope_of(cell), cell.get_attribute('data-direction')
+        check("La Nina: positive slope records a yield fall",
               colour == ("fall" if sl > 0 else "rise"), f"slope {sl}, colour={colour}")
-        check("the table states that sign and colour may disagree",
-              "not match the sign of the colour" in page.locator("#enso-detail").inner_text())
+        check("the table states how La Nina reverses the slope sign",
+              "La Niña reverses the slope sign" in page.locator("#enso-detail").inner_text())
         page.select_option("#enso-level", "1.5")
 
         print("\nthe crop legend describes what the fill encodes")
@@ -427,12 +430,10 @@ def main() -> int:
         page.wait_for_selector("#enso-c-panama", timeout=20_000)
         page.wait_for_timeout(2000)
         pan = page.evaluate(PANAMA_PROBE)
-        # Category labels space a 4-day gap and a 2-year gap identically, so the
-        # interval has to be stated on the label itself.
-        check("step labels carry their real interval",
-              bool(pan) and sum(1 for l in pan["labels"] if "+" in l) >= 4, str(pan and pan["labels"]))
-        check("the multi-year jump to today is spelled out",
-              bool(pan) and any("yr" in l for l in pan["labels"]), str(pan and pan["labels"]))
+        check("step labels show plain advisory dates",
+              bool(pan) and all("+" not in l and "yr" not in l for l in pan["labels"]), str(pan and pan["labels"]))
+        check("the latest advisory year remains explicit",
+              bool(pan) and "26" in pan["labels"][-1], str(pan and pan["labels"]))
         check("the caption says the axis is ordinal",
               bool(pan) and "not to scale in time" in (pan["cap"] or ""), (pan or {}).get("cap", "")[:120])
 
@@ -500,11 +501,26 @@ def main() -> int:
               and page.locator('#subview-elnino').evaluate("e => e.classList.contains('active')")
               and abs(page.locator('#enso-mech').bounding_box()['y']
                       - page.locator('#tab-elnino .content-page').bounding_box()['y'] - 120) < 5)
-        labels = page.eval_on_selector_all(
-            '.enso-xsec-lead [role="img"], .enso-xsec-refs [role="img"]',
-            "els => els.map(e => e.getAttribute('aria-label'))")
-        check("the cross-sections all carry distinct state descriptions",
-              len(labels) >= 3 and len(set(labels)) == len(labels) and all(labels), str(labels))
+        ticks = page.locator('#enso-mech [data-ruler]')
+        check("five geographic stops replace the scroll tour", ticks.count() == 5
+              and page.locator('.tour-step').count() == 0)
+        ticks.first.focus()
+        page.keyboard.press('ArrowRight')
+        check("ruler arrow key updates focus and visible text",
+              ticks.nth(1).get_attribute('aria-selected') == 'true'
+              and page.locator('#enso-step-soi').is_visible()
+              and not page.locator('#enso-step-trades').is_visible())
+        page.keyboard.press('End')
+        check("ruler End key selects eastern upwelling",
+              ticks.last.get_attribute('aria-selected') == 'true'
+              and page.locator('#enso-step-upwelling').is_visible())
+        labels = []
+        for state in ('normal', 'elnino', 'lanina'):
+            page.locator(f'[data-ruler-state="{state}"]').click()
+            labels.append(page.locator('#enso-ruler-figure [role="img"]').get_attribute('aria-label'))
+        check("one cross-section switches between three distinct states",
+              len(set(labels)) == 3 and all(labels)
+              and page.locator('#enso-ruler-figure .enso-ruler-highlight').is_visible())
         page.locator('#viewbtn-ensowater').click()
         page.wait_for_selector('#subview-ensowater.active #enso-c-panama')
         page.locator('#viewbtn-ensowater').focus()
@@ -540,9 +556,18 @@ def main() -> int:
             document.querySelectorAll('#enso-map').length === 1 && document.getElementById('enso-map') === window._stageAMap
             && window._stageAMap._leaflet_id === window._stageAMapId
             && document.querySelectorAll('#enso-map .leaflet-map-pane').length === 1"""))
-        check("limits remain reachable from every view", page.locator('#enso-limits').is_visible()
-              and page.locator('#enso-limits').evaluate("e => !e.closest('.subview')")
-              and page.locator('#enso-agency-status').is_visible())
+        # 2026-09-22: the limits fold shows once, on Ocean; the state sentence
+        # follows the reader to every view (hero on Ocean, status row elsewhere).
+        page.evaluate("showTab('elnino')")
+        page.wait_for_selector('#subview-elnino.active .enso-subview-meta')
+        limits_ocean = page.locator('#enso-limits').is_visible() and page.locator('#enso-agency-status').is_visible()
+        page.evaluate("showTab('ensowater')")
+        page.wait_for_selector('#subview-ensowater.active .enso-subview-meta')
+        limits_elsewhere = (not page.locator('#enso-limits').is_visible()) and page.locator('#enso-agency-status').is_visible() \
+            and page.locator('#enso-status-home #enso-agency-status').count() == 1
+        check("limits show once on Ocean and the state sentence follows every view",
+              limits_ocean and limits_elsewhere
+              and page.locator('#enso-limits').evaluate("e => !e.closest('.subview')"))
         page.evaluate("showTab('ensoharvest')")
         calendar = page.evaluate("""async () => {
             const model = (await (await fetch('data/enso_model.json')).json()).data;
@@ -586,13 +611,14 @@ def main() -> int:
         country_name = page.locator('#enso-country option[value="ZWE"]').text_content()
         page.locator('#enso-country-search').fill(country_name)
         page.wait_for_function("() => document.getElementById('enso-harvest-fig').dataset.iso === 'ZWE'")
-        check("country search synchronises native selection, bars and coefficients",
+        check("country search synchronises native selection and fitted coefficients",
               page.input_value('#enso-country') == 'ZWE'
               and country_name in page.locator('#enso-detail').inner_text()
-              and page.locator('#enso-harvest-fig .hs-bar.neg[data-k="La Niña"]').count() > 0)
+              and page.locator('#enso-harvest-fig td[data-direction="fall"]').count() > 0
+              and page.locator('#enso-harvest-fig .enso-tbl').count() == 1)
         page.evaluate("ensoFocus('USA')")
         page.wait_for_function("() => document.getElementById('enso-harvest-fig').dataset.iso === 'USA'")
-        check("ensoFocus updates both harvest surfaces without a scroll tour",
+        check("ensoFocus updates the single fitted table",
               page.input_value('#enso-country') == 'USA'
               and page.locator('.enso-harvest-pair #enso-coeffs #enso-detail').count() == 1
               and page.locator('#enso-harvest-story').count() == 0)
@@ -627,9 +653,10 @@ def main() -> int:
         check("published Panama limits lead observed AIS with its actual coverage",
               water['lead'] and water['slot'] == 'published' and water['ais'] == 'observed'
               and history[0] in water['source'] and history[-1] in water['source'])
-        check("one lanes table replaces the tour and duplicate appendix",
+        check("one two-column lane record retains every lane",
               page.locator('.enso-lanes-table tbody tr').count() == lane_count
-              and page.locator('#enso-lane-story').count() == 0)
+              and page.locator('#enso-lane-story').count() == 0
+              and page.locator('.enso-lanes-table th').count() == 2)
         page.evaluate("showTab('ensomoney')")
         page.wait_for_selector('#subview-ensomoney.active #enso-c-ffpi')
         ffpi = page.evaluate("""() => {
@@ -642,9 +669,11 @@ def main() -> int:
               and page.locator('#enso-c-ffpilive, #enso-money-story').count() == 0
               and len(ffpi) == 3 and all(not d['line'] for d in ffpi)
               and 'monthly' in ffpi[2]['label'] and ffpi[1]['style'] != ffpi[2]['style'])
-        check("reported humanitarian need is the final price plate",
-              page.locator('#subview-ensomoney figure').last.get_attribute('data-kind') == 'reported'
-              and 'Reported humanitarian need' in page.locator('#subview-ensomoney figure').last.inner_text())
+        # 2026-09-22: the humanitarian record sits inside the local-prices plate
+        # (#enso-people-evidence), where the damage it describes lands.
+        check("reported humanitarian need sits in the local-prices plate",
+              page.locator('#subview-ensomoney figure #enso-people-evidence tr').count() >= 5
+              and 'humanitarian' in page.locator('#enso-people-evidence').inner_text().lower())
         page.evaluate("showTab('ensolive')")
         check("Reported board distinguishes published stories and reported assessments",
               'Everything on this board is observed' not in page.locator('#enso-live').inner_text()
@@ -735,7 +764,7 @@ def main() -> int:
                 return isos.every((iso,i) => valuedOf(iso)
                     ? buttons[i].textContent.includes(data[iso].markets + ' markets')
                       && buttons[i].textContent.includes(data[iso].as_of)
-                    : buttons[i].textContent.includes('No monitored market'));
+                    : buttons[i].closest('.enso-rank-missing').textContent.includes('have no monitored market:'));
             }""", feed)
             first = page.locator('#enso-map-ranking button').first
             iso = first.get_attribute('data-map-country')
