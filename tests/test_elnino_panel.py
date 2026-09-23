@@ -835,6 +835,12 @@ def main() -> int:
               and page.locator('.enso-lanes-table').first.locator('th').count() == 2)
         page.evaluate("showTab('ensomoney')")
         page.wait_for_selector('#subview-ensomoney.active #enso-c-ffpi')
+        check("Who pays lists every modelled shortfall with its buyers from the outlook file", page.evaluate("""async () => {
+            const W = (await (await fetch('data/enso_outlook.json')).json()).data.who_pays;
+            const rows = [...document.querySelectorAll('.enso-whopays-plate tbody tr')];
+            return rows.length === W.length && rows.every((r, i) => r.querySelector('button').dataset.mapCountry === W[i].iso)
+                && document.querySelector('.enso-whopays-plate').textContent.includes('hit twice');
+        }"""))
         ffpi = page.evaluate("""() => {
             const c = Chart.getChart(document.getElementById('enso-c-ffpi'));
             return c.data.datasets.map(d => ({label:d.label, line:!!d.showLine, style:d.pointStyle}));

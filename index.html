@@ -12126,6 +12126,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-live-table { width:100%; border-collapse:collapse; font-size:13px; }
 #tab-elnino .enso-live-table :is(th,td) { padding:8px 12px 8px 0; border-bottom:1px solid var(--grid); text-align:left; vertical-align:top; }
 #tab-elnino .enso-live-table thead th { font:11px/1.4 'Geist Mono',monospace; color:var(--t3); font-weight:400; }
+@media(min-width:900px) { #tab-elnino .enso-live-table thead th { white-space:nowrap; } }
 #tab-elnino .enso-live-table th[scope=row] { font-weight:500; white-space:nowrap; }
 #tab-elnino .enso-live-table th[scope=row] button { background:none; border:0; padding:0; min-height:0; color:var(--t1); font:inherit; cursor:pointer; text-decoration:underline; text-decoration-color:var(--grid); text-underline-offset:3px; }
 #tab-elnino .enso-live-sub { display:block; color:var(--t3); font-size:12px; margin-top:2px; }
@@ -12140,7 +12141,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-news-row.is-food .enso-news-t { color:var(--t1); }
 #tab-elnino .enso-policy-plate td b { color:#e0864a; font-weight:500; }
 @media(min-width:1100px) { #tab-elnino #enso-live .enso-live-board { display:grid; grid-template-columns:minmax(0,7fr) minmax(0,5fr); gap:var(--enso-gap); align-items:start; } }
-@media(max-width:800px) { #tab-elnino .enso-ledger :is(th,td):nth-child(n+5) { display:none; } #tab-elnino .enso-region-table :is(th,td):nth-child(3) { display:none; } }
+@media(max-width:800px) { #tab-elnino .enso-whopays-plate .enso-live-table :is(th,td):nth-child(3), #tab-elnino .enso-whopays-plate .enso-live-table :is(th,td):nth-child(4), #tab-elnino .enso-whopays-plate .enso-live-table :is(th,td):nth-child(6) { display:none; } #tab-elnino .enso-ledger :is(th,td):nth-child(n+5) { display:none; } #tab-elnino .enso-region-table :is(th,td):nth-child(3) { display:none; } }
 /* Shipping plates (2026-09-23): Gatún record, rerouting, rivers and barges, who depends. */
 #tab-elnino .enso-lane-verdict b { font-weight:500; }
 #tab-elnino .enso-status-table th:nth-child(3), #tab-elnino .enso-status-table td:nth-child(3) { width:34%; }
@@ -12159,7 +12160,8 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-gauge-chart { height:120px; }
 #tab-elnino #enso-water > .enso-plate { margin:0 0 var(--enso-gap); }
 /* CPC strength odds (2026-09-23). */
-#tab-elnino .enso-strength-plate { margin:0 0 var(--enso-gap); }
+#tab-elnino .enso-strength-plate, #tab-elnino .enso-whopays-plate { margin:0 0 var(--enso-gap); }
+#tab-elnino .enso-whopays-plate th[scope=row] span { color:var(--t2); }
 #tab-elnino .enso-strength-table { width:100%; border-collapse:collapse; table-layout:fixed; font:12px 'Geist Mono',monospace; }
 #tab-elnino .enso-strength-table th, #tab-elnino .enso-strength-table td { border:1px solid var(--grid); padding:6px 4px; text-align:center; }
 #tab-elnino .enso-strength-table thead th { color:var(--t2); font-weight:400; }
@@ -12946,6 +12948,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
       </div>
 
       <div class="subview" id="subview-ensomoney" role="tabpanel" aria-labelledby="viewbtn-ensomoney">
+        <div id="enso-whopays"></div>
         <section id="enso-money" class="enso-sec"></section>
         <section id="enso-people" class="enso-sec"></section>
       </div>
@@ -42440,7 +42443,7 @@ function showCommodityDetail(key) {
   var num = function (v, d) { return (v == null || isNaN(v)) ? 'n/a' :
       (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(d == null ? 1 : d); };
   var metaDate = function (key) {
-    var raw = S.meta[key] && S.meta[key].generated_at;
+    var raw = S.meta[key] && (S.meta[key].generated_at || S.meta[key].generated);
     if (!raw) return null;
     var d = new Date(raw);
     return isNaN(d) ? null : d;
@@ -45685,6 +45688,39 @@ function showCommodityDetail(key) {
   }
 
   /* ── §4 THE MONEY ────────────────────────────────────────────────────── */
+  /* ── Who pays: the trade consequence of the fitted harvest changes ───────
+     From data/enso_outlook.json `who_pays`: a stated accounting (exports are
+     cut first and fall on buyers by Comtrade share; the rest is extra import
+     need at today's World Bank price). Not a price forecast. */
+  function renderWhoPays() {
+    var el = document.getElementById('enso-whopays'); if (!el) return;
+    var O = S.outlook, W = O && O.who_pays;
+    if (!W || !W.length) { el.innerHTML = ''; return; }
+    var crop = function (c) { return { corn: 'maize' }[c] || c; };
+    /* A buyer that is also a fitted loser is hit twice: its own harvest and its supplier's. */
+    var own = {}; W.forEach(function (c) { own[c.iso + '/' + c.crop] = c; });
+    var twice = [];
+    W.forEach(function (c) { (c.buyers || []).forEach(function (b) { var o = own[b.iso + '/' + c.crop]; if (o) twice.push({ iso: b.iso, crop: c.crop, ownLoss: o.loss_kt, supplierLoss: b.kt, from: c.iso, use: o.consumption_kt }); }); });
+    var top = W[0];
+    var lead = '<p class="enso-plate-lede">' + esc(nameFor(top.iso)) + '’s ' + esc(crop(top.crop)) + ' shortfall at the observed ONI (' + fmtKt(-top.loss_kt) + ', harvest ' + esc(top.harvest) + ')' +
+      (top.lost_exports_kt ? (top.loss_kt > top.exports_kt ? ' is larger than its ' + fmtKt(top.exports_kt).replace('+', '') + ' of exports: exports stop and about ' + fmtKt(top.extra_import_kt).replace('+', '') + ' must be imported' + (top.extra_import_usd_m ? ' (' + fmtUsd(top.extra_import_usd_m).replace('+', '') + ' at today’s price)' : '') : ' cuts its exports by ' + fmtKt(top.lost_exports_kt).replace('+', '')) : '') + '.' +
+      (twice.length ? ' ' + twice.map(function (t) { return '<b>' + esc(nameFor(t.iso)) + ' is hit twice</b>: its own ' + esc(crop(t.crop)) + ' ' + fmtKt(-t.ownLoss) + ' and ' + fmtKt(-t.supplierLoss) + ' less from ' + esc(nameFor(t.from)) + (t.use ? ', against ' + fmtKt(t.use).replace('+', '') + ' a year of use' : ''); }).join('; ') + '.' : '') + '</p>';
+    var row = function (c) {
+      return '<tr><th scope="row"><button type="button" data-map-country="' + esc(c.iso) + '">' + esc(nameFor(c.iso)) + '</button> <span>' + esc(crop(c.crop)) + '</span><span class="enso-live-sub">harvest ' + esc(c.harvest) + '</span></th>' +
+        '<td class="enso-ol-v">' + fmtKt(-c.loss_kt) + '</td>' +
+        '<td class="enso-ol-v">' + (c.lost_exports_kt ? fmtKt(-c.lost_exports_kt) + (c.lost_exports_usd_m ? '<span class="enso-live-sub">' + fmtUsd(-c.lost_exports_usd_m) + ' of sales</span>' : '') : '<span class="enso-ol-na">exports nothing</span>') + '</td>' +
+        '<td>' + ((c.buyers || []).length ? c.buyers.map(function (b) { return esc(nameFor(b.iso)) + ' ' + fmtKt(-b.kt); }).join(' · ') : '<span class="enso-ol-na">—</span>') + '</td>' +
+        '<td class="enso-ol-v">' + (c.extra_import_kt ? fmtKt(c.extra_import_kt) + (c.extra_import_usd_m != null ? '<span class="enso-live-sub">' + fmtUsd(c.extra_import_usd_m) + '</span>' : '<span class="enso-live-sub">no price series</span>') : '<span class="enso-ol-na">none</span>') + '</td>' +
+        '<td class="enso-ol-v">' + (c.stocks_weeks != null ? c.stocks_weeks + ' wk' : '<span class="enso-ol-na">—</span>') + '</td></tr>';
+    };
+    el.innerHTML = '<figure class="enso-plate enso-whopays-plate is-modelled">' +
+      plateHead('Who pays for the harvest changes', 'This site’s fit × USDA PSD balances × UN Comtrade export shares × World Bank prices', stamp(metaDate('outlook')), 'modelled') +
+      '<div class="plate-body">' + lead +
+      '<table class="enso-live-table"><thead><tr><th scope="col">Producer · crop</th><th scope="col">Shortfall</th><th scope="col">Exports cut</th><th scope="col">Buyers losing supply</th><th scope="col">Extra import need</th><th scope="col">Stocks</th></tr></thead><tbody>' +
+      W.map(row).join('') + '</tbody></table></div>' +
+      '<figcaption class="enso-log">Modelled accounting, at the observed ONI. ' + esc(O.who_pays_rule) + ' Buyer shares are Comtrade values, not tonnes, and name the top five buyers only. World grain prices did not rise in the strongest past El Niños, so no price change is assumed.</figcaption></figure>';
+    el.querySelectorAll('[data-map-country]').forEach(function (b) { b.onclick = function () { ensoFocus(b.getAttribute('data-map-country')); }; });
+  }
   function renderMoney() {
     var el = document.getElementById('enso-money'); if (!el) return;
     var E = S.econ; if (!E) { el.innerHTML = ''; return; }
@@ -46424,8 +46460,11 @@ function showCommodityDetail(key) {
        was only called while drawing that view. A reader landing on Shipping,
        Prices or Live saw blank sections with no alert at all. */
     var el = document.getElementById('enso-failures'); if (!el) return;
+    /* Reference files are read, not monitored: the chokepoint flows table is a
+       derived lookup, not a feed with a refresh schedule. */
+    var REFERENCE = { chokeflows: 1 };
     var issues = Object.keys(S.feedNames || {}).filter(function (k) {
-      return S[k] && feedIssue(k);
+      return !REFERENCE[k] && S[k] && feedIssue(k);
     });
     var failed = S.failed || [];
     el.innerHTML = (failed.length ?
@@ -46608,7 +46647,7 @@ function showCommodityDetail(key) {
         renderControls(); renderCoeffs(); renderDetail(); renderCalendar(); renderOutlook();
         if (S.drawn.live) renderLive();
         if (S.drawn.water) renderWater();
-        if (S.drawn.money) { renderMoney(); renderPeople(); }
+        if (S.drawn.money) { renderWhoPays(); renderMoney(); renderPeople(); }
         if (S.drawn.mech) renderMechanism();
         S.drawn.map = true;
       }
@@ -46619,7 +46658,7 @@ function showCommodityDetail(key) {
     if (S.sub === 'ensowater' && !S.drawn.water) {
       renderWater(); S.drawn.water = true;
     } else if (S.sub === 'ensomoney' && !S.drawn.money) {
-      renderMoney(); renderPeople(); S.drawn.money = true;
+      renderWhoPays(); renderMoney(); renderPeople(); S.drawn.money = true;
     }
     /* Only draw charts for the view being entered. drawCharts() used to run on
        every switch, tearing down and rebuilding all five Chart.js instances

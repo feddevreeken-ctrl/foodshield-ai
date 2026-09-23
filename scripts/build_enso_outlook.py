@@ -108,6 +108,7 @@ def main() -> int:
     relief = body(load("reliefweb_alerts.json")).get("events", [])
     news = body(load("enso_news.json")).get("items", [])
     restr = body(load("trade_restrictions.json"))
+    exports_dest = body(load("comtrade_exports.json"))
 
     latest = enso["latest"]
     record = max(enso["history"], key=lambda h: h["anom"])
@@ -209,6 +210,45 @@ def main() -> int:
             "live": live(r["iso3"]),
         })
 
+    # ── Who pays: a stated accounting, not a model ─────────────────────────
+    # A producer's shortfall first cuts its exports (up to what it exports),
+    # and those lost exports fall on its buyers in proportion to their Comtrade
+    # share; any shortfall beyond its exports is extra import need at home.
+    # Priced at today's World Bank price. Stocks are reported as a buffer in
+    # weeks of use, not subtracted, because how much is drawn is a policy choice.
+    COMTRADE_KEY = {"corn": "maize", "wheat": "wheat", "rice": "rice", "soybeans": "soybeans"}
+    chain, seen_chain = [], set()
+    for reg in out_regions:
+        for f in reg["fitted"]:
+            key = (f["iso"], f["crop"])
+            if key in seen_chain or not f["in_region"] or not f["enso_specific"]:
+                continue
+            loss = -(f["change_kt_observed"] or 0)
+            if loss < 150:
+                continue
+            seen_chain.add(key)
+            p = (psd.get(f["iso"]) or {}).get(PSD_KEY.get(f["crop"], ""), {})
+            exports, stocks, use = p.get("exports_kt") or 0, p.get("stocks_kt"), p.get("consumption_kt")
+            usd = (f.get("price") or {}).get("usd_per_t")
+            lost_exports = min(loss, exports)
+            extra_import = loss - lost_exports
+            dest = ((exports_dest.get(f["iso"]) or {}).get(COMTRADE_KEY.get(f["crop"], "")) or {}).get("top_destinations") or []
+            shares = [d for d in dest if isinstance(d.get("share_pct"), (int, float))]
+            chain.append({
+                "iso": f["iso"], "crop": f["crop"], "harvest": f["harvest"], "loss_kt": round(loss),
+                "exports_kt": exports, "lost_exports_kt": round(lost_exports),
+                "buyers": [{"iso": d["iso3"], "share_pct": d["share_pct"], "kt": round(lost_exports * d["share_pct"] / 100)}
+                           for d in shares if lost_exports * d["share_pct"] / 100 >= 1],
+                "buyers_basis": "UN Comtrade export shares by value" if shares else None,
+                "extra_import_kt": round(extra_import),
+                "extra_import_usd_m": round(extra_import * 1000 * usd / 1e6) if usd else None,
+                "lost_exports_usd_m": round(lost_exports * 1000 * usd / 1e6) if usd else None,
+                "stocks_kt": stocks, "stocks_weeks": round(stocks / use * 52, 1) if stocks and use else None,
+                "consumption_kt": use,
+                "price": f.get("price"),
+            })
+    chain.sort(key=lambda c: -c["loss_kt"])
+
     by_crop: dict[str, dict] = {}
     seen = set()
     for reg in out_regions:
@@ -230,6 +270,8 @@ def main() -> int:
         "honesty": "Conditional estimates from a linear fit without out-of-sample validation. CPC's OND 2026 RONI median (+2.67) is beyond the fitted range; figures at the record ONI are the largest the fit can support, not a ceiling on the event.",
         "regions": out_regions,
         "crops": sorted(by_crop.values(), key=lambda c: c["loss_kt_record"]),
+        "who_pays": chain,
+        "who_pays_rule": "Shortfall cuts exports first, allocated to buyers by Comtrade value share; any remainder is extra import need. Priced at the latest World Bank price. Stocks shown, not subtracted.",
     }, source="Derived: enso_regions, enso_model, crop_calendars, USDA PSD, World Bank Pink Sheet; live signals from JRC ASAP, GDACS, World Bank RTFP, ReliefWeb, El Niño news feed, trade_restrictions",
        notes="Tonnes first; value at stake is tonnes × latest World Bank price, not a price forecast.", status="ok")
     print(f"[OK] enso_outlook: {len(out_regions)} regions, {sum(len(r['fitted']) for r in out_regions)} fitted rows, "
