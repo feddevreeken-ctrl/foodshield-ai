@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -137,8 +137,9 @@ def main() -> int:
             "window": f"{seas} {yr}, 3-month mean", "window_kind": "seasonal",
             "region": N34, "baseline": REL_BASE,
             "threshold": 0.5,
-            "note": "CPC's strength index. Subtracts the tropical-mean warming trend, so it reads lower than ONI "
-                    "as the tropics warm.",
+            "note": "CPC's strength index: Niño 3.4 minus the tropical-mean (20°N–20°S) anomaly for the same "
+                    "months, rescaled to ONI's variability. It removes long-term warming and also the "
+                    "tropics' own delayed response to El Niño, so the ONI–RONI gap shifts through an event.",
             "url": RONI_URL,
         }
 
@@ -149,7 +150,9 @@ def main() -> int:
         return {
             "key": "wk34", "label": "Weekly Niño 3.4", "agency": "NOAA CPC",
             "value": newest["nino34_anom"], "unit": "°C",
-            "window": f"week ending {d.strftime('%-d %b %Y')}", "window_kind": "weekly",
+            # CPC weekly OISST values are centred on the Wednesday (a Sunday–Saturday week).
+            "window": f"week centred on {d.strftime('%-d %b %Y')} ({(d - timedelta(days=3)).strftime('%-d')}–{(d + timedelta(days=3)).strftime('%-d %b')})",
+            "window_kind": "weekly",
             "region": N34, "baseline": WK_BASE, "threshold": None,
             "note": "A single week, not a season, from a different SST analysis (OISST) "
                     "on a fixed base, so it is not ONI's weekly value.",
@@ -204,8 +207,9 @@ def main() -> int:
     # file exists to prevent. So the invariant is derived from the rows.
     FIELDS = ("agency", "region", "baseline", "window")
     READINGS = {
-        "baseline": "A like-for-like comparison. The whole gap is the choice of baseline: "
-                    "removing the tropical-mean warming trend, nothing else.",
+        "baseline": "A like-for-like comparison: same agency, region and window. The gap is RONI's "
+                    "baseline (tropical-mean removal plus rescaling), which takes out both long-term "
+                    "warming and this event's own warming of the tropics.",
         "window": "NOT a disagreement. The gap is arithmetic: one number has been averaged "
                   "down over a longer period and the other has not.",
         "agency": "Same water, same window, same baseline: the gap is two agencies' "

@@ -43142,7 +43142,6 @@ function showCommodityDetail(key) {
     var now = shown.filter(function (f) { return f.in_season; }).sort(function (a, b) { return Math.abs(b.change_pct_record) - Math.abs(a.change_pct_record); });
     var cpc = cpcOutlook();
     var djf = S.strengths && (S.strengths.seasons || []).filter(function (s) { return s.season === 'DJF'; })[0];
-    var off = (function () { var I = (S.indices && S.indices.indices) || [], o = I.filter(function (r) { return r.key === 'oni'; })[0], r = I.filter(function (r) { return r.key === 'roni'; })[0]; return o && r ? o.value - r.value : null; })();
     var phrase = function (f) { return '<b>' + esc(who(f)) + '</b> ' + num(f.change_pct_record, 0) + '%' + (f.change_kt_record != null ? ' (' + fmtKt(f.change_kt_record) + ')' : ''); };
     var down = ahead.filter(function (f) { return f.change_pct_record < 0 && Math.abs(f.change_kt_record || 0) >= 150; });
     var up = ahead.filter(function (f) { return f.change_pct_record > 0 && Math.abs(f.change_kt_record || 0) >= 150; });
@@ -43150,7 +43149,7 @@ function showCommodityDetail(key) {
        winter gets. CPC's own odds say stronger than any winter the fit has seen,
        so the fit's strongest winter leads and today's season value is the floor. */
     var lead = '<p class="enso-outlook-lead">' +
-      (djf ? 'NOAA CPC gives ' + djf.classes['very strong El Niño'] + '% odds that this winter (DJF) is very strong, RONI +2.0 °C or more' + (off != null ? ' (about ONI ' + num(2 + off, 1) + ' at today’s ' + num(off, 2) + ' °C offset, near the fit’s strongest winter)' : '') + (cpc ? ', and ' + esc(cpc.historic) + ' that October–December exceeds every event since ' + esc(cpc.since) + ', which would be beyond the fitted range' : '') + '. ' : '') +
+      (djf ? 'NOAA CPC gives ' + djf.classes['very strong El Niño'] + '% odds that this winter (DJF) is very strong, RONI +2.0 °C or more (RONI is CPC’s strength index; the fit runs on ONI, and the gap between the two shifts through an event, so this is not an ONI value)' + (cpc ? ', and ' + esc(cpc.historic) + ' that October–December exceeds every event since ' + esc(cpc.since) + ', which would be beyond the fitted range' : '') + '. ' : '') +
       'At the fit’s strongest winter (ONI ' + num(rec.oni, 1) + ', ' + esc(rec.label.replace(' record', '')) + '), the ' + (ahead[0] ? ahead[0].harvest_year : '') + ' harvests it can speak for change by ' +
       down.map(phrase).join(', ') + (up.length ? '; higher: ' + up.map(phrase).join(', ') : '') + '. ' +
       (now.length ? 'For crops already in the field, the fit associates developing El Niño years with ' + now.map(function (f) { return esc(who(f)) + ' ' + num(f.change_pct_observed, 0) + '%'; }).join(', ') + ' at today’s ONI (an association, not an attribution); USDA’s in-season estimates already contain this season.' : '') + '</p>';
@@ -43325,7 +43324,10 @@ function showCommodityDetail(key) {
        strength classification. Keep it in the observation sentence, where the
        two weekly boxes are read together, and keep the forecast in the lead. */
     var eastBased = w.east_based === true;
-    var forecast = outlook ? esc(outlook.agency) + ', ' + esc(outlook.published) + ': <span class="enso-num">' + esc(outlook.very) + '</span> chance of a very strong event this northern autumn and winter, and <span class="enso-num">' + esc(outlook.historic) + '</span> that October–December exceeds every event since <span class="enso-num">' + esc(outlook.since) + '</span>. ' : '';
+    var forecast = outlook ? esc(outlook.agency) + ', ' + esc(outlook.published) + ': <span class="enso-num">' + esc(outlook.very) + '</span> chance of a very strong event this northern autumn and winter' + (function () {
+      var ss = (S.strengths && S.strengths.seasons) || [], pick = ['SON', 'OND', 'NDJ', 'DJF'].map(function (k) { return ss.filter(function (x) { return x.season === k; })[0]; }).filter(Boolean);
+      return pick.length ? ' (by season ' + pick.map(function (x) { return x.classes['very strong El Niño'] + '% ' + x.season; }).join(', ') + '; RONI ≥ +2.0 °C)' : '';
+    })() + ', and <span class="enso-num">' + esc(outlook.historic) + '</span> that October–December exceeds every event since <span class="enso-num">' + esc(outlook.since) + '</span>. ' : '';
     var observed = roni && oni && season && typeof w.anom === 'number' && typeof w.nino12_anom === 'number'
       ? 'Observed: RONI <span class="enso-num">' + num(roni.value, 2) + ' °C</span> and ONI <span class="enso-num">' + num(oni.value, 2) + ' °C</span> for ' + esc(season[1]) +
         '; weekly Niño 3.4 <span class="enso-num">' + num(w.anom, 1) + ' °C</span> and Niño 1+2 <span class="enso-num">' + num(w.nino12_anom, 1) + ' °C</span> (week of ' + esc(weeklyDate(w.date).replace(/\s+\d{4}$/, '')) + ')' +
@@ -43790,9 +43792,10 @@ function showCommodityDetail(key) {
         sub: 'Pressure indices use their agency’s units.' }
     ];
 
-    var lede = [['oni', 'ONI', ' (CPC)'], ['roni', 'RONI', ''], ['bom_rel', 'BoM relative', '']]
+    /* Seasonal means and a weekly reading are different windows; each carries its own. */
+    var lede = [['oni', 'ONI', ' (CPC'], ['roni', 'RONI', ' (CPC'], ['bom_rel', 'BoM relative', ' (BoM']]
       .filter(function (x) { return by[x[0]] && typeof by[x[0]].value === 'number'; })
-      .map(function (x) { return x[1] + ' ' + num(by[x[0]].value, 2) + x[2]; }).join(', ');
+      .map(function (x) { return x[1] + ' ' + num(by[x[0]].value, 2) + x[2] + (by[x[0]].window ? ', ' + String(by[x[0]].window).replace(/, 3-month mean$/, '') : '') + ')'; }).join(', ');
 
     var groupHTML = GROUPS.map(function (g) {
       var set = rows.filter(function (r) { return r.window_kind === g.kind; });
@@ -44085,7 +44088,8 @@ function showCommodityDetail(key) {
   function intervalBand(oni) {
     var a = Math.abs(oni), phase = oni < 0 ? 'La Niña' : 'El Niño';
     if (a < 0.5) return 'Neutral';
-    return (a < 1 ? 'Weak' : a < 1.5 ? 'Moderate' : a < 2 ? 'Strong' : a < 2.5 ? 'Very strong' : 'Extreme') + ' ' + phase;
+    /* ONI classes; CPC's top class is "very strong", so nothing above it is named. */
+    return (a < 1 ? 'Weak' : a < 1.5 ? 'Moderate' : a < 2 ? 'Strong' : 'Very strong') + ' ' + phase;
   }
   function modelOni() {
     return S.explicitScenario ? S.oni : S.oniLive;
@@ -44107,12 +44111,20 @@ function showCommodityDetail(key) {
     var rung = keyFor(S.oni);
     return {label:intervalBand(rung[1]), centre:rung[1], live:S.oniLive};
   }
+  /* CPC names strength from RONI; the fit runs on ONI. Both are said when they differ. */
+  function roniClassNote() {
+    var I = (S.indices && S.indices.indices) || [], r = I.filter(function (x) { return x.key === 'roni'; })[0];
+    if (!r || typeof r.value !== 'number') return '';
+    var lc = function (t) { return t.charAt(0).toLowerCase() + t.slice(1); };
+    var cls = lc(intervalBand(r.value)), oniCls = S.oniLive != null ? lc(intervalBand(S.oniLive)) : '';
+    return cls === oniCls ? '' : ' (' + cls + ' by CPC’s RONI, ' + num(r.value, 2) + ')';
+  }
   function modelStateSentence() {
     var snap = scenarioSnap(), band = modelInterval();
     if (snap) return 'Explicit scenario: ' + snap.label + ', ONI ' + num(snap.centre, 1);
     if (!band) return 'Observed ONI outside the published same-phase rungs; modelled values unavailable';
     if (band.lo === band.hi) return intervalBand(band.oni) + ' at the observed ' + num(band.oni, 2) + ', on a published rung';
-    return intervalBand(band.oni) + ', interpolated between the ' + num(band.lo[1], 1) + ' and ' + num(band.hi[1], 1) + ' rungs at the observed ' + num(band.oni, 2);
+    return intervalBand(band.oni) + ' by ONI' + roniClassNote() + ', interpolated between the ' + num(band.lo[1], 1) + ' and ' + num(band.hi[1], 1) + ' rungs at the observed ' + num(band.oni, 2);
   }
   function interpolateNumeric(a, b, t) {
     if (typeof a === 'number' && isFinite(a) && typeof b === 'number' && isFinite(b)) return a * (1-t) + b * t;
