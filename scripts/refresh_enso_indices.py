@@ -119,7 +119,7 @@ def main() -> int:
             "window": f"{seas} {yr}, 3-month mean", "window_kind": "seasonal",
             "region": N34, "baseline": ABS_BASE,
             "threshold": 0.5,
-            "note": "The index this page headlines. Absolute anomaly against a fixed base.",
+            "note": "The index the harvest fit uses. Absolute anomaly against a fixed base.",
             "url": ONI_URL,
         }
 
@@ -130,7 +130,7 @@ def main() -> int:
             "window": f"{seas} {yr}, 3-month mean", "window_kind": "seasonal",
             "region": N34, "baseline": REL_BASE,
             "threshold": 0.5,
-            "note": "Subtracts the tropical-mean warming trend, so it reads lower than ONI "
+            "note": "CPC's strength index. Subtracts the tropical-mean warming trend, so it reads lower than ONI "
                     "as the tropics warm.",
             "url": RONI_URL,
         }

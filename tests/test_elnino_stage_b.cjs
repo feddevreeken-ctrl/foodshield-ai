@@ -9,7 +9,7 @@ function node(id) { return nodes[id] || (nodes[id] = { innerHTML:'', value:'', s
 const ctx = vm.createContext({window:{location:{href:'http://localhost/index.html',search:''}}, matchMedia(){return {matches:false,addEventListener(){},removeEventListener(){}};},IntersectionObserver:class {observe(){} disconnect(){}}, document:{getElementById:node,querySelector(){return node('scroller');},querySelectorAll(){return [];},addEventListener(){}}, URL,console,Date,setTimeout,clearTimeout,Event, URLSearchParams, charts:{}});
 vm.runInContext(html.slice(start,end)+`
   mk = function(id,cfg) { if (!S._chartFilter || S._chartFilter.indexOf(id)>=0) globalThis.charts[id]=cfg; };
-  globalThis.api={S,renderMechanism,feedIssue,renderFailures,calendarSeason,calendarBasis,wireRuler,renderLandHead,renderDetail,renderCoeffs,renderCalendar,renderWater,renderMoney,renderPeople,renderLimits,renderControls,syncInstruments,drawCharts,selectCountry};
+  globalThis.api={S,renderMechanism,feedIssue,renderFailures,calendarSeason,calendarBasis,wireRuler,renderLandHead,renderDetail,renderCoeffs,renderCalendar,renderWater,renderMoney,renderPeople,renderLimits,renderControls,syncInstruments,drawCharts,selectCountry,isoOf};
 })();`, ctx);
 const api = ctx.api, S=api.S;
 for (const [key,file] of Object.entries({model:'enso_model',calendars:'crop_calendars',enso:'enso',lanes:'enso_lanes',econ:'enso_econ',exp:'enso_exposure',portwatch:'portwatch',pwhist:'portwatch_history',rtfp:'rtfp',ffpi:'fao_ffpi',mech:'enso_mechanism'})) {
@@ -35,6 +35,9 @@ test('paired longitude ruler supports arrow wrap, Home/End, per-state highlighti
  nodes['enso-mech']={querySelector(){return plate;},querySelectorAll(q){return q==='[data-ruler]'?ticks:q==='[data-ruler-state]'?states:[];}};
  api.renderMechanism();
  const markup=nodes['enso-mech'].innerHTML;
+ const nino12=(S.enso.weekly_nino34.nino12_anom>0?'+':'')+S.enso.weekly_nino34.nino12_anom.toFixed(1);
+ assert(markup.includes('Niño 1+2 at '+nino12+' °C (week of'));
+ assert(!markup.includes('Niño 1+2 at +4.5 °C (week of 9 Sep 2026)'));
  const pair=markup.slice(markup.indexOf('<div class="enso-pacific-pair">'),markup.indexOf('<div class="enso-mechanism-reading">'));
  const imgs=[...pair.matchAll(/<img [^>]+>/g)].map(m=>m[0]);
  assert.equal(imgs.length,3);
@@ -152,6 +155,12 @@ test('native controls coexist with observed mode, nine rungs and labelled instru
  assert.equal((out.match(/class="is-observed-rung"/g)||[]).length,1);
  for(const id of ['enso-level','enso-mode','enso-country','enso-tog-regions','enso-tog-lanes','enso-tog-alerts','enso-tog-sst'])assert(out.includes('id="'+id+'"'));
  assert.equal((out.match(/class="enso-instrument-row/g)||[]).length,1);assert(out.includes('type="search"'));assert(out.includes('<summary>All layers</summary>'));
+});
+test('Natural Earth fallback keeps France as a named country option',()=>{
+ const saved=S.names,feature={properties:{ISO_A3:'-99',ADM0_A3:'FRA',name:'France'}};
+ const iso=api.isoOf(feature);assert.equal(iso,'FRA');S.names={[iso]:feature.properties.name};api.renderControls();
+ const option=nodes['enso-controls'].innerHTML.match(/<option value="FRA"[^>]*>([^<]+)<\/option>/);
+ assert(option);assert.equal(option[1],'France');assert.notEqual(option[1],'FRA');S.names=saved;
 });
 test('Stage H scenario expands on request and stays fully visible for modelled paint',()=>{
  const mode=S.mode,expanded=S.scenarioExpanded;S.mode='rtfp';S.scenarioExpanded=false;

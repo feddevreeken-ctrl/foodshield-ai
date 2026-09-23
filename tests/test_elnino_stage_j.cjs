@@ -8,17 +8,23 @@ const node=id=>nodes[id]||(nodes[id]={innerHTML:'',style:{},setAttribute(){},que
 let plot=null;
 const ctx=vm.createContext({console,Date,URL,URLSearchParams,charts:{},window:{location:{href:'http://localhost',search:''}},document:{addEventListener(){},getElementById:node,querySelector(){return plot;}}});
 vm.runInContext(html.slice(start,end)+`
- globalThis.api={S,renderIndices,renderLegend,coverageColor,fillFor,placeChokepointLabels,analogPlate,alignAnalogLeaders,drawCharts,renderMoney,rtfpColor};
+ globalThis.api={S,renderIndices,renderLegend,coverageColor,fillFor,placeChokepointLabels,analogPlate,alignAnalogLeaders,drawCharts,renderMoney,rtfpColor,oceanHeading};
  mk=function(id,cfg){if(!S._chartFilter||S._chartFilter.indexOf(id)>=0)globalThis.charts[id]=cfg;};
  syncInstruments=renderMapRanking=renderMapTag=compactLegend=function(){};
 })();`,ctx);
 const api=ctx.api,S=api.S;
-for(const [key,file] of Object.entries({indices:'enso_indices',enso:'enso',regions:'enso_regions',lanes:'enso_lanes',rtfp:'rtfp',exp:'enso_exposure',econ:'enso_econ'})){
+for(const [key,file] of Object.entries({indices:'enso_indices',enso:'enso',regions:'enso_regions',lanes:'enso_lanes',rtfp:'rtfp',exp:'enso_exposure',econ:'enso_econ',mech:'enso_mechanism',bulletins:'enso_bulletins'})){
  const feed=JSON.parse(fs.readFileSync('data/'+file+'.json'));S[key]=feed.data;S.meta[key]=feed._meta;
 }
 const tele=new Set(S.regions.regions.flatMap(r=>r.iso3));S.isoIndex={};tele.forEach(iso=>S.isoIndex[iso]=[{}]);
 S.oniLive=S.enso.latest.anom;S.showSST=S.showRegions=S.showLanes=S.showAlerts=false;
 let passed=0;function test(name,fn){fn();passed++;console.log('ok',name);}
+test('hero leads with the sourced CPC outlook and separates RONI from ONI',()=>{
+ const out=api.oceanHeading(),cpc=S.bulletins.bulletins.find(b=>b.agency==='NOAA CPC');
+ assert(cpc.summary.includes('very strong'));assert(out.includes('El Niño strengthening toward a very strong event'));
+ for(const text of ['RONI','ONI','more than 90%'])assert(out.includes(text));
+ assert(!out.includes('ONI band is'));assert(out.includes('the strongest warming in the east'));
+});
 test('indices use published thresholds, retain source windows, and omit the weekly bar',()=>{
  api.renderIndices();const out=node('enso-indices').innerHTML, widths={};
  for(const r of S.indices.indices){

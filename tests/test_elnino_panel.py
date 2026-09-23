@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import functools
 import http.server
+import re
 import socketserver
 import sys
 import threading
@@ -236,17 +237,17 @@ def main() -> int:
         print("\nscenario disclosure")
         tag = page.locator(".enso-tag-interpolation")
         check("modelled layer discloses interpolation at the observed ONI", tag.count() == 1 and "interpolated between" in tag.text_content())
-        # Read expected values from the feed rather than hardcoding them: CPC
-        # publishes a new season every month, and this assertion is about the hero
-        # agreeing with enso.json, not about any particular number.
+        # Read expected values from the feeds rather than hardcoding them.
         feed = page.evaluate("async () => (await (await fetch('data/enso.json')).json()).data.latest")
+        indices = page.evaluate("async () => (await (await fetch('data/enso_indices.json')).json()).data.indices")
         # The state sentence sits in the hero on Ocean and in the status row on
         # every other view (2026-09-22), so read both.
         hero = page.locator("#enso-hero").text_content() + page.locator("#enso-status-home").text_content()
-        band = feed["band"].replace("El Nino", "El Niño").replace("La Nina", "La Niña")
         val = ("%+.2f" % feed["anom"]).replace("-", "−")
-        check("hero prints the observed agency band",
-              band.lower() in hero.lower() and val.lower() in hero.lower(), "want %s / %s in: %s" % (band, val, hero[:110]))
+        check("hero leads with the CPC outlook and distinguishes the observed indices",
+              all(t in hero for t in ("RONI", "ONI", "more than 90%"))
+              and all(("%+.2f" % next(r["value"] for r in indices if r["key"] == key)).replace("-", "−") in hero
+                      for key in ("roni", "oni")), hero[:240])
 
         page.evaluate("showTab('elnino')")
         print("\nthe record strip is the whole record")
@@ -258,6 +259,11 @@ def main() -> int:
         check("the analog plate marks and labels the latest current reading",
               bool(strip) and strip["now"] and feed["season"].lower() in strip["now"].lower() and val in strip["now"],
               str(strip and strip["now"]))
+        weekly = page.evaluate("async () => (await (await fetch('data/enso.json')).json()).data.weekly_nino34")
+        # The evidence sits in a closed fold, so read text_content, not rendered text.
+        upwelling = " ".join((page.locator('.enso-mechanism-evidence section', has_text='The Humboldt upwelling is capped').text_content() or "").split())
+        check("capped-upwelling evidence follows the weekly Niño 1+2 feed",
+              ("%+.1f °C" % weekly["nino12_anom"]).replace("-", "−") in upwelling, upwelling)
         # preserveAspectRatio="none" stretches glyphs, so no text may live in the SVG
         check("no text inside the stretched chart",
               bool(strip) and strip["textInSvg"] == 0, str(strip and strip["textInSvg"]))
@@ -448,8 +454,10 @@ def main() -> int:
         ags = page.eval_on_selector_all(".enso-bul-ag", "e => e.map(x => x.textContent)")
         check("BoM weekly appears in news", any("BoM" in a for a in ags), str(ags))
         check("more than one agency is represented", len(set(ags)) >= 2, str(set(ags)))
-        check("the frozen climate.gov feed is named and excluded",
-              "climate gov" in page.locator(".enso-bul-skip").inner_text().lower())
+        skip_note = page.locator(".enso-bul-skip").inner_text()
+        check("the frozen NOAA ENSO blog is named without a derived age",
+              "NOAA’s ENSO blog is left out: its latest post is 25 June 2025." in skip_note
+              and "days old" not in skip_note)
         check("unreached agencies are named locally without a partial-feed warning",
               page.evaluate("""async () => {
                 const feed = await (await fetch('data/enso_bulletins.json')).json();
@@ -656,7 +664,7 @@ def main() -> int:
 
         print("\nstage A shared structure and lens contracts")
         open_panel(page, base)
-        lens_results, headings, frames = [], [], []
+        lens_results, headings, frames, lens_texts = [], [], [], []
         page.evaluate("window._stageAMap = document.getElementById('enso-map'); window._stageAMapId = window._stageAMap._leaflet_id")
         for tab, mode in (("elnino", "sst"), ("ensoharvest", "impact"), ("ensowater", "none"), ("ensomoney", "rtfp"), ("ensolive", "asap")):
             page.evaluate("tab => showTab(tab)", tab)
@@ -665,11 +673,13 @@ def main() -> int:
                 and page.is_checked('#enso-tog-sst') == (tab == 'elnino')
                 and page.is_checked('#enso-tog-lanes') == (tab == 'ensowater')
                 and page.is_checked('#enso-tog-alerts') == (tab == 'ensolive'))
+            lens_texts.append(page.locator('#tab-elnino').inner_text())
             if tab == "ensomoney":
                 dates = page.evaluate("async () => Object.values((await (await fetch('data/rtfp.json')).json()).data).map(r => r.as_of).filter(Boolean).sort()")
                 legend = page.locator('#enso-legend').text_content()
                 check("rtfp legend states fixed anchors and country as_of range",
                       all(t in legend for t in ('Fixed anchors', '−10%', '0%', '+30%', 'beyond the ends', 'as of', dates[0], dates[-1])))
+                check("rtfp legend states the shared country date once", legend.count("for every country") == 1)
             headings.append(page.locator('#tab-elnino h2:visible').count())
             frames.append(page.evaluate("""() => [...document.querySelectorAll('#tab-elnino .enso-plate[data-kind], #enso-mapwrap[data-kind]')].every(e =>
                 getComputedStyle(e).borderTopStyle === (['modelled','published'].includes(e.dataset.kind) ? 'dashed' : 'solid'))"""))
@@ -681,6 +691,10 @@ def main() -> int:
             document.querySelectorAll('#enso-map').length === 1 && document.getElementById('enso-map') === window._stageAMap
             && window._stageAMap._leaflet_id === window._stageAMapId
             && document.querySelectorAll('#enso-map .leaflet-map-pane').length === 1"""))
+        check("El Niño user-facing text contains no hex colour codes",
+              not any(re.search(r'#[0-9a-f]{6}', text, re.I) for text in lens_texts))
+        option_texts = page.locator('#enso-country option').all_text_contents()
+        check("France is named in the country selector", "France" in option_texts and "FRA" not in option_texts)
         # 2026-09-22: the limits fold shows once, on Ocean; the state sentence
         # follows the reader to every view (hero on Ocean, status row elsewhere).
         page.evaluate("showTab('elnino')")

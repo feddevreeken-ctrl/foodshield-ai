@@ -43062,23 +43062,44 @@ function showCommodityDetail(key) {
       '<span class="enso-plate-sub">' + esc(source) + '</span></div><span class="enso-plate-date">' +
       esc(kind || 'observed') + ' · read ' + esc(date) + '</span></div>';
   }
+  function cpcOutlook() {
+    var advisory = ((S.bulletins && S.bulletins.bulletins) || []).find(function (b) {
+      return b.agency === 'NOAA CPC' && /very strong/i.test(b.summary || '');
+    });
+    var rows = (((S.mech || {}).context || {}).rows) || [];
+    var very = rows.find(function (r) { return /^CPC odds of a very strong event/.test(r.k || ''); });
+    var historic = rows.find(function (r) { return /^CPC odds that OND .* exceeds any event since /.test(r.k || ''); });
+    var veryPct = very && String(very.v || '').match(/(\d+(?:\.\d+)?)%/);
+    var historicPct = historic && String(historic.v || '').match(/(\d+(?:\.\d+)?)%/);
+    var since = historic && String(historic.k || '').match(/since (\d{4})/);
+    var published = advisory && new Date(advisory.published);
+    if (!advisory || !veryPct || !historicPct || !since || isNaN(published)) return null;
+    return {
+      agency: advisory.agency,
+      published: stamp(published),
+      very: (/^>/.test(String(very.v || '').trim()) ? 'more than ' : '') + veryPct[1] + '%',
+      historic: historicPct[1] + '%',
+      since: since[1]
+    };
+  }
   function oceanHeading() {
-    var e = S.enso, L = e.latest, w = e.weekly_nino34 || {}, band = liveBand(L);
-    /* "in the central Pacific" was written into the headline and contradicted
-       the reading underneath it: this event is east-based, Niño 1+2 at +4.5
-       against Niño 3.4 at +2.9, and the feed says so in `east_based`. The
-       basin phrase is derived from that flag now. The feed's own note is
-       explicit that no published source ties an east-based structure to a
-       distinct crop footprint, so the sentence says where the warmth sits and
-       claims nothing about harvests from it. */
+    var e = S.enso, L = e.latest, w = e.weekly_nino34 || {}, band = liveBand(L), outlook = cpcOutlook();
+    var by = {};
+    ((S.indices && S.indices.indices) || []).forEach(function (r) { by[r.key] = r; });
+    var oni = by.oni, roni = by.roni;
+    var season = oni && String(oni.window || '').match(/^([A-Z]{3}\s+\d{4})/);
+    /* The event's east-based structure is an observed comparison, not its
+       strength classification. Keep it in the observation sentence, where the
+       two weekly boxes are read together, and keep the forecast in the lead. */
     var eastBased = w.east_based === true;
-    var where = eastBased ? 'in the eastern Pacific' : 'in the central Pacific';
-    return '<div class="enso-ocean-heading"><h2>' + esc(band) + ' ' + esc(where) + '</h2>' +
-      '<p id="enso-agency-status">NOAA CPC’s ONI band is ' + esc(band) + ': <span class="enso-num">' + num(L.anom, 2) + ' °C</span> for ' + esc(L.season + ' ' + L.year) +
-      '; weekly Niño 3.4 is <span class="enso-num">' + num(w.anom, 1) + ' °C</span>, ' + esc(weeklyDate(w.date)) + '.' +
-      (eastBased && typeof w.nino12_anom === 'number'
-        ? ' Niño 1+2 is warmer still at <span class="enso-num">' + num(w.nino12_anom, 1) + ' °C</span>, placing the strongest warming in the east.'
-        : '') + '</p>' +
+    var forecast = outlook ? esc(outlook.agency) + ', ' + esc(outlook.published) + ': <span class="enso-num">' + esc(outlook.very) + '</span> chance of a very strong event this northern autumn and winter, and <span class="enso-num">' + esc(outlook.historic) + '</span> that October–December exceeds every event since <span class="enso-num">' + esc(outlook.since) + '</span>. ' : '';
+    var observed = roni && oni && season && typeof w.anom === 'number' && typeof w.nino12_anom === 'number'
+      ? 'Observed: RONI <span class="enso-num">' + num(roni.value, 2) + ' °C</span> and ONI <span class="enso-num">' + num(oni.value, 2) + ' °C</span> for ' + esc(season[1]) +
+        '; weekly Niño 3.4 <span class="enso-num">' + num(w.anom, 1) + ' °C</span> and Niño 1+2 <span class="enso-num">' + num(w.nino12_anom, 1) + ' °C</span> (week of ' + esc(weeklyDate(w.date).replace(/\s+\d{4}$/, '')) + ')' +
+        (eastBased ? ', the strongest warming in the east.' : '.')
+      : 'Observed index comparison unavailable.';
+    return '<div class="enso-ocean-heading"><h2>' + esc(outlook ? 'El Niño strengthening toward a very strong event' : band) + '</h2>' +
+      '<p id="enso-agency-status">' + forecast + observed + '</p>' +
       '<span class="enso-badge">Collected ' + esc(stamp(metaDate('enso'))) + '</span> · <a href="#enso-mech" onclick="showTab(\'ensomech\');return false">What is El Niño?</a></div>';
   }
   function renderHero() {
@@ -43191,6 +43212,12 @@ function showCommodityDetail(key) {
     var el = document.getElementById('enso-mech'); if (!el) return;
     var M = S.mech; if (!M) { el.innerHTML = ''; return; }
     var cx = M.context || {}, readOn = stamp(metaDate('mech'));
+    var weekly = (S.enso && S.enso.weekly_nino34) || {};
+    var mechanismEvidence = function (c) {
+      if (c.id !== 'upwelling' || typeof weekly.nino12_anom !== 'number') return c.evidence;
+      var remainder = String(c.evidence || '').replace(/^.*?\):\s*/, '');
+      return 'Niño 1+2 at ' + num(weekly.nino12_anom, 1) + ' °C (week of ' + weeklyDate(weekly.date) + '): ' + remainder;
+    };
     var places = [
       ['trades', '120°E', 'Trades · 120°E–80°W', {normal:[26,34,92,42],elnino:[16,34,46,42],lanina:[18,34,92,42]}],
       ['soi', '131°E', 'Pressure · Darwin 131°E to Tahiti 150°W', {normal:[5,6,88,40],elnino:[5,6,95,40],lanina:[5,6,88,40]}],
@@ -43203,7 +43230,8 @@ function showCommodityDetail(key) {
       soi: ['Darwin and Tahiti pressure', 'The pressure difference drives the easterly trades.', 'July Troup SOI −29.1; 30-day SOI −18.7 to 14 Sept 2026.', 'BoM, 14 Sept 2026 · Troup SOI'],
       convection: ['Rainfall shifts east', 'Convection concentrates rain over the Maritime Continent.', 'Rain is enhanced in the central and eastern Pacific and suppressed over Indonesia.', 'CPC, 10 Sept 2026 · convection and rainfall'],
       warm_water: ['Warm water crosses the date line', 'The thermocline is deep in the west and shallow off South America.', 'The eastern thermocline has deepened, with anomalies above +10.0 °C at depth.', 'CPC, 10 Sept 2026 · subsurface temperatures'],
-      upwelling: ['Upwelling off Peru', 'Cold, nutrient-rich water supplies the anchoveta fishery.', 'A warm coastal layer caps the upwelling.', 'CPC, 9 Sept 2026 · Niño 1+2 +4.5 °C']
+      upwelling: ['Upwelling off Peru', 'Cold, nutrient-rich water supplies the anchoveta fishery.', 'A warm coastal layer caps the upwelling.',
+        'CPC, ' + weeklyDate(weekly.date) + ' · Niño 1+2 ' + num(weekly.nino12_anom, 1) + ' °C']
     };
     var chain = M.chain || [];
     S.rulerStops = places.filter(function (p) { return chain.some(function (c) { return c.id === p[0]; }); });
@@ -43230,7 +43258,7 @@ function showCommodityDetail(key) {
       }).join('') + '</div></div></div>' +
       '<figcaption class="enso-log" id="enso-ruler-caption"></figcaption>' +
       '<details class="enso-evidence-note enso-mechanism-evidence"><summary>Mechanism evidence and sources</summary><div class="enso-evidence-columns">' + chain.map(function (c) {
-        return '<section><h3>' + esc(c.title) + '</h3><p>' + esc(c.evidence) + '</p></section>';
+        return '<section><h3>' + esc(c.title) + '</h3><p>' + esc(mechanismEvidence(c)) + '</p></section>';
       }).join('') + '</div>' +
       '<h3>Ocean feedback</h3><p>Weaker trades allow warm water to move east. The smaller temperature gradient further weakens the trades. Returning ocean waves eventually cool the eastern basin.</p>' +
       ((M.feedback || {}).sources || []).map(function (x) { return '<p><a href="' + esc(safeUrl(x.url)) + '" target="_blank" rel="noopener">' + esc(x.label) + '</a></p>'; }).join('') +
@@ -43769,7 +43797,7 @@ function showCommodityDetail(key) {
         ? '<div class="enso-legend-note">' + S.alertCounts.reliefUnplaced + ' of ' + S.alertCounts.reliefTotal +
           ' ReliefWeb reports carry no country shape this map can place, including world-level entries, and are not drawn.</div>'
         : '') +
-      '<div class="ctr-note" style="max-width:32ch;margin-top:5px;">GDACS collected ' + esc(stamp(metaDate('gdacs'))) + '; ReliefWeb collected ' + esc(stamp(metaDate('relief'))) + '. Counts are mapped reports, not affected countries; overlapping reports share a location. ReliefWeb uses up to 40 records with a country centroid. Amber rings (#ffd080): GDACS; pale cyan rings (#b8edf2): ReliefWeb, both with dark centres (#11161e). A marker says a hazard was reported. It says nothing about what caused it.</div></div>';
+      '<div class="ctr-note" style="max-width:32ch;margin-top:5px;">GDACS collected ' + esc(stamp(metaDate('gdacs'))) + '; ReliefWeb collected ' + esc(stamp(metaDate('relief'))) + '. Counts are mapped reports, not affected countries; overlapping reports share a location. ReliefWeb uses up to 40 records with a country centroid. Amber rings: GDACS; pale cyan rings: ReliefWeb, both with dark centres. A marker says a hazard was reported. It says nothing about what caused it.</div></div>';
   }
 
   function intervalBand(oni) {
@@ -44023,9 +44051,7 @@ function showCommodityDetail(key) {
     row.querySelectorAll('.enso-legend-block').forEach(function (block) {
       var note = document.createElement('div'); note.className = 'enso-legend-note';
       var title = block.querySelector('.enso-legend-t').textContent;
-      var rtfpRange = String(rtfpDateRange()), rtfpEnds = rtfpRange.split(' to ');
-      var rtfpWhen = rtfpEnds.length === 2 && rtfpEnds[0] === rtfpEnds[1] ? 'as of ' + rtfpEnds[0] + ' for every country' : 'as of range ' + rtfpRange;
-      note.textContent = /Domestic food inflation/.test(title) ? 'Fixed anchors: −10%, 0%, +30%; beyond ends use end colours. ' + rtfpWhen + '.' : /Sea-surface/.test(title) ? 'Seven-day mean; ±5 °C.' :
+      note.textContent = /Domestic food inflation/.test(title) ? 'Fixed anchors: −10%, 0%, +30%; beyond ends use end colours.' : /Sea-surface/.test(title) ? 'Seven-day mean; ±5 °C.' :
         /teleconnection/.test(title) ? 'Published regional membership.' : /Shipping/.test(title) ? '' :
         /Hazard/.test(title) ? 'Reported hazard severity.' :
         /shock|crop/.test(title) ? 'Ochre falls; green rises. ±15%.' + (modelOni() < 0 ? ' Under La Niña the ONI is negative, so a positive slope is a fall.' : '') :
@@ -44091,7 +44117,7 @@ function showCommodityDetail(key) {
       }).join('') +
       '<div class="ctr-note" style="max-width:34ch;margin-top:5px;">' + esc(lg[2]) + '</div>' +
       '<div class="ctr-note" style="max-width:34ch;margin-top:6px;border-left:2px solid #5b9b8a;padding-left:8px;">' +
-      (S.mode === 'asap' ? 'Hotspot: lavender (#8866ad); major hotspot: violet (#51316f). These fixed assessment classes are separate from fitted yield colours. ' : 'This layer uses the site’s severity ramp. ') + 'A reported hazard is unsigned. It is present, or ' +
+      (S.mode === 'asap' ? 'Hotspot: lavender; major hotspot: violet. These fixed assessment classes are separate from fitted yield colours. ' : 'This layer uses the site’s severity ramp. ') + 'A reported hazard is unsigned. It is present, or ' +
       'it is absent. The modelled layers are signed and cannot use that ramp. The difference is the point.</div>';
       el.innerHTML = '<div class="enso-legend">' +
         '<div class="enso-legend-block"><div class="enso-legend-t">' + esc(lg[0]) + ' · reported</div>' + body + '</div>' +
@@ -44119,7 +44145,7 @@ function showCommodityDetail(key) {
            take the same paint as −15%. Every other ramp on this tab says where
            it stops; this one did not, so the darkest ochre read as a value
            rather than as a floor. */
-        '<div class="ctr-note" style="max-width:34ch;margin-top:5px;">Ochre: the fitted yield falls. Green: it rises. Fixed anchors at −15%, 0 and +15%: anything beyond them carries the end colour, so the deepest ochre is <b>15% or worse</b>, not 15%. No fill means <b>no measured signal</b>, which is not the same as no effect.</div>' +
+        '<div class="ctr-note" style="max-width:34ch;margin-top:5px;">Ochre: the fitted yield falls. Green: it rises. Fixed anchors at −15%, 0 and +15%; beyond ±15% the end colours repeat. No fill means <b>no measured signal</b>, which is not the same as no effect.</div>' +
         (S.mode === 'crop'
           ? '<div class="ctr-note" style="max-width:34ch;margin-top:5px;">The crop\u2019s fitted slope <b>times the ONI of the ' +
             'current model setting</b> (' + esc(modelStateSentence()) + '), so the colour ' +
@@ -44145,7 +44171,12 @@ function showCommodityDetail(key) {
 
   function isoOf(f) {
     var p = (f && f.properties) || {};
-    return p.ISO_A3 || p.ADM0_A3 || p.iso_a3 || p.id || '';
+    var candidates = [p.ISO_A3_EH, p.ISO_A3, p.ADM0_A3, p.iso_a3, p.id];
+    for (var i = 0; i < candidates.length; i++) {
+      if (candidates[i] && candidates[i] !== '-99') return candidates[i];
+    }
+    var geoName = String(p.name || p.NAME || p.ADMIN || p.NAME_LONG || '').toLowerCase();
+    return (typeof GEO_NAME_TO_ISO !== 'undefined' && GEO_NAME_TO_ISO[geoName]) || '';
   }
   function nameFor(iso) { return (S.names && S.names[iso]) || iso; }
 
@@ -45446,8 +45477,10 @@ function showCommodityDetail(key) {
         (skipped.length
           ? '<div class="enso-bul-skip">' + skipped.map(function (u) {
               if (u.key !== 'climate_gov_enso_blog') return '<b>' + esc(agencies[u.key] || u.key.replace(/_/g, ' ')) + '</b> not reached this cycle.';
-              return '<b>climate gov enso blog</b> is excluded: newest post ' +
-                esc(u.newest_post || 'unknown') + ' (' + esc(String(u.age_days == null ? '?' : u.age_days)) + ' days old).';
+              var newest = new Date((u.newest_post || '') + 'T00:00:00Z');
+              var newestLabel = isNaN(newest) ? 'date unavailable' : newest.toLocaleDateString('en-GB',
+                { day:'numeric', month:'long', year:'numeric', timeZone:'UTC' });
+              return '<b>NOAA’s ENSO blog</b> is left out: its latest post is ' + esc(newestLabel) + '.';
             }).join(' ') + '</div>'
           : '') +
       '</div>';
