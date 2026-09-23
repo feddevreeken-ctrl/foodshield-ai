@@ -46138,7 +46138,7 @@ function showCommodityDetail(key) {
        dated, checked situation file or the bulletins feed. */
     var cpc = cpcOutlook();
     var lead = (wfp.added_m ? '<p class="enso-live-lead"><b>WFP (' + esc(fmtDate(wfp.date)) + '):</b> up to ' + wfp.added_m + ' million more people in acute food insecurity by the ' + esc(wfp.horizon) + ' across ' + wfp.countries + ' countries (' + wfp.baseline_m + ' → ' + wfp.projected_m + ' million). ' +
-      'Anticipatory action already triggered in ' + ((wfp.aa_triggered || {}).iso3 || []).map(function (i) { return esc(nameFor(i)); }).join(', ') + '; FAO and WFP ask $' + appeal.ask_usd_m + ' million for ' + appeal.people_m + ' million people in ' + (appeal.priority_iso3 || []).length + ' priority countries.' +
+      'Anticipatory action triggered since ' + esc((wfp.aa_triggered || {}).since || '') + ' in ' + ((wfp.aa_triggered || {}).iso3 || []).map(function (i) { return esc(nameFor(i)); }).join(', ') + ((wfp.aa_triggered || {}).usd_m ? ' ($' + wfp.aa_triggered.usd_m + ' million for ' + wfp.aa_triggered.people_m + ' million people)' : '') + '; FAO and WFP ask $' + appeal.ask_usd_m + ' million for ' + appeal.people_m + ' million people in ' + (appeal.priority_iso3 || []).length + ' priority countries.' +
       '</p>' : '');
 
     /* ── 2 · Supply decisions in force: the one feed that is a decision, first,
@@ -46174,6 +46174,18 @@ function showCommodityDetail(key) {
       if (!first || MON[first[1]] == null) return '';
       return Date.UTC(+first[2], MON[first[1]], 1) > today ? first[1] + ' ' + first[2] : '';
     };
+    /* IPC-style periods: "Apr 2026 - Sep 2026 (Current)". End month decides whether a figure has lapsed. */
+    var ipcPeriod = function (p) {
+      var m = String(p.period || '').match(/^([A-Z][a-z]{2}) (\d{4}) - ([A-Z][a-z]{2}) (\d{4})(?: \((.*)\))?/);
+      if (!m) return { text: String(p.period || ''), status: '', end: null };
+      var same = m[1] === m[3] && m[2] === m[4];
+      return { text: same ? m[1] + ' ' + m[2] : m[1] + (m[2] !== m[4] ? ' ' + m[2] : '') + '–' + m[3] + ' ' + m[4],
+               status: (m[5] || '').toLowerCase().replace(/^(\d\w+) projection$/, '$1 projection'), end: Date.UTC(+m[4], MON[m[3]] + 1, 0) };
+    };
+    var ipcSource = function (p) {
+      var k = String(p.data_source || '').split(' - ')[0].trim();
+      return { IPC: 'IPC', CH: 'Cadre Harmonisé', FEWSNET: 'FEWS NET estimate', HRP: 'response-plan figure', HNRP: 'response-plan figure' }[k] || k;
+    };
     var regionRow = function (r) {
       var isos = r.iso3 || [];
       var bits = [];
@@ -46182,9 +46194,12 @@ function showCommodityDetail(key) {
       var hs = hotIn(isos); if (hs.length) bits.push('ASAP hotspots: ' + hs.map(function (i) { return esc(nameFor(i)); }).join(', '));
       var al = gdIn(isos); if (al.length) bits.push(al.length + ' GDACS alert' + (al.length > 1 ? 's' : ''));
       var trig = isos.filter(function (i) { return aaTrig[i]; }); if (trig.length) bits.push('action triggered: ' + trig.map(function (i) { return esc(nameFor(i)); }).join(', '));
+      /* Before a season opens, the baseline is who is already in crisis. */
+      var base = isos.filter(function (i) { var p = S.ipc && S.ipc[i]; if (!p || typeof p.phase3plus_count !== 'number') return false; var e = ipcPeriod(p).end; return e != null && e >= today; });
+      if (base.length) bits.push('already in Phase 3+ before the season: ' + base.map(function (i) { var p = S.ipc[i]; return esc(nameFor(i)) + ' ' + (p.phase3plus_count / 1e6).toFixed(p.phase3plus_count >= 1e6 ? 1 : 2) + ' m'; }).join(', ') + ' (latest analyses, periods vary)');
       return '<tr class="is-' + esc(String(r.concern).replace(/\s+/g, '-')) + '"><th scope="row">' + esc(r.region) + '</th><td><span class="enso-concern">' + esc(r.concern) + '</span></td>' +
         '<td class="enso-ol-h">' + (r.windows || []).map(esc).join(' · ') + '</td><td>' + esc(r.hazards) + '<span class="enso-live-sub">' + esc(r.countries) + '</span></td>' +
-        '<td class="enso-live-now">' + (bits.join(' · ') || '<span class="enso-ol-na">' + (!isos.length ? 'FEWS NET names no countries here, so nothing is joined' : seasonAhead(r.windows) ? 'season not yet under way (starts ' + esc(seasonAhead(r.windows)) + '); nothing observed yet' : 'no observed signal in these countries today') + '</span>') + '</td></tr>';
+        '<td class="enso-live-now">' + (bits.join(' · ') || '<span class="enso-ol-na">' + (!isos.length ? 'FEWS NET names no countries here, so nothing is joined' : seasonAhead(r.windows) ? 'season not yet under way (starts ' + esc(seasonAhead(r.windows)) + '); no seasonal hazard observed yet' : 'no observed signal in these countries today') + '</span>') + '</td></tr>';
     };
     var regionPlate = few.regions ? '<figure class="enso-plate is-published enso-region-plate" data-kind="published">' +
       plateHead('Where concern is high', 'FEWS NET El Niño 2026–2027 regional table · observed signals from Crop Monitor, JRC ASAP, GDACS, WFP', fmtDate(few.reviewed), 'published') +
@@ -46207,7 +46222,6 @@ function showCommodityDetail(key) {
     (few.regions || []).forEach(function (r) { (r.iso3 || []).forEach(function (i) { pool[i] = 1; }); });
     Object.keys(linkedIso).forEach(function (i) { if (S.asap && S.asap[i] && S.asap[i].hotspot_code) pool[i] = 1; });
     gd.forEach(function (e) { (e.affected_iso3 || [e.iso3]).forEach(function (i) { if (linkedIso[i]) pool[i] = 1; }); });
-    Object.keys(fitBy).forEach(function (i) { if (fitBy[i].change_kt_record < 0) pool[i] = 1; });
     var crop = function (c) { return { corn: 'maize' }[c] || c; };
     /* FEWS NET's high-concern countries count as a signal: their season may not have opened yet. */
     var fewsHigh = {}; (few.regions || []).forEach(function (r) { if (r.concern === 'high') (r.iso3 || []).forEach(function (i) { fewsHigh[i] = 1; }); });
@@ -46217,8 +46231,14 @@ function showCommodityDetail(key) {
       var score = cmr.length * 3 + (a && a.hotspot_code === 2 ? 3 : a && a.hotspot_code ? 2 : 0) + (aaTrig[iso] ? 2 : 0) + (aaPri[iso] ? 1 : 0) + Math.min(al.length, 1) + (fewsHigh[iso] ? 2 : 0);
       var tie = f && f.change_kt_record < 0 ? 1 : 0;
       return { iso: iso, a: a, cm: cmr, al: al, rt: rt, f: f, score: score, tie: tie };
-    }).filter(function (r) { return r.score > 0 || r.tie; }).sort(function (x, y) { return (y.score - x.score) || (y.tie - x.tie) || nameFor(x.iso).localeCompare(nameFor(y.iso)); });
-    var firstSentence = function (t) { var m = String(t || '').match(/^[^.]+\./); return m ? m[0] : String(t || ''); };
+    }).filter(function (r) { return r.score > 0; }).sort(function (x, y) { return (y.score - x.score) || (y.tie - x.tie) || nameFor(x.iso).localeCompare(nameFor(y.iso)); });
+    /* ASAP notes open with crop-calendar boilerplate; show the first sentence that says what is wrong. */
+    var firstSentence = function (t) {
+      var txt = String(t || '').replace(/\b(e\.g|i\.e|etc|approx)\./gi, '$1\u00a7');
+      var sents = txt.match(/[^.]+\.(\s|$)/g) || [txt];
+      var hit = sents.filter(function (x) { return /below[- ]average|deficit|poor|drought|dry|failure|flood|red alert|delayed|erratic/i.test(x); })[0] || sents[0];
+      return hit.replace(/\u00a7/g, '.').trim();
+    };
     var ledgerRow = function (r) {
       return '<tr><th scope="row"><button type="button" data-map-country="' + esc(r.iso) + '">' + esc(nameFor(r.iso)) + '</button></th>' +
         '<td>' + (r.cm.length ? r.cm.map(function (c) { return '<b>' + esc(c.crop) + '</b> ' + esc(c.status) + '<span class="enso-live-sub">' + esc(c.driver) + '</span>'; }).join('') : '<span class="enso-ol-na">—</span>') + '</td>' +
@@ -46229,11 +46249,19 @@ function showCommodityDetail(key) {
           var by = {}; r.al.forEach(function (e) { var k = e.event_type_label + '|' + e.alert_level; if (!by[k] || String(e.from_date) < String(by[k].from_date)) by[k] = e; });
           return Object.keys(by).map(function (k) { var e = by[k]; return esc(e.event_type_label) + ' · ' + esc(e.alert_level) + (e.from_date ? '<span class="enso-live-sub">since ' + esc(fmtDate(e.from_date)) + '</span>' : ''); }).join('');
         })() : '<span class="enso-ol-na">—</span>') + '</td>' +
-        '<td>' + (aaTrig[r.iso] ? '<b>triggered</b>' : aaPri[r.iso] ? 'priority' : '<span class="enso-ol-na">—</span>') + (fewsHigh[r.iso] ? '<span class="enso-live-sub">FEWS NET high concern</span>' : '') + '</td>' +
-        (function () { var p = S.ipc && S.ipc[r.iso]; return '<td class="enso-ol-v">' + (p && typeof p.phase3plus_count === 'number' ? (p.phase3plus_count / 1e6).toFixed(p.phase3plus_count >= 1e6 ? 1 : 2) + ' m<span class="enso-live-sub">' + esc(String(p.period || '').replace(/\s*\(.*\)/, '')) + '</span>' : '<span class="enso-ol-na">—</span>') + '</td>'; })() +
+        '<td>' + (aaTrig[r.iso] ? '<b>triggered</b> (WFP)' : aaPri[r.iso] ? 'in FAO–WFP appeal' : '<span class="enso-ol-na">—</span>') + (fewsHigh[r.iso] ? '<span class="enso-live-sub">FEWS NET high concern</span>' : '') + '</td>' +
+        (function () {
+          var p = S.ipc && S.ipc[r.iso]; if (!p || typeof p.phase3plus_count !== 'number') return '<td class="enso-ol-v"><span class="enso-ol-na">—</span></td>';
+          var per = ipcPeriod(p), old = per.end != null && per.end < today - 365 * day;
+          var m = function (n) { return (n / 1e6).toFixed(n >= 1e6 ? 1 : 2) + ' m'; };
+          return '<td class="enso-ol-v' + (old ? ' is-stale' : '') + '">' + m(p.phase3plus_count) +
+            (p.phase5_count > 0 ? '<span class="enso-live-sub"><b>' + m(p.phase5_count) + ' in Phase 5</b></span>' : '') +
+            '<span class="enso-live-sub">' + esc(per.text) + (per.status ? ' · ' + esc(per.status) : '') + ' · ' + esc(ipcSource(p)) + (old ? ' · older than 12 months' : per.end != null && per.end < today ? ' · period ended' : '') + '</span>' +
+            (typeof p.analysis_coverage_ratio === 'number' && p.analysis_coverage_ratio < 0.9 ? '<span class="enso-live-sub">partial: ' + Math.round(p.analysis_coverage_ratio * 100) + '% of people analysed' + (typeof p.phase3plus_pct === 'number' ? ', ' + Math.round(p.phase3plus_pct) + '% of them in Phase 3+' : '') + '</span>' : '') + '</td>';
+        })() +
         '<td class="enso-ol-v">' + (r.rt && typeof r.rt.food_inflation_pct === 'number' ? num(r.rt.food_inflation_pct, 1) + '%<span class="enso-live-sub">' + esc(String(r.rt.as_of || '').slice(0, 7)) + '</span>' : '<span class="enso-ol-na">—</span>') + '</td></tr>';
     };
-    var lhead = '<thead><tr><th scope="col">Country</th><th scope="col">Crop Monitor · ' + esc((cm.issue || '').replace(/^No\. \d+, /, '')) + '</th><th scope="col">ASAP</th><th scope="col">Hazard alert</th><th scope="col">Anticipatory action</th><th scope="col">People in IPC 3+</th><th scope="col">Food inflation, RTFP estimate</th></tr></thead>';
+    var lhead = '<thead><tr><th scope="col">Country</th><th scope="col">Crop Monitor · ' + esc((cm.issue || '').replace(/^No\. \d+, /, '')) + '</th><th scope="col">ASAP</th><th scope="col">Hazard alert</th><th scope="col">Anticipatory action · WFP ' + esc(fmtDate(wfp.date)) + ', FAO–WFP ' + esc(fmtDate(appeal.date)) + '</th><th scope="col">People in Phase 3+ (IPC, CH or equivalent)</th><th scope="col">Food inflation, RTFP estimate</th></tr></thead>';
     var ledgerPlate = '<figure class="enso-plate enso-ledger-plate" data-kind="reported">' +
       plateHead('Which countries, which food', 'Crop Monitor for Early Warning · JRC ASAP · GDACS · WFP and FAO-WFP · World Bank RTFP · this site’s fit', stamp(metaDate('asap')), 'reported') +
       '<div class="plate-body"><table class="enso-live-table enso-ledger">' + lhead + '<tbody>' + ledger.slice(0, 12).map(ledgerRow).join('') + '</tbody></table>' +
@@ -46249,8 +46277,22 @@ function showCommodityDetail(key) {
     var FOOD = /maize|corn\b|wheat|rice|soy|sorghum|millet|crop|harvest|food|grain|famine|hunger|price|palm oil|sugar|cereal|farm|livestock|production|yield|staple|IPC|food security/i;
     /* Strip accents (Niño = Nino), digit separators and punctuation before comparing. */
     var norm = function (t) { return deent(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/(\d)[,.\s](?=\d{3}\b)/g, '$1').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 70); };
+    /* Rewrites of one study carry the same headline number in different forms
+       ("451,000", "nearly half a million", "4.5 lakh"): with a death word, the
+       number rounded to one significant figure is the story's key. */
+    var DENY = /(^|\.)naturalnews\.com$/i;
+    var numKey = function (t) {
+      var x = deent(t).toLowerCase().replace(/half a million/g, '500000').replace(/(\d+(?:\.\d+)?)\s*lakh/g, function (_, n) { return String(Math.round(+n * 1e5)); })
+        .replace(/(\d+(?:\.\d+)?)\s*million/g, function (_, n) { return String(Math.round(+n * 1e6)); }).replace(/(\d),(?=\d{3})/g, '$1');
+      if (!/death|dead|die|kill|mortalit|fatal/.test(x)) return '';
+      var big = (x.match(/\d{4,}/g) || []).map(Number).filter(function (n) { return n >= 10000; })[0];
+      if (!big) return '';
+      var mag = Math.pow(10, Math.floor(Math.log10(big)));
+      return 'n' + Math.round(big / mag) * mag;
+    };
+    var hostOf = function (u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
     var groups = {}, orderKeys = [];
-    news.forEach(function (rec) { var k = norm(rec.x.title); if (!groups[k]) { groups[k] = { rec: rec, n: 0 }; orderKeys.push(k); } groups[k].n += rec.x.outlets || 1; });
+    news.filter(function (rec) { return !DENY.test(hostOf(rec.x.url)); }).forEach(function (rec) { var k = numKey(rec.x.title) || norm(rec.x.title); if (!groups[k]) { groups[k] = { rec: rec, n: 0 }; orderKeys.push(k); } groups[k].n += rec.x.outlets || 1; });
     var stories = orderKeys.map(function (k) { return groups[k]; });
     stories.sort(function (a, b) { return (FOOD.test(b.rec.x.title) - FOOD.test(a.rec.x.title)) || (Date.parse(b.rec.x.published_at || 0) - Date.parse(a.rec.x.published_at || 0)); });
     var storyRow = function (s) {
@@ -46268,7 +46310,7 @@ function showCommodityDetail(key) {
       plateHead('On the wire', 'ReliefWeb reports, publisher feeds and GDELT · headlines naming El Niño', stamp(metaDate('news')), 'published') +
       '<div class="plate-body"><div class="enso-news">' + (stories.length ? stories.slice(0, 6).map(storyRow).join('') : '<div class="ctr-note">No story naming El Niño in the collection window.</div>') + '</div>' +
       (stories.length > 6 ? '<details class="enso-ol-more"><summary>' + (stories.length - 6) + ' more stories</summary><div class="enso-news">' + stories.slice(6).map(storyRow).join('') + '</div></details>' : '') +
-      '</div><figcaption class="enso-log">' + stories.reduce(function (a, st) { return a + st.n; }, 0) + ' headlines, ' + stories.length + ' distinct stories, ' + foodN + ' about food, crops or prices, which lead. Headlines are claims, not data.</figcaption></figure>';
+      '</div><figcaption class="enso-log">' + stories.reduce(function (a, st) { return a + st.n; }, 0) + ' headlines, about ' + stories.length + ' stories once rewrites of one story are merged, ' + foodN + ' about food, crops or prices, which lead. Headlines are claims, not data.</figcaption></figure>';
 
     /* ── 6 · Humanitarian reports, newest first, one per story: a Spanish and
        an English copy of one appeal are one row. */
