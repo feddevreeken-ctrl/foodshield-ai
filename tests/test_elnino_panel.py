@@ -834,6 +834,23 @@ def main() -> int:
               'Everything on this board is observed' not in page.locator('#enso-live').inner_text()
               and page.locator('#enso-live .enso-wire-plate').get_attribute('data-kind') == 'published'
               and page.locator('#enso-live .enso-live-rail figure[data-kind="reported"]').count() >= 1)
+        # Reported redesign (2026-09-23): decisions, regional concern, a country
+        # ledger joined across feeds, then a deduplicated, food-first wire.
+        check("Reported shows FEWS NET's regions, a country ledger and in-force measures with a countdown", page.evaluate("""async () => {
+            const sit = (await (await fetch('data/enso_situation.json')).json()).data;
+            const regions = [...document.querySelectorAll('#enso-live .enso-region-table tbody tr')];
+            const ledger = document.querySelectorAll('#enso-live .enso-ledger tbody tr').length;
+            const policy = document.querySelector('#enso-live .enso-policy-plate').textContent;
+            return regions.length === sit.fewsnet.regions.length
+                && regions.every((r, i) => r.textContent.includes(sit.fewsnet.regions[i].region) && r.textContent.includes(sit.fewsnet.regions[i].concern))
+                && ledger >= 8 && /\\d+ days?/.test(policy);
+        }"""))
+        check("the wire shows each story once and no raw HTML entities leak", page.evaluate("""() => {
+            const t = [...document.querySelectorAll('#enso-live .enso-wire-plate .enso-news-t')].map(a => a.textContent.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\\s+/g, ' ').trim().slice(0, 70));
+            return t.length > 0 && new Set(t).size === t.length && !document.getElementById('enso-live').textContent.includes('&amp;');
+        }"""))
+        check("humanitarian reports keep to hazards, food and anticipatory action",
+              'earthquake' not in page.locator('#enso-live .enso-live-rail').inner_text().lower())
 
         print("\nstage H map interactions and ranked readings")
         # Capture the actual rebuilt Leaflet instance without adding a production test API.

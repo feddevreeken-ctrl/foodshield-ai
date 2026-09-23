@@ -12120,6 +12120,27 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-ol-more > summary { font:12px 'Geist Mono',monospace; color:var(--t2); cursor:pointer; padding:6px 0; }
 #tab-elnino .enso-outlook-gap { margin:14px 0 0; font-size:13px; color:var(--t2); max-width:118ch; }
 @media(max-width:700px) { #tab-elnino .enso-outlook-table :is(th,td):nth-child(n+5) { display:none; } #tab-elnino .enso-outlook-table tr.enso-ol-year th { display:table-cell; } #tab-elnino .enso-ol-v i { display:block; } }
+/* Reported board (2026-09-23): decisions, regional concern, a country ledger, then the wire. */
+#tab-elnino .enso-live-lead { font-size:15px; line-height:1.6; max-width:118ch; margin:8px 0 20px; color:var(--t1); }
+#tab-elnino #enso-live > .enso-plate { margin:0 0 var(--enso-gap); }
+#tab-elnino .enso-live-table { width:100%; border-collapse:collapse; font-size:13px; }
+#tab-elnino .enso-live-table :is(th,td) { padding:8px 12px 8px 0; border-bottom:1px solid var(--grid); text-align:left; vertical-align:top; }
+#tab-elnino .enso-live-table thead th { font:11px/1.4 'Geist Mono',monospace; color:var(--t3); font-weight:400; }
+#tab-elnino .enso-live-table th[scope=row] { font-weight:500; white-space:nowrap; }
+#tab-elnino .enso-live-table th[scope=row] button { background:none; border:0; padding:0; min-height:0; color:var(--t1); font:inherit; cursor:pointer; text-decoration:underline; text-decoration-color:var(--grid); text-underline-offset:3px; }
+#tab-elnino .enso-live-sub { display:block; color:var(--t3); font-size:12px; margin-top:2px; }
+#tab-elnino .enso-live-now { color:var(--t2); font-size:12.5px; }
+#tab-elnino .enso-concern { white-space:nowrap; font:11px/1 'Geist Mono',monospace; text-transform:uppercase; letter-spacing:.05em; color:var(--t2); }
+#tab-elnino .enso-region-table tr.is-high .enso-concern { color:#e0864a; }
+#tab-elnino .enso-region-table tr.is-moderate .enso-concern { color:#d9b36b; }
+#tab-elnino .enso-ledger td { font-size:12.5px; }
+#tab-elnino .enso-ledger td b { font-weight:500; color:var(--t1); }
+#tab-elnino .enso-live-comment > summary { font:11px 'Geist Mono',monospace; color:var(--t3); cursor:pointer; margin-top:3px; }
+#tab-elnino .enso-live-comment p { margin:4px 0 0; color:var(--t2); font-size:12px; max-width:48ch; }
+#tab-elnino .enso-news-row.is-food .enso-news-t { color:var(--t1); }
+#tab-elnino .enso-policy-plate td b { color:#e0864a; font-weight:500; }
+@media(min-width:1100px) { #tab-elnino #enso-live .enso-live-board { display:grid; grid-template-columns:minmax(0,7fr) minmax(0,5fr); gap:var(--enso-gap); align-items:start; } }
+@media(max-width:800px) { #tab-elnino .enso-ledger :is(th,td):nth-child(n+5) { display:none; } #tab-elnino .enso-region-table :is(th,td):nth-child(3) { display:none; } }
 /* Harvest callouts: unboxed atlas notes, name and one figure line, halo not panel. */
 #tab-elnino .enso-anno { width:170px; background:none; border:0; box-shadow:none; backdrop-filter:none; padding:0 6px; }
 #tab-elnino .enso-anno :is(b,span) { text-shadow:0 0 3px #0b1017, 0 0 3px #0b1017, 0 0 6px #0b1017; }
@@ -45618,177 +45639,193 @@ function showCommodityDetail(key) {
     var gdAll = [], g = S.gdacs || {};
     for (var k in g) if (g[k] && g[k].is_current) gdAll.push(g[k]);
     /* This is the El Niño tab, so the hazard list is cut to places ENSO is
-       documented to reach. The European drought GDACS is carrying is real and
-       is left out on purpose — the count of what was dropped is printed so the
-       filtering is visible rather than silent. */
+       documented to reach; what was dropped is named, not hidden. */
     var linkedIso = ensoLinkedIsos();
     var gd = gdAll.filter(function (e) {
       if (linkedIso[e.iso3]) return true;
       return (e.affected_iso3 || []).some(function (i) { return linkedIso[i]; });
     });
-    var gdDropped = gdAll.length - gd.length;
+    var gdDropped = gdAll.filter(function (e) { return gd.indexOf(e) < 0; });
     gd.sort(function (a, b) { return (b.severity_score || 0) - (a.severity_score || 0); });
-    var relAll = (S.relief && S.relief.events) || [];
-    /* relMatched, not the sliced list, is what "n more records in this feed"
-       has to count. Reading rel.length after the slice made the line report
-       the cap rather than the feed, so it said "9 more" whatever the real
-       remainder was. */
-    var relMatched = relAll.filter(function (e) { return linkedIso[e.iso3]; });
-    var rel = relMatched.slice(0, 12);
-    var relDropped = relAll.length - relMatched.length;
-    var hot = [];
-    for (var iso in (S.asap || {})) {
-      var a = S.asap[iso];
-      if (a && a.hotspot_code) hot.push({ iso: iso, a: a });
-    }
-    hot.sort(function (x, y) { return y.a.hotspot_code - x.a.hotspot_code; });
+    var SIT = S.situation || {}, few = SIT.fewsnet || {}, wfp = SIT.wfp_projection || {}, appeal = SIT.fao_wfp_appeal || {}, cm = SIT.crop_monitor || {};
+    var aaTrig = {}, aaPri = {};
+    ((wfp.aa_triggered || {}).iso3 || []).forEach(function (i) { aaTrig[i] = 1; });
+    (appeal.priority_iso3 || []).forEach(function (i) { aaPri[i] = 1; });
+    var day = 864e5, today = Date.now();
+    var fmtDate = function (iso) { var d = new Date(iso); return isNaN(d) ? String(iso || '') : stamp(d); };
 
-    /* ── The agencies' own bulletins ─────────────────────────────────────
-       Kept separate from the press river on purpose: a WMO update and a wire
-       story about a WMO update are different kinds of evidence, and collapsing
-       them into one list would let coverage volume stand in for authority.
-       Every item carries the date its agency published it. */
+    /* ── 1 · The line a reader needs first: how many people, where action has
+       already been triggered, and the agencies' odds. Every figure is from the
+       dated, checked situation file or the bulletins feed. */
+    var cpc = cpcOutlook();
+    var lead = (wfp.added_m ? '<p class="enso-live-lead"><b>WFP (' + esc(fmtDate(wfp.date)) + '):</b> up to ' + wfp.added_m + ' million more people in acute food insecurity by the ' + esc(wfp.horizon) + ' across ' + wfp.countries + ' countries (' + wfp.baseline_m + ' → ' + wfp.projected_m + ' million). ' +
+      'Anticipatory action already triggered in ' + ((wfp.aa_triggered || {}).iso3 || []).map(function (i) { return esc(nameFor(i)); }).join(', ') + '; FAO and WFP ask $' + appeal.ask_usd_m + ' million for ' + appeal.people_m + ' million people in ' + (appeal.priority_iso3 || []).length + ' priority countries.' +
+      (cpc ? ' ' + esc(cpc.agency) + ' (' + esc(cpc.published) + '): ' + esc(cpc.very) + ' odds of a very strong event.' : '') + '</p>' : '');
+
+    /* ── 2 · Supply decisions in force: the one feed that is a decision, first,
+       ordered by the date that changes it. */
+    var tr = S.restrictions || [];
+    var inForce = function (r) { return r.status !== 'historical' && !(r.ends_date && Date.parse(r.ends_date + 'T23:59:59Z') < today); };
+    var live = tr.filter(inForce).sort(function (a, b) { return (Date.parse(a.ends_date || '2999-01-01') - Date.parse(b.ends_date || '2999-01-01')); });
+    var past = tr.filter(function (r) { return !inForce(r); });
+    var policyRow = function (r) {
+      var ends = r.ends_date ? Math.ceil((Date.parse(r.ends_date + 'T23:59:59Z') - today) / day) : null;
+      return '<tr><th scope="row"><button type="button" data-map-country="' + esc(r.iso) + '">' + esc(r.country) + '</button></th><td>' + esc(r.commodity) + '</td><td>' + esc(r.measure) + '</td>' +
+        '<td class="enso-ol-v">' + (ends != null ? 'ends ' + esc(fmtDate(r.ends_date)) + ' <b>' + ends + ' day' + (ends === 1 ? '' : 's') + '</b>' : 'no end date') + '</td><td>' + esc(r.status) + '</td></tr>';
+    };
+    var policyPlate = '<figure class="enso-plate is-published enso-policy-plate" data-kind="published">' +
+      plateHead('Supply decisions in force', 'IFPRI Food Export Restrictions Tracker, reviewed by hand', stamp(metaDate('restrictions')), 'published') +
+      '<div class="plate-body">' + (live.length ? '<table class="enso-live-table"><tbody>' + live.map(policyRow).join('') + '</tbody></table>' : '<p class="ctr-note">No export restriction on record is in force today.</p>') +
+      (past.length ? '<details class="enso-ol-more"><summary>' + past.length + ' earlier measures on record</summary><table class="enso-live-table"><tbody>' + past.map(policyRow).join('') + '</tbody></table></details>' : '') +
+      '</div><figcaption class="enso-log">Sorted by the date each measure ends. A decision, not an observation: it moves supply the day it changes.</figcaption></figure>';
+
+    /* ── 3 · Where concern is high: FEWS NET's own regional table, with what
+       the observing feeds show in those countries today. */
+    var cmBy = {}; (cm.rows || []).forEach(function (r) { (cmBy[r.iso] = cmBy[r.iso] || []).push(r); });
+    var hotIn = function (isos) { return isos.filter(function (i) { return S.asap && S.asap[i] && S.asap[i].hotspot_code; }); };
+    var gdIn = function (isos) { return gdAll.filter(function (e) { return (e.affected_iso3 || [e.iso3]).some(function (i) { return isos.indexOf(i) >= 0; }); }); };
+    /* A window that has not opened yet explains an empty row better than "nothing observed". */
+    var MON = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+    var seasonAhead = function (wins) {
+      var first = String((wins || [])[0] || '').match(/([A-Z][a-z]{2})[^0-9]*?(\d{4})/);
+      if (!first || MON[first[1]] == null) return '';
+      return Date.UTC(+first[2], MON[first[1]], 1) > today ? first[1] + ' ' + first[2] : '';
+    };
+    var regionRow = function (r) {
+      var isos = r.iso3 || [];
+      var bits = [];
+      var poor = isos.filter(function (i) { return cmBy[i]; });
+      if (poor.length) bits.push('Crop Monitor poor: ' + poor.map(function (i) { return esc(nameFor(i)); }).join(', '));
+      var hs = hotIn(isos); if (hs.length) bits.push('ASAP hotspots: ' + hs.map(function (i) { return esc(nameFor(i)); }).join(', '));
+      var al = gdIn(isos); if (al.length) bits.push(al.length + ' GDACS alert' + (al.length > 1 ? 's' : ''));
+      var trig = isos.filter(function (i) { return aaTrig[i]; }); if (trig.length) bits.push('action triggered: ' + trig.map(function (i) { return esc(nameFor(i)); }).join(', '));
+      return '<tr class="is-' + esc(String(r.concern).replace(/\s+/g, '-')) + '"><th scope="row">' + esc(r.region) + '</th><td><span class="enso-concern">' + esc(r.concern) + '</span></td>' +
+        '<td class="enso-ol-h">' + (r.windows || []).map(esc).join(' · ') + '</td><td>' + esc(r.hazards) + '<span class="enso-live-sub">' + esc(r.countries) + '</span></td>' +
+        '<td class="enso-live-now">' + (bits.join(' · ') || '<span class="enso-ol-na">' + (seasonAhead(r.windows) ? 'season not yet under way (starts ' + esc(seasonAhead(r.windows)) + '); nothing observed yet' : 'no observed signal in these countries today') + '</span>') + '</td></tr>';
+    };
+    var regionPlate = few.regions ? '<figure class="enso-plate is-published enso-region-plate" data-kind="published">' +
+      plateHead('Where concern is high', 'FEWS NET El Niño 2026–2027 regional table · observed signals from Crop Monitor, JRC ASAP, GDACS, WFP', fmtDate(few.reviewed), 'published') +
+      '<div class="plate-body"><table class="enso-live-table enso-region-table"><thead><tr><th scope="col">Region</th><th scope="col">Concern</th><th scope="col">Window</th><th scope="col">Hazard · where</th><th scope="col">Observed now</th></tr></thead><tbody>' +
+      few.regions.map(regionRow).join('') + '</tbody></table></div>' +
+      '<figcaption class="enso-log">Concern levels are FEWS NET’s; the last column is what the monitoring feeds report in the named countries today. <a href="' + esc(safeUrl(few.url)) + '" target="_blank" rel="noopener">FEWS NET El Niño page</a></figcaption></figure>' : '';
+
+    /* ── 4 · Which countries, which food: one row per country with any
+       observed signal, joined across feeds, so a reader sees the crop, the
+       hazard and the response on one line instead of four lists. */
+    var fitBy = {};
+    ((S.outlook && S.outlook.regions) || []).forEach(function (r) {
+      (r.fitted || []).forEach(function (f) { if (f.in_region && f.enso_specific && Math.abs(f.change_kt_observed || 0) >= 150) fitBy[f.iso] = f; });
+    });
+    var pool = {};
+    Object.keys(cmBy).forEach(function (i) { pool[i] = 1; });
+    Object.keys(aaTrig).forEach(function (i) { pool[i] = 1; });
+    (few.regions || []).forEach(function (r) { (r.iso3 || []).forEach(function (i) { pool[i] = 1; }); });
+    Object.keys(linkedIso).forEach(function (i) { if (S.asap && S.asap[i] && S.asap[i].hotspot_code) pool[i] = 1; });
+    gd.forEach(function (e) { (e.affected_iso3 || [e.iso3]).forEach(function (i) { if (linkedIso[i]) pool[i] = 1; }); });
+    Object.keys(fitBy).forEach(function (i) { if (fitBy[i].change_kt_observed < 0) pool[i] = 1; });
+    var crop = function (c) { return { corn: 'maize' }[c] || c; };
+    var ledger = Object.keys(pool).map(function (iso) {
+      var a = S.asap && S.asap[iso], cmr = cmBy[iso] || [], al = gdIn([iso]), rt = S.rtfp && S.rtfp[iso], f = fitBy[iso];
+      var score = cmr.length * 3 + (a && a.hotspot_code === 2 ? 3 : a && a.hotspot_code ? 2 : 0) + (aaTrig[iso] ? 2 : 0) + (aaPri[iso] ? 1 : 0) + al.length +
+        (f && f.change_kt_observed < 0 ? 2 : 0);
+      return { iso: iso, a: a, cm: cmr, al: al, rt: rt, f: f, score: score };
+    }).filter(function (r) { return r.score > 0; }).sort(function (x, y) { return (y.score - x.score) || nameFor(x.iso).localeCompare(nameFor(y.iso)); });
+    var firstSentence = function (t) { var m = String(t || '').match(/^[^.]+\./); return m ? m[0] : String(t || ''); };
+    var ledgerRow = function (r) {
+      return '<tr><th scope="row"><button type="button" data-map-country="' + esc(r.iso) + '">' + esc(nameFor(r.iso)) + '</button></th>' +
+        '<td>' + (r.cm.length ? r.cm.map(function (c) { return '<b>' + esc(c.crop) + '</b> ' + esc(c.status) + '<span class="enso-live-sub">' + esc(c.driver) + '</span>'; }).join('') : '<span class="enso-ol-na">—</span>') + '</td>' +
+        '<td>' + (r.a && r.a.hotspot_code ? '<b>' + esc(r.a.hotspot_label) + '</b> <span class="enso-ol-h">' + esc(assessmentMonth(r.a.assessment_date)) + '</span>' +
+          (r.a.comment ? '<details class="enso-live-comment"><summary>ASAP note</summary><p>' + esc(firstSentence(r.a.comment)) + '</p></details>' : '') : '<span class="enso-ol-na">—</span>') + '</td>' +
+        '<td>' + (r.al.length ? r.al.map(function (e) { return esc(e.event_type_label) + ' · ' + esc(e.alert_level) + (e.from_date ? '<span class="enso-live-sub">since ' + esc(fmtDate(e.from_date)) + '</span>' : ''); }).join('') : '<span class="enso-ol-na">—</span>') + '</td>' +
+        '<td>' + (aaTrig[r.iso] ? '<b>triggered</b>' : aaPri[r.iso] ? 'priority' : '<span class="enso-ol-na">—</span>') + '</td>' +
+        '<td class="enso-ol-v">' + (r.rt && typeof r.rt.food_inflation_pct === 'number' ? num(r.rt.food_inflation_pct, 1) + '%' : '<span class="enso-ol-na">—</span>') + '</td>' +
+        '<td class="enso-ol-v">' + (r.f ? esc(crop(r.f.crop)) + ' ' + num(r.f.change_pct_observed, 0) + '% <span class="enso-live-sub">' + esc(r.f.harvest) + '</span>' : '<span class="enso-ol-na">—</span>') + '</td></tr>';
+    };
+    var lhead = '<thead><tr><th scope="col">Country</th><th scope="col">Crop Monitor · ' + esc((cm.issue || '').replace(/^No\. \d+, /, '')) + '</th><th scope="col">ASAP</th><th scope="col">Hazard alert</th><th scope="col">Anticipatory action</th><th scope="col">Food inflation</th><th scope="col">Fit · harvest</th></tr></thead>';
+    var ledgerPlate = '<figure class="enso-plate enso-ledger-plate" data-kind="reported">' +
+      plateHead('Which countries, which food', 'Crop Monitor for Early Warning · JRC ASAP · GDACS · WFP and FAO-WFP · World Bank RTFP · this site’s fit', stamp(metaDate('asap')), 'reported') +
+      '<div class="plate-body"><table class="enso-live-table enso-ledger">' + lhead + '<tbody>' + ledger.slice(0, 12).map(ledgerRow).join('') + '</tbody></table>' +
+      (ledger.length > 12 ? '<details class="enso-ol-more"><summary>' + (ledger.length - 12) + ' more countries with a signal</summary><table class="enso-live-table enso-ledger">' + lhead + '<tbody>' + ledger.slice(12).map(ledgerRow).join('') + '</tbody></table></details>' : '') +
+      '</div><figcaption class="enso-log">Observed and published columns first; the last column is this site’s fit and is modelled. A dash means that feed reports nothing for the country, not that nothing is happening. ' + esc(asapNote()) + '.</figcaption></figure>';
+
+    /* ── 5 · The wire, food first. Syndicated copies of one story collapse to
+       one row with a count; stories that name a crop, price or harvest lead. */
+    /* Some feeds store titles HTML-encoded; decode before escaping, or "S&P" prints as "S&amp;P". */
+    var deent = function (t) { return String(t || '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>'); };
+    var FOOD = /maize|corn|wheat|rice|soy|sorghum|millet|crop|harvest|food|grain|drought|famine|hunger|price|palm|sugar|monsoon|cereal|farm|livestock/i;
+    var norm = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim().slice(0, 70); };
+    var groups = {}, orderKeys = [];
+    news.forEach(function (rec) { var k = norm(rec.x.title); if (!groups[k]) { groups[k] = { rec: rec, n: 0 }; orderKeys.push(k); } groups[k].n++; });
+    var stories = orderKeys.map(function (k) { return groups[k]; });
+    stories.sort(function (a, b) { return (FOOD.test(b.rec.x.title) - FOOD.test(a.rec.x.title)) || (Date.parse(b.rec.x.published_at || 0) - Date.parse(a.rec.x.published_at || 0)); });
+    var storyRow = function (s) {
+      var x = s.rec.x, host = '';
+      try { host = new URL(x.url).hostname.replace(/^www\./, ''); } catch (e) { host = x.source || ''; }
+      return '<article class="enso-news-row no-thumb' + (FOOD.test(x.title) ? ' is-food' : '') + '"><div class="enso-news-body">' +
+        '<a href="' + esc(safeUrl(x.url)) + '" target="_blank" rel="noopener" class="enso-news-t">' + esc(deent(x.title)) + '</a>' +
+        '<div class="enso-news-m"><span class="enso-news-src">' + esc(x.source || host) + '</span><span class="enso-news-sep" aria-hidden="true">·</span>' +
+        '<time datetime="' + esc(x.published_at || '') + '">' + esc(ago(x.published_at) || x.published_label || '') + '</time>' +
+        (s.n > 1 ? '<span class="enso-news-sep" aria-hidden="true">·</span><span>' + s.n + ' outlets</span>' : '') + '</div></div>' +
+        '<div class="enso-news-c">' + isoChips(x.countries_mentioned) + '</div></article>';
+    };
+    var foodN = stories.filter(function (s) { return FOOD.test(s.rec.x.title); }).length;
+    var wirePlate = '<figure class="enso-plate is-published enso-wire-plate" data-kind="published">' +
+      plateHead('On the wire', 'ReliefWeb reports, publisher feeds and GDELT · headlines naming El Niño', stamp(metaDate('news')), 'published') +
+      '<div class="plate-body"><div class="enso-news">' + (stories.length ? stories.slice(0, 6).map(storyRow).join('') : '<div class="ctr-note">No story naming El Niño in the collection window.</div>') + '</div>' +
+      (stories.length > 6 ? '<details class="enso-ol-more"><summary>' + (stories.length - 6) + ' more stories</summary><div class="enso-news">' + stories.slice(6).map(storyRow).join('') + '</div></details>' : '') +
+      '</div><figcaption class="enso-log">' + news.length + ' headlines, ' + stories.length + ' distinct stories, ' + foodN + ' about food, crops or prices, which lead. Headlines are claims, not data.</figcaption></figure>';
+
+    /* ── 6 · Humanitarian reports, newest first, one per story: a Spanish and
+       an English copy of one appeal are one row. */
+    var relAll = (S.relief && S.relief.events) || [];
+    var HYDRO = /el ni|drought|flood|rain|cyclone|typhoon|monsoon|dry|anticipatory|food|hunger|harvest|crop|nutrition|famine|sequ|inundac|seca|lluvia/i;
+    var relSeen = {}, rel = relAll.filter(function (e) { return linkedIso[e.iso3] && HYDRO.test(e.title || ''); })
+      .sort(function (a, b) { return Date.parse(b.date || 0) - Date.parse(a.date || 0); })
+      .filter(function (e) { var k = e.iso3 + '|' + String(e.date || '').slice(0, 10); if (relSeen[k]) return false; relSeen[k] = 1; return true; });
+    var relPlate = '<figure class="enso-plate" data-kind="reported">' + plateHead('Humanitarian reports', 'ReliefWeb · teleconnection countries, newest first', stamp(metaDate('relief')), 'reported') +
+      '<div class="plate-body"><ul class="enso-rail-list enso-rail-links">' + rel.slice(0, 6).map(function (ev) {
+        return '<li><a href="' + esc(safeUrl(ev.url)) + '" target="_blank" rel="noopener">' + esc(ev.title) + '</a><span>' + esc(ev.country || ev.iso3) + ' · ' + esc(fmtDate(ev.date)) + '</span></li>';
+      }).join('') + '</ul>' + (rel.length > 6 ? '<details class="enso-ol-more"><summary>' + (rel.length - 6) + ' more reports</summary><ul class="enso-rail-list enso-rail-links">' + rel.slice(6).map(function (ev) {
+        return '<li><a href="' + esc(safeUrl(ev.url)) + '" target="_blank" rel="noopener">' + esc(ev.title) + '</a><span>' + esc(ev.country || ev.iso3) + ' · ' + esc(fmtDate(ev.date)) + '</span></li>';
+      }).join('') + '</ul></details>' : '') + '</div><figcaption class="enso-log">Reports on drought, floods, storms, food and anticipatory action only; one per country and day, so same-day language copies are one row.' +
+      (gdDropped.length ? ' Hazard alerts outside the El Niño countries left out of this board: ' + gdDropped.map(function (e) { return (e.event_type_label || 'alert').toLowerCase() + ' in ' + (e.country || e.iso3); }).join(', ') + '.' : '') + '</figcaption></figure>';
+
+    /* ── 7 · The agencies, compact: dated products and who was not reached. */
     var bulletins = (function () {
       var B = S.bulletins;
       if (!B || !B.bulletins || !B.bulletins.length) {
         var failed = (S.failed || []).indexOf('enso_bulletins') !== -1;
-        return '<div class="enso-bul enso-bul-out" role="status">' +
-          '<b>No agency bulletins.</b> ' +
-          (failed ? 'Agency bulletins could not be loaded. Retry to fetch them.'
-                  : 'The last collector run reached none of the agency pages.') + '</div>';
+        return '<div class="enso-bul enso-bul-out" role="status"><b>No agency bulletins.</b> ' +
+          (failed ? 'Agency bulletins could not be loaded. Retry to fetch them.' : 'The last collector run reached none of the agency pages.') + '</div>';
       }
       var skipped = B.unavailable || [];
       var agencies = { jma_monthly:'JMA', enfen_monthly:'ENFEN', iri_monthly:'IRI', bom_weekly:'BoM', cpc_monthly:'NOAA CPC', wmo_news:'WMO' };
-      return '<div class="enso-bul">' +
-        '<div class="enso-bul-h">' +
-          '<span class="enso-bul-k"></span>' +
-          '<span class="enso-bul-sub">Dated outlooks and observations from the monitoring agencies.</span>' +
-        '</div>' +
-        B.bulletins.map(function (b,i) {
-          return (i === 3 ? '<details class="enso-bulletins-more"><summary>' + (B.bulletins.length-3) + ' more agency bulletins</summary>' : '') + '<a class="enso-bul-row" href="' + esc(safeUrl(b.url)) + '" target="_blank" rel="noopener">' +
-            '<span class="enso-bul-ag">' + esc(b.agency) + '</span>' +
-            '<span class="enso-bul-body">' +
-              '<span class="enso-bul-t">' + esc(b.title) + '</span>' +
-              (b.summary ? '<span class="enso-bul-s">' + esc(b.summary.replace(" This is the forecast the page's own outlook language is checked against.", '')) + '</span>' : '') +
-            '</span>' +
-            '<span class="enso-bul-meta">' + esc(b.kind) +
-              '<i>' + esc(ago(b.published) || (b.published || '').slice(0, 10)) + '</i>' +
-              (b.stale ? '<u>past its usual cadence</u>' : '') +
-            '</span>' +
-          '</a>';
+      var list = B.bulletins.filter(function (b) { return !(b.agency === 'WMO' && b.kind === 'news'); });
+      return '<div class="enso-bul"><div class="enso-bul-h"><span class="enso-bul-k"></span><span class="enso-bul-sub">Dated outlooks and observations from the monitoring agencies.</span></div>' +
+        list.map(function (b) {
+          return '<a class="enso-bul-row" href="' + esc(safeUrl(b.url)) + '" target="_blank" rel="noopener"><span class="enso-bul-ag">' + esc(b.agency) + '</span>' +
+            '<span class="enso-bul-body"><span class="enso-bul-t">' + esc(b.title) + '</span></span>' +
+            '<span class="enso-bul-meta">' + esc(b.kind) + '<i>' + esc(ago(b.published) || (b.published || '').slice(0, 10)) + '</i>' + (b.stale ? '<u>past its usual cadence</u>' : '') + '</span></a>';
         }).join('') +
-        (B.bulletins.length > 3 ? '</details>' : '') +
-        (skipped.length
-          ? '<div class="enso-bul-skip">' + skipped.map(function (u) {
-              if (u.key !== 'climate_gov_enso_blog') return '<b>' + esc(agencies[u.key] || u.key.replace(/_/g, ' ')) + '</b> not reached this cycle.';
-              var newest = new Date((u.newest_post || '') + 'T00:00:00Z');
-              var newestLabel = isNaN(newest) ? 'date unavailable' : newest.toLocaleDateString('en-GB',
-                { day:'numeric', month:'long', year:'numeric', timeZone:'UTC' });
-              return '<b>NOAA’s ENSO blog</b> is left out: its latest post is ' + esc(newestLabel) + '.';
-            }).join(' ') + '</div>'
-          : '') +
-      '</div>';
+        (skipped.length ? '<div class="enso-bul-skip">' + skipped.map(function (u) {
+          if (u.key !== 'climate_gov_enso_blog') return '<b>' + esc(agencies[u.key] || u.key.replace(/_/g, ' ')) + '</b> not reached this cycle.';
+          var newest = new Date((u.newest_post || '') + 'T00:00:00Z');
+          var newestLabel = isNaN(newest) ? 'date unavailable' : newest.toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric', timeZone:'UTC' });
+          return '<b>NOAA’s ENSO blog</b> is left out: its latest post is ' + esc(newestLabel) + '.';
+        }).join(' ') + '</div>' : '') + '</div>';
     })();
+    var agencyPlate = '<figure class="enso-plate is-published enso-agency-plate" data-kind="published">' +
+      plateHead('Agency bulletins', 'Dated products; the odds themselves are on the Ocean view', stamp(metaDate('bulletins')), 'published') + bulletins + '</figure>';
 
-
-
-    /* ── LEFT: the agencies, then the wire ──────────────────────────────
-       A WMO update and a wire story about a WMO update are different kinds
-       of evidence, so they are two plates, agencies first. The wire rows lose
-       their thumbnails: the headline, the outlet and the reason a row
-       qualifies are the content; a stock photo of a dry field is not. */
-    var agencyPlate = '<figure class="enso-plate is-published enso-agency-plate">' +
-      plateHead('Agency bulletins', 'Monitoring bodies’ dated products', stamp(metaDate('bulletins')), 'published') + bulletins +
-      '<figcaption class="enso-log">Late bulletins are marked against the agency’s usual publication cadence.</figcaption></figure>';
-
-    var wireRows = news.length ? news.slice(0, 5).map(function (rec) {
-        var x = rec.x;
-        var host = '';
-        try { host = new URL(x.url).hostname.replace(/^www\./, ''); } catch (e) { host = x.source || ''; }
-        return '<article class="enso-news-row no-thumb">' +
-          '<div class="enso-news-body">' +
-            '<a href="' + esc(safeUrl(x.url)) + '" target="_blank" rel="noopener" class="enso-news-t">' + esc(x.title) + '</a>' +
-            '<div class="enso-news-m">' +
-              '<span class="enso-news-src">' + esc(x.source || host) + '</span>' +
-              /* published_label is frozen at collection time: a file built ten
-                 hours ago still says "10h ago" a week later. Prefer the live
-                 computation and keep the label only when the stamp is unusable. */
-              '<span class="enso-news-sep" aria-hidden="true">·</span>' +
-              '<time datetime="' + esc(x.published_at || '') + '">' + esc(ago(x.published_at) || x.published_label || '') + '</time>' +
-            '</div>' +
-            (rec.why !== 'names the event' ? '<div class="enso-news-why">' + esc(rec.why) + '</div>' : '') +
-          '</div>' +
-          '<div class="enso-news-c">' + isoChips(x.countries_mentioned) + '</div>' +
-        '</article>';
-      }).join('') : '<div class="ctr-note">No story naming El Niño in the last ' + esc((S.news && S.news.window_days) || 21) + ' days.</div>';
-    var wirePlate = '<figure class="enso-plate is-published enso-wire-plate">' +
-      plateHead('On the wire', 'ReliefWeb reports, publisher feeds and GDELT · headlines naming El Niño, La Niña or ENSO · last ' + ((S.news && S.news.window_days) || 21) + ' days', stamp(metaDate('news')), 'published') +
-      '<div class="plate-body"><div class="enso-news">' + wireRows + '</div>' + moreRecords(news.length, 5) + '</div>' +
-      '<figcaption class="enso-log">Country chips: collector keyword matches.</figcaption></figure>';
-
-    /* ── RIGHT: the four observation feeds, one plate each ─────────────── */
-    var rail = '';
-    if (hot.length) {
-      var maj = hot.filter(function (h) { return h.a.hotspot_code === 2; }).length;
-      rail += '<figure class="enso-plate">' + plateHead('Agricultural hotspots', 'JRC ASAP · biomass below normal', stamp(metaDate('asap')), 'reported') +
-        '<div class="plate-body"><ul class="enso-rail-list">' + hot.slice(0, 4).map(function (h) {
-          return '<li><button class="enso-chip" onclick="ensoFocus(\'' + esc(h.iso) + '\')">' + esc(nameFor(h.iso)) + '</button><span style="color:' + (h.a.hotspot_code === 2 ? MAJOR_HOTSPOT : HOTSPOT) + '">' + esc(h.a.hotspot_label) + '</span></li>';
-        }).join('') + '</ul>' + moreRecords(hot.length, 4) + '</div><figcaption class="enso-log">' + maj + ' major, ' + (hot.length - maj) + ' standard, of ' + assessedCount() + ' assessed. Hotspot classes describe assessed agricultural stress.</figcaption></figure>';
-    }
-    if (gd.length) {
-      rail += '<figure class="enso-plate">' + plateHead('Drought, flood and cyclone alerts', 'GDACS · teleconnection countries', stamp(metaDate('gdacs')), 'reported') +
-        '<div class="plate-body"><ul class="enso-rail-list">' + gd.slice(0, 4).map(function (e) {
-          /* An event whose primary country is outside the layer passed the
-             filter through the countries it affects: name those, not the primary. */
-          var inLayer = linkedIso[e.iso3] ? [e.iso3] : (e.affected_iso3 || []).filter(function (i) { return linkedIso[i]; });
-          var label = linkedIso[e.iso3] ? (e.country || e.iso3)
-            : inLayer.slice(0, 2).map(nameFor).join(', ') + (inLayer.length > 2 ? ' +' + (inLayer.length - 2) : '');
-          return '<li><button class="enso-chip" onclick="ensoFocus(\'' + esc(inLayer[0]) + '\')">' + esc(label) + '</button><span style="color:' + (e.alert_level === 'Red' ? RAMP[4] : RAMP[2]) + '">' + esc(e.event_type_label) + ' · ' + esc(e.alert_level) + '</span></li>';
-        }).join('') + '</ul>' + moreRecords(gd.length, 4) + '</div><figcaption class="enso-log">Labels: reported hazard and severity.' + (gdDropped ? ' ' + gdDropped + ' further live alert' + (gdDropped > 1 ? 's' : '') + ' outside these countries left out: ' +
-          gdAll.filter(function (e) { return gd.indexOf(e) < 0; }).map(function (e) { return (e.event_type_label || 'alert').toLowerCase() + ' in ' + (e.country || e.iso3); }).join(', ') + '.' : '') + '</figcaption></figure>';
-    }
-    if (rel.length) {
-      rail += '<figure class="enso-plate">' + plateHead('Humanitarian events', 'ReliefWeb · teleconnection countries', stamp(metaDate('relief')), 'reported') +
-        '<div class="plate-body"><ul class="enso-rail-list enso-rail-links">' + rel.slice(0, 3).map(function (ev) {
-          return '<li><a href="' + esc(safeUrl(ev.url)) + '" target="_blank" rel="noopener">' + esc(ev.title) + '</a><span>' + esc(ev.country || ev.iso3) + ' · ' + esc(ago(ev.date) || String(ev.date || '').slice(0, 10)) + '</span></li>';
-        }).join('') + '</ul>' + moreRecords(relMatched.length, 3) + '</div><figcaption class="enso-log">Dates: published appeals and assessments.' + (relDropped ? ' ' + relDropped + ' other live events sit outside these countries.' : '') + '</figcaption></figure>';
-    }
-    /* Policy sits under the wire, not in the rail: it is the one feed that is
-       a decision rather than an observation, and the left column carries the
-       reported side of the board. */
-    var tr = S.restrictions || [], policyPlate = '';
-    if (tr.length) {
-      /* The tracker's statuses are official, reported and historical; anything
-         not historical is a measure in force or reported in force. */
-      var inForce = function (r) { return r.status !== 'historical' && !(r.ends_date && Date.parse(r.ends_date + 'T23:59:59Z') < Date.now()); };
-      var active = tr.filter(inForce).length;
-      policyPlate = '<figure class="enso-plate">' + plateHead('Export restrictions on record', 'IFPRI Export Restrictions Tracker · ' + (active ? active + ' active' : 'no current measure'), stamp(metaDate('restrictions')), 'published') +
-        '<div class="plate-body"><ul class="enso-rail-list">' + tr.slice(0, 10).map(function (r) {
-          return '<li><button class="enso-chip" onclick="ensoFocus(\'' + esc(r.iso) + '\')">' + esc(r.country) + '</button><span>' + esc(r.commodity) + ' · ' + esc(r.measure) + ' <em style="font-style:normal;color:' + (r.status !== 'historical' ? RAMP[3] : 'var(--t3)') + '">' + esc(r.status === 'historical' ? 'on record' : r.status) + '</em></span></li>';
-        }).join('') + '</ul>' + moreRecords(tr.length, 10) + '</div><figcaption class="enso-log">' + (active ? 'Measures in force are marked; the rest are on record. ' : 'Nothing in the tracker is current; these are the last entries on record. ') +
-        'Source status identifies official, reported and historical measures.</figcaption></figure>';
-    }
-
-    var bN = ((S.bulletins && S.bulletins.bulletins) || []).length;
-    var out = '<div class="enso-after-h enso-view-open"><h2 class="enso-h">What is being reported now</h2>' +
-      '<p class="enso-dek enso-cols">Agency bulletins, wire stories and reported assessments. These feeds do not establish ENSO attribution.</p>' +
-      '<div class="enso-section-counts">stories ' + news.length + ' · agency bulletins ' + bN + ' · hotspots ' + hot.length + ' · alerts ' + gd.length + ' · humanitarian events ' + relMatched.length + ' · restrictions ' + tr.length + '</div></div>' +
-      '<div class="enso-live-board"><div class="enso-live-main">' + agencyPlate + wirePlate + '</div>' +
-      '<aside class="enso-live-rail" aria-label="Reported assessments and hazard feeds"><figure class="enso-plate enso-assessments" data-kind="reported">' +
-      plateHead('Reported assessments', 'Agriculture · hazards · humanitarian need', stamp(metaDate('asap')), 'reported') +
-      '<div class="enso-assessment-grid">' + rail.replace(/<figure class="enso-plate">/g, '<section class="enso-feed-section">').replace(/<\/figure>/g, '</section>') + '</div>' +
-      '<details class="enso-evidence-note"><summary>Export restriction evidence</summary>' + policyPlate.replace('<figure class="enso-plate">','<section>').replace('</figure>','</section>') + '</details></figure></aside></div>';
-    el.innerHTML = out;
-
-    var board = el.querySelector('.enso-live-board');
-    if (board) {
-      var main = board.querySelector('.enso-live-main'), railColumn = board.querySelector('.enso-live-rail');
-      board.style.setProperty('--enso-board-rows', Math.max(main.children.length, railColumn ? railColumn.children.length : 0));
-    }
+    el.innerHTML = '<div class="enso-after-h enso-view-open"><h2 class="enso-h">What is being reported now</h2>' + lead + '</div>' +
+      policyPlate + regionPlate + ledgerPlate +
+      '<div class="enso-live-board"><div class="enso-live-main">' + wirePlate + '</div>' +
+      '<aside class="enso-live-rail" aria-label="Humanitarian reports">' + relPlate + '</aside></div>' + agencyPlate;
+    el.querySelectorAll('[data-map-country]').forEach(function (b) { b.onclick = function () { ensoFocus(b.getAttribute('data-map-country')); }; });
 
     var pill = document.getElementById('enso-live-count');
     if (pill) {
-      var n = news.length + gd.length;
+      var n = stories.length + gd.length;
       pill.textContent = n ? String(n) : '';
       pill.setAttribute('role', 'img');
       pill.setAttribute('aria-label', n + ' news stories and alerts');
