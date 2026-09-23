@@ -36,6 +36,8 @@ entirely, and the alignment reduces to a rule over the harvest month alone:
     harvest Jan-Aug  ->  the season spanned the PRECEDING Dec-Feb  ->  DJF(Y)
     harvest Sep-Dec  ->  the season ran Mar-Dec and the event peaks
                           afterwards, so the developing phase belongs to  DJF(Y+1)
+    sown Mar-Aug and harvested by August (2026-09-24 amendment): the season
+                          never spanned the preceding DJF, so  ->  DJF(Y+1)
 
 Checked by hand against USDA/FAO-GIEWS calendars, and it reproduces every case:
 ZAF maize (May-Jul -> DJF Y), Moroccan barley (May-Jul -> DJF Y), Australian
@@ -173,6 +175,15 @@ def shift_for(cal_entry: dict) -> int | None:
     # months: judge it by its first month, or min() reads it as a January crop
     # and pairs it with the DJF that ended before it was sown (Uruguay wheat).
     first = h[0] if h[-1] < h[0] else min(h)
+    # A crop sown in spring and harvested by August (US rice, spring barley)
+    # never saw the preceding DJF: it grew through the summer in which the
+    # next event develops, so it belongs with the DJF that follows. Only a
+    # season sown before March spans the DJF of its own harvest year.
+    p = cal_entry.get("plant") or []
+    if first <= 8 and p:
+        pfirst = p[0] if p[-1] < p[0] else min(p)
+        if 3 <= pfirst <= 8 and pfirst < first:
+            return 1
     return 0 if first <= 8 else 1
 
 
