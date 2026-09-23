@@ -12116,7 +12116,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-ol-na { color:var(--t3); font-size:11px; }
 #tab-elnino .enso-outlook-table tr.is-falls .enso-ol-v b { color:#d9a05b; }
 #tab-elnino .enso-outlook-table tr.is-rises .enso-ol-v b { color:#8fbf8f; }
-#tab-elnino .enso-outlook-table th[scope=row] button { min-height:0; }
+#tab-elnino .enso-outlook-table th[scope=row] button { min-height:0; min-width:0; }
 #tab-elnino .enso-outlook-table tr.enso-ol-year th { padding-top:14px; font:11px/1.4 'Geist Mono',monospace; color:var(--t3); letter-spacing:.04em; text-transform:uppercase; border-bottom-color:var(--b3); }
 #tab-elnino .enso-ol-more { margin-top:10px; }
 #tab-elnino .cal-k.is-muted { opacity:.6; }
@@ -12133,7 +12133,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-live-table thead th { font:11px/1.4 'Geist Mono',monospace; color:var(--t3); font-weight:400; }
 @media(min-width:900px) { #tab-elnino .enso-live-table thead th { white-space:nowrap; } }
 #tab-elnino .enso-live-table th[scope=row] { font-weight:500; white-space:nowrap; }
-#tab-elnino .enso-live-table th[scope=row] button { background:none; border:0; padding:0; min-height:0; color:var(--t1); font:inherit; cursor:pointer; text-decoration:underline; text-decoration-color:var(--grid); text-underline-offset:3px; }
+#tab-elnino .enso-live-table th[scope=row] button { background:none; border:0; padding:0; min-height:0; min-width:0; color:var(--t1); font:inherit; cursor:pointer; text-decoration:underline; text-decoration-color:var(--grid); text-underline-offset:3px; }
 #tab-elnino .enso-live-sub { display:block; color:var(--t3); font-size:12px; margin-top:2px; }
 #tab-elnino .enso-live-now { color:var(--t2); font-size:12.5px; }
 #tab-elnino .enso-concern { white-space:nowrap; font:11px/1 'Geist Mono',monospace; text-transform:uppercase; letter-spacing:.05em; color:var(--t2); }
@@ -44467,7 +44467,9 @@ function showCommodityDetail(key) {
     var geoName = String(p.name || p.NAME || p.ADMIN || p.NAME_LONG || '').toLowerCase();
     return (typeof GEO_NAME_TO_ISO !== 'undefined' && GEO_NAME_TO_ISO[geoName]) || '';
   }
-  function nameFor(iso) { return (S.names && S.names[iso]) || iso; }
+  /* Map names, with the few long official forms shortened for tables and prose. */
+  var SHORT_NAMES = { USA: 'United States', COD: 'DR Congo', CAF: 'Central African Rep.' };
+  function nameFor(iso) { return SHORT_NAMES[iso] || (S.names && S.names[iso]) || iso; }
 
   async function getFeatures() {
     if (typeof G !== 'undefined' && G.features && G.features.length) return G.features;
@@ -45868,10 +45870,9 @@ function showCommodityDetail(key) {
       var d = r.ends_date ? Math.round((Date.parse(r.ends_date + 'T00:00:00Z') - todayUtc) / 864e5) : null;
       return esc(r.country) + ' ' + esc(r.measure) + (d != null ? ', ends ' + esc(stamp(new Date(r.ends_date + 'T00:00:00Z'))) + ' (' + d + ' day' + (d === 1 ? '' : 's') + ')' : ''); }).join('; '); };
     var precedent = function (re) { return local.filter(function (c) { return re.test(c.place + ' ' + c.metric); }).map(function (c) { return esc(c.place) + ': ' + esc(c.metric) + ', ' + esc(c.window); }).join('; '); };
-    var shortCountry = function (iso) { return String(nameFor(iso)).replace(/^United States of America$/, 'United States'); };
-    var monitored = function (isos) { return isos.map(function (i) { return esc(shortCountry(i)) + (S.rtfp && S.rtfp[i] ? ' ' + num(S.rtfp[i].food_inflation_pct, 1) + '%' : ' not monitored'); }).join(', '); };
+    var monitored = function (isos) { return isos.map(function (i) { return esc(nameFor(i)) + (S.rtfp && S.rtfp[i] ? ' ' + num(S.rtfp[i].food_inflation_pct, 1) + '%' : ' not monitored'); }).join(', '); };
     var fits = function (c) { return rows.filter(function (r) { return r.crop === c; }); };
-    var line = function (list) { return list.map(function (r) { return esc(shortCountry(r.iso)) + ' ' + num(r.change_pct_record, 0) + '% (' + esc(r.harvest) + ')'; }).join(', '); };
+    var line = function (list) { return list.map(function (r) { return esc(nameFor(r.iso)) + ' ' + num(r.change_pct_record, 0) + '% (' + esc(r.harvest) + ')'; }).join(', '); };
     var pct = function (v) { return v == null ? '' : num(v, 0) + '%'; };
     /* "Last time" is a past event; this month's FAO release is a present reading and goes with the price. */
     var past = function (re) { return local.filter(function (c) { return re.test(c.place + ' ' + c.metric) && !/2026/.test(c.window); }).map(function (c) { return esc(c.place) + ': ' + esc(c.metric) + ', ' + esc(c.window); }).join('; '); };
