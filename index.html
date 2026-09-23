@@ -12158,6 +12158,16 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-gauge-v span { color:var(--t3); margin-left:6px; }
 #tab-elnino .enso-gauge-chart { height:120px; }
 #tab-elnino #enso-water > .enso-plate { margin:0 0 var(--enso-gap); }
+/* CPC strength odds (2026-09-23). */
+#tab-elnino .enso-strength-plate { margin:0 0 var(--enso-gap); }
+#tab-elnino .enso-strength-table { width:100%; border-collapse:collapse; table-layout:fixed; font:12px 'Geist Mono',monospace; }
+#tab-elnino .enso-strength-table th, #tab-elnino .enso-strength-table td { border:1px solid var(--grid); padding:6px 4px; text-align:center; }
+#tab-elnino .enso-strength-table thead th { color:var(--t2); font-weight:400; }
+#tab-elnino .enso-strength-table thead th span { display:block; color:var(--t3); font-size:10px; }
+#tab-elnino .enso-strength-table th[scope=row] { text-align:left; font:12px 'Geist',sans-serif; color:var(--t2); width:150px; }
+#tab-elnino .enso-strength-table td { color:var(--t2); }
+#tab-elnino .enso-strength-table td.is-high { color:#0b1017; font-weight:600; }
+@media(max-width:700px) { #tab-elnino .enso-strength-table thead th span { display:none; } #tab-elnino .enso-strength-table th[scope=row] { width:96px; } }
 /* Harvest callouts: unboxed atlas notes, name and one figure line, halo not panel. */
 #tab-elnino .enso-anno { width:170px; background:none; border:0; box-shadow:none; backdrop-filter:none; padding:0 6px; }
 #tab-elnino .enso-anno :is(b,span) { text-shadow:0 0 3px #0b1017, 0 0 3px #0b1017, 0 0 6px #0b1017; }
@@ -12919,6 +12929,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
         </div>
       <section id="enso-indices" class="enso-sec"></section>
       <div class="subview active" id="subview-elnino" role="tabpanel" aria-labelledby="viewbtn-elnino">
+        <div id="enso-strengths"></div>
         <div id="subview-ensomech"><section id="enso-mech" class="enso-sec"></section></div>
       </div>
       <div class="subview" id="subview-ensoharvest" role="tabpanel" aria-labelledby="viewbtn-ensoharvest">
@@ -42682,13 +42693,13 @@ function showCommodityDetail(key) {
                  'sst_anomaly', 'portwatch_history', 'crop_calendars',
                  'portwatch', 'rtfp', 'fao_ffpi',
                  'asap', 'gdacs', 'ipc', 'reliefweb_alerts',
-                 'enso_news', 'trade_restrictions', 'enso_outlook', 'enso_gauges', 'enso_situation', 'chokepoint_flows'];
+                 'enso_news', 'trade_restrictions', 'enso_outlook', 'enso_gauges', 'enso_situation', 'chokepoint_flows', 'enso_strengths'];
     var out = await Promise.all(names.map(get));
     var keys = ['enso', 'exp', 'model', 'regions', 'lanes', 'corridors', 'econ', 'mech', 'indices', 'bulletins',
                 'sst', 'pwhist', 'calendars',
                 'portwatch', 'rtfp', 'ffpi',
                 'asap', 'gdacs', 'ipc', 'relief',
-                'news', 'restrictions', 'outlook', 'gauges', 'situation', 'chokeflows'];
+                'news', 'restrictions', 'outlook', 'gauges', 'situation', 'chokeflows', 'strengths'];
     S.feedNames = {};
     S.oniLive = null;
     keys.forEach(function (k, i) {
@@ -43409,6 +43420,34 @@ function showCommodityDetail(key) {
     }
   }
 
+  /* ── How strong, and for how long: CPC's own season-by-season odds ──────
+     The agency's forecast, drawn as a table: rows are strength classes, columns
+     the overlapping three-month seasons, cells the published percentage. */
+  function renderStrengths() {
+    var el = document.getElementById('enso-strengths'); if (!el) return;
+    var T = S.strengths;
+    if (!T || !T.seasons || !T.seasons.length) { el.innerHTML = ''; return; }
+    var rows = T.classes.slice().reverse().filter(function (c) { return T.seasons.some(function (s) { return s.classes[c] > 0; }); });
+    var peak = function (s) { var best = null; T.classes.forEach(function (c) { if (!best || s.classes[c] > s.classes[best]) best = c; }); return best; };
+    var firstNeutral = T.seasons.filter(function (s) { return peak(s) === 'neutral'; })[0];
+    var veryDjf = T.seasons.filter(function (s) { return s.season === 'DJF'; })[0];
+    var lead = '<p class="enso-plate-lede">' + esc('NOAA CPC, ' + T.issued + ': ') +
+      T.seasons.filter(function (s) { return s.classes['very strong El Niño'] >= 90; }).map(function (s) { return s.season; }).join(', ') + ' very strong (RONI ≥ +2.0 °C) at 90% or more' +
+      (veryDjf ? '; DJF ' + veryDjf.classes['very strong El Niño'] + '%' : '') +
+      (firstNeutral ? '; neutral becomes the most likely state by ' + esc(firstNeutral.season) + ' (' + firstNeutral.classes.neutral + '%), with La Niña at ' + firstNeutral.classes['La Niña'] + '%' : '') + '.</p>';
+    var shade = function (v) { return 'background:rgba(224,134,74,' + (v / 100 * 0.85).toFixed(3) + ')'; };
+    el.innerHTML = '<figure class="enso-plate is-published enso-strength-plate" data-kind="published">' +
+      plateHead('How strong, and for how long', 'NOAA CPC ENSO strength probabilities · RONI, overlapping three-month seasons', T.issued, 'published') +
+      '<div class="plate-body">' + lead + '<table class="enso-strength-table"><thead><tr><th scope="col"><span class="enso-sr">Strength</span></th>' +
+      T.seasons.map(function (s) { return '<th scope="col" title="">' + esc(s.season) + '<span>' + esc(s.months) + '</span></th>'; }).join('') + '</tr></thead><tbody>' +
+      rows.map(function (c) {
+        return '<tr><th scope="row">' + esc(c) + '</th>' + T.seasons.map(function (s) {
+          var v = s.classes[c] || 0;
+          return '<td style="' + shade(v) + '"' + (v >= 50 ? ' class="is-high"' : '') + '>' + (v ? v + '%' : '') + '</td>';
+        }).join('') + '</tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<figcaption class="enso-log">The agency’s forecast, as published; cells are CPC’s percentages for each strength class. RONI is CPC’s strength index; the harvest fit on this page uses ONI, which runs about 0.4 °C higher this year. <a href="' + esc(safeUrl(T.url)) + '" target="_blank" rel="noopener">CPC strength probabilities</a></figcaption></figure>';
+  }
   function renderMechanism() {
     var el = document.getElementById('enso-mech'); if (!el) return;
     var M = S.mech; if (!M) { el.innerHTML = ''; return; }
@@ -45932,7 +45971,7 @@ function showCommodityDetail(key) {
     var FOOD = /maize|corn|wheat|rice|soy|sorghum|millet|crop|harvest|food|grain|drought|famine|hunger|price|palm|sugar|monsoon|cereal|farm|livestock/i;
     var norm = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim().slice(0, 70); };
     var groups = {}, orderKeys = [];
-    news.forEach(function (rec) { var k = norm(rec.x.title); if (!groups[k]) { groups[k] = { rec: rec, n: 0 }; orderKeys.push(k); } groups[k].n++; });
+    news.forEach(function (rec) { var k = norm(rec.x.title); if (!groups[k]) { groups[k] = { rec: rec, n: 0 }; orderKeys.push(k); } groups[k].n += rec.x.outlets || 1; });
     var stories = orderKeys.map(function (k) { return groups[k]; });
     stories.sort(function (a, b) { return (FOOD.test(b.rec.x.title) - FOOD.test(a.rec.x.title)) || (Date.parse(b.rec.x.published_at || 0) - Date.parse(a.rec.x.published_at || 0)); });
     var storyRow = function (s) {
@@ -45950,7 +45989,7 @@ function showCommodityDetail(key) {
       plateHead('On the wire', 'ReliefWeb reports, publisher feeds and GDELT · headlines naming El Niño', stamp(metaDate('news')), 'published') +
       '<div class="plate-body"><div class="enso-news">' + (stories.length ? stories.slice(0, 6).map(storyRow).join('') : '<div class="ctr-note">No story naming El Niño in the collection window.</div>') + '</div>' +
       (stories.length > 6 ? '<details class="enso-ol-more"><summary>' + (stories.length - 6) + ' more stories</summary><div class="enso-news">' + stories.slice(6).map(storyRow).join('') + '</div></details>' : '') +
-      '</div><figcaption class="enso-log">' + news.length + ' headlines, ' + stories.length + ' distinct stories, ' + foodN + ' about food, crops or prices, which lead. Headlines are claims, not data.</figcaption></figure>';
+      '</div><figcaption class="enso-log">' + stories.reduce(function (a, st) { return a + st.n; }, 0) + ' headlines, ' + stories.length + ' distinct stories, ' + foodN + ' about food, crops or prices, which lead. Headlines are claims, not data.</figcaption></figure>';
 
     /* ── 6 · Humanitarian reports, newest first, one per story: a Spanish and
        an English copy of one appeal are one row. */
@@ -46549,7 +46588,7 @@ function showCommodityDetail(key) {
     if (!S.drawn.limits) { renderLimits(); S.drawn.limits = true; }
     wireTabKeys(); syncTabRoving();
 
-    if (S.sub === 'elnino' && !S.drawn.mech) { renderMechanism(); S.drawn.mech = true; }
+    if (S.sub === 'elnino' && !S.drawn.mech) { renderStrengths(); renderMechanism(); S.drawn.mech = true; }
 
     {
       if (!S.drawn.map) {

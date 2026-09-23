@@ -262,6 +262,13 @@ def main() -> int:
         weekly = page.evaluate("async () => (await (await fetch('data/enso.json')).json()).data.weekly_nino34")
         # The evidence sits in a closed fold, so read text_content, not rendered text.
         upwelling = " ".join((page.locator('.enso-mechanism-evidence section', has_text='The Humboldt upwelling is capped').text_content() or "").split())
+        check("the CPC strength table prints the agency's percentages for every season", page.evaluate("""async () => {
+            const T = (await (await fetch('data/enso_strengths.json')).json()).data;
+            const rows = [...document.querySelectorAll('.enso-strength-table tbody tr')];
+            return rows.length > 0 && T.seasons.length === document.querySelectorAll('.enso-strength-table thead th').length - 1
+                && rows.every(r => { const c = r.querySelector('th').textContent;
+                    return [...r.querySelectorAll('td')].every((td, i) => (T.seasons[i].classes[c] ? T.seasons[i].classes[c] + '%' : '') === td.textContent); });
+        }"""))
         check("capped-upwelling evidence follows the weekly Niño 1+2 feed",
               ("%+.1f °C" % weekly["nino12_anom"]).replace("-", "−") in upwelling, upwelling)
         # preserveAspectRatio="none" stretches glyphs, so no text may live in the SVG

@@ -41,6 +41,8 @@ DATA = Path(__file__).resolve().parent.parent / "data"
 NAMED = re.compile(r"el\s*ni[ñn]o|la\s*ni[ñn]a|\benso\b|southern oscillation|ni[ñn]o costero", re.I)
 MAX_AGE_DAYS = 21
 MAX_ITEMS = 60
+RELIEF_SLOTS = 15   # humanitarian reports are kept even when press copies are many
+FOOD = re.compile(r"maize|corn|wheat|rice|soy|sorghum|millet|crop|harvest|food|grain|drought|famine|hunger|price|palm|sugar|monsoon|cereal|farm|livestock", re.I)
 
 RW_URL = "https://api.reliefweb.int/v2/reports"
 RW_APPNAME_DEFAULT = "vreeken-foodshield-7k3n"
@@ -235,7 +237,21 @@ def main() -> int:
             continue
         items.append(it)
     items.sort(key=lambda i: i["published_at"], reverse=True)
-    items = items[:MAX_ITEMS]
+    # One story, many outlets: a syndicated study filled 31 of 60 slots and
+    # pushed the 21-day window under one day. Collapse copies by normalised
+    # title (newest kept, outlets counted), keep ReliefWeb's reports from being
+    # crowded out by press copies, and flag the stories about food.
+    stories: dict[str, dict] = {}
+    for it in items:
+        key = re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", "", (it.get("title") or "").lower())).strip()[:70]
+        if key in stories:
+            stories[key]["outlets"] = stories[key].get("outlets", 1) + it.get("outlets", 1)
+            continue
+        stories[key] = dict(it, outlets=it.get("outlets", 1), food=bool(FOOD.search(it.get("title") or "")))
+    distinct = list(stories.values())
+    relief = [i for i in distinct if str(i.get("provenance", "")).startswith("reliefweb")][:RELIEF_SLOTS]
+    rest = [i for i in distinct if i not in relief][:MAX_ITEMS - len(relief)]
+    items = sorted(relief + rest, key=lambda i: i["published_at"], reverse=True)
 
     # Half the RSS feeds down, or ReliefWeb down, means completeness is unverified.
     partial = status["reliefweb"] != "ok" or (ok + failed and failed * 2 >= ok + failed)
