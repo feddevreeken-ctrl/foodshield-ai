@@ -12,7 +12,7 @@ vm.runInContext(html.slice(start,end)+`
   globalThis.api={S,renderMechanism,feedIssue,renderFailures,calendarSeason,calendarBasis,wireRuler,renderLandHead,renderDetail,renderCoeffs,renderCalendar,renderWater,renderMoney,renderPeople,renderLimits,renderControls,syncInstruments,drawCharts,selectCountry,isoOf};
 })();`, ctx);
 const api = ctx.api, S=api.S;
-for (const [key,file] of Object.entries({model:'enso_model',calendars:'crop_calendars',enso:'enso',lanes:'enso_lanes',econ:'enso_econ',exp:'enso_exposure',portwatch:'portwatch',pwhist:'portwatch_history',rtfp:'rtfp',ffpi:'fao_ffpi',mech:'enso_mechanism'})) {
+for (const [key,file] of Object.entries({model:'enso_model',calendars:'crop_calendars',enso:'enso',lanes:'enso_lanes',econ:'enso_econ',exp:'enso_exposure',portwatch:'portwatch',pwhist:'portwatch_history',rtfp:'rtfp',ffpi:'fao_ffpi',mech:'enso_mechanism',gauges:'enso_gauges'})) {
  const data=JSON.parse(fs.readFileSync('data/'+file+'.json','utf8'));S[key]=data.data;S.meta[key]=data._meta;
 }
 S.oniLive=S.enso.latest.anom;
