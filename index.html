@@ -12118,6 +12118,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-outlook-table tr.enso-ol-year th { padding-top:14px; font:11px/1.4 'Geist Mono',monospace; color:var(--t3); letter-spacing:.04em; text-transform:uppercase; border-bottom-color:var(--b3); }
 #tab-elnino .enso-ol-more { margin-top:10px; }
 #tab-elnino .cal-k.is-muted { opacity:.6; }
+#tab-elnino .enso-inline-link { background:none; border:0; padding:0; min-height:0; font:inherit; color:var(--t1); text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
 #tab-elnino .enso-ol-excluded { margin:8px 0 0; padding-left:18px; color:var(--t2); font-size:13px; } #tab-elnino .enso-ol-excluded li { margin:4px 0; }
 #tab-elnino .enso-ol-more > summary { font:12px 'Geist Mono',monospace; color:var(--t2); cursor:pointer; padding:6px 0; }
 #tab-elnino .enso-outlook-gap { margin:14px 0 0; font-size:13px; color:var(--t2); max-width:118ch; }
@@ -45332,7 +45333,12 @@ function showCommodityDetail(key) {
     var iso = S.sel, fig = document.getElementById('enso-harvest-fig');
     if (fig) fig.setAttribute('data-iso', iso || '');
     if (!iso) {
-      el.innerHTML = '<p class="enso-empty">Choose a country above to see its fitted crop responses.</p>';
+      /* Not a dead end: offer the largest modelled loss as a starting point. */
+      var top = ((S.outlook && S.outlook.rows_all) || []).filter(function (r) { return r.status === 'shown' && !r.in_season && r.change_kt_record < 0; })
+        .sort(function (a, b) { return a.change_kt_record - b.change_kt_record; })[0];
+      el.innerHTML = '<p class="enso-empty">Choose a country above to see its fitted crop responses' +
+        (top ? ', or <button type="button" class="enso-inline-link" data-start-iso="' + esc(top.iso) + '">start with ' + esc(nameFor(top.iso)) + '</button>, the largest modelled loss' : '') + '.</p>';
+      var startBtn = el.querySelector('[data-start-iso]'); if (startBtn) startBtn.onclick = function () { ensoFocus(startBtn.getAttribute('data-start-iso')); };
       return;
     }
     var nm = nameFor(iso), d = rowFor(iso), m = S.model && S.model[iso];
@@ -45457,7 +45463,7 @@ function showCommodityDetail(key) {
     var el = document.getElementById('enso-coeffs'); if (!el) return;
     var counts = (S.meta.model || {}).counts || {};
     el.innerHTML = '<figure id="enso-harvest-fig" class="enso-plate enso-coef-plate is-modelled" data-kind="modelled">' +
-      plateHead('Fitted crop responses', 'FAOSTAT 1961–2024 · % yield per ONI · ' + harvestRows().length + ' fitted signals', stamp(metaDate('model')), 'modelled') +
+      plateHead('Fitted crop responses', 'FAOSTAT 1961–2024 · % yield per ONI · ' + (S.outlook && S.outlook.rows_all ? S.outlook.rows_all.filter(function (r) { return r.status === 'shown'; }).length + ' of ' : '') + harvestRows().length + ' fitted signals pass on the El Niño term alone', stamp(metaDate('model')), 'modelled') +
       '<div id="enso-detail" aria-live="polite"></div>' +
       '<figcaption class="enso-log">Country estimates are directional and await validation outside the fitted sample.</figcaption>' +
       '<details class="enso-evidence-note"><summary>Fit method and coverage</summary><p>Detrended yields are fitted to calendar-aligned winter ONI, with Newey–West errors and Benjamini–Hochberg q below 0.10. ' +
@@ -46147,7 +46153,11 @@ function showCommodityDetail(key) {
         '<td>' + (r.cm.length ? r.cm.map(function (c) { return '<b>' + esc(c.crop) + '</b> ' + esc(c.status) + '<span class="enso-live-sub">' + esc(c.driver) + '</span>'; }).join('') : '<span class="enso-ol-na">—</span>') + '</td>' +
         '<td>' + (r.a && r.a.hotspot_code ? '<b>' + esc(r.a.hotspot_label) + '</b> <span class="enso-ol-h">' + esc(assessmentMonth(r.a.assessment_date)) + '</span>' +
           (r.a.comment ? '<details class="enso-live-comment"><summary>ASAP note</summary><p>' + esc(firstSentence(r.a.comment)) + '</p></details>' : '') : '<span class="enso-ol-na">—</span>') + '</td>' +
-        '<td>' + (r.al.length ? r.al.map(function (e) { return esc(e.event_type_label) + ' · ' + esc(e.alert_level) + (e.from_date ? '<span class="enso-live-sub">since ' + esc(fmtDate(e.from_date)) + '</span>' : ''); }).join('') : '<span class="enso-ol-na">—</span>') + '</td>' +
+        '<td>' + (r.al.length ? (function () {
+          /* Overlapping alerts of one type and level read as one, dated by the earliest. */
+          var by = {}; r.al.forEach(function (e) { var k = e.event_type_label + '|' + e.alert_level; if (!by[k] || String(e.from_date) < String(by[k].from_date)) by[k] = e; });
+          return Object.keys(by).map(function (k) { var e = by[k]; return esc(e.event_type_label) + ' · ' + esc(e.alert_level) + (e.from_date ? '<span class="enso-live-sub">since ' + esc(fmtDate(e.from_date)) + '</span>' : ''); }).join('');
+        })() : '<span class="enso-ol-na">—</span>') + '</td>' +
         '<td>' + (aaTrig[r.iso] ? '<b>triggered</b>' : aaPri[r.iso] ? 'priority' : '<span class="enso-ol-na">—</span>') + (fewsHigh[r.iso] ? '<span class="enso-live-sub">FEWS NET high concern</span>' : '') + '</td>' +
         (function () { var p = S.ipc && S.ipc[r.iso]; return '<td class="enso-ol-v">' + (p && typeof p.phase3plus_count === 'number' ? (p.phase3plus_count / 1e6).toFixed(p.phase3plus_count >= 1e6 ? 1 : 2) + ' m<span class="enso-live-sub">' + esc(String(p.period || '').replace(/\s*\(.*\)/, '')) + '</span>' : '<span class="enso-ol-na">—</span>') + '</td>'; })() +
         '<td class="enso-ol-v">' + (r.rt && typeof r.rt.food_inflation_pct === 'number' ? num(r.rt.food_inflation_pct, 1) + '%<span class="enso-live-sub">' + esc(String(r.rt.as_of || '').slice(0, 7)) + '</span>' : '<span class="enso-ol-na">—</span>') + '</td></tr>';
