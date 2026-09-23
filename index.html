@@ -43176,6 +43176,14 @@ function showCommodityDetail(key) {
       plateHead('What this El Niño implies for harvests', 'FAOSTAT yield fit 1961–2024 × USDA PSD 2026 production · World Bank prices ' + esc(((all[0] || {}).price || {}).month || ''), stamp(metaDate('outlook')), 'modelled') +
       '<div class="plate-body">' + lead + table +
       (gaps.length ? '<p class="enso-outlook-gap"><b>No fitted signal is not no risk.</b> ' + gaps.join('; ') + '. The fit has no calendar or no surviving signal here; see Reported for what is being observed.</p>' : '') +
+      (function () {
+        /* The Indian Ocean Dipole decides the pairs the fit sets aside as shared
+           with it (Australia, East Africa's short rains), so its live state is named. */
+        var iod = S.indices && S.indices.iod;
+        if (!iod || typeof iod.value !== 'number') return '';
+        return '<p class="enso-outlook-gap"><b>Also in play: the Indian Ocean Dipole</b> at ' + num(iod.value, 2) + ' °C (' + esc(iod.agency) + ', ' + esc(iod.window) + '; ' + esc(iod.state) + ' side of ±' + iod.threshold + ' °C). ' +
+          'A positive IOD alongside El Niño usually means a wetter East African short-rains season and a drier Australian winter crop; ' + esc(iod.note) + '</p>';
+      })() +
       '</div><figcaption class="enso-log">Modelled, not observed. Tonnes are the fitted yield change times current production; the price column sizes what is at stake at today’s World Bank price and is not a price forecast.</figcaption>' +
       '<details class="enso-evidence-note"><summary>How these numbers are made</summary><p>Each row is a country-crop pair whose El Niño slope survives false-discovery control (q &lt; 0.10) across 146 tested pairs. The slope is in log-yield, so the change at an ONI value is exp(b·ONI) − 1; the band is 90% from Newey–West errors. The harvest is the one the model aligns to the ' + esc(O.harvest_winter) + ' winter. ' +
       (shared.length ? shared.length + ' further pairs (' + shared.map(function (f) { return esc(who(f)); }).join(', ') + ') move with the Indian Ocean Dipole as much as with El Niño and are left out. ' : '') +

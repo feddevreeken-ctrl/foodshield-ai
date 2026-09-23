@@ -42,6 +42,7 @@ RONI_URL = "https://www.cpc.ncep.noaa.gov/data/indices/RONI.ascii.txt"
 WEEKLY_URL = "https://www.cpc.ncep.noaa.gov/data/indices/wksst9120.for"
 BOM_RNINO_URL = "https://www.bom.gov.au/clim_data/IDCK000072/rnino_3.4.txt"
 BOM_SOI_URL = "https://www.bom.gov.au/clim_data/IDCKGSM000/soi.txt"
+BOM_IOD_URL = "https://www.bom.gov.au/clim_data/IDCK000072/iod_1.txt"
 
 MAX_AGE_DAYS = 45
 
@@ -240,8 +241,23 @@ def main() -> int:
                          "agreement or disagreement.",
             })
 
+    # The Indian Ocean Dipole is not an ENSO index, so it stays out of the
+    # comparison pairs, but it decides the Australian and East African signals
+    # the harvest fit marks as "shared with IOD". BoM's weekly DMI, same format.
+    iod = None
+    try:
+        start, end, v = parse_bom_weekly(_fetch(BOM_IOD_URL))
+        iod = {"label": "Indian Ocean Dipole (DMI)", "agency": "BoM Australia", "value": v, "unit": "°C",
+               "window": f"week {_d(start)} – {_d(end)}", "threshold": 0.4,
+               "state": "positive" if v >= 0.4 else "negative" if v <= -0.4 else "neutral",
+               "note": "BoM treats ±0.4 °C sustained for about eight weeks as an IOD event; one week above is not an event yet.",
+               "url": BOM_IOD_URL}
+    except Exception as e:  # noqa: BLE001 -- optional companion, never blocks the indices
+        unavailable.append({"key": "iod", "label": "Indian Ocean Dipole", "reason": f"{type(e).__name__}: {e}"})
+
     payload = {
         "indices": indices,
+        "iod": iod,
         "comparisons": comparisons,
         "invalid_comparisons": invalid,
         "unavailable": unavailable,
