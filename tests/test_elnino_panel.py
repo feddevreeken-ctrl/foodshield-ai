@@ -671,7 +671,7 @@ def main() -> int:
 
         print("\nstage A shared structure and lens contracts")
         open_panel(page, base)
-        lens_results, headings, frames, lens_texts = [], [], [], []
+        lens_results, headings, frames, lens_texts, spill = [], [], [], [], []
         page.evaluate("window._stageAMap = document.getElementById('enso-map'); window._stageAMapId = window._stageAMap._leaflet_id")
         for tab, mode in (("elnino", "sst"), ("ensoharvest", "impact"), ("ensowater", "none"), ("ensomoney", "rtfp"), ("ensolive", "asap")):
             page.evaluate("tab => showTab(tab)", tab)
@@ -688,12 +688,17 @@ def main() -> int:
                       all(t in legend for t in ('Fixed anchors', '−10%', '0%', '+30%', 'beyond the ends', 'as of', dates[0], dates[-1])))
                 check("rtfp legend states the shared country date once", legend.count("for every country") == 1)
             headings.append(page.locator('#tab-elnino h2:visible').count())
+            # 2026-09-24: a no-wrap table once pushed the Reported ledger 557px past its plate.
+            spill.append(page.evaluate("""() => { const bad = []; document.querySelectorAll('#tab-elnino .enso-plate').forEach(pl => { if (!pl.offsetParent) return;
+                const pr = pl.getBoundingClientRect(); pl.querySelectorAll('table, canvas, p').forEach(e => { const r = e.getBoundingClientRect(); if (r.width && r.right > pr.right + 2) bad.push(((pl.querySelector('.enso-plate-t') || {}).textContent || '?') + ' ' + e.tagName); }); });
+                return bad; }"""))
             frames.append(page.evaluate("""() => [...document.querySelectorAll('#tab-elnino .enso-plate[data-kind], #enso-mapwrap[data-kind]')].every(e =>
                 getComputedStyle(e).borderTopStyle === (['modelled','published','estimated'].includes(e.dataset.kind) ? 'dashed' : 'solid'))"""))
         check("each view applies its layer and overlay defaults", all(lens_results), str(lens_results))
         check("one visible Instrument Serif H2 per view", headings == [1] * 5
               and page.locator('#tab-elnino h2:visible').evaluate("e => getComputedStyle(e).fontFamily.includes('Instrument Serif')"), str(headings))
         check("observed frames are solid and modelled or published frames dashed", all(frames), str(frames))
+        check("no table, chart or paragraph runs past its plate on any lens", not any(spill), str([x for x in spill if x]))
         check("one persistent map instance across all five views", page.evaluate("""() =>
             document.querySelectorAll('#enso-map').length === 1 && document.getElementById('enso-map') === window._stageAMap
             && window._stageAMap._leaflet_id === window._stageAMapId
