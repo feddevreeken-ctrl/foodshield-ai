@@ -1201,15 +1201,19 @@ def main() -> int:
                 ('ensolive', ['Hotspots', 'IPC', 'Hazards'])):
                 page.evaluate('tab => showTab(tab)', tab)
                 page.wait_for_timeout(150)
-                check(f"map instruments at {width}: {tab} has its lens chips and map within 170px of title", page.evaluate("""expected => {
+                # Search and zoom sit on the map (2026-09-23), so the header is
+                # title/source, one layer row and a caption: map within 110px.
+                check(f"map instruments at {width}: {tab} has its lens chips, map within 110px of the plate head, search and zoom on the map", page.evaluate("""expected => {
                     const row = document.querySelector('.enso-instrument-row');
                     const labels = [...row.children].filter(e => e.tagName !== 'DETAILS').map(e => e.textContent.trim());
-                    const head = document.querySelector('#enso-mapwrap .enso-plate-t').getBoundingClientRect();
+                    const head = document.querySelector('#enso-mapwrap > .enso-plate-h').getBoundingClientRect();
                     const map = document.querySelector('#enso-map').getBoundingClientRect();
-                    const search = document.querySelector('#enso-mapwrap .enso-plate-z .enso-country-search');
+                    const search = document.querySelector('#enso-map .enso-map-tools .enso-country-search');
+                    const tools = document.querySelector('#enso-map .enso-map-tools');
+                    const t = tools && tools.getBoundingClientRect();
                     return JSON.stringify(labels) === JSON.stringify(expected)
-                        && !row.querySelector('details').open && map.top - head.top <= 170
-                        && search && Math.abs(search.getBoundingClientRect().width - 220) < 1;
+                        && !row.querySelector('details').open && map.top - head.top <= 110
+                        && !!search && !!t && t.left >= map.left && t.right <= map.right && t.top >= map.top && t.bottom <= map.bottom;
                 }""", labels))
             page.evaluate("showTab('ensomoney')")
             page.wait_for_timeout(150)

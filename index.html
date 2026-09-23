@@ -12085,6 +12085,30 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
   #tab-elnino .enso-extra-layers .enso-overlay { flex:0 1 auto; }
 }
 
+/* Map block, laptop first (2026-09-23): search and zoom sit on the map, the
+   layer row is compact, and the map takes the height the chrome gave up. */
+#tab-elnino #enso-map .enso-map-tools { position:absolute; top:10px; right:10px; z-index:800; display:flex; flex-wrap:nowrap; align-items:center; gap:4px; }
+#tab-elnino #enso-map .enso-map-tools button { min-height:28px; height:28px; padding:0 8px; font:11px/1 'Geist Mono',monospace; background:rgba(11,16,23,.88); border:1px solid var(--b3); color:var(--t2); }
+#tab-elnino #enso-map .enso-map-tools .enso-country-search { flex:0 0 180px; width:180px; }
+#tab-elnino #enso-map .enso-map-tools .enso-country-search input { height:28px; min-height:28px; background:rgba(11,16,23,.88); }
+#tab-elnino #enso-mapwrap .enso-plate-h { padding:12px 24px 4px; }
+#tab-elnino .enso-control-deck .enso-instrument-row button, #tab-elnino .enso-all-layers > summary { min-height:30px; padding-top:0; padding-bottom:0; }
+#tab-elnino #enso-maptag { margin:4px 24px 8px; }
+#tab-elnino .enso-view-heading { margin:8px 0 12px; }
+#tab-elnino .enso-view-heading h2 { margin:0; }
+#tab-elnino #enso-mapwrap .enso-plate-h.is-dup-title .enso-plate-t { display:none; }
+#tab-elnino #enso-mapwrap .enso-plate-h > div:first-child { display:flex; flex-wrap:wrap; align-items:baseline; column-gap:12px; }
+#tab-elnino #enso-agency-status { max-width:118ch; margin:8px 0 12px; }
+#tab-elnino #enso-hero.enso-sec { margin:16px 0; }
+#tab-elnino #enso-hero .enso-ocean-heading { margin-bottom:0; }
+#tab-elnino #enso-controls :is(button,.enso-overlay-face) { min-height:30px; padding-top:4px; padding-bottom:4px; }
+@media(min-width:1024px) { #tab-elnino #enso-map { height:clamp(440px, calc(100vh - 300px), 640px); } }
+@media(max-width:600px) {
+  #tab-elnino #enso-map .enso-map-tools { top:8px; right:8px; flex-wrap:wrap; justify-content:flex-end; max-width:calc(100% - 16px); }
+  #tab-elnino #enso-map .enso-map-tools .enso-country-search { flex:1 1 100%; width:auto; }
+  #tab-elnino .enso-control-deck .enso-instrument-row button, #tab-elnino .enso-all-layers > summary, #tab-elnino #enso-controls :is(button,.enso-overlay-face) { min-height:44px; }
+}
+
 </style>
 </head>
 <body>
@@ -44778,19 +44802,32 @@ function showCommodityDetail(key) {
     var bounds = S.sub === 'ensowater' ? [[-45, -115], [62, 125]] :
       S.sub === 'ensomoney' ? [[-40, -100], [40, 155]] : null;
     if (bounds) S.map.fitBounds(bounds, {padding:[12,12], animate:false});
-    else S.map.setView([10, -30], 2);
+    /* Zoom so one world spans the map's width: at a fixed zoom 2 a laptop-wide
+       map showed grey bands beyond the dateline on both sides. */
+    else S.map.setView([10, -30], S.map.getSize ? Math.max(2, Math.round(Math.log2(S.map.getSize().x / 256) * 10) / 10) : 2);
+  }
+  /* When the view's H2 already says what the map plate's title says, the
+     plate keeps its source line and drops the repeated title. */
+  function syncMapTitle() {
+    if (!document.querySelector) return;
+    var head = document.querySelector('#enso-mapwrap > .enso-plate-h'), h2 = document.querySelector('#tab-elnino .enso-view-heading:not([hidden]) h2');
+    if (!head) return;
+    var t = head.querySelector('.enso-plate-t');
+    head.classList.toggle('is-dup-title', !!(h2 && t && h2.textContent.trim() === t.textContent.trim()));
   }
   function mountMapSearch(head) {
     var controls = document.getElementById('enso-controls');
     var search = controls && controls.querySelector('.enso-country-search');
-    var zoom = head.querySelector('.enso-plate-z');
+    /* The zoom stack lives on the map now; fall back to the head for the
+       first paint before it moves. */
+    var zoom = (S.map && S.map.getContainer && S.map.getContainer().querySelector('.enso-plate-z')) || head.querySelector('.enso-plate-z');
     if (search && zoom) zoom.insertBefore(search, zoom.firstChild);
   }
 
   function mapChrome() {
     var wrap = document.getElementById('enso-mapwrap'); if (!wrap || !S.map) return;
     var state = mapState(), existing = wrap.querySelector('.enso-plate-h');
-    if (existing) { existing.querySelector('.enso-plate-t').textContent = state.title; existing.querySelector('.enso-plate-sub').textContent = state.source; mountMapSearch(existing); return; }
+    if (existing) { existing.querySelector('.enso-plate-t').textContent = state.title; existing.querySelector('.enso-plate-sub').textContent = state.source; mountMapSearch(existing); syncMapTitle(); return; }
     var head = document.createElement('div');
     head.className = 'enso-plate-h';
     head.innerHTML =
@@ -44801,8 +44838,17 @@ function showCommodityDetail(key) {
         '<button type="button" aria-label="Reset view" data-z="0">Reset</button>' +
       '</div>';
     wrap.insertBefore(head, wrap.firstChild);
+    /* Search and zoom sit on the map's top-right corner, so the header above
+       the map is one line and the map gets the height. Clicks and wheel on the
+       stack must not pan or zoom the map underneath. */
+    var tools = head.querySelector('.enso-plate-z');
+    if (tools.classList && S.map.getContainer && L.DomEvent) {
+      tools.classList.add('enso-map-tools');
+      S.map.getContainer().appendChild(tools);
+      L.DomEvent.disableClickPropagation(tools); L.DomEvent.disableScrollPropagation(tools);
+    }
     mountMapSearch(head);
-    head.querySelectorAll('button').forEach(function (b) {
+    tools.querySelectorAll('button').forEach(function (b) {
       b.onclick = function () {
         var z = parseInt(b.dataset.z, 10);
         if (!S.map) return;
@@ -44814,8 +44860,8 @@ function showCommodityDetail(key) {
     var syncZoom = function () {
       if (!S.map) return;
       var z = S.map.getZoom();
-      head.querySelector('[data-z="1"]').disabled  = z >= S.map.getMaxZoom();
-      head.querySelector('[data-z="-1"]').disabled = z <= S.map.getMinZoom();
+      tools.querySelector('[data-z="1"]').disabled  = z >= S.map.getMaxZoom();
+      tools.querySelector('[data-z="-1"]').disabled = z <= S.map.getMinZoom();
     };
     if (S.map) { S.map.on('zoomend', syncZoom); syncZoom(); }
   }
@@ -45926,6 +45972,7 @@ function showCommodityDetail(key) {
       if (title) { panel.dataset.heading = title.textContent; title.remove(); }
       heading.innerHTML = '<h2>' + esc(panel.dataset.heading || {ensoharvest:'Harvest responses',ensowater:'Shipping restrictions and transits',ensomoney:'Prices and published estimates',ensolive:'What is being reported now'}[S.sub]) + '</h2>';
     }
+    syncMapTitle();
     panel.querySelectorAll('.enso-lanes-table tbody tr').forEach(function (row) {
       ['Lane / phase','What the record shows'].forEach(function (label, i) {
         if (row.children[i]) row.children[i].setAttribute('data-label', label);
