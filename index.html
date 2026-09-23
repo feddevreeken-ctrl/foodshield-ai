@@ -12111,6 +12111,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-outlook-table th[scope=row] span { color:var(--t2); }
 #tab-elnino .enso-ol-h { font:12px 'Geist Mono',monospace; color:var(--t2); white-space:nowrap; }
 #tab-elnino .enso-ol-v { font-family:'Geist Mono',monospace; white-space:nowrap; }
+#tab-elnino .enso-pricewatch-plate .enso-ol-v { white-space:normal; min-width:18ch; }
 #tab-elnino .enso-ol-rec { color:var(--t3); }
 #tab-elnino .enso-ol-na { color:var(--t3); font-size:11px; }
 #tab-elnino .enso-outlook-table tr.is-falls .enso-ol-v b { color:#d9a05b; }
@@ -45867,20 +45868,25 @@ function showCommodityDetail(key) {
       var d = r.ends_date ? Math.round((Date.parse(r.ends_date + 'T00:00:00Z') - todayUtc) / 864e5) : null;
       return esc(r.country) + ' ' + esc(r.measure) + (d != null ? ', ends ' + esc(stamp(new Date(r.ends_date + 'T00:00:00Z'))) + ' (' + d + ' day' + (d === 1 ? '' : 's') + ')' : ''); }).join('; '); };
     var precedent = function (re) { return local.filter(function (c) { return re.test(c.place + ' ' + c.metric); }).map(function (c) { return esc(c.place) + ': ' + esc(c.metric) + ', ' + esc(c.window); }).join('; '); };
-    var monitored = function (isos) { return isos.map(function (i) { return esc(nameFor(i)) + (S.rtfp && S.rtfp[i] ? ' ' + num(S.rtfp[i].food_inflation_pct, 1) + '%' : ' not monitored'); }).join(', '); };
+    var shortCountry = function (iso) { return String(nameFor(iso)).replace(/^United States of America$/, 'United States'); };
+    var monitored = function (isos) { return isos.map(function (i) { return esc(shortCountry(i)) + (S.rtfp && S.rtfp[i] ? ' ' + num(S.rtfp[i].food_inflation_pct, 1) + '%' : ' not monitored'); }).join(', '); };
     var fits = function (c) { return rows.filter(function (r) { return r.crop === c; }); };
-    var line = function (list) { return list.map(function (r) { return esc(nameFor(r.iso)) + ' ' + num(r.change_pct_record, 0) + '% (' + esc(r.harvest) + ')'; }).join(', '); };
+    var line = function (list) { return list.map(function (r) { return esc(shortCountry(r.iso)) + ' ' + num(r.change_pct_record, 0) + '% (' + esc(r.harvest) + ')'; }).join(', '); };
     var pct = function (v) { return v == null ? '' : num(v, 0) + '%'; };
     /* "Last time" is a past event; this month's FAO release is a present reading and goes with the price. */
     var past = function (re) { return local.filter(function (c) { return re.test(c.place + ' ' + c.metric) && !/2026/.test(c.window); }).map(function (c) { return esc(c.place) + ': ' + esc(c.metric) + ', ' + esc(c.window); }).join('; '); };
-    var nowNote = function (re) { return local.filter(function (c) { return re.test(c.place + ' ' + c.metric) && /2026/.test(c.window); }).map(function (c) { return esc(c.metric) + ' (' + esc(c.window.split(';')[0]) + ')'; })[0] || ''; };
+    /* One FAO release names several indices; each commodity keeps only its own clause. */
+    var nowNote = function (re, pick) { return local.filter(function (c) { return re.test(c.place + ' ' + c.metric) && /2026/.test(c.window); }).map(function (c) {
+      var part = pick ? (String(c.metric).split(/;\s*/).filter(function (t) { return pick.test(t); })[0] || c.metric) : c.metric;
+      part = part.replace(/^\s*\w/, function (ch) { return ch.toUpperCase(); });
+      return esc(part) + (/month on month/.test(part) || !/month on month/.test(c.metric) ? '' : ' month on month') + ' (' + esc(c.window.split(';')[0]) + ')'; })[0] || ''; };
     var gainers = function (c) { return ((O && O.rows_all) || []).filter(function (r) { return r.crop === c && r.status === 'shown' && !r.in_season; }); };
     var items = [
       { k: 'Maize', fit: fits('corn'), p: price('maize'), prec: past(/maize|Zambia/i), mon: fits('corn').map(function (r) { return r.iso; }).concat(['ZMB', 'MWI']), pol: policy(/maize|corn/i) },
       { k: 'Wheat', fit: gainers('wheat'), p: price('wheat'), prec: '', mon: [], pol: policy(/wheat/i) },
       { k: 'Rice', fit: fits('rice'), p: price('rice'), prec: past(/rice/i), mon: fits('rice').map(function (r) { return r.iso; }), pol: policy(/rice/i) },
-      { k: 'Sugar', fit: [], p: price('sugar'), prec: past(/sugar/i), now: nowNote(/sugar/i), mon: [], pol: policy(/sugar/i) },
-      { k: 'Palm oil', fit: [], p: price('palm_oil'), prec: past(/oil/i), now: nowNote(/oil/i), mon: [], pol: policy(/palm|oil/i) }
+      { k: 'Sugar', fit: [], p: price('sugar'), prec: past(/sugar/i), now: nowNote(/sugar/i, /sugar/i), mon: [], pol: policy(/sugar/i) },
+      { k: 'Palm oil', fit: [], p: price('palm_oil'), prec: past(/oil/i), now: nowNote(/oil/i, /oil/i), mon: [], pol: policy(/palm|oil/i) }
     ].filter(function (x) { return x.fit.length || x.prec || x.pol || x.now; });
     if (!items.length) { el.innerHTML = ''; return; }
     el.innerHTML = '<figure class="enso-plate enso-pricewatch-plate is-published" data-kind="published">' +
@@ -45889,7 +45895,7 @@ function showCommodityDetail(key) {
       items.map(function (x) {
         return '<tr><th scope="row">' + esc(x.k) + '</th><td>' + (x.fit.length ? line(x.fit) : '<span class="enso-ol-na">no fitted pair</span>') + '</td>' +
           '<td>' + (x.prec || '<span class="enso-ol-na">—</span>') + '</td><td>' + (x.mon.length ? monitored(x.mon) : '<span class="enso-ol-na">—</span>') + '</td>' +
-          '<td class="enso-ol-v">' + (x.p ? '$' + Math.round(x.p.usd_per_t) + '/t <span class="enso-live-sub">' + esc(x.p.series) + ', ' + esc(x.p.month) + (x.p.mom != null ? ' · ' + pct(x.p.mom) + ' m/m' : '') + (x.p.yoy != null ? ' · ' + pct(x.p.yoy) + ' y/y' : '') + '</span>' : '<span class="enso-ol-na">—</span>') + (x.now ? '<span class="enso-live-sub">FAO: ' + x.now + '</span>' : '') + '</td>' +
+          '<td class="enso-ol-v">' + (x.p ? '$' + Math.round(x.p.usd_per_t).toLocaleString('en-US') + '/t <span class="enso-live-sub">' + esc(x.p.series) + ', ' + esc(/^\d{4}-\d{2}$/.test(x.p.month) ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+x.p.month.slice(5) - 1] + ' ' + x.p.month.slice(0, 4) : x.p.month) + (x.p.mom != null ? ' · ' + pct(x.p.mom) + ' m/m' : '') + (x.p.yoy != null ? ' · ' + pct(x.p.yoy) + ' y/y' : '') + '</span>' : '<span class="enso-ol-na">—</span>') + (x.now ? '<span class="enso-live-sub">FAO: ' + x.now + '</span>' : '') + '</td>' +
           '<td>' + (x.pol || '<span class="enso-ol-na">none on record</span>') + '</td></tr>';
       }).join('') + '</tbody></table></div>' +
       '<figcaption class="enso-log">Where the damage lands is local: in 2023-24 South African white maize rose a third while world grain prices were soft. So the local column matters more than the world price, and a “not monitored” there is a gap in the evidence, not calm.</figcaption></figure>';
