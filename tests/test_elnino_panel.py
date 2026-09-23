@@ -1102,7 +1102,7 @@ def main() -> int:
                 && markers.every(l => {
                     const span = l.getElement().querySelector('span'), box = span.getBoundingClientRect(), style = getComputedStyle(span);
                     return span.dataset.corridor === 'us_gulf_panama_east_asia'
-                        && span.textContent === '↔ Gulf to East Asia' && getComputedStyle(span).visibility === 'visible'
+                        && span.textContent === '↔ US Gulf to East Asia' && getComputedStyle(span).visibility === 'visible'
                         && style.backgroundColor === 'rgba(0, 0, 0, 0)' && style.borderTopWidth === '0px'
                         && style.textShadow !== 'none' && box.width > 0 && box.height > 0;
                 });

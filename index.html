@@ -44859,7 +44859,7 @@ function showCommodityDetail(key) {
   }
 
   function drawCorridors(lanes) {
-    var shortNames = {panama:'Gulf to East Asia',amazon:'Amazon northern arc',parana:'Paraná to Atlantic',
+    var shortNames = {panama:'US Gulf to East Asia',amazon:'Amazon northern arc',parana:'Paraná to Atlantic',
       mississippi:'Mississippi grain',malacca:'Malacca to China',rhine:'Rhine grain',bosporus:'Black Sea to Egypt',
       suez:'Suez grain',bab_el_mandeb:'Red Sea to East Africa'};
     ((S.corridors && S.corridors.corridors) || []).forEach(function (c) {
@@ -45571,8 +45571,10 @@ function showCommodityDetail(key) {
     if (gauge) parts.push(gauge.text);
     var steps = (live.steps || []).filter(function (st) { return st.effective <= new Date().toISOString().slice(0,10); }).sort(function (a,b) { return a.effective.localeCompare(b.effective); });
     if (steps.length) { var st = steps[steps.length-1]; parts.push(st.total + ' slots/day from ' + stamp(new Date(st.effective))); }
+    /* Counts as well as percentages: −28% of a small number is a few ships. */
     if (pw && pw.transits_per_day && pw.yoy) parts.push(pw.transits_per_day.total.toFixed(1) + ' transits/day, ' + num(pw.yoy.total_pct,1) + '% y/y' +
-      (typeof pw.yoy.dry_bulk_pct === 'number' ? ', dry bulk ' + num(pw.yoy.dry_bulk_pct,1) + '%' : '') + ' · ' + pwWindow(pw.window));
+      (typeof pw.yoy.dry_bulk_pct === 'number' ? ', dry bulk ' + (pw.transits_per_day.dry_bulk != null && pw.baseline_transits_per_day && pw.baseline_transits_per_day.dry_bulk != null ? pw.transits_per_day.dry_bulk.toFixed(1) + ' vs ' + pw.baseline_transits_per_day.dry_bulk.toFixed(1) + ' a day (' + num(pw.yoy.dry_bulk_pct,0) + '%)' : num(pw.yoy.dry_bulk_pct,1) + '%') : '') + ' · ' + pwWindow(pw.window) + ', IMF PortWatch (AIS)' +
+      (ln.id === 'panama' && live.august_2026_outturn ? '; the Canal’s own count for August 2026 was ' + live.august_2026_outturn.oceangoing_transits_daily_avg.toFixed(1) + ' oceangoing transits a day (' + live.august_2026_outturn.advisory + '); AIS counts run lower by method' : ''));
     /* September observations currently live in the curated prose fields.
        Extract the source's figure and date without duplicating its numbers. */
     var text = [ln.events,ln.counter_evidence,ln.mechanism].filter(Boolean).join(' '), match;

@@ -107,7 +107,7 @@ test('Stage I transit rings join actual lane values and distinguish zero, missin
 });
 test('Stage I Panama continuation names occupy both dateline endpoints',()=>{
  assert.equal(S.corridorEdges.length,2);assert.deepEqual(S.corridorEdges.map(l=>l.coords[1]),[-180,180]);
- assert(S.corridorEdges.every(l=>l.options.icon.html.includes('↔ Gulf to East Asia')&&l.options.icon.html.includes('us_gulf_panama_east_asia')));
+ assert(S.corridorEdges.every(l=>l.options.icon.html.includes('↔ US Gulf to East Asia')&&l.options.icon.html.includes('us_gulf_panama_east_asia')));
 });
 test('long ocean legs curve and split at the dateline without a world-spanning chord',()=>{
  const path=api.corridorGeometry(S.corridors.corridors[0].waypoints);
