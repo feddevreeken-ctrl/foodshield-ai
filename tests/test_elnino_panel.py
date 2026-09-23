@@ -699,6 +699,20 @@ def main() -> int:
               and page.locator('#tab-elnino h2:visible').evaluate("e => getComputedStyle(e).fontFamily.includes('Instrument Serif')"), str(headings))
         check("observed frames are solid and modelled or published frames dashed", all(frames), str(frames))
         check("no table, chart or paragraph runs past its plate on any lens", not any(spill), str([x for x in spill if x]))
+        # 2026-09-24: the Ocean lens leads with a dated calendar joined from the other lenses' data.
+        page.evaluate("showTab('elnino')")
+        page.wait_for_selector('#subview-elnino.active .enso-next12 li')
+        check("Ocean leads with the next twelve months, each line typed and linked to its lens", page.evaluate("""async () => {
+            const O = (await (await fetch('data/enso_outlook.json')).json()).data;
+            const items = [...document.querySelectorAll('.enso-next12 li')];
+            const first = document.querySelector('#subview-elnino > *:not([hidden])');
+            const harv = O.rows_all.filter(r => r.status === 'shown' && !r.in_season && Math.abs(r.change_kt_record || 0) >= 150);
+            const text = document.querySelector('.enso-next12').textContent;
+            return first && first.id === 'enso-next12'
+                && items.length >= 6 && items.every(li => /^is-(forecast|published|modelled|precedent)$/.test(li.className) && li.querySelector('[data-goto-lens]'))
+                && harv.every(r => text.includes(r.harvest))
+                && (text.match(/more maize from abroad/g) || []).length <= 1;
+        }"""))
         check("one persistent map instance across all five views", page.evaluate("""() =>
             document.querySelectorAll('#enso-map').length === 1 && document.getElementById('enso-map') === window._stageAMap
             && window._stageAMap._leaflet_id === window._stageAMapId

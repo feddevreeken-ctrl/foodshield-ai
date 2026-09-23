@@ -12113,6 +12113,16 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-ol-v { font-family:'Geist Mono',monospace; white-space:nowrap; }
 #tab-elnino .enso-pricewatch-plate .enso-ol-v { white-space:normal; min-width:18ch; }
 #tab-elnino tr.enso-ol-total > * { border-top:1px solid var(--b3); font-weight:500; }
+#tab-elnino .enso-next12 { list-style:none; margin:0; padding:0; }
+#tab-elnino .enso-next12 li { display:grid; grid-template-columns:minmax(120px,150px) 92px 1fr; gap:4px 16px; align-items:baseline; padding:10px 0; border-top:1px solid var(--grid); }
+#tab-elnino .enso-next12 li:first-child { border-top:0; }
+#tab-elnino .enso-next12-when { font:12px/1.5 'Geist Mono',monospace; color:var(--t1); }
+#tab-elnino .enso-next12-kind { font:10.5px/1.6 'Geist Mono',monospace; letter-spacing:.04em; text-transform:uppercase; color:var(--t3); }
+#tab-elnino .enso-next12 li.is-modelled .enso-next12-kind { color:#e0864a; }
+#tab-elnino .enso-next12 li.is-forecast .enso-next12-kind { color:#8fb1cf; }
+#tab-elnino .enso-next12 p { margin:0; color:var(--t2); font-size:14px; line-height:1.55; }
+#tab-elnino .enso-next12 .enso-inline-link { min-height:0; min-width:0; padding:0 2px; white-space:nowrap; }
+@media (max-width:700px){ #tab-elnino .enso-next12 li { grid-template-columns:1fr auto; } #tab-elnino .enso-next12 p { grid-column:1 / -1; } }
 #tab-elnino .enso-ledger thead th { white-space:normal !important; }
 #tab-elnino .enso-ledger .enso-ol-v { white-space:normal; min-width:11ch; }
 #tab-elnino .enso-ledger .enso-ol-v .enso-live-sub { font-size:11px; }
@@ -12942,6 +12952,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
         </div>
       <section id="enso-indices" class="enso-sec"></section>
       <div class="subview active" id="subview-elnino" role="tabpanel" aria-labelledby="viewbtn-elnino">
+        <div id="enso-next12"></div>
         <div id="enso-strengths"></div>
         <div id="subview-ensomech"><section id="enso-mech" class="enso-sec"></section></div>
       </div>
@@ -43452,6 +43463,83 @@ function showCommodityDetail(key) {
   /* ── How strong, and for how long: CPC's own season-by-season odds ──────
      The agency's forecast, drawn as a table: rows are strength classes, columns
      the overlapping three-month seasons, cells the published percentage. */
+  /* ── THE NEXT TWELVE MONTHS ─────────────────────────────────────────────
+     One dated calendar that answers "what happens, to which food, where,
+     when", joined from what the other lenses already hold: CPC's strength
+     odds, FEWS NET's windows, the fitted harvests, Gatún's past El Niño lows,
+     IPC releases and export measures. Each line keeps its kind, so a
+     forecast, a model and a precedent are never read as the same thing. */
+  var MON3 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function parseWindow(w) {
+    var t = String(w || ''), m = t.match(/([A-Z][a-z]{2})(?:\s+(\d{4}))?\s*[–-]\s*([A-Z][a-z]{2})\s+(\d{4})/), a, b;
+    if (m && MON3.indexOf(m[1]) >= 0 && MON3.indexOf(m[3]) >= 0) {
+      var y1 = m[2] ? +m[2] : (MON3.indexOf(m[1]) <= MON3.indexOf(m[3]) ? +m[4] : +m[4] - 1);
+      a = Date.UTC(y1, MON3.indexOf(m[1]), 1); b = Date.UTC(+m[4], MON3.indexOf(m[3]) + 1, 0);
+      return { start: a, end: b };
+    }
+    m = t.match(/([A-Z][a-z]{2})\s+(\d{4})/);
+    if (m && MON3.indexOf(m[1]) >= 0) return { start: Date.UTC(+m[2], MON3.indexOf(m[1]), 1), end: Date.UTC(+m[2], MON3.indexOf(m[1]) + 1, 0) };
+    return null;
+  }
+  function renderNext12() {
+    var el = document.getElementById('enso-next12'); if (!el) return;
+    var now = new Date(), t0 = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1), t1 = Date.UTC(now.getUTCFullYear() + 1, now.getUTCMonth() + 1, 0);
+    var items = [];
+    /* "Oct 2026–Dec 2026" reads as "Oct–Dec 2026". */
+    var span = function (a, b) { var A = new Date(a), B = new Date(b); return A.getUTCFullYear() === B.getUTCFullYear() ? (A.getUTCMonth() === B.getUTCMonth() ? '' : MON3[A.getUTCMonth()] + '–') + MON3[B.getUTCMonth()] + ' ' + B.getUTCFullYear() : MON3[A.getUTCMonth()] + ' ' + A.getUTCFullYear() + '–' + MON3[B.getUTCMonth()] + ' ' + B.getUTCFullYear(); };
+    var add = function (win, when, text, kind, tab) { if (!win || win.end < t0 || win.start > t1) return; items.push({ s: Math.max(win.start, t0), e: win.end, when: when, text: text, kind: kind, tab: tab }); };
+    /* CPC: the peak seasons and when neutral becomes likeliest. */
+    var ss = (S.strengths && S.strengths.seasons) || [], yr = now.getUTCFullYear();
+    var peak = ss.filter(function (x) { return (x.classes['very strong El Niño'] || 0) >= 90; });
+    if (peak.length) {
+      var p0 = peak[0], p1 = peak[peak.length - 1], w0 = parseWindow(p0.months.split(' ')[0] + ' ' + yr), w1 = parseWindow(p1.months.split(' ').slice(-1)[0] + ' ' + (p1.season === 'NDJ' ? yr + 1 : yr));
+      if (w0 && w1) add({ start: w0.start, end: w1.end }, span(w0.start, w1.end) + ' (' + p0.season + '–' + p1.season + ')', 'The event peaks: CPC puts a very strong El Niño at ' + peak.map(function (x) { return x.classes['very strong El Niño'] + '% ' + x.season; }).join(', ') + ' (RONI ≥ +2.0 °C).', 'forecast', 'elnino');
+    }
+    var neu = ss.filter(function (x) { var c = x.classes, best = Object.keys(c).sort(function (a, b) { return c[b] - c[a]; })[0]; return best === 'neutral'; })[0];
+    if (neu) { var nw = parseWindow(neu.months.split(' ')[0] + ' ' + (yr + 1)); if (nw) add({ start: nw.start, end: nw.start + 90 * 864e5 }, span(nw.start, nw.start + 85 * 864e5) + ' (' + neu.season + ')', 'The event fades: CPC makes neutral the likeliest state (' + neu.classes.neutral + '%).', 'forecast', 'elnino'); }
+    /* FEWS NET windows with high or moderate concern. */
+    ((S.situation || {}).fewsnet || {}).regions && S.situation.fewsnet.regions.forEach(function (r) {
+      if (r.concern !== 'high' && r.concern !== 'moderate') return;
+      /* One line per region: its windows share one hazard text, so they are spanned, not repeated. */
+      var ws = (r.windows || []).map(parseWindow).filter(Boolean); if (!ws.length) return;
+      var wa = Math.min.apply(null, ws.map(function (x) { return x.start; })), wb = Math.max.apply(null, ws.map(function (x) { return x.end; }));
+      [wa].forEach(function () { add({ start: wa, end: wb }, span(wa, wb), '<b>' + esc(r.region) + '</b>: ' + esc(String(r.hazards).split(';').slice(0, 2).join(';')) + (r.iso3 && r.iso3.length ? ' (' + esc(r.iso3.map(nameFor).join(', ')) + ')' : '') + '. FEWS NET ' + esc(r.concern) + ' concern.', 'forecast', 'ensolive'); });
+    });
+    /* Newer IPC releases with a famine-risk line. */
+    var U = (S.situation || {}).ipc_updates || {};
+    Object.keys(U).forEach(function (iso) { var u = U[iso]; if (!u.famine_risk) return; var uw = parseWindow(u.period); add(uw, uw ? span(uw.start, uw.end) : '', '<b>' + esc(nameFor(iso)) + '</b>: ' + (u.phase3plus_count / 1e6).toFixed(1) + ' million people projected in IPC Phase 3+; ' + esc(u.famine_risk.split(';')[0]) + ' (IPC, ' + esc(stamp(new Date(u.released))) + ').', 'published', 'ensolive'); });
+    /* Panama: the dry season is when past El Niño lows came. */
+    var an = (((S.gauges || {}).gauges || {}).gatun || {}).analog_min;
+    if (an) {
+      var dry = Object.keys(an).map(function (k) { return an[k]; }).filter(function (x) { var m = +String(x.date).slice(5, 7); return m >= 1 && m <= 5; });
+      if (dry.length) add({ start: Date.UTC(yr + 1, 0, 1), end: Date.UTC(yr + 1, 4, 31) }, 'Jan–May ' + (yr + 1), '<b>Panama</b> dry season: Gatún’s lowest levels in past El Niños came now (' + dry.map(function (x) { return x.ft.toFixed(1) + ' ft, ' + MON3[+x.date.slice(5, 7) - 1] + ' ' + x.date.slice(0, 4); }).join('; ') + '), when the Canal cut slots and drafts before.', 'precedent', 'ensowater');
+    }
+    /* Fitted harvests, largest first within a window. */
+    var O = S.outlook, rec = O && O.cases && O.cases.record;
+    var tot = {}; ((O && O.who_pays_totals) || []).forEach(function (x) { tot[x.crop] = x; });
+    var hv = ((O && O.rows_all) || []).filter(function (r) { return r.status === 'shown' && !r.in_season && Math.abs(r.change_kt_record || 0) >= 150; });
+    var bigMaize = hv.filter(function (r) { return r.crop === 'corn' && r.change_kt_record < 0; }).sort(function (a, b) { return a.change_kt_record - b.change_kt_record; })[0];
+    var byWin = {}; hv.forEach(function (r) { (byWin[r.harvest] = byWin[r.harvest] || []).push(r); });
+    Object.keys(byWin).forEach(function (w) {
+      var rs = byWin[w].sort(function (a, b) { return Math.abs(b.change_kt_record) - Math.abs(a.change_kt_record); });
+      add(parseWindow(w), w, rs.map(function (r) { return '<b>' + esc(nameFor(r.iso)) + '</b> ' + esc({ corn: 'maize' }[r.crop] || r.crop) + ' harvest ' + num(r.change_pct_record, 0) + '% (' + fmtKt(r.change_kt_record) + ')'; }).join('; ') +
+        (bigMaize && rs.indexOf(bigMaize) >= 0 && tot.corn ? '; the region then needs about ' + fmtKt(tot.corn.total_kt).replace('+', '') + ' more maize from abroad' : '') +
+        (rec ? ', if this winter reaches ONI ' + num(rec.oni, 1) : '') + '.', 'modelled', 'ensoharvest');
+    });
+    /* Export measures that end inside the year. */
+    (S.restrictions || []).forEach(function (r) { if (r.status === 'historical' || !r.ends_date) return; var d = Date.parse(r.ends_date + 'T00:00:00Z'); add({ start: d, end: d }, stamp(new Date(d)), '<b>' + esc(r.country) + '</b> ' + esc(r.commodity.toLowerCase()) + ' ' + esc(r.measure.toLowerCase()) + ' ends; an extension would keep supply tight.', 'published', 'ensomoney'); });
+    if (!items.length) { el.innerHTML = ''; return; }
+    items.sort(function (a, b) { return a.s - b.s || a.e - b.e; });
+    var KIND = { forecast: 'Forecast', published: 'Published', modelled: 'Modelled', precedent: 'Precedent' };
+    var LENS = { elnino: 'Ocean', ensoharvest: 'Harvests', ensowater: 'Shipping', ensomoney: 'Prices', ensolive: 'Reported' };
+    el.innerHTML = '<figure class="enso-plate enso-next12-plate" data-kind="published">' +
+      plateHead('The next twelve months', 'Joined from CPC, FEWS NET, IPC, the Panama Canal record, this site’s fit and export measures · each line says what kind of claim it is', stamp(metaDate('outlook')), 'published') +
+      '<div class="plate-body"><ol class="enso-next12">' + items.map(function (it) {
+        return '<li class="is-' + it.kind + '"><span class="enso-next12-when">' + esc(it.when) + '</span><span class="enso-next12-kind">' + KIND[it.kind] + '</span><p>' + it.text + ' <button type="button" class="enso-inline-link" data-goto-lens="' + it.tab + '">' + LENS[it.tab] + ' →</button></p></li>';
+      }).join('') + '</ol></div>' +
+      '<figcaption class="enso-log">Forecast: an agency’s odds. Published: an agency’s dated statement. Modelled: this site’s fitted response at the fit’s strongest winter, not a forecast of this year’s outcome. Precedent: what happened in past El Niños. Nothing here is typed by hand; each line is rebuilt from its source on every refresh.</figcaption></figure>';
+    el.querySelectorAll('[data-goto-lens]').forEach(function (b) { b.onclick = function () { showTab(b.getAttribute('data-goto-lens')); }; });
+  }
   function renderStrengths() {
     var el = document.getElementById('enso-strengths'); if (!el) return;
     var T = S.strengths;
@@ -46653,6 +46741,8 @@ function showCommodityDetail(key) {
     var oceanPanel = document.getElementById('subview-elnino');
     var analog = document.querySelector('#enso-hero .enso-oni-plate');
     if (analog) oceanPanel.insertBefore(analog, oceanPanel.firstChild);
+    /* The dated calendar answers the first question, so it leads the Ocean lens. */
+    var next12 = document.getElementById('enso-next12'); if (next12 && next12.parentElement === oceanPanel) oceanPanel.insertBefore(next12, oceanPanel.firstChild);
     var indices = document.getElementById('enso-indices'), oni = oceanPanel.querySelector('.enso-oni-plate');
     if (oni && indices && indices.parentElement !== oni) oni.appendChild(indices);
     /* The limits describe the fitted harvest layer and the price evidence, so they sit with Harvests. */
@@ -46943,7 +47033,7 @@ function showCommodityDetail(key) {
     if (!S.drawn.limits) { renderLimits(); S.drawn.limits = true; }
     wireTabKeys(); syncTabRoving();
 
-    if (S.sub === 'elnino' && !S.drawn.mech) { renderStrengths(); renderMechanism(); S.drawn.mech = true; }
+    if (S.sub === 'elnino' && !S.drawn.mech) { renderNext12(); renderStrengths(); renderMechanism(); S.drawn.mech = true; }
 
     {
       if (!S.drawn.map) {
