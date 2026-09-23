@@ -12141,6 +12141,23 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-policy-plate td b { color:#e0864a; font-weight:500; }
 @media(min-width:1100px) { #tab-elnino #enso-live .enso-live-board { display:grid; grid-template-columns:minmax(0,7fr) minmax(0,5fr); gap:var(--enso-gap); align-items:start; } }
 @media(max-width:800px) { #tab-elnino .enso-ledger :is(th,td):nth-child(n+5) { display:none; } #tab-elnino .enso-region-table :is(th,td):nth-child(3) { display:none; } }
+/* Shipping plates (2026-09-23): Gatún record, rerouting, rivers and barges, who depends. */
+#tab-elnino .enso-lane-verdict b { font-weight:500; }
+#tab-elnino .enso-status-table th:nth-child(3), #tab-elnino .enso-status-table td:nth-child(3) { width:34%; }
+#tab-elnino .enso-status-table th:nth-child(4), #tab-elnino .enso-status-table td:nth-child(4) { width:34%; }
+#tab-elnino .enso-lane-verdict.is-elevated b { color:#e0864a; }
+#tab-elnino .enso-lane-verdict.is-watch b { color:#d9b36b; }
+#tab-elnino .enso-lane-verdict.is-eases b { color:#8fb1cf; }
+#tab-elnino .enso-lane-verdict.is-other b { color:var(--t2); }
+#tab-elnino .enso-plate-lede { font-size:14px; line-height:1.6; color:var(--t1); max-width:118ch; margin:0 0 12px; }
+#tab-elnino .enso-gatun-chart { height:300px; }
+#tab-elnino .enso-gauge-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; }
+#tab-elnino .enso-gauge h4 { margin:0 0 4px; font:500 13px 'Geist',sans-serif; color:var(--t1); }
+#tab-elnino .enso-gauge-v { margin:0 0 6px; font:12px 'Geist Mono',monospace; color:var(--t2); }
+#tab-elnino .enso-gauge-v b { font-size:18px; color:var(--t1); font-weight:500; }
+#tab-elnino .enso-gauge-v span { color:var(--t3); margin-left:6px; }
+#tab-elnino .enso-gauge-chart { height:120px; }
+#tab-elnino #enso-water > .enso-plate { margin:0 0 var(--enso-gap); }
 /* Harvest callouts: unboxed atlas notes, name and one figure line, halo not panel. */
 #tab-elnino .enso-anno { width:170px; background:none; border:0; box-shadow:none; backdrop-filter:none; padding:0 6px; }
 #tab-elnino .enso-anno :is(b,span) { text-shadow:0 0 3px #0b1017, 0 0 3px #0b1017, 0 0 6px #0b1017; }
@@ -42652,10 +42669,12 @@ function showCommodityDetail(key) {
         var r = await fetch('data/' + n + '.json', opts);
         if (!r.ok) { S.failed.push(n); return null; }
         var j = await r.json();
-        if (!j || typeof j !== 'object' || !j.data || typeof j.data !== 'object') {
+        /* chokepoint_flows.json predates the data envelope: its body is the file itself. */
+        var body = j && typeof j === 'object' ? (j.data || (n === 'chokepoint_flows' && j.chokepoints ? j : null)) : null;
+        if (!body || typeof body !== 'object') {
           S.failed.push(n); return null;
         }
-        return { meta: j._meta || {}, data: j.data };
+        return { meta: j._meta || {}, data: body };
       } catch (e) { S.failed.push(n); return null; }
     };
     var names = ['enso', 'enso_exposure', 'enso_model', 'enso_regions',
@@ -42663,13 +42682,13 @@ function showCommodityDetail(key) {
                  'sst_anomaly', 'portwatch_history', 'crop_calendars',
                  'portwatch', 'rtfp', 'fao_ffpi',
                  'asap', 'gdacs', 'ipc', 'reliefweb_alerts',
-                 'enso_news', 'trade_restrictions', 'enso_outlook', 'enso_gauges', 'enso_situation'];
+                 'enso_news', 'trade_restrictions', 'enso_outlook', 'enso_gauges', 'enso_situation', 'chokepoint_flows'];
     var out = await Promise.all(names.map(get));
     var keys = ['enso', 'exp', 'model', 'regions', 'lanes', 'corridors', 'econ', 'mech', 'indices', 'bulletins',
                 'sst', 'pwhist', 'calendars',
                 'portwatch', 'rtfp', 'ffpi',
                 'asap', 'gdacs', 'ipc', 'relief',
-                'news', 'restrictions', 'outlook', 'gauges', 'situation'];
+                'news', 'restrictions', 'outlook', 'gauges', 'situation', 'chokeflows'];
     S.feedNames = {};
     S.oniLive = null;
     keys.forEach(function (k, i) {
@@ -44610,12 +44629,19 @@ function showCommodityDetail(key) {
       malacca:'Malacca',rhine:'Rhine',suez:'Suez',bab_el_mandeb:'Bab el-Mandeb',bosporus:'Turkish Straits'})[ln.id] || ln.name;
   }
   function transitRadius(pct) { return 9 + Math.min(Math.abs(pct), 100) * 0.24; }
+  /* Grain moves on dry-bulk ships, so the ring measures dry-bulk transits
+     against a year earlier when PortWatch has them (Panama: dry bulk −28%
+     while all vessels fell 9%); all vessels is the fallback. */
   function laneMeasurement(ln) {
-    var pw = laneStatus(ln), pct = pw && pw.yoy && pw.yoy.total_pct;
-    var total = pw && pw.transits_per_day && pw.transits_per_day.total;
+    var pw = laneStatus(ln), y = (pw && pw.yoy) || {}, t = (pw && pw.transits_per_day) || {};
+    var dry = typeof y.dry_bulk_pct === 'number' && isFinite(y.dry_bulk_pct) && typeof t.dry_bulk === 'number' && isFinite(t.dry_bulk);
+    var pct = dry ? y.dry_bulk_pct : y.total_pct, total = t.total;
     if (typeof pct !== 'number' || !isFinite(pct) || typeof total !== 'number' || !isFinite(total)) return null;
-    return {pct:pct, total:total, radius:transitRadius(pct), record:pw};
+    return {pct:pct, total:total, dry:dry ? t.dry_bulk : null, metric:dry ? 'dry bulk' : 'all vessels', radius:transitRadius(pct), record:pw};
   }
+  /* Orange where the lane has a published ENSO link; blue-grey where the
+     change has other causes (war, security), so a big ring is not read as El Niño. */
+  function ringStroke(ln) { return ln.phase === 'el_nino' || ln.phase === 'la_nina' ? '#dd5a3a' : '#8fb1cf'; }
   function transitPeriod(pw) {
     return (pw.window_days ? pw.window_days + '-day mean' : 'averaging window unavailable') +
       ' to ' + (pw.latest_date ? stamp(new Date(pw.latest_date)) : 'date unavailable');
@@ -44628,14 +44654,14 @@ function showCommodityDetail(key) {
       var period = transitPeriod(m.record);
       if (periods.indexOf(period) < 0) periods.push(period);
     });
-    return '<div class="enso-legend-note enso-transit-source">Outer ring: mean transits per day against a year earlier, IMF PortWatch; ' +
+    return '<div class="enso-legend-note enso-transit-source">Outer ring: dry-bulk (grain-carrying) transits per day against a year earlier, all vessels where dry bulk is missing, IMF PortWatch; ' +
       esc(periods.length ? periods.join('; ') : 'no measured transit change available') + '; collected ' + esc(stamp(metaDate('portwatch'))) + '.</div>' +
       '<div class="enso-transit-key" aria-label="Ring size guide, absolute year-on-year change">' + [0,25,50].map(function (pct) {
         var size = transitRadius(pct) * 2;
         return '<span><svg aria-hidden="true" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' +
           '<circle cx="' + (size/2) + '" cy="' + (size/2) + '" r="' + (size/2 - 0.75) + '" fill="none" stroke="#dd5a3a" stroke-width="1.5"/></svg>' +
           (pct ? '±' : '') + pct + '%</span>';
-      }).join('') + '</div><div class="enso-legend-note">Ring radius grows with absolute change, capped at 100%; − means fewer transits, + means more. Orange rings mark measured change; hollow grey diamonds have no transit measurement.</div>' +
+      }).join('') + '</div><div class="enso-legend-note">Ring radius grows with absolute change, capped at 100%; − means fewer transits, + means more. Orange: a lane with a published ENSO link; blue-grey: a change with other causes such as war or security. Hollow grey diamonds have no transit measurement.</div>' +
       (missing.length ? '<div class="enso-legend-note enso-transit-missing"><svg class="enso-sw-round" aria-hidden="true" width="14" height="14" viewBox="0 0 14 14"><path d="M7 1L13 7L7 13L1 7Z" fill="none" stroke="#8b8980"/></svg> Hollow diamond, no ring: no PortWatch transit change available for ' + esc(missing.join(', ')) + '.</div>' : '') +
       /* The measured cause behind the Panama ring, read from the lane's own
          published evidence rather than retyped here, so it cannot drift from
@@ -44794,11 +44820,11 @@ function showCommodityDetail(key) {
         }));
       });
       var measured = laneMeasurement(ln), pw = laneStatus(ln);
-      var observation = measured ? measured.total.toFixed(1) + ' transits/day, ' + num(measured.pct, 1) + '% y/y (' + pw.status + '), ' +
+      var observation = measured ? (measured.dry != null ? measured.dry.toFixed(1) + ' dry-bulk of ' : '') + measured.total.toFixed(1) + ' transits/day, ' + measured.metric + ' ' + num(measured.pct, 1) + '% y/y (' + pw.status + '), ' +
         transitPeriod(pw) + '; IMF PortWatch, collected ' + stamp(metaDate('portwatch')) : 'No PortWatch transit change available';
       var live = '<br>' + esc(observation);
       var diameter = measured ? measured.radius * 2 : 0;
-      var ring = measured ? '<svg class="enso-transit-ring" aria-hidden="true" data-yoy="' + measured.pct + '" style="width:' + diameter + 'px;height:' + diameter + 'px" viewBox="0 0 ' + diameter + ' ' + diameter + '"><circle cx="' + measured.radius + '" cy="' + measured.radius + '" r="' + (measured.radius - .75) + '" fill="none" stroke="#dd5a3a" stroke-width="1.5"/></svg>' : '';
+      var ring = measured ? '<svg class="enso-transit-ring" aria-hidden="true" data-yoy="' + measured.pct + '" style="width:' + diameter + 'px;height:' + diameter + 'px" viewBox="0 0 ' + diameter + ' ' + diameter + '"><circle cx="' + measured.radius + '" cy="' + measured.radius + '" r="' + (measured.radius - .75) + '" fill="none" stroke="' + ringStroke(ln) + '" stroke-width="1.5"/></svg>' : '';
       var name = laneName(ln), change = measured ? num(measured.pct, 1) + '% y/y' : '';
       var labelWidth = Math.ceil(Math.max(name.length * 6.2, change.length * 6.4)) + 4;
       var labelText = '<svg width="' + labelWidth + '" height="' + (measured ? 29 : 16) + '"><text x="2" y="12">' + esc(name) + '</text>' +
@@ -45360,18 +45386,66 @@ function showCommodityDetail(key) {
     renderDetail();
   }
 
+  /* ── Measured water per lane, from data/enso_gauges.json ──────────────
+     Each lane that has a gauge reads it here; nothing is typed. */
+  function laneGauge(ln) {
+    var G = (S.gauges && S.gauges.gauges) || {};
+    var d = function (x) { var t = new Date(x); return isNaN(t) ? '' : stamp(t); };
+    if (ln.id === 'panama' && G.gatun) {
+      var g = G.gatun, c = g.climatology_today || {};
+      return { text: 'Gatún ' + g.latest.value.toFixed(2) + ' ft, ' + d(g.latest.date) + (typeof g.vs_median_ft === 'number' ? ' (' + num(g.vs_median_ft, 1) + ' ft against the ' + (c.n_years || '') + '-year median for the date)' : ''), g: g };
+    }
+    if (ln.id === 'mississippi' && G.stlouis) {
+      var m = G.stlouis, b = G.barge_stlouis;
+      return { text: 'St. Louis ' + m.latest.value.toFixed(1) + ' ft, ' + d(m.latest.date) + (m.forecast_min ? '; NWS forecast ' + m.forecast_min.ft.toFixed(1) + ' ft by ' + d(m.forecast_min.t) : '') +
+        (b ? '; barge rate ' + Math.round(b.latest.value) + '% of tariff, ' + d(b.latest.date) + (b.record ? ' (record ' + Math.round(b.record.value) + '%, ' + d(b.record.date) + ')' : '') : ''), g: m };
+    }
+    if (ln.id === 'rhine' && G.kaub) {
+      var k = G.kaub, nw = (k.reference || {}).NW;
+      return { text: 'Kaub ' + Math.round(k.latest.value) + ' cm, ' + d(k.latest.date) + (nw ? ' (lowest daily in ' + nw.from.slice(0, 4) + '–' + nw.to.slice(0, 4) + ': ' + Math.round(nw.value) + ' cm)' : ''), g: k };
+    }
+    if (ln.id === 'parana' && G.rosario) {
+      var r = G.rosario, first = r.daily_45d[0];
+      return { text: 'Rosario ' + r.latest.value.toFixed(2) + ' m, ' + d(r.latest.date) + (first ? ' (' + num(r.latest.value - first.m, 2) + ' m since ' + d(first.date) + ')' : ''), g: r };
+    }
+    if (ln.id === 'amazon' && G.manaus) {
+      var a = G.manaus, a0 = a.daily_30d[0];
+      var days = a0 ? Math.max(1, (Date.parse(a.latest.date) - Date.parse(a0.date)) / 864e5) : 0;
+      return { text: 'Manaus ' + a.latest.value.toFixed(2) + ' m, ' + d(a.latest.date) + (a0 ? ' (falling ' + Math.round((a0.m - a.latest.value) / days * 100) + ' cm a day)' : ''), g: a };
+    }
+    return null;
+  }
+  /* The lane's outlook: its published ENSO sign, the event now under way and
+     what its gauge shows. A rule, stated, not a model: El Niño-tagged lanes are
+     at risk in their own low-water season, La Niña-tagged lanes usually ease,
+     untagged lanes change for other reasons and are named as such. */
+  function laneVerdict(ln) {
+    var G = (S.gauges && S.gauges.gauges) || {}, oni = S.oniLive != null ? S.oniLive : (S.enso && S.enso.latest && S.enso.latest.anom);
+    var strong = typeof oni === 'number' && oni >= 1.5;
+    if (ln.id === 'panama') {
+      var g = G.gatun, an = g && g.analogs, low = [];
+      if (an) Object.keys(an).forEach(function (k) { var pts = an[k]; if (pts && pts.length) low.push(k + ' ' + Math.min.apply(null, pts.map(function (p) { return p.ft; })).toFixed(1) + ' ft'); });
+      return { level: strong ? 'elevated' : 'watch', text: 'Risk rises into the January–May dry season, when the lake is drawn down' + (low.length ? '; in past El Niño years it bottomed at ' + low.join(', ') : '') + '.' };
+    }
+    if (ln.id === 'amazon') return { level: strong ? 'elevated' : 'watch', text: 'At risk in the October–November low-water season; the record lows of 2023 and 2024 came in El Niño-linked droughts.' };
+    if (ln.id === 'malacca') return { level: 'watch', text: 'Haze from peat fires can cut visibility in an El Niño dry season; weak attribution.' };
+    if (ln.phase === 'la_nina') return { level: 'eases', text: 'La Niña is the damaging phase here; El Niño usually eases this lane.' + (ln.id === 'mississippi' ? ' Seasonal low water is still possible and is measured above.' : '') };
+    return { level: 'other', text: 'No published ENSO link; changes here have other causes and compound the grain routes rather than follow El Niño.' };
+  }
   function laneNow(ln) {
-    var parts = [], live = ln.live_2026 || {}, pw = laneStatus(ln);
+    var parts = [], live = ln.live_2026 || {}, pw = laneStatus(ln), gauge = laneGauge(ln);
+    if (gauge) parts.push(gauge.text);
     var steps = (live.steps || []).filter(function (st) { return st.effective <= new Date().toISOString().slice(0,10); }).sort(function (a,b) { return a.effective.localeCompare(b.effective); });
     if (steps.length) { var st = steps[steps.length-1]; parts.push(st.total + ' slots/day from ' + stamp(new Date(st.effective))); }
-    if (pw && pw.transits_per_day && pw.yoy) parts.push(pw.transits_per_day.total.toFixed(1) + ' transits/day, ' + num(pw.yoy.total_pct,1) + '% y/y · ' + pw.window);
+    if (pw && pw.transits_per_day && pw.yoy) parts.push(pw.transits_per_day.total.toFixed(1) + ' transits/day, ' + num(pw.yoy.total_pct,1) + '% y/y' +
+      (typeof pw.yoy.dry_bulk_pct === 'number' ? ', dry bulk ' + num(pw.yoy.dry_bulk_pct,1) + '%' : '') + ' · ' + pw.window);
     /* September observations currently live in the curated prose fields.
        Extract the source's figure and date without duplicating its numbers. */
     var text = [ln.events,ln.counter_evidence,ln.mechanism].filter(Boolean).join(' '), match;
-    if (ln.id === 'amazon' && (match = text.match(/Manaus at ([\d.]+ m) on (\d+ \w+ \d{4})/))) parts.push('Manaus ' + match[1] + ' on ' + match[2]);
-    if (ln.id === 'rhine' && (match = text.match(/Kaub at ([\d.]+ cm) at ([\d:]+) on (\d+ \w+ \d{4})/))) parts.push('Kaub ' + match[1] + ', ' + match[3] + ' · ' + match[2]);
-    if (ln.id === 'mississippi' && (match = text.match(/reports ([\d,]+ tons) of barged grain for the week ending (\d+ \w+ \d{4}), ([\d.]+% above)/))) parts.push(match[1] + ' · week ending ' + match[2] + ' · ' + match[3] + ' year earlier');
-    if (ln.id === 'parana' && (match = text.match(/Bolsa de Comercio de Rosario put the (.+?) episode at ([^.;]+)/))) parts.push('Latest cited loss: ' + match[2] + ' · ' + match[1] + '; current reading unavailable');
+    if (!gauge && ln.id === 'amazon' && (match = text.match(/Manaus at ([\d.]+ m) on (\d+ \w+ \d{4})/))) parts.push('Manaus ' + match[1] + ' on ' + match[2]);
+    if (!gauge && ln.id === 'rhine' && (match = text.match(/Kaub at ([\d.]+ cm) at ([\d:]+) on (\d+ \w+ \d{4})/))) parts.push('Kaub ' + match[1] + ', ' + match[3] + ' · ' + match[2]);
+    if (!gauge && ln.id === 'mississippi' && (match = text.match(/reports ([\d,]+ tons) of barged grain for the week ending (\d+ \w+ \d{4}), ([\d.]+% above)/))) parts.push(match[1] + ' · week ending ' + match[2] + ' · ' + match[3] + ' year earlier');
+    if (!gauge && ln.id === 'parana' && (match = text.match(/Bolsa de Comercio de Rosario put the (.+?) episode at ([^.;]+)/))) parts.push('Latest cited loss: ' + match[2] + ' · ' + match[1] + '; current reading unavailable');
     if (!parts.length) {
       var sentences = String(ln.events || ln.prior_events || '').match(/[^.!?]+[.!?]*/g) || [];
       var dated = sentences.filter(function (line) { return /\b(?:19|20)\d{2}\b/.test(line); });
@@ -45385,15 +45459,117 @@ function showCommodityDetail(key) {
   function laneBoard(lanes, readOn) {
     var order = {el_nino:0,la_nina:1,none:2};
     return '<figure class="enso-plate enso-lane-board">' + plateHead('Lane status', 'Latest observed and published figures · attribution describes the ENSO link', readOn, 'reported') +
-      '<div class="plate-body"><table class="enso-status-table"><thead><tr><th scope="col">Lane</th><th scope="col">Phase tag</th><th scope="col">Now</th><th scope="col">Attribution strength</th></tr></thead><tbody>' +
+      '<div class="plate-body"><table class="enso-status-table"><thead><tr><th scope="col">Lane</th><th scope="col">ENSO link</th><th scope="col">Measured now</th><th scope="col">Outlook for this event</th></tr></thead><tbody>' +
       lanes.slice().sort(function (a,b) { return order[a.phase] - order[b.phase]; }).map(function (ln) {
         return '<tr data-board-lane="' + esc(ln.id) + '"><th scope="row"><button type="button" data-open-lane="' + esc(ln.id) + '" aria-controls="enso-lane-record-' + esc(ln.id) + '">' + esc(laneName(ln)) + '</button></th>' +
-          '<td data-label="Phase tag">' + (ln.phase === 'el_nino' ? 'El Niño' : ln.phase === 'la_nina' ? 'La Niña' : 'None') + '</td>' +
-          '<td data-label="Now" class="enso-lane-now">' + esc(laneNow(ln)) + '</td><td data-label="Attribution strength">' + esc(ln.attribution || 'none') + '</td></tr>';
+          '<td data-label="ENSO link">' + (ln.phase === 'el_nino' ? 'El Niño' : ln.phase === 'la_nina' ? 'La Niña' : 'None') + '<span class="enso-live-sub">' + esc(ln.attribution || 'none') + ' attribution</span></td>' +
+          '<td data-label="Measured now" class="enso-lane-now">' + esc(laneNow(ln)) + '</td>' +
+          (function () { var v = laneVerdict(ln); return '<td data-label="Outlook" class="enso-lane-verdict is-' + v.level + '"><b>' + esc({ elevated: 'Elevated', watch: 'Watch', eases: 'Usually eases', other: 'Other causes' }[v.level]) + '</b><span class="enso-live-sub">' + esc(v.text) + '</span></td>'; })() + '</tr>';
       }).join('') + '</tbody></table></div></figure>';
   }
 
   /* ── §3 THE WATER ────────────────────────────────────────────────────── */
+  /* ── Shipping plates read from data/enso_gauges.json and chokepoint flows ── */
+  function shippingPlates(lanes) {
+    var G = (S.gauges && S.gauges.gauges) || {}, out = '', gd = stamp(metaDate('gauges'));
+    var g = G.gatun;
+    if (g && g.band && g.band.length) {
+      var c = g.climatology_today || {};
+      out += '<figure class="enso-plate enso-gatun-plate">' + plateHead('Gatún Lake against its record', 'Panama Canal Authority daily level since 1965 · 60-day ACP projection', gd, 'observed') +
+        '<div class="plate-body"><p class="enso-plate-lede">' + g.latest.value.toFixed(2) + ' ft on ' + esc(stamp(new Date(g.latest.date))) + ', ' + num(g.vs_median_ft, 1) + ' ft against the median for the date (' + (c.p10 != null ? '10th–90th percentile ' + c.p10.toFixed(1) + '–' + c.p90.toFixed(1) + ' ft, ' : '') + (c.n_years || '') + ' years). ' +
+        'The wet season normally refills the lake to December; the Canal cuts drafts and slots when it falls in the January–May dry season, as it did in 1997-98, 2015-16 and 2023-24.</p>' +
+        '<div class="enso-chart enso-gatun-chart"><canvas id="enso-c-gatun"></canvas></div></div>' +
+        '<figcaption class="enso-log">Band: 10th–90th percentile of 1966–2025 for each week; line: median. Dashed: the same weeks in three El Niño years. Dotted: the Canal’s own projection, which is an estimate; drafts are set only by Advisories to Shipping.</figcaption></figure>';
+    }
+    var H = S.pwhist && S.pwhist.chokepoints;
+    if (H && H.panama && H.suez) {
+      out += '<figure class="enso-plate enso-reroute-plate">' + plateHead('Where the grain ships went', 'IMF PortWatch · dry-bulk transits, seven-day means', stamp(metaDate('pwhist')), 'observed') +
+        '<div class="plate-body"><div class="enso-chart enso-daily-chart"><canvas id="enso-c-reroute"></canvas></div></div>' +
+        '<figcaption class="enso-log">In 2023-24 Gulf grain for Asia moved from Panama to Suez and the Cape as slots were cut. The Suez line also carries the Red Sea security story, so a rise there is not El Niño on its own.</figcaption></figure>';
+    }
+    var cells = [
+      ['stlouis', 'Mississippi at St. Louis', 'ft', 'enso-c-stl'], ['barge_stlouis', 'St. Louis barge rate', '% of tariff', 'enso-c-barge'],
+      ['kaub', 'Rhine at Kaub', 'cm', 'enso-c-kaub'], ['rosario', 'Paraná at Rosario', 'm', 'enso-c-rosario'], ['manaus', 'Rio Negro at Manaus', 'm', 'enso-c-manaus']
+    ].filter(function (x) { return G[x[0]]; });
+    if (cells.length) {
+      out += '<figure class="enso-plate enso-gauge-plate">' + plateHead('Rivers and barges', 'NOAA NWPS · USDA AgTransport · WSV PEGELONLINE · INA Argentina · ANA Brazil', gd, 'observed') +
+        '<div class="plate-body enso-gauge-grid">' + cells.map(function (x) {
+          var r = G[x[0]], v = r.latest.value;
+          return '<section class="enso-gauge"><h4>' + esc(x[1]) + '</h4><p class="enso-gauge-v"><b>' + (x[2] === 'm' ? v.toFixed(2) : Math.round(v)) + '</b> ' + esc(x[2]) + ' <span>' + esc(stamp(new Date(r.latest.date))) + '</span></p>' +
+            '<div class="enso-chart enso-gauge-chart"><canvas id="' + x[3] + '"></canvas></div></section>';
+        }).join('') + '</div>' +
+        '<figcaption class="enso-log">Each gauge from the agency that owns it. The Mississippi and Rhine have no published El Niño link; they are drawn because low water there compounds grain logistics whatever the Pacific does.' +
+        ((S.gauges.unavailable || []).length ? ' Not reached this run: ' + S.gauges.unavailable.map(function (u) { return esc(u.key); }).join(', ') + '.' : '') + '</figcaption></figure>';
+    }
+    /* Who depends on each lane: the lane's own cited food role, and for Panama
+       the importers the chokepoint flows file cites by name. Inferred shares are
+       labelled as inference. */
+    var flows = (S.chokeflows && S.chokeflows.chokepoints) || null;
+    var rows = lanes.filter(function (ln) { return ln.food_role; }).map(function (ln) {
+      var cf = flows && flows[ln.portwatch_key === 'bosporus' ? 'turkish_straits' : ln.portwatch_key];
+      var cited = cf ? (cf.exposed || []).filter(function (e) { return e.basis === 'food_role_cited' && typeof e.share_of_imports_pct === 'number'; }) : [];
+      return '<tr><th scope="row">' + esc(laneName(ln)) + '</th><td>' + esc(ln.food_role) + '</td><td>' +
+        (cited.length ? cited.map(function (e) { return esc(nameFor(e.iso)) + ' ' + esc(e.commodity) + ' ' + Math.round(e.share_of_imports_pct) + '%'; }).join(' · ') : '<span class="enso-ol-na">no cited importer share</span>') + '</td></tr>';
+    });
+    out += '<figure class="enso-plate is-published enso-exposed-plate" data-kind="published">' + plateHead('Who depends on these lanes', 'Cited trade roles per lane · importer shares where a source names them', stamp(metaDate('lanes')), 'published') +
+      '<div class="plate-body"><table class="enso-live-table"><thead><tr><th scope="col">Lane</th><th scope="col">What moves through it</th><th scope="col">Importers named in a source · share of their imports</th></tr></thead><tbody>' + rows.join('') + '</tbody></table></div>' +
+      '<figcaption class="enso-log">Importer shares are of each importer’s imports of that commodity, from Chatham House, <i>Chokepoints in Global Food Trade</i> (2017), older than the current trade pattern; shares inferred from geography alone are not shown.</figcaption></figure>';
+    return out;
+  }
+  function gaugeCharts() {
+    var G = (S.gauges && S.gauges.gauges) || {};
+    var axis = function (title) { return { grid: { color: 'rgba(255,255,255,0.05)' }, border: { display: false }, title: { display: !!title, text: title, color: '#8b8980', font: { size: 10, family: 'Geist Mono' } } }; };
+    var line = function (label, data, color, dash, width) { return { label: label, data: data, borderColor: color, borderWidth: width || 1.5, borderDash: dash || [], pointRadius: 0, tension: 0, spanGaps: true, fill: false }; };
+    var g = G.gatun;
+    if (g && g.band) {
+      var days = g.band.map(function (b) { return b.day; });
+      var at = function (pts, key) { var m = {}; (pts || []).forEach(function (p) { m[p.day || String(p.date).slice(5)] = p[key]; }); return days.map(function (d) { return m[d] == null ? null : m[d]; }); };
+      var mmdd = function (iso) { return String(iso).slice(5); };
+      var proj = {}; (g.projection || []).forEach(function (p) { proj[mmdd(p.date)] = p.ft; });
+      var projOnDays = days.map(function (d) { return proj[d] == null ? null : proj[d]; });
+      var ds = [
+        { label: '90th percentile', data: g.band.map(function (b) { return b.p90; }), borderColor: 'rgba(143,177,207,0)', backgroundColor: 'rgba(143,177,207,.14)', pointRadius: 0, fill: '+1' },
+        { label: '10th percentile', data: g.band.map(function (b) { return b.p10; }), borderColor: 'rgba(143,177,207,0)', pointRadius: 0, fill: false },
+        line('median 1966–2025', g.band.map(function (b) { return b.p50; }), 'rgba(143,177,207,.8)', [], 1)
+      ];
+      var col = { '1997-98': '#9d8a6a', '2015-16': '#c9a957', '2023-24': '#e0864a' };
+      Object.keys(g.analogs || {}).forEach(function (k) { ds.push(line(k, at(g.analogs[k], 'ft'), col[k] || '#b6b8be', [5, 4], 1.3)); });
+      ds.push(line('2026', at((g.this_year || []).map(function (p) { return { day: mmdd(p.date), ft: p.ft }; }), 'ft'), '#ebe9e2', [], 2.2));
+      if (projOnDays.some(function (v) { return v != null; })) ds.push(line('ACP projection', projOnDays, '#ebe9e2', [1, 3], 1.6));
+      mk('enso-c-gatun', { keyNotes: ['Band: 10th–90th percentile 1966–2025; solid pale line: median; bright line: 2026; dashed: 1997-98, 2015-16, 2023-24; dotted: ACP projection.'],
+        type: 'line', data: { labels: days, datasets: ds },
+        options: defaults({ interaction: { mode: 'index', intersect: false },
+          plugins: { tooltip: { filter: function (i) { return i.parsed.y != null && !/percentile/.test(i.dataset.label); }, callbacks: { label: function (c) { return c.dataset.label + ': ' + c.parsed.y.toFixed(2) + ' ft'; } } } },
+          scales: { x: Object.assign(axis(''), { grid: { display: false } }), y: axis('feet above sea level') } }) });
+    }
+    var H = S.pwhist && S.pwhist.chokepoints;
+    if (H && H.panama && H.suez) {
+      var mean7 = function (arr) { return arr.map(function (_, i) { var s = 0, n = 0; for (var k = Math.max(0, i - 6); k <= i; k++) { if (arr[k] != null) { s += arr[k]; n++; } } return n === 7 ? +(s / n).toFixed(2) : null; }); };
+      var rds = [line('Panama, dry bulk', mean7(H.panama.dry_bulk), '#e0864a', [], 1.8), line('Suez, dry bulk', mean7(H.suez.dry_bulk), '#8fb1cf', [], 1.5)];
+      if (H.cape_of_good_hope) rds.push(line('Cape of Good Hope, dry bulk', mean7(H.cape_of_good_hope.dry_bulk), '#b6b8be', [4, 3], 1.3));
+      mk('enso-c-reroute', { keyNotes: ['Orange: Panama; blue-grey: Suez; dashed grey: Cape of Good Hope. Dry-bulk transits per day, seven-day means, IMF PortWatch ' + H.panama.dates[0] + ' to ' + H.panama.dates[H.panama.dates.length - 1] + '.'],
+        type: 'line', data: { labels: H.panama.dates, datasets: rds },
+        options: defaults({ interaction: { mode: 'index', intersect: false }, scales: { x: Object.assign(axis(''), { grid: { display: false } }), y: Object.assign(axis('dry-bulk transits per day'), { beginAtZero: true }) } }) });
+    }
+    var small = function (id, labels, data, ref, refLabel, unit) {
+      var ds2 = [line(unit, data, '#ebe9e2', [], 1.6)];
+      if (ref != null) ds2.push(line(refLabel, labels.map(function () { return ref; }), '#e0864a', [4, 3], 1));
+      mk(id, { keyNotes: [refLabel ? 'Dashed orange: ' + refLabel + '.' : ''], type: 'line', data: { labels: labels, datasets: ds2 },
+        options: defaults({ interaction: { mode: 'index', intersect: false }, scales: { x: Object.assign(axis(''), { grid: { display: false }, ticks: { display: false } }), y: axis('') } }) });
+    };
+    if (G.stlouis) {
+      var obs = G.stlouis.observed_30d || [], fc = (G.stlouis.forecast || []).filter(function (p, i, a) { return i === a.length - 1 || String(p.t).slice(0, 10) !== String(a[i + 1].t).slice(0, 10); });
+      var lab = obs.map(function (p) { return p.date.slice(5); }).concat(fc.map(function (p) { return String(p.t).slice(5, 10); }));
+      var obsData = obs.map(function (p) { return p.ft; }).concat(fc.map(function () { return null; }));
+      var fcData = obs.map(function (_, i) { return i === obs.length - 1 ? obs[i].ft : null; }).concat(fc.map(function (p) { return p.ft; }));
+      mk('enso-c-stl', { keyNotes: ['Solid: observed stage; dotted: NWS forecast issued ' + String(G.stlouis.forecast_issued || '').slice(0, 10) + '.'], type: 'line', data: { labels: lab, datasets: [line('observed, ft', obsData, '#ebe9e2', [], 1.6), line('NWS forecast, ft', fcData, '#ebe9e2', [1, 3], 1.6)] },
+        options: defaults({ interaction: { mode: 'index', intersect: false }, scales: { x: Object.assign(axis(''), { grid: { display: false }, ticks: { display: false } }), y: axis('') } }) });
+    }
+    if (G.barge_stlouis) { var bw = G.barge_stlouis.weekly_52 || [], rec = G.barge_stlouis.record; small('enso-c-barge', bw.map(function (p) { return p.date.slice(2, 7); }), bw.map(function (p) { return p.pct_tariff; }), rec && rec.value, rec ? 'record ' + Math.round(rec.value) + '%, ' + rec.date : '', '% of tariff'); }
+    if (G.kaub) { var kd = G.kaub.daily_30d || [], nw = (G.kaub.reference || {}).NW; small('enso-c-kaub', kd.map(function (p) { return p.date.slice(5); }), kd.map(function (p) { return p.cm; }), nw && nw.value, nw ? 'lowest daily ' + nw.from.slice(0, 4) + '–' + nw.to.slice(0, 4) + ', ' + Math.round(nw.value) + ' cm' : '', 'cm'); }
+    if (G.rosario) { var rd = G.rosario.daily_45d || []; small('enso-c-rosario', rd.map(function (p) { return p.date.slice(5); }), rd.map(function (p) { return p.m; }), null, '', 'm'); }
+    if (G.manaus) { var md = G.manaus.daily_30d || []; small('enso-c-manaus', md.map(function (p) { return p.date.slice(5); }), md.map(function (p) { return p.m; }), null, '', 'm'); }
+  }
   function renderWater() {
     var el = document.getElementById('enso-water'); if (!el) return;
     var lanes = (S.lanes && S.lanes.lanes) || [];
@@ -45424,6 +45600,7 @@ function showCommodityDetail(key) {
       }
     }
     if (pan) out += '</section>';
+    out += shippingPlates(lanes);
     out += '<figure class="enso-plate is-published">' + plateHead('Lane evidence and attribution', 'Regulatory advisories · attribution literature · IMF PortWatch AIS', readOn, 'published') +
       '<div class="enso-tblwrap enso-lane-records" role="region" aria-label="Lane records" tabindex="0"><table class="enso-tbl enso-lanes-table"><thead><tr><th scope="col">Lane / phase</th><th scope="col">What the record shows</th></tr></thead><tbody>' + lanes.map(function (ln,i) {
         var pw = laneStatus(ln);
@@ -45935,7 +46112,7 @@ function showCommodityDetail(key) {
   function drawCharts(sub) {
     var E = S.econ || {};
     var want = { ensomoney: ['enso-c-ffpi', 'enso-c-rtfp'],
-                 ensowater: ['enso-c-panama', 'enso-c-panama-daily'] }[sub];
+                 ensowater: ['enso-c-panama', 'enso-c-panama-daily', 'enso-c-gatun', 'enso-c-reroute', 'enso-c-stl', 'enso-c-barge', 'enso-c-kaub', 'enso-c-rosario', 'enso-c-manaus'] }[sub];
     if (sub && !want) return;
     S._chartFilter = want || null;
     /* 2 — FFPI at event peaks */
@@ -46003,6 +46180,7 @@ function showCommodityDetail(key) {
         var marks = pan && pan.live_2026 && pan.live_2026.steps ? pan.live_2026.steps.map(function (st) { return { date: st.effective, label: 'slots ' + st.total + '/day' }; }) : [];
         dailyChart('panama', 'enso-c-panama-daily', marks);
       })();
+      gaugeCharts();
       mk('enso-c-panama', { keyNotes: ['Orange step line: published 2023–24 limit, slots/day; pale diamonds: 2026 advisory limits. Ordinal steps, not to scale in time.'],
         type: 'line',
         data: {

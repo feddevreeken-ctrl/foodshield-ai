@@ -90,7 +90,7 @@ test('Stage I transit rings join actual lane values and distinguish zero, missin
  S.lanes.lanes.forEach((ln,i)=>{
   const m=api.laneMeasurement(ln),html=S.lanePins[i].options.icon.html,pw=S.portwatch[ln.portwatch_key];
   if(!pw){assert.equal(m,null);assert(!html.includes('no transit data'));assert(S.lanePins[i].options.icon.className.includes('no-transit'));assert(!html.includes('enso-transit-ring'));}
-  else {assert.equal(m.pct,pw.yoy.total_pct);assert.equal(m.total,pw.transits_per_day.total);assert(html.includes('data-yoy="'+pw.yoy.total_pct+'"'));assert(html.includes('<circle'));assert(html.includes('stroke="#dd5a3a"'));}
+  else {const dry=Number.isFinite(pw.yoy.dry_bulk_pct)&&Number.isFinite(pw.transits_per_day.dry_bulk),pct=dry?pw.yoy.dry_bulk_pct:pw.yoy.total_pct;assert.equal(m.pct,pct);assert.equal(m.total,pw.transits_per_day.total);assert(html.includes('data-yoy="'+pct+'"'));assert(html.includes('<circle'));assert(html.includes('stroke="'+(['el_nino','la_nina'].includes(ln.phase)?'#dd5a3a':'#8fb1cf')+'"'));}
  });
  const original=S.portwatch,ln={portwatch_key:'fixture'};
  try {
@@ -282,7 +282,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    assert.equal(key.includes('Niño 3.4 box'),view==='elnino');
    assert.equal(key.includes('El Niño reduces output here'),view==='ensoharvest');
    assert.equal(key.includes('El Niño raises output here'),view==='ensoharvest');
-   assert.equal(key.includes('Orange rings mark measured change'),view==='ensowater');
+   assert.equal(key.includes('Orange: a lane with a published ENSO link'),view==='ensowater');
    /* The solid-line swatch keyed a mark the map never draws: no lane in enso_lanes.json carries a geometry, so S.laneLines is always empty. The observed mark is the diamond and its ring. */
    assert.equal(key.includes('diamond and ring: observed, measured at the chokepoint'),view==='ensowater');
    assert.equal(key.includes('dashed: published schematic corridor through named ports'),view==='ensowater');

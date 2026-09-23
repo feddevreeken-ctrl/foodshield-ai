@@ -802,6 +802,20 @@ def main() -> int:
             const pair = document.querySelector('.enso-panama-pair'), panels = pair.querySelectorAll(':scope > figure');
             return panels.length === 2 && panels[1].getBoundingClientRect().left >= panels[0].getBoundingClientRect().right;
         }"""))
+        # Shipping logic (2026-09-23): every lane gets a stated outlook, the gauges
+        # print the agencies' own latest readings, and Gatún is read against its record.
+        check("Shipping gives every lane an outlook and prints each gauge's latest reading", page.evaluate("""async () => {
+            const G = (await (await fetch('data/enso_gauges.json')).json()).data.gauges;
+            const verdicts = [...document.querySelectorAll('.enso-status-table .enso-lane-verdict b')].map(b => b.textContent);
+            const cards = [...document.querySelectorAll('.enso-gauge .enso-gauge-v b')].map(b => parseFloat(b.textContent));
+            const want = ['stlouis', 'barge_stlouis', 'kaub', 'rosario', 'manaus'].filter(k => G[k]).map(k => G[k].latest.value);
+            const g = Chart.getChart(document.getElementById('enso-c-gatun'));
+            const labels = g ? g.data.datasets.map(d => d.label) : [];
+            return verdicts.length === 9 && verdicts.every(v => v.length > 0)
+                && cards.length === want.length && cards.every((v, i) => Math.abs(v - want[i]) < 1)
+                && ['1997-98', '2015-16', '2023-24', '2026'].every(l => labels.includes(l))
+                && document.querySelector('.enso-exposed-plate').textContent.includes('Japan maize');
+        }"""))
         page.locator('[data-open-lane="rhine"]').click()
         check("lane board opens the matching folded record",
               page.locator('#enso-lane-record-rhine details').get_attribute('open') is not None
@@ -1042,7 +1056,7 @@ def main() -> int:
                 const label = document.querySelector('.enso-choke-label[data-lane="' + ln.id + '"]');
                 if (!label) return false;
                 const pin = label.closest('.enso-choke'), ring = pin.querySelector('.enso-transit-ring');
-                const pw = feed.data[ln.portwatch_key], pct = pw && pw.yoy && pw.yoy.total_pct;
+                const pw = feed.data[ln.portwatch_key], dry = pw && Number.isFinite(pw.yoy.dry_bulk_pct) && Number.isFinite(pw.transits_per_day.dry_bulk), pct = pw && pw.yoy && (dry ? pw.yoy.dry_bulk_pct : pw.yoy.total_pct);
                 if (!pw || !Number.isFinite(pct) || !Number.isFinite(pw.transits_per_day.total)) {
                     missing++;
                     return !ring && pin.classList.contains('no-transit') && !label.textContent.includes('no transit data')
@@ -1059,7 +1073,7 @@ def main() -> int:
                     && key.includes(pw.window_days + '-day mean to ' + date(pw.latest_date))
                     && pin.getAttribute('aria-label').includes(pw.transits_per_day.total.toFixed(1) + ' transits/day');
             }) && measured === rings.length && measured > 0 && missing > 0
-                && key.includes('mean transits per day against a year earlier, IMF PortWatch')
+                && key.includes('transits per day against a year earlier, all vessels where dry bulk is missing, IMF PortWatch')
                 && key.includes('collected ' + date(feed._meta.generated_at))
                 && key.includes('Ring radius grows with absolute change, capped at 100%');
         }"""))
@@ -1103,11 +1117,16 @@ def main() -> int:
         hovered = page.locator('.enso-corridor-tip').is_visible()
         route.dispatch_event('mouseout')
         check("Stage I hovering a route reveals its corridor name", hovered and page.locator('.enso-corridor-tip').count() == 0)
-        check("Stage I corridors have no destination triangles and chokepoints retain circular orange rings", page.evaluate("""() => {
+        # Rings are orange on lanes with a published ENSO link and blue-grey where
+        # the change has other causes (2026-09-23), so a war ring is not read as El Niño.
+        check("Stage I corridors have no destination triangles and chokepoint rings are coloured by driver", page.evaluate("""async () => {
+            const lanes = (await (await fetch('data/enso_lanes.json')).json()).data.lanes;
+            const phase = Object.fromEntries(lanes.map(l => [l.id, l.phase]));
             const rings = [...document.querySelectorAll('.enso-transit-ring')];
             return !document.querySelector('.enso-corridor-arrow') && rings.length > 0 && rings.every(ring => {
-                const circle = ring.querySelector('circle');
-                return ring.tagName.toLowerCase() === 'svg' && circle && circle.getAttribute('stroke') === '#dd5a3a'
+                const circle = ring.querySelector('circle'), id = ring.closest('.enso-choke').querySelector('.enso-choke-label').dataset.lane;
+                const want = ['el_nino', 'la_nina'].includes(phase[id]) ? '#dd5a3a' : '#8fb1cf';
+                return ring.tagName.toLowerCase() === 'svg' && circle && circle.getAttribute('stroke') === want
                     && Number(circle.getAttribute('r')) > 0 && getComputedStyle(ring).borderTopWidth === '0px';
             });
         }"""))
