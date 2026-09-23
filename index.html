@@ -46194,8 +46194,17 @@ function showCommodityDetail(key) {
       var k = String(p.data_source || '').split(' - ')[0].trim();
       return { IPC: 'IPC', CH: 'Cadre Harmonisé', FEWSNET: 'FEWS NET estimate', HRP: 'response-plan figure', HNRP: 'response-plan figure' }[k] || k;
     };
+    /* FEWS NET names no countries for some regions; this site's documented ENSO
+       regions stand in, labelled as this site's join, not FEWS NET's. */
+    var STANDIN = { 'West Africa': ['sahel_millet'], 'Asia, Middle East & Europe': ['india_monsoon', 'indonesia_rice', 'philippines_rice'] };
+    var standinIsos = function (name) {
+      var ids = STANDIN[name] || [], out = [];
+      ((S.regions && S.regions.regions) || []).forEach(function (g) { if (ids.indexOf(g.id) >= 0) (g.iso3 || []).forEach(function (i) { if (out.indexOf(i) < 0) out.push(i); }); });
+      return out;
+    };
     var regionRow = function (r) {
-      var isos = r.iso3 || [];
+      var standin = !(r.iso3 || []).length ? standinIsos(r.region) : [];
+      var isos = (r.iso3 || []).length ? r.iso3 : standin;
       var bits = [];
       var poor = isos.filter(function (i) { return cmBy[i]; });
       if (poor.length) bits.push('Crop Monitor poor: ' + poor.map(function (i) { return esc(nameFor(i)); }).join(', '));
@@ -46207,7 +46216,7 @@ function showCommodityDetail(key) {
       if (base.length) bits.push('already in Phase 3+ before the season: ' + base.map(function (i) { var p = ipcOf(i); return esc(nameFor(i)) + ' ' + (p.phase3plus_count / 1e6).toFixed(p.phase3plus_count >= 1e6 ? 1 : 2) + ' m'; }).join(', ') + ' (latest analyses, periods vary)');
       return '<tr class="is-' + esc(String(r.concern).replace(/\s+/g, '-')) + '"><th scope="row">' + esc(r.region) + '</th><td><span class="enso-concern">' + esc(r.concern) + '</span></td>' +
         '<td class="enso-ol-h">' + (r.windows || []).map(esc).join(' · ') + '</td><td>' + esc(r.hazards) + '<span class="enso-live-sub">' + esc(r.countries) + '</span></td>' +
-        '<td class="enso-live-now">' + (bits.join(' · ') || '<span class="enso-ol-na">' + (!isos.length ? 'FEWS NET names no countries here, so nothing is joined' : seasonAhead(r.windows) ? 'season not yet under way (starts ' + esc(seasonAhead(r.windows)) + '); no seasonal hazard observed yet' : 'no observed signal in these countries today') + '</span>') + '</td></tr>';
+        '<td class="enso-live-now">' + (bits.length && standin.length ? '<span class="enso-live-sub">FEWS NET names no countries here; this site’s ENSO regions stand in (' + esc(standin.map(nameFor).join(', ')) + ')</span>' : '') + (bits.join(' · ') || '<span class="enso-ol-na">' + (!isos.length ? 'FEWS NET names no countries here, so nothing is joined' : seasonAhead(r.windows) ? 'season not yet under way (starts ' + esc(seasonAhead(r.windows)) + '); no seasonal hazard observed yet' : 'no observed signal in these countries today') + '</span>') + '</td></tr>';
     };
     var regionPlate = few.regions ? '<figure class="enso-plate is-published enso-region-plate" data-kind="published">' +
       plateHead('Where concern is high', 'FEWS NET El Niño 2026–2027 regional table · observed signals from Crop Monitor, JRC ASAP, GDACS, WFP', fmtDate(few.reviewed), 'published') +
