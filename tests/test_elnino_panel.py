@@ -184,8 +184,10 @@ def main() -> int:
         check("a wheel over the map scrolls the content page", wheel_after > wheel_before,
               f"{wheel_before} -> {wheel_after}")
         # A layer picked by hand belongs to the view it was picked on. Pressing
-        # "Food inflation" on Ocean must not paint Reported with it.
-        page.locator('[data-native="enso-mode"][data-value="rtfp"]').click()
+        # "Food inflation" on Ocean must not paint Reported with it. Off-lens
+        # layers sit in the "All layers" fold, so open it first.
+        page.evaluate("() => document.querySelectorAll('#tab-elnino details.enso-all-layers').forEach(d => d.open = true)")
+        page.locator('[data-native="enso-mode"][data-value="rtfp"]:visible').first.click()
         page.wait_for_timeout(600)
         picked_here = page.input_value('#enso-mode')
         page.evaluate("showTab('ensolive')")
@@ -558,19 +560,50 @@ def main() -> int:
               ticks.last.get_attribute('aria-selected') == 'true'
               and page.locator('#enso-step-upwelling').is_visible()
               and page.locator('#enso-ruler-figure').get_attribute('data-state') == 'elnino')
+        check("two engravings are visible at 1440px: Normal and El Niño", page.evaluate("""() => {
+            const visible = [...document.querySelectorAll('.enso-pacific-pair .enso-raster')]
+                .filter(r => getComputedStyle(r).opacity === '1').map(r => r.querySelector('img'));
+            return visible.length === 2 && visible[0].src.includes('walker') && visible[1].src.includes('elnino')
+                && visible.every(img => img.complete && img.naturalWidth > 0 && img.loading === 'eager'
+                    && img.width / img.height > 1.49 && img.width / img.height < 1.51
+                    && img.getAttribute('width') === '1536' && img.getAttribute('height') === '1024');
+        }"""))
         labels = []
         for state in ('elnino', 'lanina'):
             page.locator(f'[data-ruler-state="{state}"]').click()
-            labels.append(page.locator('#enso-ruler-figure svg').get_attribute('aria-label'))
+            page.wait_for_timeout(650)
+            raster = page.locator('#enso-ruler-figure .enso-raster[aria-hidden="false"]')
+            labels.append(raster.get_attribute('aria-label'))
+            check(f"{state} engraving becomes visible after choosing its Pacific state", raster.evaluate("""(r, state) =>
+                getComputedStyle(r).opacity === '1' && r.querySelector('img').src.includes(state)
+                    && r.querySelector('img').complete && r.querySelector('img').naturalWidth > 0
+                    && [...r.parentElement.querySelectorAll('.enso-raster[aria-hidden="true"]')]
+                        .every(other => getComputedStyle(other).opacity === '0')""", state))
         check("Normal stays beside two distinct comparison states",
               len(set(labels)) == 2 and all(labels)
-              and page.locator('.enso-pacific-pair svg').count() == 2
+              and page.locator('.enso-pacific-pair img').count() == 3
               and page.locator('#enso-ruler-normal > b').inner_text() == 'Normal')
+        for i in range(5):
+            ticks.nth(i).click()
+            check(f"step {i + 1} moves the rectangle on both engravings", page.evaluate("""i => {
+                const rects = [...document.querySelectorAll('.enso-pacific-pair .enso-ruler-highlight')];
+                const neutral = [[26,34,92,42],[5,6,88,40],[10,38,62,50],[5,5,42,38],[78,36,92,60]];
+                const lanina = [[18,34,92,42],[5,6,88,40],[10,38,42,50],[3,5,32,38],[78,38,92,62]];
+                const values = rect => rect.style.transform.match(/-?\\d*\\.?\\d+/g).map(Number);
+                const transform = box => [box[0], box[1], (box[2] - box[0]) / 100, (box[3] - box[1]) / 100];
+                return rects.length === 2 && rects.every(r => r.dataset.step === String(i))
+                    && JSON.stringify(values(rects[0])) === JSON.stringify(transform(neutral[i]))
+                    && JSON.stringify(values(rects[1])) === JSON.stringify(transform(lanina[i]));
+            }""", i))
         ticks.nth(2).click()
         page.wait_for_timeout(300)
-        check("step three highlights warm water in both panels", page.evaluate("""() =>
-            [...document.querySelectorAll('.enso-pacific-pair .g-warmpool')]
-                .every(g => getComputedStyle(g).opacity === '1')"""))
+        check("step three highlights each engraving's warm water", page.evaluate("""() => {
+            const rects = [...document.querySelectorAll('.enso-pacific-pair .enso-ruler-highlight')];
+            const values = rect => rect.style.transform.match(/-?\\d*\\.?\\d+/g).map(Number);
+            return rects.length === 2 && rects.every(r => r.dataset.step === '2')
+                && JSON.stringify(values(rects[0])) === JSON.stringify([10,38,.52,.12])
+                && JSON.stringify(values(rects[1])) === JSON.stringify([10,38,.32,.12]);
+        }"""))
         ticks.first.click()
         check("a manual Pacific state survives step selection and updates the caption",
               page.locator('#enso-ruler-figure').get_attribute('data-state') == 'lanina'
@@ -578,7 +611,7 @@ def main() -> int:
         page.emulate_media(reduced_motion='reduce')
         ticks.nth(2).click()
         # Reduced motion keeps the 200ms opacity crossfade (it aids comprehension)
-        # and drops the loops and slides, so only CSS animations are counted, after
+        # and makes rectangle movement instant, so CSS animations are counted after
         # the crossfade has finished.
         page.wait_for_timeout(700)
         check("reduced motion leaves no running animations in the mechanism", page.evaluate("""() =>
@@ -679,11 +712,13 @@ def main() -> int:
         print("\nstage B instruments and consolidated plates")
         page.evaluate("showTab('ensoharvest')")
         page.wait_for_selector('#subview-ensoharvest.active #enso-harvest-fig')
-        check("nine scenario rungs retain the observed marker and both instrument rows",
+        check("nine scenario rungs remain in All layers beside one instrument row",
               page.locator('[data-native="enso-level"]:not([data-value="observed"])').count() == 9
               and page.locator('[data-native="enso-level"][data-value="observed"]').count() == 1
               and page.locator('.is-observed-rung').count() == 1
-              and page.locator('.enso-instrument-row').count() == 2)
+              and page.locator('.enso-instrument-row').count() == 1
+              and page.locator('.enso-all-layers summary').text_content() == 'All layers')
+        page.locator('.enso-all-layers').evaluate('e => e.open = true')
         page.locator('[data-native="enso-level"][data-value="-1.5"]').click()
         page.locator('[data-native="enso-mode"][data-value="crop"]').click()
         check("visible scenario and layer buttons drive the native change handlers",
@@ -838,6 +873,7 @@ def main() -> int:
                             and not page.locator('#enso-scenario-toggle').is_visible())
         page.evaluate("showTab('ensoharvest')")
         page.wait_for_selector('#subview-ensoharvest.active .enso-subview-meta')
+        page.locator('.enso-all-layers').evaluate('e => e.open = true')
         page.locator('[data-native="enso-level"][data-value="-1.5"]').click()
         explicit = page.input_value('#enso-level') == '-1.5' and 'enso_level=-1.5' in page.url
         check("Stage H scenario is absent on observed lenses and lives on Harvests without losing deep links",
@@ -886,6 +922,8 @@ def main() -> int:
             }""", feed)
             first = page.locator('#enso-map-ranking button').first
             iso = first.get_attribute('data-map-country')
+            # Each lens fits its own view on open; read the zoom once that settles.
+            page.wait_for_timeout(800)
             before_zoom = page.evaluate('_stageHMap.getZoom()')
             first.click()
             ranked.append(valid and page.locator(f'#subview-{tab}').evaluate("e => e.classList.contains('active')")
@@ -906,9 +944,9 @@ def main() -> int:
                 document.getElementById('enso-map').getBoundingClientRect().bottom - 1"""))
         check("Stage H both ranked lists stack below the map on phones", all(stacked))
         page.evaluate("showTab('ensowater')")
-        check("Stage H phones show only three El Nino corridor chips and retain all routes in the fold",
-              page.locator('.enso-corridor-chip > span:visible').count() == 3
-              and page.locator('.enso-corridor-secondary > span:visible').count() == 0
+        check("Stage H phones show no corridor chips and retain all routes in the fold",
+              page.locator('.enso-corridor-chip').count() == 0
+              and page.locator('path.enso-corridor').count() == 9
               and 'all corridors are listed here' in page.locator('#enso-legend details').text_content())
         page.set_viewport_size({'width':1440,'height':1000})
         page.locator('#enso-mapwrap [data-z="0"]').click()
@@ -922,11 +960,14 @@ def main() -> int:
             });
             return found;
         }"""))
-        check("Stage H Panama and Amazon corridor chips clear chokepoint chips", page.evaluate("""() => {
-            const overlap = (a,b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-            const chips = [...document.querySelectorAll('.enso-corridor-chip > span')].filter(e => /Gulf to East Asia|Amazon northern arc/.test(e.textContent));
-            const chokes = [...document.querySelectorAll('.enso-choke-label')].map(e => e.getBoundingClientRect());
-            return chips.length === 2 && chips.every(c => chokes.every(b => !overlap(c.getBoundingClientRect(),b)));
+        check("Stage H chokepoint labels use unboxed text with a ground halo", page.evaluate("""() => {
+            const labels = [...document.querySelectorAll('.enso-choke-label')];
+            return labels.length === 9 && document.querySelectorAll('.enso-anno').length === 0 && labels.every(label => {
+                const style = getComputedStyle(label), text = label.querySelector('text'), ink = getComputedStyle(text);
+                return style.borderTopWidth === '0px' && style.backgroundColor === 'rgba(0, 0, 0, 0)'
+                    && ink.paintOrder.startsWith('stroke') && ink.strokeWidth === '2px'
+                    && ink.fontSize === '11px' && ink.stroke === 'rgb(11, 16, 23)';
+            });
         }"""))
 
         print("\nStage I shipping marks and measurements")
@@ -963,9 +1004,9 @@ def main() -> int:
                 const pw = feed.data[ln.portwatch_key], pct = pw && pw.yoy && pw.yoy.total_pct;
                 if (!pw || !Number.isFinite(pct) || !Number.isFinite(pw.transits_per_day.total)) {
                     missing++;
-                    return !ring && pin.classList.contains('no-transit') && label.textContent.includes('no transit data')
+                    return !ring && pin.classList.contains('no-transit') && !label.textContent.includes('no transit data')
                         && key.includes('no PortWatch transit change available')
-                        && key.includes(label.firstChild.textContent);
+                        && key.includes(label.querySelector('text').textContent);
                 }
                 measured++;
                 const expected = 2 * (9 + Math.min(Math.abs(pct),100) * .24);
@@ -988,50 +1029,45 @@ def main() -> int:
             });
             return markers.length === 2 && markers.map(l => l.getLatLng().lng).sort((a,b)=>a-b).join(',') === '-180,180'
                 && markers.every(l => {
-                    const span = l.getElement().querySelector('span'), box = span.getBoundingClientRect();
+                    const span = l.getElement().querySelector('span'), box = span.getBoundingClientRect(), style = getComputedStyle(span);
                     return span.dataset.corridor === 'us_gulf_panama_east_asia'
                         && span.textContent === '↔ Gulf to East Asia' && getComputedStyle(span).visibility === 'visible'
-                        && box.width > 0 && box.height > 0;
+                        && style.backgroundColor === 'rgba(0, 0, 0, 0)' && style.borderTopWidth === '0px'
+                        && style.textShadow !== 'none' && box.width > 0 && box.height > 0;
                 });
         }"""))
-        check("Stage I nine routes and chips remain focusable with only three chips at rest", page.evaluate("""async () => {
+        check("Stage I nine routes are focusable hairlines with corridor names in tooltips", page.evaluate("""async () => {
             const feed = (await (await fetch('data/enso_corridors.json')).json()).data.corridors;
             const lines = [...document.querySelectorAll('path.enso-corridor')];
-            const chips = [...document.querySelectorAll('.enso-corridor-chip')];
-            const shown = e => getComputedStyle(e.querySelector('span')).visibility === 'visible';
-            return lines.length === 9 && chips.length === 9 && chips.filter(shown).length === 3
-                && feed.every(c => {
-                    const line = lines.find(e => e.dataset.corridor === c.id), chip = chips.find(e => e.dataset.corridor === c.id);
-                    const primary = c.phase === 'el_nino';
-                    return line && chip && line.tabIndex === 0 && chip.tabIndex === 0 && shown(chip) === primary
-                        && Number(line.getAttribute('stroke-width')) === (primary ? 2 : 1)
-                        && Number(line.getAttribute('stroke-opacity')) === (primary ? .75 : .35)
-                        && document.querySelector('#enso-legend details').textContent.includes(c.name);
-                });
+            return lines.length === 9 && !document.querySelector('.enso-corridor-chip') && feed.every(c => {
+                const line = lines.find(e => e.dataset.corridor === c.id);
+                return line && line.tabIndex === 0 && line.getAttribute('aria-label').includes(c.name)
+                    && line.getAttribute('stroke') === '#8fb1cf'
+                    && Number(line.getAttribute('stroke-width')) === 1
+                    && Number(line.getAttribute('stroke-opacity')) === .55
+                    && document.querySelector('#enso-legend details').textContent.includes(c.name);
+            });
         }"""))
-        context_chips = page.locator('.enso-corridor-secondary')
+        routes = page.locator('path.enso-corridor')
         focus_results = []
-        for i in range(context_chips.count()):
-            chip = context_chips.nth(i)
-            chip.focus()
-            focus_results.append(chip.evaluate("e => e === document.activeElement && getComputedStyle(e.querySelector('span')).visibility === 'visible'"))
-            chip.evaluate('e => e.blur()')
-            focus_results.append(not chip.locator('span').is_visible())
-        check("Stage I context chips reveal on keyboard focus and return to quiet on blur", len(focus_results) == 12 and all(focus_results))
-        context_id = context_chips.first.get_attribute('data-corridor')
-        context_path = page.locator(f'path.enso-corridor[data-corridor="{context_id}"]')
-        context_path.dispatch_event('mouseover')
-        hovered = context_chips.first.locator('span').is_visible()
-        context_path.dispatch_event('mouseout')
-        check("Stage I hovering a context route reveals its chip", hovered and not context_chips.first.locator('span').is_visible())
-        check("Stage I direction marks are seven pixel SVG triangles in the route hue", page.evaluate("""() => {
-            const arrows = [...document.querySelectorAll('.enso-corridor-arrow')], lines = [];
-            _stageHMap.eachLayer(l => { if (l.options.className === 'enso-corridor') lines.push(l); });
-            return arrows.length === 9 && arrows.every((el,i) => {
-                const svg = el.querySelector('svg'), path = svg && svg.querySelector('path');
-                return svg && svg.getAttribute('width') === '7' && svg.getAttribute('height') === '7'
-                    && path.getAttribute('d') === 'M0 0 L7 3.5 L0 7 Z' && !el.textContent.includes('›')
-                    && path.getAttribute('fill') === lines[i].options.color && svg.style.transform.startsWith('rotate(');
+        for i in range(routes.count()):
+            route = routes.nth(i)
+            route.focus()
+            focus_results.append(page.locator('.enso-corridor-tip').is_visible())
+            route.evaluate('e => e.blur()')
+            focus_results.append(page.locator('.enso-corridor-tip').count() == 0)
+        check("Stage I route tooltips open on keyboard focus and close on blur", len(focus_results) == 18 and all(focus_results))
+        route = routes.first
+        route.dispatch_event('mouseover')
+        hovered = page.locator('.enso-corridor-tip').is_visible()
+        route.dispatch_event('mouseout')
+        check("Stage I hovering a route reveals its corridor name", hovered and page.locator('.enso-corridor-tip').count() == 0)
+        check("Stage I corridors have no destination triangles and chokepoints retain circular orange rings", page.evaluate("""() => {
+            const rings = [...document.querySelectorAll('.enso-transit-ring')];
+            return !document.querySelector('.enso-corridor-arrow') && rings.length > 0 && rings.every(ring => {
+                const circle = ring.querySelector('circle');
+                return ring.tagName.toLowerCase() === 'svg' && circle && circle.getAttribute('stroke') === '#dd5a3a'
+                    && Number(circle.getAttribute('r')) > 0 && getComputedStyle(ring).borderTopWidth === '0px';
             });
         }"""))
 
@@ -1126,10 +1162,52 @@ def main() -> int:
         check("Stage J price key names only hues present in the plot", page.evaluate("""() => {
             const cv = document.getElementById('enso-c-rtfp'), values = Chart.getChart(cv).data.datasets[0].data;
             const key = cv.closest('.enso-plate').querySelector('.enso-chart-notes').textContent;
-            return key.includes('Cyan') === values.some(v => v < 0)
-                && key.includes('Magenta') === values.some(v => v > 0)
-                && key.includes('Warm grey') === values.some(v => v === 0);
+            return key.includes('Blue-grey') === values.some(v => v < 0)
+                && key.includes('Ochre to orange') === values.some(v => v > 0)
+                && key.includes('Ground grey') === values.some(v => v === 0);
         }"""))
+
+        for width, height in ((1280, 800), (1440, 900)):
+            page.set_viewport_size({'width': width, 'height': height})
+            for tab, labels in (
+                ('ensowater', ['No land layer', 'Shipping']),
+                ('ensomoney', ['Food inflation', 'Hazards']),
+                ('elnino', ['Sea-surface']),
+                ('ensoharvest', ['Production shock', 'Strongest crop', 'Coverage', 'Teleconnections']),
+                ('ensolive', ['Hotspots', 'IPC', 'Hazards'])):
+                page.evaluate('tab => showTab(tab)', tab)
+                page.wait_for_timeout(150)
+                check(f"map instruments at {width}: {tab} has its lens chips and map within 170px of title", page.evaluate("""expected => {
+                    const row = document.querySelector('.enso-instrument-row');
+                    const labels = [...row.children].filter(e => e.tagName !== 'DETAILS').map(e => e.textContent.trim());
+                    const head = document.querySelector('#enso-mapwrap .enso-plate-t').getBoundingClientRect();
+                    const map = document.querySelector('#enso-map').getBoundingClientRect();
+                    const search = document.querySelector('#enso-mapwrap .enso-plate-z .enso-country-search');
+                    return JSON.stringify(labels) === JSON.stringify(expected)
+                        && !row.querySelector('details').open && map.top - head.top <= 170
+                        && search && Math.abs(search.getBoundingClientRect().width - 220) < 1;
+                }""", labels))
+            page.evaluate("showTab('ensomoney')")
+            page.wait_for_timeout(150)
+            check(f"Prices at {width}: all teleconnection outlines and faint unmonitored land", page.evaluate("""async () => {
+                const regions = (await (await fetch('data/enso_regions.json')).json()).data.regions;
+                const rt = (await (await fetch('data/rtfp.json')).json()).data;
+                const tele = new Set(regions.flatMap(r => r.iso3)), seen = new Set();
+                let good = true;
+                _stageHMap.eachLayer(l => {
+                    const p = l.feature && l.feature.properties, iso = p && (p.ISO_A3 || p.ADM0_A3 || p.iso_a3 || p.id);
+                    if (!iso || !l.options.fillColor || !tele.has(iso)) return;
+                    seen.add(iso);
+                    good = good && l.options.opacity >= .6 && l.options.weight >= .7;
+                    if (!Number.isFinite((rt[iso] || {}).food_inflation_pct))
+                        good = good && l.options.fillColor === '#e6e3da' && l.options.fillOpacity === .06;
+                });
+                const pane = _stageHMap.getPane('ensoGraticule');
+                return good && seen.size === tele.size && pane.style.zIndex === '210'
+                    && pane.querySelectorAll('.enso-grat-lab').length === 3
+                    && document.querySelectorAll('.enso-price-ramp').length === 1
+                    && !!document.querySelector('.enso-price-missing');
+            }"""))
 
         check("no console errors", not errors, "; ".join(errors[:2]))
         browser.close()

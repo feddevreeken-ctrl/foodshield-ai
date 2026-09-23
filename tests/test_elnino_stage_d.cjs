@@ -44,7 +44,7 @@ const pending=[];
 const ctx=vm.createContext({console,Date,URL,URLSearchParams,Event,L,charts:{},RAMP:['#1','#2','#3','#4','#5'],setTimeout:fn=>pending.push(fn),clearTimeout(){},window:{location:{href:'http://localhost/index.html',search:''},matchMedia(){return {matches:true};}},document:{getElementById:node,querySelector:s=>s==='#tab-elnino .content-page'?node('scroller'):null,querySelectorAll(){return [];},createElement:t=>new Element(t),createElementNS:(_,t)=>new Element(t),addEventListener(){}}});
 const start=html.indexOf('(function () {',html.indexOf('   THE MAP USES A DIVERGING')),end=html.indexOf('\n})();',start);
 vm.runInContext(html.slice(start,end)+`
-  globalThis.api={S,laneMeasurement,transitKey,renderMapRanking,rankedPrices,rankedHotspots,priceMapSentence,mapState,renderControls,syncInstruments,selectCountry,flyTo,drawAlerts,alertLegend,corridorChipCandidates,placeCorridorChips,renderLegend,drawLanes,laneGeometry,corridorGeometry,fillFor,rtfpColor,renderWater,renderMoney,renderCoeffs,renderCalendar,analogPlate,drawCharts,paint,toggleSST,buildDefs};
+  globalThis.api={S,laneMeasurement,transitKey,renderMapRanking,rankedPrices,rankedHotspots,priceMapSentence,mapState,renderControls,syncInstruments,selectCountry,flyTo,drawAlerts,alertLegend,placeChokepointLabels,fitMapView,drawGraticule,renderLegend,drawLanes,laneGeometry,corridorGeometry,fillFor,rtfpColor,renderWater,renderMoney,renderCoeffs,renderCalendar,analogPlate,drawCharts,paint,toggleSST,buildDefs};
   mk=function(id,cfg){ if(!S._chartFilter || S._chartFilter.indexOf(id)>=0) globalThis.charts[id]=cfg; };
   syncInstruments=renderMapTag=renderControls=renderDetail=renderFailures=wireTabKeys=syncTabRoving=wireRasterPlates=finishPlates=renderSubviewMeta=function(){};
 })();`,ctx);
@@ -58,7 +58,7 @@ for(const [key,file] of Object.entries({model:'enso_model',calendars:'crop_calen
 let passed=0;
 function test(name,fn){fn();passed++;console.log('ok',name);}
 S.oniLive=S.enso.latest.anom;
-S.map={layers:new Set(),hasLayer(l){return this.layers.has(l);},removeLayer(l){this.layers.delete(l);},invalidateSize(){}};
+S.map={layers:new Set(),hasLayer(l){return this.layers.has(l);},removeLayer(l){this.layers.delete(l);},invalidateSize(){},fitBounds(bounds,options){this.bounds=bounds;this.fitOptions=options;},setView(center,z){this.center=center;this.zoom=z;}};
 S.nino34=new Layer();S.ninoLabel=new Layer();S.sstLayer=new Layer();S.layerRegions=new Layer();S.layerRegions.eachLayer=()=>{};
 const country=new Layer();country.feature={properties:{ISO_A3:'ZWE'}};
 S.layerBase={eachLayer(fn){fn(country);}};
@@ -75,26 +75,22 @@ test('lane geometry is data-only, validated and phase coloured',()=>{
  assert.equal(api.laneGeometry({geometry:{type:'LineString',coordinates:[[999,20],[0,0]]}}).length,0);
  S.lanes=original;S.lanePins=[];S.laneLines=[];api.drawLanes();
 });
-test('Shipping draws nine sourced schematic corridors, chips and destination triangles',()=>{
- assert.equal(S.corridorLines.length,9);assert.equal(S.corridorLabels.length,9);assert.equal(S.corridorArrows.length,9);
+test('Shipping draws nine blue-grey hairline corridors with names in tooltips',()=>{
+ assert.equal(S.corridorLines.length,9);assert.equal(S.corridorLabels.length,0);assert.equal(S.corridorArrows.length,0);
  S.corridors.corridors.forEach((c,i)=>{
   const lane=S.lanes.lanes.find(l=>l.id===c.lane),line=S.corridorLines[i];
-  assert.equal(c.phase,lane.phase);assert.equal(line.options.color,{el_nino:'#d2693a',la_nina:'#4a86b3',none:'#6a685e'}[c.phase]);
-  assert.equal(line.options.weight,c.phase==='el_nino'?2:1);assert.equal(line.options.opacity,c.phase==='el_nino'?.75:.35);
-  assert.equal(line.options.dashArray,'6 4');
-  assert(S.corridorArrows[i].options.icon.html.includes('<svg'));assert(S.corridorArrows[i].options.icon.html.includes('<path'));
-  assert.equal(S.corridorLabels[i].options.icon.className,'enso-corridor-chip'+(c.phase==='el_nino'?'':' enso-corridor-secondary'));
+  assert.equal(c.phase,lane.phase);assert.equal(line.options.color,'#8fb1cf');
+  assert.equal(line.options.weight,1);assert.equal(line.options.opacity,.55);assert.equal(line.options.dashArray,'6 4');
   for(const text of [c.name,c.basis,'schematic corridor through named waypoints, not vessel tracks',...c.commodities,...c.sources])assert(line.tooltip.includes(text.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')));
  });
- assert(S.lanePins.every(p=>p.options.zIndexOffset>S.corridorLabels[0].options.zIndexOffset));
- const old=S.corridorLines.concat(S.corridorLabels,S.corridorArrows,S.corridorEdges);old.forEach(l=>l.addTo(S.map));api.drawLanes();
+ const old=S.corridorLines.concat(S.corridorEdges);old.forEach(l=>l.addTo(S.map));api.drawLanes();
  assert(old.every(l=>!S.map.hasLayer(l)));assert.equal(S.corridorLines.length,9);
 });
 test('Stage I transit rings join actual lane values and distinguish zero, missing and increases',()=>{
  S.lanes.lanes.forEach((ln,i)=>{
   const m=api.laneMeasurement(ln),html=S.lanePins[i].options.icon.html,pw=S.portwatch[ln.portwatch_key];
-  if(!pw){assert.equal(m,null);assert(html.includes('no transit data'));assert(!html.includes('enso-transit-ring'));}
-  else {assert.equal(m.pct,pw.yoy.total_pct);assert.equal(m.total,pw.transits_per_day.total);assert(html.includes('data-yoy="'+pw.yoy.total_pct+'"'));}
+  if(!pw){assert.equal(m,null);assert(!html.includes('no transit data'));assert(S.lanePins[i].options.icon.className.includes('no-transit'));assert(!html.includes('enso-transit-ring'));}
+  else {assert.equal(m.pct,pw.yoy.total_pct);assert.equal(m.total,pw.transits_per_day.total);assert(html.includes('data-yoy="'+pw.yoy.total_pct+'"'));assert(html.includes('<circle'));assert(html.includes('stroke="#dd5a3a"'));}
  });
  const original=S.portwatch,ln={portwatch_key:'fixture'};
  try {
@@ -182,14 +178,21 @@ test('Stage H alert keys count only mapped reports and rings contrast with both 
  assert(S.alertPins.every(p=>p.options.fillColor==='#11161e'&&p.options.fillOpacity===1));
  S.gdacs=oldG;S.relief=oldR;S.alertPins=oldPins;
 });
-test('Stage H corridor labels clear Panama and Amazon and only three chips remain on phones',()=>{
- assert.equal(S.corridorLabels.filter(l=>!l.options.icon.className.includes('secondary')).length,3);
- for(const id of ['panama','amazon']) {
-  const i=S.corridors.corridors.findIndex(c=>c.lane===id),at=S.corridorLabels[i].coords;
-  const ln=S.lanes.lanes.find(l=>l.id===id);
-  assert(Math.hypot(at[0]-ln.lat,at[1]-ln.lng)>8, id+' label must move off the diamond');
- }
+test('Shipping keeps one unboxed SVG label per chokepoint, with no corridor chips',()=>{
+ assert.equal(S.corridorLabels.length,0);
+ S.lanePins.forEach(pin=>{
+  const label=new Element();label.innerHTML=pin.options.icon.html;
+  assert.equal(label.querySelectorAll('.enso-choke-label').length,1);
+  assert.equal(label.querySelectorAll('text').length,pin.options.icon.className.includes('no-transit')?1:2);
+ });
  assert.equal(S.corridorLines[0].coords.length,2);assert(S.corridorLines[0].coords.every(arc=>arc.length>1));
+});
+test('lens defaults fit the lane belt and tropical price countries without animation',()=>{
+ const sub=S.sub;
+ for(const [view,bounds] of [['ensowater',[[-45,-115],[62,125]]],['ensomoney',[[-40,-100],[40,155]]]]){
+  S.sub=view;api.fitMapView();assert.deepEqual(S.map.bounds,bounds);assert.equal(S.map.fitOptions.animate,false);
+ }
+ S.sub=sub;
 });
 test('Explore instrument preserves controls and dates modelled paint from displayed metadata',()=>{
  const elements={};const get=id=>elements[id]||(elements[id]=new Element());
@@ -256,7 +259,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
   for(const k of ['scrollWheelZoom','doubleClickZoom','touchZoom','boxZoom','keyboard']){assert.equal(m.options[k],false);assert(!m[k].enabled());}
   assert(m.dragging.enabled());
   const buttons=zoomNode('enso-mapwrap').querySelectorAll('button'),[plus,minus,reset]=buttons;
-  assert.equal(buttons.length,3);assert(minus.disabled);plus.onclick();assert.equal(m.getZoom(),3);assert(!minus.disabled);
+  assert.equal(buttons.length,3);assert(!minus.disabled);plus.onclick();assert.equal(m.getZoom(),3);assert(!minus.disabled);
   minus.onclick();assert.equal(m.getZoom(),2);plus.onclick();reset.onclick();assert.equal(m.getZoom(),2);
   for(let i=0;i<4;i++)plus.onclick();assert(plus.disabled);reset.onclick();assert(!plus.disabled);
  });
@@ -272,29 +275,47 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    for(const l of S.alertPins)assert.equal(S.map.hasLayer(l),view==='ensolive');
    /* Shipping has no callout any more: the Gatun card was the largest object on a map whose subject is the marks under it, and its numbers moved into the fold. Harvests keeps its two (three layers each). */
    assert.equal(S.annoLayers.length,view==='ensoharvest'?6:0);
-   assert.equal(country.options.color,['ensoharvest','ensomoney','ensolive'].includes(view)?'#ebe9e2':'#0b0b0d');
+   assert.equal(country.options.color,['ensoharvest','ensomoney','ensolive'].includes(view)?'#ebe9e2':'#e6e3da');
    if(view!=='ensolive')assert(!country.element.classList.contains('enso-hotspot')&&!country.element.classList.contains('enso-major-hotspot'));
    const legend=node('enso-legend'),visible=legend.querySelector('.enso-legend'),key=visible.textContent;
    assert.equal(legend.querySelectorAll('details').length,1);assert.equal(visible.querySelectorAll('details').length,0);
    assert.equal(key.includes('Niño 3.4 box'),view==='elnino');
    assert.equal(key.includes('El Niño reduces output here'),view==='ensoharvest');
    assert.equal(key.includes('El Niño raises output here'),view==='ensoharvest');
-   assert.equal(key.includes('degraded on the La Niña side'),view==='ensowater');
+   assert.equal(key.includes('Orange rings mark measured change'),view==='ensowater');
    /* The solid-line swatch keyed a mark the map never draws: no lane in enso_lanes.json carries a geometry, so S.laneLines is always empty. The observed mark is the diamond and its ring. */
    assert.equal(key.includes('diamond and ring: observed, measured at the chokepoint'),view==='ensowater');
    assert.equal(key.includes('dashed: published schematic corridor through named ports'),view==='ensowater');
-   if(view==='ensowater'){assert.equal(S.corridorLines.filter(l=>S.map.hasLayer(l)).length,9);assert.equal(S.corridorLabels.filter(l=>S.map.hasLayer(l)).length,9);for(const c of S.corridors.corridors){assert(legend.querySelector('details').textContent.includes(c.basis.replace(/'/g,'&#39;')));}}
+   if(view==='ensowater'){assert.equal(S.corridorLines.filter(l=>S.map.hasLayer(l)).length,9);assert.equal(S.corridorLabels.length,0);for(const c of S.corridors.corridors){assert(legend.querySelector('details').textContent.includes(c.basis.replace(/'/g,'&#39;')));}}
    assert.equal(key.includes('GDACS drought'),view==='ensolive');
    if(view==='ensolive')for(const label of ['hotspot','major hotspot','ReliefWeb humanitarian event'])assert(key.includes(label));
    if(view==='ensowater')for(const l of S.lanes.lanes)assert(legend.querySelector('details').textContent.includes(l.name));
-   if(view==='ensomoney')for(const label of ['−10%','0%','+30%','Cyan','warm grey','magenta','No data'])assert(key.includes(label));
+   if(view==='ensomoney')for(const label of ['−10%','0%','+30%','Blue-grey','ground grey','ochre to orange','In the teleconnection layer, no monitored market'])assert(key.includes(label));
    if(cycle||view!=='elnino')assert.equal(node('scroller').scrollTop,0);
   });
  }
  test('hotspot classes and price no-data preserve distinct palettes',()=>{
   S.mode='asap';const saved=S.asap;S.asap={ZWE:{hotspot_code:1}};api.paint();assert.equal(api.fillFor('ZWE'),'#8866ad');assert(country.element.classList.contains('enso-hotspot'));
   S.asap.ZWE.hotspot_code=2;api.paint();assert.equal(api.fillFor('ZWE'),'#51316f');assert(country.element.classList.contains('enso-major-hotspot'));assert(!country.element.classList.contains('enso-hotspot'));
-  S.mode='rtfp';api.paint();assert(!country.element.classList.contains('enso-major-hotspot'));assert.notEqual(api.rtfpColor(0),'#1c1c22');assert.equal(api.rtfpColor(null),null);S.asap=saved;
+  S.mode='rtfp';api.paint();assert(!country.element.classList.contains('enso-major-hotspot'));assert.equal(api.rtfpColor(-10),'#8fb1cf');assert.equal(api.rtfpColor(0),'#1c1c22');assert.equal(api.rtfpColor(15),'#c9773a');assert.equal(api.rtfpColor(30),'#dd5a3a');assert.equal(api.rtfpColor(60),api.rtfpColor(30));assert.equal(api.rtfpColor(null),null);S.asap=saved;
+ });
+ test('Prices outlines all teleconnection members and keeps missing land distinct from zero',()=>{
+  const oldBase=S.layerBase, oldMode=S.mode, oldSel=S.sel;
+  const countries=Object.keys(S.isoIndex).map(iso=>{const l=new Layer();l.feature={properties:{ISO_A3:iso}};return l;});
+  const outside=new Layer();outside.feature={properties:{ISO_A3:'NOT_IN_LAYER'}};
+  S.layerBase={eachLayer(fn){countries.concat(outside).forEach(fn);}};S.mode='rtfp';S.sel=null;api.paint();
+  countries.forEach(l=>{
+   const iso=l.feature.properties.ISO_A3;assert.equal(l.options.color,'#e6e3da');assert.equal(l.options.opacity,.6);assert.equal(l.options.weight,.7);
+   if(!Number.isFinite((S.rtfp[iso]||{}).food_inflation_pct)){assert.equal(l.options.fillColor,'#e6e3da');assert.equal(l.options.fillOpacity,.06);}
+  });
+  assert.equal(outside.options.opacity,.18);assert.equal(outside.options.fillOpacity,.06);
+  assert.equal(api.rtfpColor(0),'#1c1c22');assert.equal(api.rtfpColor(null),null);
+  S.layerBase=oldBase;S.mode=oldMode;S.sel=oldSel;
+ });
+ test('graticule lines and labels share the pane beneath the country fills',()=>{
+  const before=new Set(S.map.layers);api.drawGraticule();
+  const marks=[...S.map.layers].filter(l=>!before.has(l));assert.equal(marks.length,6);assert(marks.every(l=>l.options.pane==='ensoGraticule'));
+  marks.forEach(l=>S.map.removeLayer(l));
  });
  test('diagram keys describe actual marks, windows and dated series',()=>{
   const analog=api.analogPlate();for(const label of ['five strongest past events','last published season','±0.5','five marked analog winters'])assert(analog.includes(label));

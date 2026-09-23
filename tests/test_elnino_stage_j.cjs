@@ -8,7 +8,7 @@ const node=id=>nodes[id]||(nodes[id]={innerHTML:'',style:{},setAttribute(){},que
 let plot=null;
 const ctx=vm.createContext({console,Date,URL,URLSearchParams,charts:{},window:{location:{href:'http://localhost',search:''}},document:{addEventListener(){},getElementById:node,querySelector(){return plot;}}});
 vm.runInContext(html.slice(start,end)+`
- globalThis.api={S,renderIndices,renderLegend,coverageColor,fillFor,placeCorridorChips,analogPlate,alignAnalogLeaders,drawCharts,renderMoney,rtfpColor};
+ globalThis.api={S,renderIndices,renderLegend,coverageColor,fillFor,placeChokepointLabels,analogPlate,alignAnalogLeaders,drawCharts,renderMoney,rtfpColor};
  mk=function(id,cfg){if(!S._chartFilter||S._chartFilter.indexOf(id)>=0)globalThis.charts[id]=cfg;};
  syncInstruments=renderMapRanking=renderMapTag=compactLegend=function(){};
 })();`,ctx);
@@ -53,7 +53,7 @@ test('measured labels stay inside a phone plate and clear graticule text on repe
  const host={getBoundingClientRect:()=>rect(30,40,350,330),querySelectorAll:s=>s==='.enso-choke-label'?labels:[grat]};
  S.map={getContainer:()=>host,latLngToContainerPoint(){}};S.showLanes=true;S.corridorLabels=[];
  for(let pass=0;pass<2;pass++){
-  api.placeCorridorChips();
+  api.placeChokepointLabels();
   for(const l of labels){const r=l.getBoundingClientRect(),g=grat.getBoundingClientRect();
    assert(r.left>=34&&r.right<=376&&r.top>=44&&r.bottom<=366);
    assert(r.right<=g.left||r.left>=g.right||r.bottom<=g.top||r.top>=g.bottom);
@@ -96,7 +96,7 @@ test('price key never names a hue absent from positive-only, negative-only or ze
  const saved=S.rtfp,iso=Object.keys(S.isoIndex)[0];
  for(const value of [2,-2,0]){
   S.rtfp={[iso]:{food_inflation_pct:value,markets:1,as_of:'2026-08-01'}};api.drawCharts('ensomoney');
-  const key=ctx.charts['enso-c-rtfp'].keyNotes[0];assert.equal(key.includes('Cyan'),value<0);assert.equal(key.includes('Magenta'),value>0);assert.equal(key.includes('Warm grey'),value===0);
+  const key=ctx.charts['enso-c-rtfp'].keyNotes[0];assert.equal(key.includes('Blue-grey'),value<0);assert.equal(key.includes('Ochre to orange'),value>0);assert.equal(key.includes('Ground grey'),value===0);
  }
  S.rtfp=saved;
 });
