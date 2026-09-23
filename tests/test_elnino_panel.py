@@ -689,7 +689,7 @@ def main() -> int:
                 check("rtfp legend states the shared country date once", legend.count("for every country") == 1)
             headings.append(page.locator('#tab-elnino h2:visible').count())
             frames.append(page.evaluate("""() => [...document.querySelectorAll('#tab-elnino .enso-plate[data-kind], #enso-mapwrap[data-kind]')].every(e =>
-                getComputedStyle(e).borderTopStyle === (['modelled','published'].includes(e.dataset.kind) ? 'dashed' : 'solid'))"""))
+                getComputedStyle(e).borderTopStyle === (['modelled','published','estimated'].includes(e.dataset.kind) ? 'dashed' : 'solid'))"""))
         check("each view applies its layer and overlay defaults", all(lens_results), str(lens_results))
         check("one visible Instrument Serif H2 per view", headings == [1] * 5
               and page.locator('#tab-elnino h2:visible').evaluate("e => getComputedStyle(e).fontFamily.includes('Instrument Serif')"), str(headings))
@@ -839,9 +839,10 @@ def main() -> int:
         page.wait_for_selector('#subview-ensomoney.active #enso-c-ffpi')
         check("Who pays lists every modelled shortfall with its buyers from the outlook file", page.evaluate("""async () => {
             const W = (await (await fetch('data/enso_outlook.json')).json()).data.who_pays;
-            const rows = [...document.querySelectorAll('.enso-whopays-plate tbody tr')];
+            const rows = [...document.querySelectorAll('.enso-whopays-plate tbody tr:not(.enso-ol-total)')];
             return rows.length === W.length && rows.every((r, i) => r.querySelector('button').dataset.mapCountry === W[i].iso)
-                && document.querySelector('.enso-whopays-plate').textContent.includes('hit twice');
+                && document.querySelector('.enso-whopays-plate').textContent.includes('hit twice')
+                && document.querySelectorAll('.enso-whopays-plate tr.enso-ol-total').length === ((await (await fetch('data/enso_outlook.json')).json()).data.who_pays_totals || []).length;
         }"""))
         ffpi = page.evaluate("""() => {
             const c = Chart.getChart(document.getElementById('enso-c-ffpi'));

@@ -266,18 +266,37 @@ def main() -> int:
                 continue
             seen_chain.add(key)
             p = (psd.get(f["iso"]) or {}).get(PSD_KEY.get(f["crop"], ""), {})
-            exports, stocks, use = p.get("exports_kt") or 0, p.get("stocks_kt"), p.get("consumption_kt")
             usd = (f.get("price") or {}).get("usd_per_t")
+            if not p:
+                # No USDA balance for the pair (e.g. Brazilian sorghum): the trade
+                # split is unknown, so nothing is allocated rather than "exports nothing".
+                chain.append({"iso": f["iso"], "crop": f["crop"], "harvest": f["harvest"], "loss_kt": round(loss),
+                              "balance": "not pulled", "exports_kt": None, "lost_exports_kt": None, "buyers": [],
+                              "extra_import_kt": None, "extra_import_usd_m": None, "lost_exports_usd_m": None,
+                              "stocks_kt": None, "stocks_weeks": None, "consumption_kt": None, "price": f.get("price")})
+                continue
+            exports, stocks, use = p.get("exports_kt") or 0, p.get("stocks_kt"), p.get("consumption_kt")
             lost_exports = min(loss, exports)
             extra_import = loss - lost_exports
             dest = ((exports_dest.get(f["iso"]) or {}).get(COMTRADE_KEY.get(f["crop"], "")) or {}).get("top_destinations") or []
             shares = [d for d in dest if isinstance(d.get("share_pct"), (int, float))]
+            # A buyer cannot lose more than it normally imports (USDA PSD); what the
+            # value shares would push past that goes to "other buyers".
+            buyers, other = [], lost_exports
+            for d in shares:
+                kt = lost_exports * d["share_pct"] / 100
+                cap = ((psd.get(d["iso3"]) or {}).get(PSD_KEY.get(f["crop"], "")) or {}).get("imports_kt")
+                if isinstance(cap, (int, float)) and cap > 0:
+                    kt = min(kt, cap)
+                if kt >= 1:
+                    buyers.append({"iso": d["iso3"], "share_pct": d["share_pct"], "kt": round(kt),
+                                   "capped_at_imports": isinstance(cap, (int, float)) and cap > 0 and kt == cap})
+                    other -= kt
             chain.append({
                 "iso": f["iso"], "crop": f["crop"], "harvest": f["harvest"], "loss_kt": round(loss),
                 "exports_kt": exports, "lost_exports_kt": round(lost_exports),
-                "buyers": [{"iso": d["iso3"], "share_pct": d["share_pct"], "kt": round(lost_exports * d["share_pct"] / 100)}
-                           for d in shares if lost_exports * d["share_pct"] / 100 >= 1],
-                "buyers_basis": "UN Comtrade export shares by value" if shares else None,
+                "buyers": buyers, "other_buyers_kt": round(other) if other >= 1 else 0,
+                "buyers_basis": "UN Comtrade export shares by value, capped at each buyer's USDA PSD imports" if shares else None,
                 "extra_import_kt": round(extra_import),
                 "extra_import_usd_m": round(extra_import * 1000 * usd / 1e6) if usd else None,
                 "lost_exports_usd_m": round(lost_exports * 1000 * usd / 1e6) if usd else None,
@@ -286,6 +305,24 @@ def main() -> int:
                 "price": f.get("price"),
             })
     chain.sort(key=lambda c: -c["loss_kt"])
+    # New import demand per crop: producers' extra imports plus buyers replacing
+    # lost exports from elsewhere. Pairs with no balance are left out and named.
+    totals = {}
+    for c in chain:
+        t = totals.setdefault(c["crop"], {"crop": c["crop"], "extra_import_kt": 0, "replaced_kt": 0, "usd_m": 0,
+                                          "priced": True, "not_pulled": []})
+        if c.get("balance") == "not pulled":
+            t["not_pulled"].append(c["iso"])
+            continue
+        t["extra_import_kt"] += c["extra_import_kt"]
+        t["replaced_kt"] += c["lost_exports_kt"]
+        usd = (c.get("price") or {}).get("usd_per_t")
+        if usd:
+            t["usd_m"] += round((c["extra_import_kt"] + c["lost_exports_kt"]) * 1000 * usd / 1e6)
+        else:
+            t["priced"] = False
+    who_pays_totals = [dict(t, total_kt=t["extra_import_kt"] + t["replaced_kt"]) for t in totals.values()
+                       if t["extra_import_kt"] + t["replaced_kt"] > 0]
 
     by_crop: dict[str, dict] = {}
     seen = set()
@@ -309,7 +346,7 @@ def main() -> int:
         "regions": out_regions,
         "crops": sorted(by_crop.values(), key=lambda c: c["loss_kt_record"]),
         "rows_all": rows_all,
-        "who_pays": chain,
+        "who_pays": chain, "who_pays_totals": who_pays_totals,
         "who_pays_case": "record",
         "who_pays_rule": "At the fit's strongest winter (ONI +2.5). Shortfall cuts exports first, allocated to buyers by Comtrade value share; any remainder is extra import need. Priced at the latest World Bank price. Stocks shown, not subtracted.",
     }, source="Derived: enso_regions, enso_model, crop_calendars, USDA PSD, World Bank Pink Sheet; live signals from JRC ASAP, GDACS, World Bank RTFP, ReliefWeb, El Niño news feed, trade_restrictions",

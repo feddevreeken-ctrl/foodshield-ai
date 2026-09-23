@@ -12112,6 +12112,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-ol-h { font:12px 'Geist Mono',monospace; color:var(--t2); white-space:nowrap; }
 #tab-elnino .enso-ol-v { font-family:'Geist Mono',monospace; white-space:nowrap; }
 #tab-elnino .enso-pricewatch-plate .enso-ol-v { white-space:normal; min-width:18ch; }
+#tab-elnino tr.enso-ol-total > * { border-top:1px solid var(--b3); font-weight:500; }
 #tab-elnino .enso-ol-rec { color:var(--t3); }
 #tab-elnino .enso-ol-na { color:var(--t3); font-size:11px; }
 #tab-elnino .enso-outlook-table tr.is-falls .enso-ol-v b { color:#d9a05b; }
@@ -43158,7 +43159,8 @@ function showCommodityDetail(key) {
       return '<tr class="is-' + (f.change_pct_record < 0 ? 'falls' : 'rises') + '"><td class="enso-ol-h">' + esc(f.harvest) + '</td>' +
         '<th scope="row"><button type="button" data-map-country="' + esc(f.iso) + '">' + esc(nameFor(f.iso)) + '</button> <span>' + esc(crop(f.crop)) + '</span></th>' +
         '<td class="enso-ol-v"><b>' + num(f.change_pct_record, 0) + '%</b> <i>' + band(f.change_pct_record_90) + '</i></td>' +
-        '<td class="enso-ol-v">' + fmtKt(f.change_kt_record) + (f.production_basis && f.production_basis.indexOf('FAOSTAT') === 0 ? '<span class="enso-live-sub">on ' + esc(f.production_basis) + '</span>' : '') + '</td>' +
+        /* Every row names the crop the percentage is applied to, so an unusual year is visible. */
+        '<td class="enso-ol-v">' + fmtKt(f.change_kt_record) + (f.production_kt ? '<span class="enso-live-sub">on ' + fmtKt(f.production_kt).replace('+', '') + ', ' + esc(f.production_basis || '') + '</span>' : '') + '</td>' +
         '<td class="enso-ol-v">' + (f.value_usd_m_record != null ? fmtUsd(f.value_usd_m_record) : '<span class="enso-ol-na">price not pulled</span>') + '</td>' +
         '<td class="enso-ol-v enso-ol-rec">' + num(f.change_pct_observed, 0) + '% · ' + fmtKt(f.change_kt_observed) + '</td></tr>';
     };
@@ -43186,15 +43188,15 @@ function showCommodityDetail(key) {
     var fitCrops = {}; shown.forEach(function (f) { (fitCrops[f.iso] = fitCrops[f.iso] || []).push(crop(f.crop)); });
     var conc = (((S.situation || {}).fewsnet || {}).regions || []).filter(function (r) { return (r.concern === 'high' || r.concern === 'moderate') && (r.iso3 || []).length; });
     var gaps = conc.map(function (r) {
-      return esc(r.region) + ' (FEWS NET ' + esc(r.concern) + '): ' + r.iso3.map(function (i) { return esc(nameFor(i)) + (fitCrops[i] ? ' (fit covers ' + esc(fitCrops[i].join(', ')) + ')' : ''); }).join(', ');
+      return esc(r.region) + ' (FEWS NET ' + esc(r.concern) + (r.hazards ? ', ' + esc(String(r.hazards).split(/[;.]/)[0].trim().replace(/^\w/, function (c) { return c.toLowerCase(); })) : '') + '): ' + r.iso3.map(function (i) { return esc(nameFor(i)) + (fitCrops[i] ? ' (fit covers ' + esc(fitCrops[i].join(', ')) + ' only)' : ''); }).join(', ');
     });
     var iod = S.indices && S.indices.iod;
     el.innerHTML = '<figure class="enso-plate enso-outlook-plate is-modelled">' +
       plateHead('What this El Niño implies for harvests', 'FAOSTAT yield fit 1961–2024 × USDA PSD 2026 production (FAOSTAT 2015–2024 mean for crops not in this PSD pull) · World Bank prices ' + esc(((shown[0] || {}).price || {}).month || ''), stamp(metaDate('outlook')), 'modelled') +
       '<div class="plate-body">' + lead + table +
-      (gaps.length ? '<p class="enso-outlook-gap"><b>No fitted signal is not no risk.</b> ' + gaps.join('; ') + '. Where the fit covers no crop, see Reported for what is being observed.</p>' : '') +
+      (gaps.length ? '<p class="enso-outlook-gap"><b>Where the fit is silent or partial.</b> ' + gaps.join('; ') + '. Where the fit covers no crop, see Reported for what is being observed.</p>' : '') +
       (iod && typeof iod.value === 'number' ? '<p class="enso-outlook-gap"><b>Also in play: the Indian Ocean Dipole</b> at ' + num(iod.value, 2) + ' °C (' + esc(iod.agency) + ', ' + esc(iod.window) + '; ' + esc(iod.state) + ' side of ±' + iod.threshold + ' °C). A positive IOD alongside El Niño usually means a wetter East African short-rains season and a drier Australian winter crop; ' + esc(iod.note) + '</p>' : '') +
-      '</div><figcaption class="enso-log">Modelled, not observed: fitted sensitivities with a size attached, not a calibrated forecast. Tonnes are the yield change times current production; the price column sizes what is at stake at today’s World Bank price and is not a price forecast.</figcaption>' +
+      '</div><figcaption class="enso-log">Modelled, not observed: fitted sensitivities with a size attached, not a calibrated forecast. Tonnes are the yield change times the production named under each row (USDA PSD 2026 where pulled; a single year, so an unusually small or large crop moves the tonnes); the price column sizes what is at stake at today’s World Bank price and is not a price forecast.</figcaption>' +
       '<details class="enso-evidence-note"><summary>How these numbers are made, and what is left out</summary><p>Each pair was fitted on detrended log-yield against winter ONI with Newey–West errors; a row is shown only when its El Niño slope survives Benjamini–Hochberg control on its own (q &lt; 0.10 across ' + O.rows_all.length + ' flagged pairs’ El Niño tests). The change at an ONI value is exp(b·ONI) − 1, the band 90% from the standard error. The model has not been scored on harvests it was not trained on. ' + esc(O.honesty) + '</p>' +
       (excluded ? '<ul class="enso-ol-excluded">' + excluded + '</ul>' : '') + '</details></figure>';
     el.querySelectorAll('[data-map-country]').forEach(function (b) { b.onclick = function () { ensoFocus(b.getAttribute('data-map-country')); }; });
@@ -44287,7 +44289,7 @@ function showCommodityDetail(key) {
     var el = document.getElementById('enso-maptag'); if (!el) return;
     var m = mapState();
     var frame = document.getElementById('enso-mapwrap');
-    if (frame) { frame.classList.toggle('is-modelled', m.kind === 'modelled'); frame.classList.toggle('is-published', m.kind === 'published'); frame.dataset.kind = m.kind; }
+    if (frame) { frame.classList.toggle('is-modelled', m.kind === 'modelled' || m.kind === 'estimated'); frame.classList.toggle('is-published', m.kind === 'published'); frame.dataset.kind = m.kind; }
     var marks = {impact:'Land colour: fitted production change', crop:'Land colour: strongest fitted crop response',
       coverage:'Land colour: production covered by the fit', asap:'Land colour: JRC ASAP hotspot class',
       gdacs:'Land colour: reported drought and flood severity', ipc:'Land colour: population in IPC phase 3+',
@@ -45851,10 +45853,12 @@ function showCommodityDetail(key) {
       (top.lost_exports_kt ? (top.loss_kt > top.exports_kt ? ' is larger than its ' + fmtKt(top.exports_kt).replace('+', '') + ' of exports: exports stop and about ' + fmtKt(top.extra_import_kt).replace('+', '') + ' must be imported' + (top.extra_import_usd_m ? ' (' + fmtUsd(top.extra_import_usd_m).replace('+', '') + ' at today’s price)' : '') : ' cuts its exports by ' + fmtKt(top.lost_exports_kt).replace('+', '')) : '') + '.' +
       (twice.length ? ' ' + twice.map(function (t) { return '<b>' + esc(nameFor(t.iso)) + ' is hit twice</b>: its own ' + esc(crop(t.crop)) + ' ' + fmtKt(-t.ownLoss) + ' and ' + fmtKt(-t.supplierLoss) + ' less from ' + esc(nameFor(t.from)) + (t.use ? ', against ' + fmtKt(t.use).replace('+', '') + ' a year of use' : ''); }).join('; ') + '.' : '') + '</p>';
     var row = function (c) {
+      if (c.balance === 'not pulled') return '<tr><th scope="row"><button type="button" data-map-country="' + esc(c.iso) + '">' + esc(nameFor(c.iso)) + '</button> <span>' + esc(crop(c.crop)) + '</span><span class="enso-live-sub">harvest ' + esc(c.harvest) + '</span></th>' +
+        '<td class="enso-ol-v">' + fmtKt(-c.loss_kt) + '</td><td colspan="4"><span class="enso-ol-na">no USDA trade balance for this crop here, so the shortfall is not split into exports and imports</span></td></tr>';
       return '<tr><th scope="row"><button type="button" data-map-country="' + esc(c.iso) + '">' + esc(nameFor(c.iso)) + '</button> <span>' + esc(crop(c.crop)) + '</span><span class="enso-live-sub">harvest ' + esc(c.harvest) + '</span></th>' +
         '<td class="enso-ol-v">' + fmtKt(-c.loss_kt) + '</td>' +
         '<td class="enso-ol-v">' + (c.lost_exports_kt ? fmtKt(-c.lost_exports_kt) + (c.lost_exports_usd_m ? '<span class="enso-live-sub">' + fmtUsd(-c.lost_exports_usd_m) + ' of sales</span>' : '') : '<span class="enso-ol-na">exports nothing</span>') + '</td>' +
-        '<td>' + ((c.buyers || []).length ? c.buyers.map(function (b) { return esc(nameFor(b.iso)) + ' ' + fmtKt(-b.kt); }).join(' · ') : '<span class="enso-ol-na">—</span>') + '</td>' +
+        '<td>' + ((c.buyers || []).length ? c.buyers.map(function (b) { return esc(nameFor(b.iso)) + ' ' + fmtKt(-b.kt) + (b.capped_at_imports ? '*' : ''); }).join(' · ') + (c.other_buyers_kt ? ' · other buyers ' + fmtKt(-c.other_buyers_kt) : '') : '<span class="enso-ol-na">—</span>') + '</td>' +
         '<td class="enso-ol-v">' + (c.extra_import_kt ? fmtKt(c.extra_import_kt) + (c.extra_import_usd_m != null ? '<span class="enso-live-sub">' + fmtUsd(c.extra_import_usd_m) + '</span>' : '<span class="enso-live-sub">no price series</span>') : '<span class="enso-ol-na">none</span>') + '</td>' +
         '<td class="enso-ol-v">' + (c.stocks_weeks != null ? c.stocks_weeks + ' wk' : '<span class="enso-ol-na">—</span>') + '</td></tr>';
     };
@@ -45862,8 +45866,21 @@ function showCommodityDetail(key) {
       plateHead('Who pays for the harvest changes', 'This site’s fit × USDA PSD balances × UN Comtrade export shares × World Bank prices', stamp(metaDate('outlook')), 'modelled') +
       '<div class="plate-body">' + lead +
       '<table class="enso-live-table"><thead><tr><th scope="col">Producer · crop</th><th scope="col">Shortfall</th><th scope="col">Exports cut</th><th scope="col">Buyers losing supply</th><th scope="col">Extra import need</th><th scope="col">Stocks</th></tr></thead><tbody>' +
-      W.map(row).join('') + '</tbody></table></div>' +
-      '<figcaption class="enso-log">Modelled accounting. ' + esc(O.who_pays_rule) + ' Priced at the World Bank export benchmark (US Gulf, free on board): freight to Durban or Beira and the inland haul to a landlocked buyer are extra, so the real bill is higher. Buyer shares are Comtrade values, not tonnes, and name the top five buyers only. World grain prices did not rise in the strongest past El Niños, so no price change is assumed.</figcaption></figure>';
+      W.map(row).join('') + (O.who_pays_totals || []).map(function (t) {
+        /* The region's new import demand: producers' own extra imports plus buyers replacing lost exports. */
+        return '<tr class="enso-ol-total"><th scope="row">New ' + esc(crop(t.crop)) + ' import demand</th><td colspan="3">' + [t.extra_import_kt ? fmtKt(t.extra_import_kt).replace('+', '') + ' producers’ extra imports' : '', t.replaced_kt ? fmtKt(t.replaced_kt).replace('+', '') + ' buyers replacing lost exports' : ''].filter(Boolean).join(' + ') + '</td><td class="enso-ol-v">' + fmtKt(t.total_kt) + (t.priced ? '<span class="enso-live-sub">' + fmtUsd(t.usd_m) + '</span>' : '') + '</td><td></td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      (function () {
+        /* Each price series says where it is quoted; the freight note applies to the southern African maize rows only. */
+        var BASIS = { 'Maize': 'US No. 2 yellow maize, US Gulf, free on board', 'Rice, Thai 5%': 'Thai 5% white rice, Bangkok, free on board' };
+        var series = {}; W.forEach(function (c) { if (c.price && c.price.series) series[c.price.series] = c.price; });
+        var basis = Object.keys(series).map(function (k) { return (BASIS[k] || k) + ' ($' + Math.round(series[k].usd_per_t) + '/t, ' + esc(series[k].month) + ')'; }).join('; ');
+        var pk = S.pink && S.pink.series && S.pink.series.maize, yy = null;
+        if (pk && pk.history && pk.history.length) { var last = pk.history[pk.history.length - 1], ya = pk.history.filter(function (p) { return p.month === (Number(pk.latest_month.slice(0, 4)) - 1) + pk.latest_month.slice(4); })[0]; if (ya) yy = (last.value / ya.value - 1) * 100; }
+        return '<figcaption class="enso-log">Modelled accounting. ' + esc(O.who_pays_rule) + ' Buyer shares are Comtrade values, not tonnes, top five buyers only; * marks a buyer capped at its normal imports (USDA PSD), with the rest under other buyers. ' +
+          'Priced at the World Bank benchmark: ' + basis + '. Southern Africa eats white maize, which traded well above the yellow benchmark in 2024, and freight to Durban or Beira plus the inland haul to a landlocked buyer are extra, so the real maize bill is higher. ' +
+          'Prices are held at that month, not forecast' + (yy != null ? '; world maize is already ' + Math.round(yy) + '% above a year earlier, which this page does not attribute to El Niño' : '') + '. Published estimates of the El Niño effect on world grain prices run from none to small; at a +9% rise, the upper published estimate for food commodities (ECB, June 2023), the bills rise by about a tenth.</figcaption>';
+      })() + '</figure>';
     el.querySelectorAll('[data-map-country]').forEach(function (b) { b.onclick = function () { ensoFocus(b.getAttribute('data-map-country')); }; });
   }
   /* ── Which prices to watch, and when ──────────────────────────────────
@@ -45902,11 +45919,11 @@ function showCommodityDetail(key) {
       return esc(part) + (/month on month/.test(part) || !/month on month/.test(c.metric) ? '' : ' month on month') + ' (' + esc(c.window.split(';')[0]) + ')'; })[0] || ''; };
     var gainers = function (c) { return ((O && O.rows_all) || []).filter(function (r) { return r.crop === c && r.status === 'shown' && !r.in_season; }); };
     var items = [
-      { k: 'Maize', fit: fits('corn'), p: price('maize'), prec: past(/maize|Zambia/i), mon: fits('corn').map(function (r) { return r.iso; }).concat(['ZMB', 'MWI']), pol: policy(/maize|corn/i) },
-      { k: 'Wheat', fit: gainers('wheat'), p: price('wheat'), prec: '', mon: [], pol: policy(/wheat/i) },
-      { k: 'Rice', fit: fits('rice'), p: price('rice'), prec: past(/rice/i), mon: fits('rice').map(function (r) { return r.iso; }), pol: policy(/rice/i) },
-      { k: 'Sugar', fit: [], p: price('sugar'), prec: past(/sugar/i), now: nowNote(/sugar/i, /sugar/i), mon: [], pol: policy(/sugar/i) },
-      { k: 'Palm oil', fit: [], p: price('palm_oil'), prec: past(/oil/i), now: nowNote(/oil/i, /oil/i), mon: [], pol: policy(/palm|oil/i) }
+      { k: 'Maize', fit: fits('corn'), p: price('maize'), prec: past(/maize|Zambia/i), mon: fits('corn').map(function (r) { return r.iso; }).concat(['ZMB', 'MWI']), pol: policy(/maize|corn/i), polRe: /maize|corn/i },
+      { k: 'Wheat', fit: gainers('wheat'), p: price('wheat'), prec: '', mon: [], pol: policy(/wheat/i), polRe: /wheat/i },
+      { k: 'Rice', fit: fits('rice'), p: price('rice'), prec: past(/rice/i), mon: fits('rice').map(function (r) { return r.iso; }), pol: policy(/rice/i), polRe: /rice/i },
+      { k: 'Sugar', fit: [], p: price('sugar'), prec: past(/sugar/i), now: nowNote(/sugar/i, /sugar/i), mon: [], pol: policy(/sugar/i), polRe: /sugar/i },
+      { k: 'Palm oil', fit: [], p: price('palm_oil'), prec: past(/oil/i), now: nowNote(/oil/i, /oil/i), mon: [], pol: policy(/palm|oil/i), polRe: /palm|oil/i }
     ].filter(function (x) { return x.fit.length || x.prec || x.pol || x.now; });
     if (!items.length) { el.innerHTML = ''; return; }
     el.innerHTML = '<figure class="enso-plate enso-pricewatch-plate is-published" data-kind="published">' +
@@ -45916,9 +45933,12 @@ function showCommodityDetail(key) {
         return '<tr><th scope="row">' + esc(x.k) + '</th><td>' + (x.fit.length ? line(x.fit) : '<span class="enso-ol-na">no fitted pair</span>') + '</td>' +
           '<td>' + (x.prec || '<span class="enso-ol-na">—</span>') + '</td><td>' + (x.mon.length ? monitored(x.mon) : '<span class="enso-ol-na">—</span>') + '</td>' +
           '<td class="enso-ol-v">' + (x.p ? '$' + Math.round(x.p.usd_per_t).toLocaleString('en-US') + '/t <span class="enso-live-sub">' + esc(x.p.series) + ', ' + esc(/^\d{4}-\d{2}$/.test(x.p.month) ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+x.p.month.slice(5) - 1] + ' ' + x.p.month.slice(0, 4) : x.p.month) + (x.p.mom != null ? ' · ' + pct(x.p.mom) + ' m/m' : '') + (x.p.yoy != null ? ' · ' + pct(x.p.yoy) + ' y/y' : '') + '</span>' : '<span class="enso-ol-na">—</span>') + (x.now ? '<span class="enso-live-sub">FAO: ' + x.now + '</span>' : '') + '</td>' +
-          '<td>' + (x.pol || '<span class="enso-ol-na">none on record</span>') + '</td></tr>';
+          '<td>' + (x.pol || '<span class="enso-ol-na">' + ((S.restrictions || []).some(function (r) { return x.polRe.test(r.commodity || ''); }) ? 'none in force' : 'not tracked') + '</span>') + '</td></tr>';
       }).join('') + '</tbody></table></div>' +
-      '<figcaption class="enso-log">Where the damage lands is local: in 2023-24 South African white maize rose a third while world grain prices were soft. So the local column matters more than the world price, and a “not monitored” there is a gap in the evidence, not calm.</figcaption></figure>';
+      '<figcaption class="enso-log">Where the damage lands is local: in 2023-24 South African white maize rose a third while world grain prices were soft. So the local column matters more than the world price, and a “not monitored” there is a gap in the evidence, not calm. ' + (function () {
+        var cs = []; (S.restrictions || []).forEach(function (r) { if (r.country && cs.indexOf(r.country) < 0) cs.push(r.country); });
+        return cs.length ? 'The export-measure tracker covers ' + esc(cs.join(', ')) + ' only; “not tracked” means no measure for that commodity is followed here.' : '';
+      })() + '</figcaption></figure>';
   }
   function renderMoney() {
     var el = document.getElementById('enso-money'); if (!el) return;
@@ -45958,7 +45978,7 @@ function showCommodityDetail(key) {
     var rt = S.rtfp || {}, rows = Object.keys(rt).map(function (iso) { return { iso: iso, r: rt[iso] }; }).filter(function (x) { return x.r && typeof x.r.food_inflation_pct === 'number'; }).sort(function (a,b) { return b.r.food_inflation_pct - a.r.food_inflation_pct; });
     if (rows.length) {
       var telePrices = rankedTelePrices(), teleCount = ensoTeleIsos().length;
-      out += '<figure class="enso-plate enso-price-local">' + plateHead('Food inflation in teleconnection countries', 'World Bank Real-Time Food Prices via HDX · % year on year', stamp(metaDate('rtfp')), 'observed') +
+      out += '<figure class="enso-plate enso-price-local">' + plateHead('Food inflation in teleconnection countries', 'World Bank Real-Time Food Prices via HDX · % year on year · gaps model-filled', stamp(metaDate('rtfp')), 'estimated') +
         '<div class="plate-body"><div class="enso-chart"><canvas id="enso-c-rtfp"></canvas></div>' +
         '<p class="enso-chart-cap">Bars: ' + telePrices.length + ' teleconnection countries with monitored values, highest first. No monitored value: ' + (teleCount - telePrices.length) + ' countries. The source table also includes ' + (rows.length - telePrices.length) + ' monitored countries outside the published layer.</p>' +
         '<details class="enso-evidence-note"><summary>Country price sources and reporting dates</summary><div class="enso-tblwrap"><table class="enso-tbl"><thead><tr><th>Country</th><th>Food inflation</th><th>Markets</th><th>As of</th><th>Source</th></tr></thead><tbody>' + rows.map(function (x) {
