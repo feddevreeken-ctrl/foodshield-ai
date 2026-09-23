@@ -34,6 +34,8 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import config as C
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from refresh_comtrade import _clean_rows  # noqa: E402
 
 DATA = Path(__file__).resolve().parents[2] / "data"
 OUT_FILE = DATA / "comtrade_staples.json"
@@ -92,6 +94,10 @@ def pull(importers, dry_run=False, flow="M"):
                 continue
             ok += 1
             raw_rows += len(rows)
+            # The public preview returns each trade as an aggregate and again per
+            # transport mode and per second partner; keep only the aggregate rows
+            # (refresh_comtrade._clean_rows, v45) or values count two to eleven times.
+            rows = _clean_rows(rows)
             for row in rows:
                 p = row.get("partnerCode")
                 if not p or int(p) == 0:
