@@ -704,14 +704,16 @@ def main() -> int:
         check("France is named in the country selector", "France" in option_texts and "FRA" not in option_texts)
         # 2026-09-22: the limits fold shows once, on Ocean; the state sentence
         # follows the reader to every view (hero on Ocean, status row elsewhere).
-        page.evaluate("showTab('elnino')")
-        page.wait_for_selector('#subview-elnino.active .enso-subview-meta')
+        # 2026-09-24: the limits describe the fitted harvest layer and price
+        # evidence, so the fold moved from Ocean to Harvests.
+        page.evaluate("showTab('ensoharvest')")
+        page.wait_for_selector('#subview-ensoharvest.active .enso-subview-meta')
         limits_ocean = page.locator('#enso-limits').is_visible() and page.locator('#enso-agency-status').is_visible()
         page.evaluate("showTab('ensowater')")
         page.wait_for_selector('#subview-ensowater.active .enso-subview-meta')
         limits_elsewhere = (not page.locator('#enso-limits').is_visible()) and page.locator('#enso-agency-status').is_visible() \
             and page.locator('#enso-status-home #enso-agency-status').count() == 1
-        check("limits show once on Ocean and the state sentence follows every view",
+        check("limits show once, on Harvests, and the state sentence follows every view",
               limits_ocean and limits_elsewhere
               and page.locator('#enso-limits').evaluate("e => !e.closest('.subview')"))
         page.evaluate("showTab('ensoharvest')")
@@ -1300,15 +1302,13 @@ def main() -> int:
             return rows.length === shown.length && shown.filter(r => r.in_season).every(r => r.change_kt_record === null)
                 && shown.every(r => r.q_nino < 0.10) && (!left.length || (note && left.every(r => note.textContent.includes(r.crop === 'corn' ? 'maize' : r.crop))));
         }"""))
-        check("the harvest country list leaves out shared-with-IOD pairs", page.evaluate("""async () => {
-            const m = (await (await fetch('data/enso_model.json')).json()).data;
-            const want = new Set();
-            for (const iso in m) for (const crop in m[iso]) {
-                const c = m[iso][crop];
-                if (c && c.signal && c.enso_specific !== false) want.add(iso);
-            }
+        # 2026-09-24: the list uses the outlook's own predicate, an El Niño slope
+        # that passes on its own (shared-IOD and La Niña-only pairs are out).
+        check("the harvest country list names only countries whose El Niño slope passes", page.evaluate("""async () => {
+            const O = (await (await fetch('data/enso_outlook.json')).json()).data;
+            const want = new Set(O.rows_all.filter(r => r.status === 'shown').map(r => r.iso));
             const chips = document.querySelectorAll('#enso-land-head .enso-country-list .enso-chip').length;
-            return chips === want.size && /El Niño-specific/.test(document.getElementById('enso-land-head').textContent);
+            return chips === want.size && /passes on its own/.test(document.getElementById('enso-land-head').textContent);
         }"""))
         check("the Reported badge counts what its label names",
               page.locator('#viewbtn-ensolive .enso-view-desc').inner_text().strip() == 'news & alerts')
