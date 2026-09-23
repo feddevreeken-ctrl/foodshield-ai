@@ -168,13 +168,13 @@ test('Stage H ranked-country taps stay in their lens and pan without zoom',()=>{
  }
  assert.equal(pan.length,2);assert(pan.every(p=>p.options.animate===false));S.sub='elnino';
 });
-test('Stage H alert keys count only mapped reports and rings contrast with both purples',()=>{
+test('Stage H alert keys count only mapped reports and rings contrast with both hotspot fills',()=>{
  const oldG=S.gdacs,oldR=S.relief,oldPins=S.alertPins;
  S.alertPins=[];S.gdacs={yes:{is_current:true,lat:1,lng:2},no:{is_current:false,lat:1,lng:2},bad:{is_current:true,lat:NaN,lng:2}};
  S.relief={events:[{iso3:'ZWE'},{iso3:'WLD'}]};api.drawAlerts();
  assert.equal(S.alertPins.length,2);assert(api.alertLegend().includes('GDACS 1'));assert(api.alertLegend().includes('ReliefWeb 1'));
  function luminance(hex){const rgb=hex.match(/[0-9a-f]{2}/gi).map(h=>parseInt(h,16)/255).map(v=>v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4));return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;}
- for(const p of S.alertPins)for(const purple of ['#8866ad','#51316f'])assert((luminance(p.options.color)+.05)/(luminance(purple)+.05)>3);
+ for(const p of S.alertPins)for(const fill of ['#7d6a3e','#b4602c'])assert((luminance(p.options.color)+.05)/(luminance(fill)+.05)>3);
  assert(S.alertPins.every(p=>p.options.fillColor==='#11161e'&&p.options.fillOpacity===1));
  S.gdacs=oldG;S.relief=oldR;S.alertPins=oldPins;
 });
@@ -295,9 +295,9 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
   });
  }
  test('hotspot classes and price no-data preserve distinct palettes',()=>{
-  S.mode='asap';const saved=S.asap;S.asap={ZWE:{hotspot_code:1}};api.paint();assert.equal(api.fillFor('ZWE'),'#8866ad');assert(country.element.classList.contains('enso-hotspot'));
-  S.asap.ZWE.hotspot_code=2;api.paint();assert.equal(api.fillFor('ZWE'),'#51316f');assert(country.element.classList.contains('enso-major-hotspot'));assert(!country.element.classList.contains('enso-hotspot'));
-  S.mode='rtfp';api.paint();assert(!country.element.classList.contains('enso-major-hotspot'));assert.equal(api.rtfpColor(-10),'#8fb1cf');assert.equal(api.rtfpColor(0),'#1c1c22');assert.equal(api.rtfpColor(15),'#c9773a');assert.equal(api.rtfpColor(30),'#dd5a3a');assert.equal(api.rtfpColor(60),api.rtfpColor(30));assert.equal(api.rtfpColor(null),null);S.asap=saved;
+  S.mode='asap';const saved=S.asap;S.asap={ZWE:{hotspot_code:1}};api.paint();assert.equal(api.fillFor('ZWE'),'#7d6a3e');assert(country.element.classList.contains('enso-hotspot'));
+  S.asap.ZWE.hotspot_code=2;api.paint();assert.equal(api.fillFor('ZWE'),'#b4602c');assert(country.element.classList.contains('enso-major-hotspot'));assert(!country.element.classList.contains('enso-hotspot'));
+  S.mode='rtfp';api.paint();assert(!country.element.classList.contains('enso-major-hotspot'));assert.equal(api.rtfpColor(-10),'#8fb1cf');assert.equal(api.rtfpColor(0),'#606268');assert.equal(api.rtfpColor(15),'#c9773a');assert.equal(api.rtfpColor(30),'#dd5a3a');assert.equal(api.rtfpColor(60),api.rtfpColor(30));assert.equal(api.rtfpColor(null),null);S.asap=saved;
  });
  test('Prices outlines all teleconnection members and keeps missing land distinct from zero',()=>{
   const oldBase=S.layerBase, oldMode=S.mode, oldSel=S.sel;
@@ -309,7 +309,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    if(!Number.isFinite((S.rtfp[iso]||{}).food_inflation_pct)){assert.equal(l.options.fillColor,'#e6e3da');assert.equal(l.options.fillOpacity,.06);}
   });
   assert.equal(outside.options.opacity,.18);assert.equal(outside.options.fillOpacity,.06);
-  assert.equal(api.rtfpColor(0),'#1c1c22');assert.equal(api.rtfpColor(null),null);
+  assert.equal(api.rtfpColor(0),'#606268');assert.equal(api.rtfpColor(null),null);
   S.layerBase=oldBase;S.mode=oldMode;S.sel=oldSel;
  });
  test('graticule lines and labels share the pane beneath the country fills',()=>{
