@@ -189,7 +189,7 @@ test('Shipping keeps one unboxed SVG label per chokepoint, with no corridor chip
 });
 test('lens defaults fit the lane belt and tropical price countries without animation',()=>{
  const sub=S.sub;
- for(const [view,bounds] of [['ensowater',[[-45,-115],[62,125]]],['ensomoney',[[-40,-100],[40,155]]]]){
+ for(const [view,bounds] of [['ensowater',[[-45,-115],[62,150]]],['ensomoney',[[-40,-100],[40,155]]]]){
   S.sub=view;api.fitMapView();assert.deepEqual(S.map.bounds,bounds);assert.equal(S.map.fitOptions.animate,false);
  }
  S.sub=sub;

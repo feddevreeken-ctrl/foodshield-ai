@@ -45024,7 +45024,8 @@ function showCommodityDetail(key) {
 
   function fitMapView() {
     if (!S.map) return;
-    var bounds = S.sub === 'ensowater' ? [[-45, -115], [62, 125]] :
+    /* Shipping reaches 150°E so the East Asian end of the Panama grain route is on the map. */
+    var bounds = S.sub === 'ensowater' ? [[-45, -115], [62, 150]] :
       S.sub === 'ensomoney' ? [[-40, -100], [40, 155]] : null;
     if (bounds) S.map.fitBounds(bounds, {padding:[12,12], animate:false});
     /* Zoom so one world spans the map's width: at a fixed zoom 2 a laptop-wide
@@ -45561,6 +45562,29 @@ function showCommodityDetail(key) {
         '<figcaption class="enso-log">Each gauge from the agency that owns it. The Mississippi and Rhine have no published El Niño link; they are drawn because low water there compounds grain logistics whatever the Pacific does.' +
         ((S.gauges.unavailable || []).length ? ' Not reached this run: ' + S.gauges.unavailable.map(function (u) { return esc(u.key); }).join(', ') + '.' : '') + '</figcaption></figure>';
     }
+    /* When the harvests meet the lanes: a join, no new claims. Each lane's origin
+       countries, the fit's harvest rows there (with their windows) and the lane's
+       outlook from the board above. Southern Africa's import route is named as
+       unmonitored rather than left out. */
+    var ORIGIN = { panama: ['USA'], mississippi: ['USA'], parana: ['ARG', 'URY', 'PRY'], amazon: ['BRA'] };
+    /* Only the crops each lane's cited food role names: the Amazon's northern arc
+       moves Mato Grosso soy and maize, not the south's rice and barley. */
+    var LANE_CROPS = { panama: ['corn', 'soybeans', 'sorghum'], mississippi: ['corn', 'soybeans', 'wheat', 'sorghum'], parana: ['corn', 'soybeans', 'wheat'], amazon: ['corn', 'soybeans'] };
+    var rowsAll = (S.outlook && S.outlook.rows_all) || [];
+    var cropName = function (c) { return { corn: 'maize' }[c] || c; };
+    var meet = lanes.filter(function (ln) { return ORIGIN[ln.id]; }).map(function (ln) {
+      var fits = rowsAll.filter(function (r) { return ORIGIN[ln.id].indexOf(r.iso) >= 0 && LANE_CROPS[ln.id].indexOf(r.crop) >= 0 && (r.status === 'shown' || r.status === 'no_el_nino_slope'); });
+      var v = laneVerdict(ln);
+      return '<tr><th scope="row">' + esc(laneName(ln)) + '</th><td>' + esc(ORIGIN[ln.id].map(nameFor).join(', ')) + '</td><td>' +
+        (fits.length ? fits.map(function (r) { return esc(cropName(r.crop)) + ' ' + esc(r.harvest) + (r.status === 'shown' ? ' <b>' + num(r.change_pct_record, 0) + '%</b>' : ' <span class="enso-ol-na">no El Niño slope</span>'); }).join('<br>') : '<span class="enso-ol-na">no fitted pair for this lane’s ' + esc(LANE_CROPS[ln.id].map(cropName).join(', ')) + '</span>') + '</td>' +
+        '<td class="enso-lane-verdict is-' + v.level + '"><b>' + esc({ elevated: 'Elevated', watch: 'Watch', eases: 'Usually eases', other: 'Other causes', restricted: 'Restricted now · not ENSO' }[v.level]) + '</b></td></tr>';
+    });
+    var zaf = rowsAll.filter(function (r) { return r.iso === 'ZAF' && r.crop === 'corn' && r.status === 'shown'; })[0];
+    if (zaf) meet.push('<tr><th scope="row">Southern Africa import route</th><td>South Africa to Zimbabwe, Namibia, Botswana, Mozambique, eSwatini</td><td>maize ' + esc(zaf.harvest) + ' <b>' + num(zaf.change_pct_record, 0) + '%</b></td><td><span class="enso-ol-na">not monitored: no gauge or transit feed on this page</span></td></tr>');
+    if (meet.length) out += '<figure class="enso-plate enso-meet-plate" data-kind="modelled">' + plateHead('When the harvests meet the lanes', 'This site’s fit by origin country × the lane board above', stamp(metaDate('outlook')), 'modelled') +
+      '<div class="plate-body"><table class="enso-live-table"><thead><tr><th scope="col">Lane</th><th scope="col">Origin</th><th scope="col">Fitted harvest, change at ONI ' + num(((S.outlook || {}).cases || {record:{oni:2.5}}).record.oni, 1) + '</th><th scope="col">Lane outlook</th></tr></thead><tbody>' + meet.join('') + '</tbody></table></div>' +
+      '<figcaption class="enso-log">A join of two things already on this page: the harvest ledger by origin country and the lane board. It says which lane a changed harvest must use, not how much of it will.</figcaption></figure>';
+
     /* Who depends on each lane: the lane's own cited food role, and for Panama
        the importers the chokepoint flows file cites by name. Inferred shares are
        labelled as inference. */
