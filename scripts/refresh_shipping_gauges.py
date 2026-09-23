@@ -9,7 +9,8 @@ that owns it, with no key:
   Panama   Gatún Lake level, daily since 1965, and the Canal's 60-day projection
            with its estimated maximum drafts (Panama Canal Authority CSVs)
   Mississippi  St. Louis stage, observed and the NWS forecast (NOAA NWPS, EADM7)
-               plus the weekly St. Louis barge rate (USDA AgTransport, Socrata)
+               plus the weekly St. Louis barge rate and the ocean-going grain
+               ships loaded at the US Gulf each week (USDA AgTransport, Socrata)
   Rhine    Kaub gauge, 30 days of readings and the station's own reference
            levels (German waterways agency, PEGELONLINE)
   Paraná   Rosario daily height (Argentina INA, series 34)
@@ -43,6 +44,7 @@ GATUN_PROJ = "https://evtms-rpts.pancanal.com/eng/h2o/Gatun_Water_Level_Projecti
 NWPS_OBS = "https://api.water.noaa.gov/nwps/v1/gauges/eadm7/stageflow/observed"
 NWPS_FC = "https://api.water.noaa.gov/nwps/v1/gauges/eadm7/stageflow/forecast"
 BARGE = "https://agtransport.usda.gov/resource/deqi-uken.json"
+VESSELS = "https://agtransport.usda.gov/resource/uiht-9xts.json"
 KAUB = "https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/KAUB/W"
 INA = "https://alerta.ina.gob.ar/a5/obs/puntual/series/34/observaciones"
 ANA = "https://telemetriaws1.ana.gov.br/ServiceANA.asmx/DadosHidrometeorologicos"
@@ -176,6 +178,36 @@ def barge() -> dict:
     }
 
 
+def gulf_loadings(today: date) -> dict:
+    """Grain ships loaded at the US Gulf in the past 7 days, weekly (USDA GTR).
+
+    The river is only half of the Mississippi chain: what low water costs shows
+    up at the Gulf elevators as fewer ships loaded. The same week in the five
+    previous years is the baseline, because loadings are strongly seasonal."""
+    rows = get(VESSELS, **{"port": "Gulf", "$select": "date,week,year,loaded_7_days,due_10_days",
+                           "$where": "loaded_7_days IS NOT NULL", "$order": "date DESC", "$limit": "400"}).json()
+    pts = [{"date": r["date"][:10], "week": int(r["week"]), "year": int(r["year"]),
+            "loaded": int(float(r["loaded_7_days"])),
+            "due": int(float(r["due_10_days"])) if r.get("due_10_days") else None} for r in rows]
+    if not pts:
+        raise RuntimeError("Gulf vessel loading series empty")
+    last = pts[0]
+    age = (today - date.fromisoformat(last["date"])).days
+    if age > 35:
+        raise RuntimeError(f"Gulf vessel loadings last reported {last['date']}, {age} days ago: stale")
+    prior = [p["loaded"] for p in pts
+             if last["year"] - 5 <= p["year"] < last["year"] and abs(p["week"] - last["week"]) <= 1]
+    return {
+        "name": "Grain ships loaded at the US Gulf, past 7 days", "unit": "ocean-going vessels",
+        "source": "USDA AMS Grain Transportation Report, via AgTransport",
+        "url": "https://agtransport.usda.gov/d/uiht-9xts",
+        "latest": {"date": last["date"], "value": last["loaded"], "due_10_days": last["due"]},
+        "same_week_5y": {"mean": round(statistics.mean(prior), 1), "n": len(prior),
+                         "years": f"{last['year'] - 5}-{last['year'] - 1}"} if len(prior) >= 5 else None,
+        "weekly_52": [{"date": p["date"], "value": p["loaded"]} for p in reversed(pts[:52])],
+    }
+
+
 def kaub() -> dict:
     meta = get(KAUB + ".json", includeCurrentMeasurement="true", includeCharacteristicValues="true").json()
     meas = get(KAUB + "/measurements.json", start="P30D").json()
@@ -240,6 +272,7 @@ def main() -> int:
     today = datetime.now(timezone.utc).date()
     gauges, unavailable = {}, []
     for key, fn in (("gatun", lambda: gatun(today)), ("stlouis", stlouis), ("barge_stlouis", barge),
+                    ("gulf_loadings", lambda: gulf_loadings(today)),
                     ("kaub", kaub), ("rosario", lambda: rosario(today)), ("manaus", lambda: manaus(today))):
         try:
             gauges[key] = fn()

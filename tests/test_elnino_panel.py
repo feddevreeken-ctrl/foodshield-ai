@@ -817,7 +817,7 @@ def main() -> int:
             const G = (await (await fetch('data/enso_gauges.json')).json()).data.gauges;
             const verdicts = [...document.querySelectorAll('.enso-status-table .enso-lane-verdict b')].map(b => b.textContent);
             const cards = [...document.querySelectorAll('.enso-gauge .enso-gauge-v b')].map(b => parseFloat(b.textContent));
-            const want = ['stlouis', 'barge_stlouis', 'kaub', 'rosario', 'manaus'].filter(k => G[k]).map(k => G[k].latest.value);
+            const want = ['stlouis', 'barge_stlouis', 'gulf_loadings', 'kaub', 'rosario', 'manaus'].filter(k => G[k]).map(k => G[k].latest.value);
             const g = Chart.getChart(document.getElementById('enso-c-gatun'));
             const labels = g ? g.data.datasets.map(d => d.label) : [];
             return verdicts.length === 9 && verdicts.every(v => v.length > 0)

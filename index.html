@@ -12158,6 +12158,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-plate-lede { font-size:14px; line-height:1.6; color:var(--t1); max-width:118ch; margin:0 0 12px; }
 #tab-elnino .enso-gatun-chart { height:300px; }
 #tab-elnino .enso-gauge-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; }
+@media (min-width:900px){ #tab-elnino .enso-gauge-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 #tab-elnino .enso-gauge h4 { margin:0 0 4px; font:500 13px 'Geist',sans-serif; color:var(--t1); }
 #tab-elnino .enso-gauge-v { margin:0 0 6px; font:12px 'Geist Mono',monospace; color:var(--t2); }
 #tab-elnino .enso-gauge-v b { font-size:18px; color:var(--t1); font-weight:500; }
@@ -45532,7 +45533,15 @@ function showCommodityDetail(key) {
       var b = G.barge_stlouis, st = G.stlouis;
       return { level: 'watch', text: 'Weak La Niña tag, and El Niño’s effect here is a toss-up (the 2023 record low came during El Niño).' +
         (b && b.record ? ' Barge freight is ' + Math.round(b.latest.value) + '% of tariff against a ' + Math.round(b.record.value) + '% record' : '') +
-        (st && st.forecast_min && st.forecast_min.is_last_point ? '; the NWS forecast is still falling at its last point' : '') + ', in the middle of the US harvest.' };
+        (st && st.forecast_min && st.forecast_min.is_last_point ? '; the NWS forecast is still falling at its last point' : '') + ', in the middle of the US harvest.' +
+        (function () {
+          /* The ocean end of the chain: if low water bites, fewer ships load at the Gulf. */
+          var gl = G.gulf_loadings, m5 = gl && gl.same_week_5y;
+          if (!gl || !m5) return '';
+          var r = gl.latest.value / m5.mean;
+          return ' At the Gulf, ' + gl.latest.value + ' grain ships loaded in the week to ' + stamp(new Date(gl.latest.date)) + ' against ' + Math.round(m5.mean) + ' in the same week of ' + m5.years.replace('-', '–') +
+            (r < 0.8 ? ': exports are slowing.' : r > 1.2 ? ': exports are running ahead.' : ': exports are moving normally so far.');
+        })() };
     }
     if (ln.id === 'rhine' && G.kaub && (G.kaub.reference || {}).GlW && G.kaub.latest.value < G.kaub.reference.GlW.value)
       return { level: 'restricted', text: 'Restricted now: Kaub is below its ' + Math.round(G.kaub.reference.GlW.value) + ' cm navigation reference, so barges load light. No published ENSO link; it compounds European grain logistics on its own.' };
@@ -45614,23 +45623,26 @@ function showCommodityDetail(key) {
         '<figcaption class="enso-log">Watch for Panama falling while the Cape rises: that is how the 2023-24 diversion of Gulf grain showed (it is older than this 12-month window). Today all three are below a year ago, so no reroute is visible yet; the Suez line also carries the Red Sea security story.</figcaption></figure>';
     }
     var cells = [
-      ['stlouis', 'Mississippi at St. Louis', 'ft', 'enso-c-stl'], ['barge_stlouis', 'St. Louis barge rate', '% of tariff', 'enso-c-barge'],
+      ['stlouis', 'Mississippi at St. Louis', 'ft', 'enso-c-stl'], ['barge_stlouis', 'St. Louis barge rate', '% of tariff', 'enso-c-barge'], ['gulf_loadings', 'Grain ships loaded, US Gulf', 'ships in 7 days', 'enso-c-gulf'],
       ['kaub', 'Rhine at Kaub', 'cm', 'enso-c-kaub'], ['rosario', 'Paraná at Rosario', 'm', 'enso-c-rosario'], ['manaus', 'Rio Negro at Manaus', 'm', 'enso-c-manaus']
     ].filter(function (x) { return G[x[0]]; });
     if (cells.length) {
-      out += '<figure class="enso-plate enso-gauge-plate">' + plateHead('Rivers and barges', 'NOAA NWPS · USDA AgTransport · WSV PEGELONLINE · INA Argentina · ANA Brazil', gd, 'observed') +
+      out += '<figure class="enso-plate enso-gauge-plate">' + plateHead('Rivers and barges', 'NOAA NWPS · USDA AgTransport and Grain Transportation Report · WSV PEGELONLINE · INA Argentina · ANA Brazil', gd, 'observed') +
+        plateKey([['is-line', '#ebe9e2', 'Measured'], ['is-dash', '#e0864a', 'Reference named under each gauge'], ['is-dash', '#ebe9e2', 'Dotted: NWS forecast (St. Louis)']]) +
         '<div class="plate-body enso-gauge-grid">' + cells.map(function (x) {
           var r = G[x[0]], v = r.latest.value;
           var ctx = '';
           if (x[0] === 'barge_stlouis' && r.weekly_52 && r.weekly_52.length) {
             var vals = r.weekly_52.map(function (p) { return p.pct_tariff; }), hi = Math.max.apply(null, vals), yr = r.weekly_52[0];
             ctx = (v >= hi ? '12-month high' : 'high ' + Math.round(hi) + '%') + '; a year ago ' + Math.round(yr.pct_tariff) + '%' + (r.record ? '; record ' + Math.round(r.record.value) + '%, ' + esc(r.record.date.slice(0, 7)) : '');
+          } else if (x[0] === 'gulf_loadings' && r.same_week_5y) {
+            ctx = 'same week ' + esc(r.same_week_5y.years.replace('-', '–')) + ': ' + Math.round(r.same_week_5y.mean) + ' on average' + (r.latest.due_10_days != null ? '; ' + r.latest.due_10_days + ' due in the next 10 days' : '');
           } else if (x[0] === 'kaub' && r.reference && r.reference.NW) ctx = 'lowest daily ' + r.reference.NW.from.slice(0, 4) + '–' + r.reference.NW.to.slice(0, 4) + ': ' + Math.round(r.reference.NW.value) + ' cm';
           else if (x[0] === 'stlouis' && r.forecast_max && r.forecast_min) ctx = 'NWS: crest ' + r.forecast_max.ft.toFixed(1) + ' ft, then ' + r.forecast_min.ft.toFixed(1) + ' ft by ' + esc(stamp(new Date(r.forecast_min.t)));
           return '<section class="enso-gauge"><h4>' + esc(x[1]) + '</h4><p class="enso-gauge-v"><b>' + (x[2] === 'm' ? v.toFixed(2) : Math.round(v)) + '</b> ' + esc(x[2]) + ' <span>' + esc(stamp(new Date(r.latest.date))) + '</span>' + (ctx ? '<span class="enso-live-sub">' + ctx + '</span>' : '') + '</p>' +
             '<div class="enso-chart enso-gauge-chart"><canvas id="' + x[3] + '"></canvas></div></section>';
         }).join('') + '</div>' +
-        '<figcaption class="enso-log">Each gauge from the agency that owns it. The Mississippi and Rhine have no published El Niño link; they are drawn because low water there compounds grain logistics whatever the Pacific does.' +
+        '<figcaption class="enso-log">Each gauge from the agency that owns it. River stage, barge rate and Gulf loadings are one chain: low water at St. Louis raises barge freight first and, if it lasts, shows up as fewer ocean ships loading grain at the Gulf. The Mississippi and Rhine have no published El Niño link; they are drawn because low water there compounds grain logistics whatever the Pacific does.' +
         ((S.gauges.unavailable || []).length ? ' Not reached this run: ' + S.gauges.unavailable.map(function (u) { return esc(u.key); }).join(', ') + '.' : '') + '</figcaption></figure>';
     }
     /* When the harvests meet the lanes: a join, no new claims. Each lane's origin
@@ -45726,6 +45738,7 @@ function showCommodityDetail(key) {
     }
     /* Read against its own year; the 2022 record stays in the text, because as a line it flattened the climb. */
     if (G.barge_stlouis) { var bw = G.barge_stlouis.weekly_52 || [], bmean = bw.length ? bw.reduce(function (a, p) { return a + p.pct_tariff; }, 0) / bw.length : null; small('enso-c-barge', bw.map(function (p) { return p.date.slice(2, 7); }), bw.map(function (p) { return p.pct_tariff; }), bmean, bmean != null ? '52-week mean ' + Math.round(bmean) + '%' : '', '% of tariff'); }
+    if (G.gulf_loadings) { var gw = G.gulf_loadings.weekly_52 || [], gmean = gw.length ? gw.reduce(function (a, p) { return a + p.value; }, 0) / gw.length : null; small('enso-c-gulf', gw.map(function (p) { return p.date.slice(2, 10); }), gw.map(function (p) { return p.value; }), gmean, gmean != null ? '52-week mean ' + Math.round(gmean) + ' ships' : '', 'ships'); }
     if (G.kaub) { var kd = G.kaub.daily_30d || [], nw = (G.kaub.reference || {}).NW; small('enso-c-kaub', kd.map(function (p) { return p.date.slice(5); }), kd.map(function (p) { return p.cm; }), nw && nw.value, nw ? 'lowest daily ' + nw.from.slice(0, 4) + '–' + nw.to.slice(0, 4) + ', ' + Math.round(nw.value) + ' cm' : '', 'cm'); }
     if (G.rosario) { var rd = G.rosario.daily_45d || []; small('enso-c-rosario', rd.map(function (p) { return p.date.slice(5); }), rd.map(function (p) { return p.m; }), null, '', 'm'); }
     if (G.manaus) { var md = G.manaus.daily_30d || []; small('enso-c-manaus', md.map(function (p) { return p.date.slice(5); }), md.map(function (p) { return p.m; }), null, '', 'm'); }
@@ -46320,6 +46333,8 @@ function showCommodityDetail(key) {
     var ctx = cv.getContext && cv.getContext('2d'); if (!ctx) return;
     S.charts[id] = (typeof _safeChart === 'function') ? _safeChart(ctx, cfg) : null;
     var frame = cv.closest('.enso-plate');
+    /* Small multiples share one static key in the plate head; a per-chart legend would show only the last one. */
+    if (frame && frame.classList.contains('enso-gauge-plate')) frame = null;
     if (frame && S.charts[id]) {
       var old = frame.querySelector('.enso-chart-legend'); if (old) old.remove();
       var oldAxis = frame.querySelector('.enso-axis-key'); if (oldAxis) oldAxis.remove();
@@ -46374,7 +46389,7 @@ function showCommodityDetail(key) {
   function drawCharts(sub) {
     var E = S.econ || {};
     var want = { ensomoney: ['enso-c-ffpi', 'enso-c-rtfp'],
-                 ensowater: ['enso-c-panama', 'enso-c-panama-daily', 'enso-c-gatun', 'enso-c-reroute', 'enso-c-stl', 'enso-c-barge', 'enso-c-kaub', 'enso-c-rosario', 'enso-c-manaus'] }[sub];
+                 ensowater: ['enso-c-panama', 'enso-c-panama-daily', 'enso-c-gatun', 'enso-c-reroute', 'enso-c-stl', 'enso-c-barge', 'enso-c-gulf', 'enso-c-kaub', 'enso-c-rosario', 'enso-c-manaus'] }[sub];
     if (sub && !want) return;
     S._chartFilter = want || null;
     /* 2 — FFPI at event peaks */
