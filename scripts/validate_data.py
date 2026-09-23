@@ -121,6 +121,7 @@ EXPECTED_FILES = {
     # El Niño wire: the same kind of feed (third-party claims with links); the
     # El Niño tab's Reported view reads it. Empty on a quiet cycle is honest.
     'enso_news.json':             ('soft',     'dict_or_empty'),
+    'enso_outlook.json':          ('soft',     'dict_or_empty'),
     # Build-time commodity interpretation. SOFT, and additionally listed in
     # OPTIONAL_FILES below: on a repo that has never run the step (no provider key
     # and no prior build) the file legitimately does not exist yet.

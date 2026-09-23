@@ -44023,11 +44023,11 @@ function showCommodityDetail(key) {
   function mapState() {
     var modelled = MODES_MODELLED.indexOf(S.mode) >= 0;
     /* The impact layer's date comes from enso_exposure.json, which is the fit
-       weighted by USDA PSD production, so naming only the fit put the
+       weighted by FAOSTAT production, so naming only the fit put the
        exposure file's build date against a source that did not produce it.
        Both steps are named now. Crop and coverage are read straight from the
        model and keep the model's own date. */
-    var source = { impact: 'FAOSTAT yield fit 1961–2024, weighted by USDA PSD production', crop: 'FAOSTAT yield fit, 1961–2024', coverage: 'FAOSTAT yield fit, 1961–2024',
+    var source = { impact: 'FAOSTAT yield fit 1961–2024, weighted by FAOSTAT production', crop: 'FAOSTAT yield fit, 1961–2024', coverage: 'FAOSTAT yield fit, 1961–2024',
       asap: 'JRC ASAP assessments', gdacs: 'GDACS hazard reports', ipc: 'IPC/CH via WFP HungerMap', rtfp: 'World Bank RTFP via HDX', sst: 'NOAA OISST v2.1',
       none: S.showLanes ? 'IMF PortWatch AIS transits, Panama Canal Authority advisories, lane evidence' : 'Natural Earth geography' }[S.mode];
     /* With no land fill the plate is named for what it does show: the lanes and
@@ -44921,7 +44921,8 @@ function showCommodityDetail(key) {
     }
     S.features = feats;
     S.names = {};
-    feats.forEach(function (f) { var i = isoOf(f); if (i) S.names[i] = (f.properties || {}).name || i; });
+    /* First feature wins: Natural Earth ships small territories (Ashmore and Cartier Is.) under their sovereign's ISO, and last-wins named Australia after them. */
+    feats.forEach(function (f) { var i = isoOf(f), pr = f.properties || {}; if (i && (!S.names[i] || pr.ADM0_A3 === i)) S.names[i] = pr.name || i; });
 
     /* No Leaflet zoom control — its default +/- box is the single most
        recognisable "a developer put a map here" tell. A mono pair in the plate
@@ -46188,7 +46189,8 @@ function showCommodityDetail(key) {
       var feats = S.features || await getFeatures();
       if (feats) {
         S.features = feats; S.names = {};
-        feats.forEach(function (f) { var i = isoOf(f); if (i) S.names[i] = (f.properties || {}).name || i; });
+        /* First feature wins: Natural Earth ships small territories (Ashmore and Cartier Is.) under their sovereign's ISO, and last-wins named Australia after them. */
+    feats.forEach(function (f) { var i = isoOf(f), pr = f.properties || {}; if (i && (!S.names[i] || pr.ADM0_A3 === i)) S.names[i] = pr.name || i; });
       }
     }
     if (!S.drawn.live) { renderLive(); S.drawn.live = true; }

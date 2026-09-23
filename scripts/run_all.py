@@ -75,6 +75,7 @@ import refresh_hapi_idps   # v43 — HDX HAPI internal displacement (new nowcast
 import refresh_trade_restrictions
 import refresh_commodity_news   # v46 — GDELT + EC RSS commodity headlines (claims, not data)
 import refresh_enso_news        # El Niño wire: headlines that name the event (claims, not data)
+import build_enso_outlook       # El Niño outlook: fitted pairs x production x harvest, plus live signals per region
 import build_countries_dataset
 import snapshot_fdrs
 import validate_fdrs
@@ -154,6 +155,8 @@ STEPS = [
     # El Niño wire: ReliefWeb reports, the same publisher feeds, one GDELT query,
     # all asked for the event by name. Keeps last-good items across a bad run.
     ("El Niño news",           refresh_enso_news.main,          "enso_news.json"),
+    # Derived, no network: reads the feeds above and the fitted model, so it runs after them.
+    ("El Niño outlook",        build_enso_outlook.main,         "enso_outlook.json"),
     ("Countries dataset",      build_countries_dataset.main,    "countries.json"),
     # v40 — daily point-in-time snapshot of the structural FDRS (idempotent/preserve-safe);
     # builds the immutable history the hindcast/validation needs. Reads the fresh countries.json.
