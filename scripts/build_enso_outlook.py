@@ -124,6 +124,28 @@ def main() -> int:
         v = s.get("latest_value")
         return (v, s.get("label"), s.get("latest_month")) if isinstance(v, (int, float)) else (None, None, None)
 
+    # The model's `signal` is a joint test on the El Niño AND La Niña slopes, so a
+    # pair can carry it on its La Niña side alone. What "this El Niño implies"
+    # needs is the El Niño slope, so it gets its own Benjamini-Hochberg q across
+    # every fitted pair's p_nino, and a row is shown only when that q < 0.10.
+    pn = sorted(((c["p_nino"], (iso, crop)) for iso, cs in model.items() for crop, c in cs.items()
+                 if isinstance(c, dict) and isinstance(c.get("p_nino"), (int, float))), key=lambda t: t[0])
+    q_nino, m_tests, running = {}, len(pn), 1.0
+    for rank in range(m_tests, 0, -1):
+        p_val, key = pn[rank - 1]
+        running = min(running, p_val * m_tests / rank)
+        q_nino[key] = running
+
+    def status_of(iso: str, crop: str, c: dict) -> str:
+        harvest = (cal.get(iso) or {}).get(crop, {}).get("harvest") or []
+        if harvest and harvest[-1] < harvest[0] and c.get("alignment") == "djf_same_year":
+            return "alignment_review"          # wrap-around harvest fitted to the wrong winter; refit pending
+        if c.get("enso_specific") is False:
+            return "shared_iod"
+        if q_nino.get((iso, crop), 1) >= 0.10:
+            return "no_el_nino_slope"
+        return "shown"
+
     def fitted_rows(isos: list[str]) -> list[dict]:
         rows = []
         for iso in isos:
@@ -135,13 +157,19 @@ def main() -> int:
                 if isinstance(p.get("production_kt"), (int, float)):
                     prod, prod_basis = p["production_kt"], f"USDA PSD {p.get('_year_production_kt', p.get('year'))}"
                 else:
-                    prod, prod_basis = c.get("mean_production_kt"), "FAOSTAT 1961–2024 mean"
+                    prod, prod_basis = c.get("mean_production_kt"), "FAOSTAT 2015–2024 mean"
                 harvest = (cal.get(iso) or {}).get(crop, {}).get("harvest") or []
                 hyear = jan_year if c.get("alignment") == "djf_same_year" else jan_year - 1
                 usd, plabel, pmonth = price(crop)
+                in_season = hyear < jan_year
                 row = {
                     "iso": iso, "crop": crop, "slope_pct_per_oni": slope,
-                    "q_value": c.get("q_value"), "enso_specific": c.get("enso_specific", True),
+                    "q_value": c.get("q_value"), "p_nino": c.get("p_nino"), "q_nino": round(q_nino.get((iso, crop), 1), 4),
+                    "status": status_of(iso, crop, c), "enso_specific": c.get("enso_specific", True),
+                    # A harvest of the onset year is already in USDA's in-season
+                    # estimate; the fit's share of it is shown as a percentage,
+                    # not added again as tonnes.
+                    "in_season": in_season,
                     # A harvest that runs Dec-Jan straddles the year; the fit's year is its end.
                     "harvest": ((MONTHS[harvest[0] - 1] + " " + str(hyear - 1) + "–" + MONTHS[harvest[-1] - 1] + " " + str(hyear))
                                 if len(harvest) > 1 and harvest[-1] < harvest[0]
@@ -160,7 +188,7 @@ def main() -> int:
                     hi = (math.exp((b + 1.645 * se) * case["oni"]) - 1) * 100
                     row[f"change_pct_{k}"] = round(pct, 1)
                     row[f"change_pct_{k}_90"] = [round(lo, 1), round(hi, 1)]
-                    row[f"change_kt_{k}"] = round(prod * pct / 100, 0) if isinstance(prod, (int, float)) else None
+                    row[f"change_kt_{k}"] = (round(prod * pct / 100, 0) if isinstance(prod, (int, float)) and not in_season else None)
                     if usd and row[f"change_kt_{k}"] is not None:
                         row[f"value_usd_m_{k}"] = round(row[f"change_kt_{k}"] * 1000 * usd / 1e6, 0)
                 if usd:
@@ -210,6 +238,16 @@ def main() -> int:
             "live": live(r["iso3"]),
         })
 
+    # Every signal pair in the model, not only the region-listed crops, so a
+    # country the Harvests list names (Egypt, Iran, Pakistan, Angola) is either
+    # shown or has a stated reason for not being shown.
+    region_of = {}
+    for r in regions:
+        for iso in r["iso3"]:
+            for crop in REGION_CROPS.get(r["id"], set()):
+                region_of.setdefault((iso, crop), r["label"])
+    rows_all = [dict(f, region=region_of.get((f["iso"], f["crop"]))) for f in fitted_rows(sorted(model))]
+
     # ── Who pays: a stated accounting, not a model ─────────────────────────
     # A producer's shortfall first cuts its exports (up to what it exports),
     # and those lost exports fall on its buyers in proportion to their Comtrade
@@ -221,9 +259,9 @@ def main() -> int:
     for reg in out_regions:
         for f in reg["fitted"]:
             key = (f["iso"], f["crop"])
-            if key in seen_chain or not f["in_region"] or not f["enso_specific"]:
+            if key in seen_chain or not f["in_region"] or f["status"] != "shown" or f["in_season"]:
                 continue
-            loss = -(f["change_kt_observed"] or 0)
+            loss = -(f["change_kt_record"] or 0)
             if loss < 150:
                 continue
             seen_chain.add(key)
@@ -254,7 +292,7 @@ def main() -> int:
     for reg in out_regions:
         for f in reg["fitted"]:
             key = (f["iso"], f["crop"])
-            if key in seen or not f["enso_specific"]:
+            if key in seen or f["status"] != "shown" or f["in_season"]:
                 continue
             seen.add(key)
             c = by_crop.setdefault(f["crop"], {"crop": f["crop"], "loss_kt_record": 0, "gain_kt_record": 0, "countries": []})
@@ -270,8 +308,10 @@ def main() -> int:
         "honesty": "Conditional estimates from a linear fit without out-of-sample validation. CPC's OND 2026 RONI median (+2.67) is beyond the fitted range; figures at the record ONI are the largest the fit can support, not a ceiling on the event.",
         "regions": out_regions,
         "crops": sorted(by_crop.values(), key=lambda c: c["loss_kt_record"]),
+        "rows_all": rows_all,
         "who_pays": chain,
-        "who_pays_rule": "Shortfall cuts exports first, allocated to buyers by Comtrade value share; any remainder is extra import need. Priced at the latest World Bank price. Stocks shown, not subtracted.",
+        "who_pays_case": "record",
+        "who_pays_rule": "At the fit's strongest winter (ONI +2.5). Shortfall cuts exports first, allocated to buyers by Comtrade value share; any remainder is extra import need. Priced at the latest World Bank price. Stocks shown, not subtracted.",
     }, source="Derived: enso_regions, enso_model, crop_calendars, USDA PSD, World Bank Pink Sheet; live signals from JRC ASAP, GDACS, World Bank RTFP, ReliefWeb, El Niño news feed, trade_restrictions",
        notes="Tonnes first; value at stake is tonnes × latest World Bank price, not a price forecast.", status="ok")
     print(f"[OK] enso_outlook: {len(out_regions)} regions, {sum(len(r['fitted']) for r in out_regions)} fitted rows, "

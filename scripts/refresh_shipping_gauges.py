@@ -97,6 +97,16 @@ def gatun(today: date) -> dict:
             if x in by:
                 pts.append({"day": d.isoformat()[5:], "ft": by[x]})
         analogs[f"{y}-{str(y + 1)[2:]}"] = pts
+    # The true low of each analog year from the DAILY record over the same
+    # Jun-May window, with its date: the weekly samples above miss the bottom,
+    # and the month matters (2023's low came in the wet season, July).
+    analog_min = {}
+    for y in ANALOGS:
+        lo = date(y, 6, 1)
+        window = [(d, v) for d, v in rows if lo <= d < lo + timedelta(days=366)]
+        if window:
+            d_min, v_min = min(window, key=lambda t: t[1])
+            analog_min[f"{y}-{str(y + 1)[2:]}"] = {"ft": v_min, "date": d_min.isoformat()}
 
     proj = []
     lines = [ln for ln in get(GATUN_PROJ).text.splitlines() if ln.strip()]
@@ -117,7 +127,7 @@ def gatun(today: date) -> dict:
         "latest": {"date": last_day.isoformat(), "value": last_ft},
         "climatology_today": now_clim,
         "vs_median_ft": round(last_ft - now_clim["p50"], 2) if now_clim else None,
-        "window_start": start.isoformat(), "band": band, "this_year": this, "analogs": analogs,
+        "window_start": start.isoformat(), "band": band, "this_year": this, "analogs": analogs, "analog_min": analog_min,
         "projection": proj, "projection_url": GATUN_PROJ,
         "projection_note": "ACP's own estimate; official drafts are set only by Advisories to Shipping.",
     }
@@ -136,6 +146,7 @@ def stlouis() -> dict:
     for p in obs:                      # last reading of each day
         daily[p["t"][:10]] = p
     fmin = min(fc, key=lambda p: p["ft"]) if fc else None
+    fmax = max(fc, key=lambda p: p["ft"]) if fc else None
     return {
         "name": "Mississippi at St. Louis", "unit": "ft", "source": "NOAA National Water Prediction Service (EADM7)",
         "url": "https://water.noaa.gov/gauges/eadm7",
@@ -143,7 +154,8 @@ def stlouis() -> dict:
         "observed_30d": [{"date": k, "ft": v["ft"]} for k, v in sorted(daily.items())][-30:],
         "forecast": [{"t": p["t"], "ft": p["ft"]} for p in fc],
         "forecast_issued": fj.get("issuedTime"),
-        "forecast_min": {"t": fmin["t"], "ft": fmin["ft"]} if fmin else None,
+        "forecast_min": {"t": fmin["t"], "ft": fmin["ft"], "is_last_point": fmin is fc[-1]} if fmin else None,
+        "forecast_max": {"t": fmax["t"], "ft": fmax["ft"]} if fmax else None,
     }
 
 

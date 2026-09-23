@@ -1086,7 +1086,7 @@ def main() -> int:
                     && key.includes(pw.window_days + '-day mean to ' + date(pw.latest_date))
                     && pin.getAttribute('aria-label').includes(pw.transits_per_day.total.toFixed(1) + ' transits/day');
             }) && measured === rings.length && measured > 0 && missing > 0
-                && key.includes('transits per day against a year earlier, all vessels where dry bulk is missing, IMF PortWatch')
+                && key.includes('per day against a year earlier, all vessels where dry bulk is missing, IMF PortWatch')
                 && key.includes('collected ' + date(feed._meta.generated_at))
                 && key.includes('Ring radius grows with absolute change, capped at 100%');
         }"""))
@@ -1292,6 +1292,14 @@ def main() -> int:
               not any(s in src for s in ("SOI −18.7", "up to 40 records", "a European drought among them")))
         page.evaluate("showTab('ensoharvest')")
         page.wait_for_selector('#subview-ensoharvest.active .enso-subview-meta')
+        check("the outlook shows only pairs whose El Niño slope passes, adds no tonnes to in-season harvests and names every pair it leaves out", page.evaluate("""async () => {
+            const O = (await (await fetch('data/enso_outlook.json')).json()).data;
+            const shown = O.rows_all.filter(r => r.status === 'shown'), left = O.rows_all.filter(r => r.status !== 'shown');
+            const rows = [...document.querySelectorAll('.enso-outlook-plate tbody tr:not(.enso-ol-year)')];
+            const note = document.querySelector('.enso-outlook-plate .enso-ol-excluded');
+            return rows.length === shown.length && shown.filter(r => r.in_season).every(r => r.change_kt_record === null)
+                && shown.every(r => r.q_nino < 0.10) && (!left.length || (note && left.every(r => note.textContent.includes(r.crop === 'corn' ? 'maize' : r.crop))));
+        }"""))
         check("the harvest country list leaves out shared-with-IOD pairs", page.evaluate("""async () => {
             const m = (await (await fetch('data/enso_model.json')).json()).data;
             const want = new Set();

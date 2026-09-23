@@ -169,7 +169,11 @@ def shift_for(cal_entry: dict) -> int | None:
     # A season harvested Jan-Aug was growing through the preceding DJF of its own
     # harvest year. One harvested Sep-Dec ran Mar-Dec, so the event that shaped it
     # peaks in the DJF that follows.
-    return 0 if min(h) <= 8 else 1
+    # A harvest that wraps the year end (e.g. [12, 1]) starts in the late
+    # months: judge it by its first month, or min() reads it as a January crop
+    # and pairs it with the DJF that ended before it was sown (Uruguay wheat).
+    first = h[0] if h[-1] < h[0] else min(h)
+    return 0 if first <= 8 else 1
 
 
 def load_faostat() -> dict:
