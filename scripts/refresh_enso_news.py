@@ -72,8 +72,19 @@ def _iso(value) -> str | None:
         return None
 
 
+def detokenise(t: str) -> str:
+    """GDELT returns titles tokenised ('451 , 000', 'El Nino - driven', 'news . com').
+    Put the punctuation back where a newsroom wrote it."""
+    t = re.sub(r"(\d) , (\d{3})\b", r"\1,\2", t)
+    t = re.sub(r"(\w) - (\w)", r"\1-\2", t)
+    t = re.sub(r"(\w) \. (com|org|net|co)\b", r"\1.\2", t)
+    t = re.sub(r"\s+([,.:;?!%)])", r"\1", t)
+    t = re.sub(r"([(])\s+", r"\1", t)
+    return re.sub(r"\s{2,}", " ", t).strip()
+
+
 def _item(title, source, url, published, provenance, kind, isos=None):
-    title = cn.sanitize_title(title)
+    title = detokenise(cn.sanitize_title(title) or "")
     url = cn.sanitize_url(url)
     if not title or not url:
         return None
@@ -224,6 +235,7 @@ def main() -> int:
     # Merge with last-good, newest wins per URL, then window and cap.
     merged: dict[str, dict] = {}
     for it in _previous() + fresh:
+        it["title"] = detokenise(it.get("title") or "")
         merged[it["url"]] = it
     items = []
     for it in merged.values():
