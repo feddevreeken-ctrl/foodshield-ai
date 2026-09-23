@@ -608,6 +608,16 @@ def main() -> int:
         check("a manual Pacific state survives step selection and updates the caption",
               page.locator('#enso-ruler-figure').get_attribute('data-state') == 'lanina'
               and 'La Niña:' in page.locator('#enso-ruler-caption').inner_text())
+        check("engraving overlays run only transform and opacity animations", page.evaluate("""() => {
+            const animations = document.querySelector('.enso-mechanism-plate').getAnimations({subtree:true})
+                .filter(a => a instanceof CSSAnimation && a.playState === 'running'
+                    && a.effect.target && a.effect.target.closest('.enso-flow'));
+            const metadata = new Set(['offset', 'computedOffset', 'easing', 'composite']);
+            const properties = animations.flatMap(a => a.effect.getKeyframes().flatMap(frame =>
+                Object.keys(frame).filter(key => !metadata.has(key))));
+            return animations.length >= 8 && properties.length > 0
+                && properties.every(key => key === 'transform' || key === 'opacity');
+        }"""))
         page.emulate_media(reduced_motion='reduce')
         ticks.nth(2).click()
         # Reduced motion keeps the 200ms opacity crossfade (it aids comprehension)
