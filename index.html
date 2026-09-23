@@ -45913,7 +45913,7 @@ function showCommodityDetail(key) {
     var line = function (list) { return list.map(function (r) { return esc(nameFor(r.iso)) + ' ' + num(r.change_pct_record, 0) + '% (' + esc(r.harvest) + ')'; }).join(', '); };
     var pct = function (v) { return v == null ? '' : num(v, 0) + '%'; };
     /* "Last time" is a past event; this month's FAO release is a present reading and goes with the price. */
-    var past = function (re) { return local.filter(function (c) { return re.test(c.place + ' ' + c.metric) && !/2026/.test(c.window); }).map(function (c) { return esc(c.place) + ': ' + esc(c.metric) + ', ' + esc(c.window); }).join('; '); };
+    var past = function (re) { return local.filter(function (c) { return re.test(c.place + ' ' + c.metric) && !/2026/.test(c.window); }).map(function (c) { return esc(c.place) + ': ' + esc(c.metric) + ', ' + esc(c.window) + (c.source ? ' <span class="enso-live-sub">' + esc(c.source) + '</span>' : ''); }).join(''); };
     /* One FAO release names several indices; each commodity keeps only its own clause. */
     var nowNote = function (re, pick) { return local.filter(function (c) { return re.test(c.place + ' ' + c.metric) && /2026/.test(c.window); }).map(function (c) {
       var part = pick ? (String(c.metric).split(/;\s*/).filter(function (t) { return pick.test(t); })[0] || c.metric) : c.metric;
@@ -45937,7 +45937,7 @@ function showCommodityDetail(key) {
           '<td class="enso-ol-v">' + (x.p ? '$' + Math.round(x.p.usd_per_t).toLocaleString('en-US') + '/t <span class="enso-live-sub">' + esc(x.p.series) + ', ' + esc(/^\d{4}-\d{2}$/.test(x.p.month) ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+x.p.month.slice(5) - 1] + ' ' + x.p.month.slice(0, 4) : x.p.month) + (x.p.mom != null ? ' · ' + pct(x.p.mom) + ' m/m' : '') + (x.p.yoy != null ? ' · ' + pct(x.p.yoy) + ' y/y' : '') + '</span>' : '<span class="enso-ol-na">—</span>') + (x.now ? '<span class="enso-live-sub">FAO: ' + x.now + '</span>' : '') + '</td>' +
           '<td>' + (x.pol || '<span class="enso-ol-na">' + ((S.restrictions || []).some(function (r) { return x.polRe.test(r.commodity || ''); }) ? 'none in force' : 'not tracked') + '</span>') + '</td></tr>';
       }).join('') + '</tbody></table></div>' +
-      '<figcaption class="enso-log">Where the damage lands is local: in 2023-24 South African white maize rose a third while world grain prices were soft. So the local column matters more than the world price, and a “not monitored” there is a gap in the evidence, not calm. ' + (function () {
+      '<figcaption class="enso-log">Where the damage lands is local: in early 2024 South African white maize rose more than a third while world grain prices were soft. So the local column matters more than the world price, and a “not monitored” there is a gap in the evidence, not calm. ' + (function () {
         var cs = []; (S.restrictions || []).forEach(function (r) { if (r.country && cs.indexOf(r.country) < 0) cs.push(r.country); });
         return cs.length ? 'The export-measure tracker covers ' + esc(cs.join(', ')) + ' only; “not tracked” means no measure for that commodity is followed here.' : '';
       })() + '</figcaption></figure>';
@@ -45986,7 +45986,7 @@ function showCommodityDetail(key) {
         '<details class="enso-evidence-note"><summary>Country price sources and reporting dates</summary><div class="enso-tblwrap"><table class="enso-tbl"><thead><tr><th>Country</th><th>Food inflation</th><th>Markets</th><th>As of</th><th>Source</th></tr></thead><tbody>' + rows.map(function (x) {
           return '<tr data-price-iso="' + esc(x.iso) + '"><td>' + esc(nameFor(x.iso)) + '</td><td class="num">' + esc(x.r.food_inflation_pct) + '%</td><td class="num">' + esc(x.r.markets == null ? 'Unknown' : x.r.markets) + '</td><td class="num">' + esc(x.r.as_of || 'date unavailable') + '</td><td><a href="' + esc(safeUrl(x.r.source_url)) + '" target="_blank" rel="noopener">World Bank RTFP</a></td></tr>';
         }).join('') + '</tbody></table></div></details>' +
-        '<details class="enso-evidence-note"><summary>Historical local prices and policy context</summary>' + (loc.cases || []).map(function (c) { return '<p><b>' + esc(c.place) + ' · ' + esc(c.window) + '.</b> ' + esc(c.metric) + ' ' + esc(c.note || '') + '</p>'; }).join('') + '<p>' + esc(loc.source || '') + ' · read ' + esc(readOn) + '</p>' +
+        '<details class="enso-evidence-note"><summary>Historical local prices and policy context</summary>' + (loc.cases || []).map(function (c) { return '<p><b>' + esc(c.place) + ' · ' + esc(c.window) + '.</b> ' + esc(c.metric) + '. ' + esc(String(c.note || '').replace(/\s*Source:.*$/, '')) + (c.source ? ' <span class="enso-live-sub">' + (c.url ? '<a href="' + esc(safeUrl(c.url)) + '" target="_blank" rel="noopener">' + esc(c.source) + '</a>' : esc(c.source)) + '</span>' : '') + '</p>'; }).join('') + '<p>' + esc(loc.source || '') + ' · read ' + esc(readOn) + '</p>' +
         (loc.policy_amplifier ? '<p>' + esc(loc.policy_amplifier.claim) + ' ' + esc(loc.policy_amplifier.evidence) + ' <a href="' + esc(safeUrl(loc.policy_amplifier.url)) + '" target="_blank" rel="noopener">' + esc(loc.policy_amplifier.source) + '</a></p>' : '') + '<p>' + esc(loc.conditioning || '') + '</p></details></div>' +
         '<details class="enso-evidence-note"><summary>Published economic estimates and evidence</summary>' + estimates + '</details><div id="enso-people-evidence"></div><figcaption class="enso-log">Market medians measure local food inflation; changes are not attributed to ENSO.</figcaption></figure>';
     } else { out += '<figure class="enso-plate">' + estimates + '<div id="enso-people-evidence"></div></figure>'; }
@@ -46184,6 +46184,12 @@ function showCommodityDetail(key) {
       return { text: same ? m[1] + ' ' + m[2] : m[1] + (m[2] !== m[4] ? ' ' + m[2] : '') + '–' + m[3] + ' ' + m[4],
                status: (m[5] || '').toLowerCase().replace(/^(\d\w+) projection$/, '$1 projection'), end: Date.UTC(+m[4], MON[m[3]] + 1, 0) };
     };
+    /* A hand-checked IPC release newer than the feed replaces the feed's figure. */
+    var ipcOf = function (iso) {
+      var f = S.ipc && S.ipc[iso], u = ((S.situation || {}).ipc_updates || {})[iso];
+      if (u && (!f || Date.parse(u.released) > Date.parse(f.analysis_date || 0))) return u;
+      return f;
+    };
     var ipcSource = function (p) {
       var k = String(p.data_source || '').split(' - ')[0].trim();
       return { IPC: 'IPC', CH: 'Cadre Harmonisé', FEWSNET: 'FEWS NET estimate', HRP: 'response-plan figure', HNRP: 'response-plan figure' }[k] || k;
@@ -46197,8 +46203,8 @@ function showCommodityDetail(key) {
       var al = gdIn(isos); if (al.length) bits.push(al.length + ' GDACS alert' + (al.length > 1 ? 's' : ''));
       var trig = isos.filter(function (i) { return aaTrig[i]; }); if (trig.length) bits.push('action triggered: ' + trig.map(function (i) { return esc(nameFor(i)); }).join(', '));
       /* Before a season opens, the baseline is who is already in crisis. */
-      var base = isos.filter(function (i) { var p = S.ipc && S.ipc[i]; if (!p || typeof p.phase3plus_count !== 'number') return false; var e = ipcPeriod(p).end; return e != null && e >= today; });
-      if (base.length) bits.push('already in Phase 3+ before the season: ' + base.map(function (i) { var p = S.ipc[i]; return esc(nameFor(i)) + ' ' + (p.phase3plus_count / 1e6).toFixed(p.phase3plus_count >= 1e6 ? 1 : 2) + ' m'; }).join(', ') + ' (latest analyses, periods vary)');
+      var base = isos.filter(function (i) { var p = ipcOf(i); if (!p || typeof p.phase3plus_count !== 'number') return false; var e = ipcPeriod(p).end; return e != null && e >= today; });
+      if (base.length) bits.push('already in Phase 3+ before the season: ' + base.map(function (i) { var p = ipcOf(i); return esc(nameFor(i)) + ' ' + (p.phase3plus_count / 1e6).toFixed(p.phase3plus_count >= 1e6 ? 1 : 2) + ' m'; }).join(', ') + ' (latest analyses, periods vary)');
       return '<tr class="is-' + esc(String(r.concern).replace(/\s+/g, '-')) + '"><th scope="row">' + esc(r.region) + '</th><td><span class="enso-concern">' + esc(r.concern) + '</span></td>' +
         '<td class="enso-ol-h">' + (r.windows || []).map(esc).join(' · ') + '</td><td>' + esc(r.hazards) + '<span class="enso-live-sub">' + esc(r.countries) + '</span></td>' +
         '<td class="enso-live-now">' + (bits.join(' · ') || '<span class="enso-ol-na">' + (!isos.length ? 'FEWS NET names no countries here, so nothing is joined' : seasonAhead(r.windows) ? 'season not yet under way (starts ' + esc(seasonAhead(r.windows)) + '); no seasonal hazard observed yet' : 'no observed signal in these countries today') + '</span>') + '</td></tr>';
@@ -46253,11 +46259,12 @@ function showCommodityDetail(key) {
         })() : '<span class="enso-ol-na">—</span>') + '</td>' +
         '<td>' + (aaTrig[r.iso] ? '<b>triggered</b> (WFP)' : aaPri[r.iso] ? 'in FAO–WFP appeal' : '<span class="enso-ol-na">—</span>') + (fewsHigh[r.iso] ? '<span class="enso-live-sub">FEWS NET high concern</span>' : '') + '</td>' +
         (function () {
-          var p = S.ipc && S.ipc[r.iso]; if (!p || typeof p.phase3plus_count !== 'number') return '<td class="enso-ol-v"><span class="enso-ol-na">—</span></td>';
+          var p = ipcOf(r.iso); if (!p || typeof p.phase3plus_count !== 'number') return '<td class="enso-ol-v"><span class="enso-ol-na">—</span></td>';
           var per = ipcPeriod(p), old = per.end != null && per.end < today - 365 * day;
           var m = function (n) { return (n / 1e6).toFixed(n >= 1e6 ? 1 : 2) + ' m'; };
           return '<td class="enso-ol-v' + (old ? ' is-stale' : '') + '">' + m(p.phase3plus_count) +
             (p.phase5_count > 0 ? '<span class="enso-live-sub"><b>' + m(p.phase5_count) + ' in Phase 5</b></span>' : '') +
+            (p.famine_risk ? '<span class="enso-live-sub"><b>' + esc(p.famine_risk.split(';')[0].replace(/^r/, 'R')) + '</b> · <a href="' + esc(safeUrl(p.url)) + '" target="_blank" rel="noopener">IPC, ' + esc(fmtDate(p.released)) + '</a></span>' : '') +
             '<span class="enso-live-sub">' + esc(per.text) + (per.status ? ' · ' + esc(per.status) : '') + ' · ' + esc(ipcSource(p)) + (old ? ' · older than 12 months' : per.end != null && per.end < today ? ' · period ended' : '') + '</span>' +
             (typeof p.analysis_coverage_ratio === 'number' && p.analysis_coverage_ratio < 0.9 ? '<span class="enso-live-sub">partial: ' + Math.round(p.analysis_coverage_ratio * 100) + '% of people analysed' + (typeof p.phase3plus_pct === 'number' ? ', ' + Math.round(p.phase3plus_pct) + '% of them in Phase 3+' : '') + '</span>' : '') + '</td>';
         })() +
