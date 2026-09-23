@@ -12805,7 +12805,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
     <button class="viewswitch-btn" id="viewbtn-ensoharvest" role="tab" aria-selected="false" tabindex="-1" aria-controls="subview-ensoharvest" title="Fitted harvest responses and crop calendars." onclick="showTab('ensoharvest',this)"><span class="enso-view-label">Harvests</span><span class="enso-view-desc">crop responses</span></button>
     <button class="viewswitch-btn" id="viewbtn-ensowater" role="tab" aria-selected="false" tabindex="-1" aria-controls="subview-ensowater" title="Shipping chokepoints, tagged by which ENSO phase degrades them." onclick="showTab('ensowater',this)"><span class="enso-view-label">Shipping</span><span class="enso-view-desc">chokepoints</span></button>
     <button class="viewswitch-btn" id="viewbtn-ensomoney" role="tab" aria-selected="false" tabindex="-1" aria-controls="subview-ensomoney" title="What the record shows, what models estimate, and where the literature disagrees." onclick="showTab('ensomoney',this)"><span class="enso-view-label">Prices</span><span class="enso-view-desc">food inflation</span></button>
-    <button class="viewswitch-btn" id="viewbtn-ensolive" role="tab" aria-selected="false" tabindex="-1" aria-controls="subview-ensolive" title="Live alerts, agricultural stress and the newswire." onclick="showTab('ensolive',this)"><span class="enso-view-label">Reported<span class="enso-livedot" id="enso-live-count"></span></span><span class="enso-view-desc">bulletins</span></button>
+    <button class="viewswitch-btn" id="viewbtn-ensolive" role="tab" aria-selected="false" tabindex="-1" aria-controls="subview-ensolive" title="Live alerts, agricultural stress and the newswire." onclick="showTab('ensolive',this)"><span class="enso-view-label">Reported<span class="enso-livedot" id="enso-live-count"></span></span><span class="enso-view-desc">news &amp; alerts</span></button>
   </div>
       <div id="enso-status-home"></div>
       <section id="enso-hero" class="enso-sec" aria-label="Current ocean state"></section>
@@ -42499,6 +42499,17 @@ function showCommodityDetail(key) {
     for (var k in a) { if (a[k] && typeof a[k].hotspot_code === 'number') n++; }
     return n;
   }
+  /* ASAP publishes around the 10th of each month. A file whose newest
+     assessment is more than 40 days old says so, instead of passing a
+     collection date off as the assessment's. */
+  function asapNote() {
+    var a = S.asap || {}, newest = null;
+    for (var k in a) { var d = a[k] && a[k].assessment_date ? new Date(a[k].assessment_date) : null; if (d && !isNaN(d) && (!newest || d > newest)) newest = d; }
+    var base = 'collected ' + stamp(metaDate('asap'));
+    if (!newest) return base + '; assessment date unavailable';
+    var ageDays = Math.floor((Date.now() - newest) / 864e5);
+    return base + '; latest assessment ' + stamp(newest) + (ageDays > 40 ? ', the next monthly assessment is not yet in the feed' : '');
+  }
   /* The country tooltip counted stories through newsFor(), which was never
      written: every hover threw before it could print. It went unseen while
      nothing but a map click reached that line, and stage H's ranked lists
@@ -43211,9 +43222,18 @@ function showCommodityDetail(key) {
   function renderMechanism() {
     var el = document.getElementById('enso-mech'); if (!el) return;
     var M = S.mech; if (!M) { el.innerHTML = ''; return; }
-    var cx = M.context || {}, readOn = stamp(metaDate('mech'));
+    /* These plates also render live values from the weekly, indices and
+       bulletin feeds, so the stamp is the newest of the files they read. */
+    var readDates = ['mech', 'enso', 'indices', 'bulletins'].map(metaDate).filter(Boolean);
+    var cx = M.context || {}, readOn = stamp(readDates.length ? new Date(Math.max.apply(null, readDates)) : null);
     var weekly = (S.enso && S.enso.weekly_nino34) || {};
+    /* The 30-day SOI comes from the indices feed; the July monthly value
+       has no field and stays as dated prose. */
+    var soiRow = ((S.indices && S.indices.indices) || []).filter(function (r) { return r.key === 'soi'; })[0];
+    var soiEnd = soiRow ? String(soiRow.window || '').replace(/^30 days to /, '') : '';
+    var soiLive = soiRow && typeof soiRow.value === 'number' ? '30-day SOI ' + num(soiRow.value, 1) + ' to ' + soiEnd : '';
     var mechanismEvidence = function (c) {
+      if (c.id === 'soi' && soiLive) return String(c.evidence || '').replace(/BoM 30-day SOI [^(]*?\d{4}/, 'BoM ' + soiLive);
       if (c.id !== 'upwelling' || typeof weekly.nino12_anom !== 'number') return c.evidence;
       var remainder = String(c.evidence || '').replace(/^.*?\):\s*/, '');
       return 'Niño 1+2 at ' + num(weekly.nino12_anom, 1) + ' °C (week of ' + weeklyDate(weekly.date) + '): ' + remainder;
@@ -43227,7 +43247,7 @@ function showCommodityDetail(key) {
     ];
     var copy = {
       trades: ['Trade winds', 'Easterly winds push warm surface water toward Indonesia.', 'Westerly anomalies have persisted since mid-March 2026.', 'CPC, 10 Sept 2026 · low-level winds'],
-      soi: ['Darwin and Tahiti pressure', 'The pressure difference drives the easterly trades.', 'July Troup SOI −29.1; 30-day SOI −18.7 to 14 Sept 2026.', 'BoM, 14 Sept 2026 · Troup SOI'],
+      soi: ['Darwin and Tahiti pressure', 'The pressure difference drives the easterly trades.', 'July Troup SOI −29.1' + (soiLive ? '; ' + soiLive : '') + '.', 'BoM' + (soiEnd ? ', ' + soiEnd : '') + ' · Troup SOI'],
       convection: ['Rainfall shifts east', 'Convection concentrates rain over the Maritime Continent.', 'Rain is enhanced in the central and eastern Pacific and suppressed over Indonesia.', 'CPC, 10 Sept 2026 · convection and rainfall'],
       warm_water: ['Warm water crosses the date line', 'The thermocline is deep in the west and shallow off South America.', 'The eastern thermocline has deepened, with anomalies above +10.0 °C at depth.', 'CPC, 10 Sept 2026 · subsurface temperatures'],
       upwelling: ['Upwelling off Peru', 'Cold, nutrient-rich water supplies the anchoveta fishery.', 'A warm coastal layer caps the upwelling.',
@@ -43263,7 +43283,9 @@ function showCommodityDetail(key) {
       '<h3>Ocean feedback</h3><p>Weaker trades allow warm water to move east. The smaller temperature gradient further weakens the trades. Returning ocean waves eventually cool the eastern basin.</p>' +
       ((M.feedback || {}).sources || []).map(function (x) { return '<p><a href="' + esc(safeUrl(x.url)) + '" target="_blank" rel="noopener">' + esc(x.label) + '</a></p>'; }).join('') +
       regionsStrip() + '<h3>Timing from the ocean signal</h3><div class="enso-casc">' + (M.cascade || []).map(function (c) {
-        return '<div class="enso-casc-row"><div class="enso-casc-lag">' + esc(c.lag) + '</div><div><b>' + esc(c.band) + '</b><span class="enso-casc-s">' + esc(c.status) + '</span><p>' + esc(c.what) + '</p></div></div>';
+        return '<div class="enso-casc-row"><div class="enso-casc-lag">' + esc(c.lag) + '</div><div><b>' + esc(c.band) + '</b><span class="enso-casc-s">' + esc(c.status) + '</span><p>' + esc(c.what) + '</p>' +
+          /* The note carries the attribution (e.g. which agency forecasts the delayed rains). */
+          (c.note ? '<details class="enso-casc-note"><summary>Basis</summary><p>' + esc(c.note) + '</p></details>' : '') + '</div></div>';
       }).join('') + '</div>';
     if (cx.rows) {
       out += '<section class="enso-evidence-context">' +
@@ -43271,12 +43293,12 @@ function showCommodityDetail(key) {
           '<div class="enso-ctx">' + cx.rows.map(function (r) {
             var value = r.v;
             if (/^Agencies/.test(r.k) && S.bulletins && S.bulletins.bulletins) {
-              var latest = {};
+              var latest = {}, kinds = {};
               S.bulletins.bulletins.forEach(function (b) {
                 if (!b.agency || (b.agency === 'WMO' && b.kind === 'news')) return;
                 var d = new Date(b.published);
                 if (!b.published || isNaN(d)) return;
-                if (!latest[b.agency] || d > latest[b.agency]) latest[b.agency] = d;
+                if (!latest[b.agency] || d > latest[b.agency]) { latest[b.agency] = d; kinds[b.agency] = b.kind; }
               });
               var order = ['NOAA CPC', 'BoM Australia', 'IRI / Columbia', 'JMA', 'ENFEN (Peru)'];
               var agencies = order.filter(function (a) { return latest[a]; }).concat(
@@ -43285,7 +43307,8 @@ function showCommodityDetail(key) {
                 .filter(function (y, i, all) { return all.indexOf(y) === i; });
               if (agencies.length) value = agencies.map(function (a) {
                 var d = latest[a];
-                return a + ' (' + d.getUTCDate() + ' ' +
+                /* A weekly data file is not the agency's written update: say which. */
+                return a + ' (' + (kinds[a] === 'weekly' ? 'weekly index, ' : '') + d.getUTCDate() + ' ' +
                   ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()] +
                   (years.length > 1 ? ' ' + d.getUTCFullYear() : '') + ')';
               }).join(', ') + (years.length === 1 ? ' ' + years[0] : '');
@@ -43620,11 +43643,13 @@ function showCommodityDetail(key) {
     var el = document.getElementById('enso-land-head'); if (!el) return;
     /* The countries with a surviving fit, strongest slope first, as one tap
        each: the map is one way in, this list is the other. */
+    /* Shared-with-IOD pairs are left out, as they are from the map's country
+       totals; the calendar and coefficient table still show them, labelled. */
     var seen = {}, isos = [];
-    harvestRows().forEach(function (r) { if (!seen[r.iso]) { seen[r.iso] = true; isos.push(r.iso); } });
+    harvestRows().forEach(function (r) { if (r.c.enso_specific !== false && !seen[r.iso]) { seen[r.iso] = true; isos.push(r.iso); } });
     el.innerHTML = '<div class="enso-section-intro"><h2 class="enso-h">Harvest responses</h2>' +
       '<p>Select a country on the map or search above to compare its fitted crop responses. ' +
-      (isos.length ? isos.length + ' countries carry a fitted signal, strongest El Niño slope first:' : '') + '</p>' +
+      (isos.length ? isos.length + ' countries carry an El Niño-specific fitted signal, strongest slope first:' : '') + '</p>' +
       (isos.length ? '<div class="enso-country-list">' + isos.map(function (iso) {
         return '<button type="button" class="enso-chip' + (iso === S.sel ? ' is-selected' : '') + '" onclick="ensoFocus(\'' + esc(iso) + '\')">' + esc(nameFor(iso)) + '</button>';
       }).join('') + '</div>' : '') + '</div>';
@@ -43797,7 +43822,7 @@ function showCommodityDetail(key) {
         ? '<div class="enso-legend-note">' + S.alertCounts.reliefUnplaced + ' of ' + S.alertCounts.reliefTotal +
           ' ReliefWeb reports carry no country shape this map can place, including world-level entries, and are not drawn.</div>'
         : '') +
-      '<div class="ctr-note" style="max-width:32ch;margin-top:5px;">GDACS collected ' + esc(stamp(metaDate('gdacs'))) + '; ReliefWeb collected ' + esc(stamp(metaDate('relief'))) + '. Counts are mapped reports, not affected countries; overlapping reports share a location. ReliefWeb uses up to 40 records with a country centroid. Amber rings: GDACS; pale cyan rings: ReliefWeb, both with dark centres. A marker says a hazard was reported. It says nothing about what caused it.</div></div>';
+      '<div class="ctr-note" style="max-width:32ch;margin-top:5px;">GDACS collected ' + esc(stamp(metaDate('gdacs'))) + '; ReliefWeb collected ' + esc(stamp(metaDate('relief'))) + '. Counts are mapped reports, not affected countries; overlapping reports share a location. The map draws every current GDACS alert worldwide and the ' + counts.relief + ' ReliefWeb reports that carry a country centroid; the list beside the map keeps only those in teleconnection countries. Amber rings: GDACS; pale cyan rings: ReliefWeb, both with dark centres. A marker says a hazard was reported. It says nothing about what caused it.</div></div>';
   }
 
   function intervalBand(oni) {
@@ -43936,7 +43961,7 @@ function showCommodityDetail(key) {
         var outside = all.filter(function (i) { return !teleSet[i]; });
         el.innerHTML = '<div class="enso-legend-t">Food inflation · El Niño teleconnection countries</div>' +
           '<p class="enso-rank-note">' + valued.length + ' of ' + tele.length + ' countries have monitored values, highest first.</p>' +
-          '<ol class="enso-rank-list">' + valued.slice(0,3).map(priceRow).join('') + '</ol><details class="enso-rank-more"><summary>' + (tele.length + outside.length - Math.min(3,valued.length)) + ' more countries</summary><ol class="enso-rank-list" start="4">' + valued.slice(3).map(priceRow).join('') + '</ol>' +
+          '<ol class="enso-rank-list">' + valued.slice(0,3).map(priceRow).join('') + '</ol><details class="enso-rank-more"><summary>' + [Math.max(0, valued.length - 3) + ' more ranked', unvalued.length ? unvalued.length + ' without a market' : '', outside.length ? outside.length + ' outside the layer' : ''].filter(Boolean).join(' · ') + '</summary><ol class="enso-rank-list" start="4">' + valued.slice(3).map(priceRow).join('') + '</ol>' +
           (unvalued.length ? '<p class="enso-rank-missing">' + unvalued.length + ' countries in the layer have no monitored market: ' + unvalued.map(function (iso) { return '<button type="button" data-map-country="' + esc(iso) + '" aria-pressed="' + (S.sel===iso) + '">' + esc(nameFor(iso)) + '</button>'; }).join(', ') + '.</p>' : '') +
           (outside.length ? '<div class="enso-legend-t enso-rank-t2">Also painted · ' + outside.length + ' monitored countries outside the layer</div>' +
             '<p class="enso-rank-note">Monitored countries outside the published teleconnection regions.</p>' +
@@ -43981,6 +44006,7 @@ function showCommodityDetail(key) {
       S.mode === 'none' ? (S.showLanes ? 'observed IMF PortWatch transit changes at chokepoints, collected ' + stamp(metaDate('portwatch')) + '; published schematic corridors reviewed ' + stamp(metaDate('corridors')) + ', with published ENSO phase tags reviewed ' + stamp(metaDate('lanes')) : 'reference geography only; choose a layer above to paint the land, and add overlays to any of them') :
       'collected ' + stamp(metaDate(key)) + (modelled ? '' : '; assessment periods vary by record');
     if (S.mode === 'rtfp') date = rtfpNote();
+    if (S.mode === 'asap') date = asapNote();
     if (S.mode === 'sst' && !S.showSST) title += ' (backdrop hidden)';
     if (S.mode === 'sst' && !S.sst) date = 'source unavailable';
     return { kind: kind, title: title, source: source, date: date };
@@ -44683,6 +44709,8 @@ function showCommodityDetail(key) {
   /* Three annotations, not thirty. Each states a measured number this page can
      defend, sited on the place it belongs to — the map should argue, not just
      colour in. Hidden on narrow screens where they would collide. */
+  /* Callout figures read the fit at render time so a refit cannot strand them. */
+  function fitOf(iso, crop) { var c = S.model && S.model[iso] && S.model[iso][crop]; return c && typeof c.yield_pct_per_oni_nino === 'number' ? c : null; }
   var ANNOTATIONS = [
     /* The abandonment figure is not from the FAOSTAT fit this plate is sourced
        to, so it carried no citation a reader could follow. It is the NOAA
@@ -44690,9 +44718,9 @@ function showCommodityDetail(key) {
        us_southern_plains, and it says so now. The yield slope beside it is the
        fit, and stays labelled as such. */
     { at: [38.5, -98.4], label: [40, -128], side: 'left', t: 'Kansas', lens: ['ensoharvest'],
-      d: 'El Niño cuts winter-wheat abandonment 3pp in the southern Plains (NOAA Climate Program Office). In the fit, US wheat is +4.4%/ONI, the most statistically significant result in the panel (q<0.0001), though not the largest.' },
+      d: function () { var c = fitOf('USA', 'wheat'); return 'El Niño cuts winter-wheat abandonment 3pp in the southern Plains (NOAA Climate Program Office).' + (c ? ' In the fit, US wheat is ' + num(c.yield_pct_per_oni_nino, 1) + '%/ONI' + (c.q_value < 0.0001 ? ', the most statistically significant result in the panel (q<0.0001), though not the largest.' : ' (q ' + c.q_value.toPrecision(2) + ').') : ''); } },
     { at: [-28.6, 26.2], label: [-33, 58], side: 'right', t: 'Free State', lens: ['ensoharvest'],
-      d: 'South African maize −21%/ONI. Zimbabwe −27.6%. The best-evidenced El Niño food signal there is.' },
+      d: function () { var z = fitOf('ZAF', 'corn'), w = fitOf('ZWE', 'corn'); return (z ? 'South African maize ' + num(z.yield_pct_per_oni_nino, 0) + '%/ONI. ' : '') + (w ? 'Zimbabwe ' + num(w.yield_pct_per_oni_nino, 1) + '%. ' : '') + 'The best-evidenced El Niño food signal in the fit.'; } },
     /* The Gatún callout is gone from the Shipping lens. A 176px card floating
        in the South Pacific was the largest object on a map whose subject is
        the marks underneath it, and the reader had to parse it before the
@@ -44729,7 +44757,7 @@ function showCommodityDetail(key) {
         zIndexOffset: 1000,
         icon: L.divIcon({
           className: 'enso-anno enso-anno-' + a.side,
-          html: '<b>' + esc(a.t) + '</b><span>' + esc(a.d) + '</span>',
+          html: '<b>' + esc(a.t) + '</b><span>' + esc(typeof a.d === 'function' ? a.d() : a.d) + '</span>',
           /* iconSize was [188, 1]. Leaflet writes that height inline, so the
              annotation's box was ONE PIXEL tall: every line of body text
              overflowed below it and sat directly on the map, which is why it
@@ -45333,7 +45361,7 @@ function showCommodityDetail(key) {
        'one 2023/24 season Mato Grosso soy fell 16% while Rio Grande do Sul rose 68%. One colour per country hides both.'],
       ['Australia’s signal is mostly the Indian Ocean Dipole',
        'The apparent ENSO effect on Australian <i>wheat</i> falls to r = −0.08 once the IOD is controlled for, and no wheat ' +
-       'coefficient is published here. Australian <i>barley</i> does carry one (−11.9%/ONI) but it does not survive the same ' +
+       'coefficient is published here. Australian <i>barley</i> does carry one (' + (fitOf('AUS', 'barley') ? num(fitOf('AUS', 'barley').yield_pct_per_oni_nino, 1) + '%/ONI' : 'see the table') + ') but it does not survive the same ' +
        'control, so the table marks it <b>not ENSO-specific</b>.'],
       ['Published price estimates',
        'Price elasticities come from the cited literature. Each estimate retains its source, method and scope.'],
@@ -45392,8 +45420,9 @@ function showCommodityDetail(key) {
     var h = (Date.now() - t) / 36e5;
     if (h < -1) return 'dated ' + new Date(t).toISOString().slice(0, 10);   /* feeds do publish ahead */
     if (h < 1) return 'just now';
-    if (h < 24) return Math.round(h) + 'h ago';
-    var d = Math.round(h / 24);
+    if (h < 24) return Math.floor(h) + 'h ago';
+    /* Floor: a date-only stamp (T00:00Z) 13.9 days old is 13 days old, not 14. */
+    var d = Math.floor(h / 24);
     return d + (d === 1 ? ' day ago' : ' days ago');
   }
   function isoChips(list) {
@@ -45534,8 +45563,14 @@ function showCommodityDetail(key) {
     if (gd.length) {
       rail += '<figure class="enso-plate">' + plateHead('Drought, flood and cyclone alerts', 'GDACS · teleconnection countries', stamp(metaDate('gdacs')), 'reported') +
         '<div class="plate-body"><ul class="enso-rail-list">' + gd.slice(0, 4).map(function (e) {
-          return '<li><button class="enso-chip" onclick="ensoFocus(\'' + esc(e.iso3) + '\')">' + esc(e.country || e.iso3) + '</button><span style="color:' + (e.alert_level === 'Red' ? RAMP[4] : RAMP[2]) + '">' + esc(e.event_type_label) + ' · ' + esc(e.alert_level) + '</span></li>';
-        }).join('') + '</ul>' + moreRecords(gd.length, 4) + '</div><figcaption class="enso-log">Labels: reported hazard and severity.' + (gdDropped ? ' ' + gdDropped + ' further live alert' + (gdDropped > 1 ? 's' : '') + ' outside these countries, a European drought among them, left out.' : '') + '</figcaption></figure>';
+          /* An event whose primary country is outside the layer passed the
+             filter through the countries it affects: name those, not the primary. */
+          var inLayer = linkedIso[e.iso3] ? [e.iso3] : (e.affected_iso3 || []).filter(function (i) { return linkedIso[i]; });
+          var label = linkedIso[e.iso3] ? (e.country || e.iso3)
+            : inLayer.slice(0, 2).map(nameFor).join(', ') + (inLayer.length > 2 ? ' +' + (inLayer.length - 2) : '');
+          return '<li><button class="enso-chip" onclick="ensoFocus(\'' + esc(inLayer[0]) + '\')">' + esc(label) + '</button><span style="color:' + (e.alert_level === 'Red' ? RAMP[4] : RAMP[2]) + '">' + esc(e.event_type_label) + ' · ' + esc(e.alert_level) + '</span></li>';
+        }).join('') + '</ul>' + moreRecords(gd.length, 4) + '</div><figcaption class="enso-log">Labels: reported hazard and severity.' + (gdDropped ? ' ' + gdDropped + ' further live alert' + (gdDropped > 1 ? 's' : '') + ' outside these countries left out: ' +
+          gdAll.filter(function (e) { return gd.indexOf(e) < 0; }).map(function (e) { return (e.event_type_label || 'alert').toLowerCase() + ' in ' + (e.country || e.iso3); }).join(', ') + '.' : '') + '</figcaption></figure>';
     }
     if (rel.length) {
       rail += '<figure class="enso-plate">' + plateHead('Humanitarian events', 'ReliefWeb · teleconnection countries', stamp(metaDate('relief')), 'reported') +
@@ -45581,7 +45616,7 @@ function showCommodityDetail(key) {
       var n = news.length + gd.length;
       pill.textContent = n ? String(n) : '';
       pill.setAttribute('role', 'img');
-      pill.setAttribute('aria-label', n + ' live items');
+      pill.setAttribute('aria-label', n + ' news stories and alerts');
       pill.style.display = n ? '' : 'none';
     }
   }

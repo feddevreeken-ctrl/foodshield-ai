@@ -79,17 +79,21 @@ def bom_weekly() -> dict:
     _, r_end, r_val = last(get(BOM_RNINO))
     _, s_end, s_val = last(get(BOM_SOI))
     end = datetime.strptime(r_end, "%Y%m%d").replace(tzinfo=timezone.utc)
+    # The two files end on different days (the SOI is a 30-day window), so the
+    # title names the SOI's own window and the item is dated by the newer file.
+    s_dt = datetime.strptime(s_end, "%Y%m%d").replace(tzinfo=timezone.utc)
     return {
         "agency": "BoM Australia",
         "kind": "weekly",
-        "title": "Weekly relative Niño 3.4 " + ("%+.2f" % r_val) + " °C, Troup SOI " + ("%+.1f" % s_val),
+        "title": ("Weekly relative Niño 3.4 " + ("%+.2f" % r_val) + " °C, Troup SOI "
+                  + ("%+.1f" % s_val) + " (30 days to " + s_dt.strftime("%-d %b") + ")"),
         "summary": ("BoM's operational ocean index for the week ending "
                     + end.strftime("%-d %B %Y")
                     + ". Its El Niño threshold is +0.8 °C, higher than CPC's +0.5. The SOI is "
                     + ("negative, the El Niño-like sign" if s_val < 0 else "positive, the La Niña-like sign")
                     + ", so the atmosphere is "
                     + ("coupled to the ocean signal." if s_val < 0 else "not reinforcing it.")),
-        "published": end.isoformat(),
+        "published": max(end, s_dt).isoformat(),
         "url": "https://www.bom.gov.au/climate/enso/",
         "data_urls": [BOM_RNINO, BOM_SOI],
     }

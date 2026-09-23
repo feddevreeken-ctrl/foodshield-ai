@@ -1233,6 +1233,25 @@ def main() -> int:
                     && !!document.querySelector('.enso-price-missing');
             }"""))
 
+        print("\nTier 1: figures come from the feeds (court 2026-09-23)")
+        src = (ROOT / "index.html").read_text()
+        check("no hand-typed feed figures left in the page",
+              not any(s in src for s in ("SOI −18.7", "up to 40 records", "a European drought among them")))
+        page.evaluate("showTab('ensoharvest')")
+        page.wait_for_selector('#subview-ensoharvest.active .enso-subview-meta')
+        check("the harvest country list leaves out shared-with-IOD pairs", page.evaluate("""async () => {
+            const m = (await (await fetch('data/enso_model.json')).json()).data;
+            const want = new Set();
+            for (const iso in m) for (const crop in m[iso]) {
+                const c = m[iso][crop];
+                if (c && c.signal && c.enso_specific !== false) want.add(iso);
+            }
+            const chips = document.querySelectorAll('#enso-land-head .enso-country-list .enso-chip').length;
+            return chips === want.size && /El Niño-specific/.test(document.getElementById('enso-land-head').textContent);
+        }"""))
+        check("the Reported badge counts what its label names",
+              page.locator('#viewbtn-ensolive .enso-view-desc').inner_text().strip() == 'news & alerts')
+
         check("no console errors", not errors, "; ".join(errors[:2]))
         browser.close()
 

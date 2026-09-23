@@ -50,7 +50,12 @@ MAX_AGE_DAYS = 45
 LABELS = {"oni": "ONI", "roni": "RONI", "wk34": "Weekly Niño 3.4",
           "bom_rel": "Relative Niño 3.4", "soi": "Troup SOI"}
 N34 = "Niño 3.4 (170°W–120°W)"
-ABS_BASE = "absolute, fixed 1991–2020"
+# ONI and the weekly file are both absolute anomalies but NOT on one baseline:
+# ONI is ERSST v5 against centred 30-year periods CPC moves every five years,
+# the weekly file is OISST v2.1 against a fixed 1991-2020 climatology. Sharing
+# one string made ONI vs weekly look like a window-only (arithmetic) gap.
+ONI_BASE = "ERSST v5, centred 30-year base periods"
+WK_BASE = "OISST v2.1, fixed 1991–2020"
 REL_BASE = "relative to the tropical mean"
 
 
@@ -117,9 +122,10 @@ def main() -> int:
         return {
             "key": "oni", "label": "ONI", "agency": "NOAA CPC", "value": v, "unit": "°C",
             "window": f"{seas} {yr}, 3-month mean", "window_kind": "seasonal",
-            "region": N34, "baseline": ABS_BASE,
+            "region": N34, "baseline": ONI_BASE,
             "threshold": 0.5,
-            "note": "The index the harvest fit uses. Absolute anomaly against a fixed base.",
+            "note": "The index the harvest fit uses. Absolute anomaly against base periods "
+                    "CPC re-centres every five years.",
             "url": ONI_URL,
         }
 
@@ -143,9 +149,9 @@ def main() -> int:
             "key": "wk34", "label": "Weekly Niño 3.4", "agency": "NOAA CPC",
             "value": newest["nino34_anom"], "unit": "°C",
             "window": f"week ending {d.strftime('%-d %b %Y')}", "window_kind": "weekly",
-            "region": N34, "baseline": ABS_BASE, "threshold": None,
-            "note": "A single week, not a season. Runs hotter than the seasonal mean "
-                    "because it has not been averaged down.",
+            "region": N34, "baseline": WK_BASE, "threshold": None,
+            "note": "A single week, not a season, from a different SST analysis (OISST) "
+                    "on a fixed base, so it is not ONI's weekly value.",
             "url": WEEKLY_URL,
         }
 
