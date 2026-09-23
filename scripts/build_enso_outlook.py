@@ -170,8 +170,10 @@ def main() -> int:
                     # estimate; the fit's share of it is shown as a percentage,
                     # not added again as tonnes.
                     "in_season": in_season,
-                    # A harvest that runs Dec-Jan straddles the year; the fit's year is its end.
-                    "harvest": ((MONTHS[harvest[0] - 1] + " " + str(hyear - 1) + "–" + MONTHS[harvest[-1] - 1] + " " + str(hyear))
+                    # A harvest that runs Dec-Jan straddles the year. Paired with the DJF
+                    # of its own year, the fit's year is its end; paired with the DJF that
+                    # follows (djf_next_year), the fit's year is its start.
+                    "harvest": ((MONTHS[harvest[0] - 1] + " " + str(hyear - (0 if c.get("alignment") == "djf_next_year" else 1)) + "–" + MONTHS[harvest[-1] - 1] + " " + str(hyear + (1 if c.get("alignment") == "djf_next_year" else 0)))
                                 if len(harvest) > 1 and harvest[-1] < harvest[0]
                                 else (month_span(harvest) + " " + str(hyear)).strip()),
                     "harvest_year": hyear,
