@@ -14,13 +14,14 @@ This is the agency's forecast, published as is. Nothing here is modelled.
 from __future__ import annotations
 
 import html as htmlmod
+import json
 import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import http_get, write_json  # noqa: E402
+from _common import DATA_DIR, http_get, write_json  # noqa: E402
 
 URL = "https://cpc.ncep.noaa.gov/products/analysis_monitoring/enso/roni/strengths/"
 UA = {"User-Agent": "Mozilla/5.0 (FoodShield AI; public food-security dashboard)", "Accept": "*/*"}
@@ -71,10 +72,18 @@ def main() -> int:
                         "classes": {name: sum(probs[k] for k in idx) for name, idx in CLASSES}})
     if len(seasons) < 6:
         raise RuntimeError(f"only {len(seasons)} season rows parsed")
-    write_json("enso_strengths.json", {
+    payload = {
         "issued": issued.strftime("%B %Y"), "index": "RONI (relative Oceanic Niño Index)",
         "bins": BINS, "classes": [c[0] for c in CLASSES], "seasons": seasons, "url": URL,
-    }, source="NOAA Climate Prediction Center, ENSO strength probabilities (RONI)",
+    }
+    # refresh_cpc_roni_outlook.py owns data.roni_outlook in this file; keep its last-good value.
+    try:
+        prev = json.loads((DATA_DIR / "enso_strengths.json").read_text()).get("data", {})
+        if prev.get("roni_outlook"):
+            payload["roni_outlook"] = prev["roni_outlook"]
+    except (OSError, ValueError):
+        pass
+    write_json("enso_strengths.json", payload, source="NOAA Climate Prediction Center, ENSO strength probabilities (RONI)",
        notes="CPC's published odds per season and strength bin; parsed from its table, not modelled.",
        status="ok")
     print(f"[OK] enso_strengths: {len(seasons)} seasons, issued {issued:%B %Y}")

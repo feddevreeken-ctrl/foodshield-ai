@@ -76,6 +76,7 @@ import refresh_trade_restrictions
 import refresh_commodity_news   # v46 — GDELT + EC RSS commodity headlines (claims, not data)
 import refresh_enso_news        # El Niño wire: headlines that name the event (claims, not data)
 import refresh_cpc_strengths    # CPC RONI strength odds by season (how strong, how long)
+import refresh_cpc_roni_outlook  # CPC RONI outlook: median and 5th/95th percentile per season
 import refresh_shipping_gauges  # Gatún, St. Louis (+ barge rate), Kaub, Rosario, Manaus: the water behind the lanes
 import refresh_import_ports     # PortWatch dry-bulk imports at the gateway ports of the El Niño concern regions
 import refresh_enso_freight     # USDA AgTransport: Gulf/PNW->Japan grain freight, export inspections, barged grain
@@ -160,6 +161,7 @@ STEPS = [
     # all asked for the event by name. Keeps last-good items across a bad run.
     ("El Niño news",           refresh_enso_news.main,          "enso_news.json"),
     ("CPC strength odds",      refresh_cpc_strengths.main,      "enso_strengths.json"),
+    ("CPC RONI outlook",       refresh_cpc_roni_outlook.main,   "enso_strengths.json"),
     ("Shipping gauges",        refresh_shipping_gauges.main,    "enso_gauges.json"),
     ("Import ports",           refresh_import_ports.main,       "enso_ports.json"),
     ("Grain freight (USDA)",   refresh_enso_freight.main,       "enso_freight.json"),

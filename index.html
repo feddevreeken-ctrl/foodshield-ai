@@ -42968,7 +42968,8 @@ function showCommodityDetail(key) {
        Only the live ONI feed still bypasses the cache. */
     S.failed = [];
     var get = async function (n) {
-      var opts = (n === 'enso') ? { cache: 'no-store' } : {};
+      /* A redraw triggered by a changed feed revalidates every file, so the browser cache cannot serve the old copy. */
+      var opts = (n === 'enso') ? { cache: 'no-store' } : S.forceFresh ? { cache: 'no-cache' } : {};
       try {
         var r = await fetch('data/' + n + '.json', opts);
         if (!r.ok) { S.failed.push(n); return null; }
@@ -44190,8 +44191,26 @@ function showCommodityDetail(key) {
   /* An open tab should not go stale: every 30 minutes, while the El Niño tab
      is visible, re-read data/enso.json (cache bypassed) and, if NOAA's numbers
      have moved through the refresh, reload the whole module. */
+  /* One pass over every feed the tab reads: HEAD each file and compare its ETag / Last-Modified with
+     the previous pass. Returns true when any file changed since then. */
+  async function feedTagsChanged() {
+    var names = Object.keys(S.feedNames || {}).map(function (k) { return S.feedNames[k]; });
+    var seen = S.feedTags || (S.feedTags = {}), changed = false;
+    await Promise.all(names.map(async function (n) {
+      try {
+        var h = await fetch('data/' + n + '.json', { method: 'HEAD', cache: 'no-store' }); if (!h.ok) return;
+        var tag = h.headers.get('etag') || h.headers.get('last-modified'); if (!tag) return;
+        if (seen[n] && seen[n] !== tag) changed = true;
+        seen[n] = tag;
+      } catch (e) {}
+    }));
+    return changed;
+  }
   function ensoPoll() {
     if (S.pollTimer) return;
+    /* The baseline is taken now, right after the load, so a refresh that lands before the first
+       interval is still noticed. */
+    feedTagsChanged();
     S.pollTimer = setInterval(async function () {
       try {
         var tab = document.getElementById('tab-elnino');
@@ -44199,17 +44218,10 @@ function showCommodityDetail(key) {
         /* Every feed the tab reads, not just the ENSO index: news, alerts, prices and the outlook
            refresh every six hours, and an open page should follow them. A HEAD request per file
            compares its ETag / Last-Modified with the last poll; any change redraws the tab. */
-        var names = Object.keys(S.feedNames || {}).map(function (k) { return S.feedNames[k]; });
-        var seen = S.feedTags || (S.feedTags = {}), changed = false;
-        await Promise.all(names.map(async function (n) {
-          try {
-            var h = await fetch('data/' + n + '.json', { method: 'HEAD', cache: 'no-store' }); if (!h.ok) return;
-            var tag = h.headers.get('etag') || h.headers.get('last-modified'); if (!tag) return;
-            if (seen[n] && seen[n] !== tag) changed = true;
-            seen[n] = tag;
-          } catch (e) {}
-        }));
-        if (changed && typeof ensoRetry === 'function') ensoRetry();
+        if (await feedTagsChanged() && typeof ensoRetry === 'function') {
+          S.forceFresh = true;
+          try { await ensoRetry(); } finally { S.forceFresh = false; }
+        }
       } catch (e) { /* a failed poll changes nothing; the next one will try again */ }
     }, 15 * 60 * 1000);
   }

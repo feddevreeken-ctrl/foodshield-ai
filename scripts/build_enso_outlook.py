@@ -16,8 +16,9 @@ Reads what the pipeline already holds and writes data/enso_outlook.json:
 TWO ANCHORED CASES, NO EXTRAPOLATION
 ------------------------------------
 The fit is linear in ONI and was trained on 1961-2024 winters, the largest of
-which is 2015-16 at +2.5. CPC's own outlook puts DJF 2026-27 at RONI +2.27 (median);
-with ONI running ~0.4 above RONI that is about ONI +2.7, beyond anything the fit has seen. So this does not weight a probability
+which is 2015-16 at +2.5. CPC's own RONI outlook for the coming DJF (data/enso_strengths.json,
+roni_outlook) plus the current ONI-RONI gap (data/enso_indices.json) puts it beyond anything the
+fit has seen; the honesty line states both, from those files. So this does not weight a probability
 table into a single forecast. It reports each fitted pair at two ONI values the
 record contains: the latest observed season, and the record winter. Anything
 stronger is stated as outside the fitted range.
@@ -98,6 +99,33 @@ def load(name: str) -> dict:
 
 def body(d: dict):
     return d.get("data", d)
+
+
+def honesty_line(jan_year: int, record: dict) -> str:
+    """CPC's DJF RONI median (refresh_cpc_roni_outlook.py) and the ONI-RONI gap
+    for the latest season both indices cover (refresh_enso_indices), in words."""
+    rec = f"(ONI {record['anom']:+.1f}, {record['year'] - 1}-{str(record['year'])[2:]})"
+    winter = f"{jan_year - 1}-{str(jan_year)[2:]}"
+    try:
+        djf = next(o for o in body(load("enso_strengths.json")).get("roni_outlook") or []
+                   if o.get("label") == f"DJF {winter}")
+        idx = {i["key"]: i for i in body(load("enso_indices.json")).get("indices", [])}
+        oni, roni = idx["oni"], idx["roni"]
+        if oni.get("window") != roni.get("window"):
+            raise ValueError("ONI and RONI windows differ")
+        gap = oni["value"] - roni["value"]
+    except (StopIteration, KeyError, OSError, ValueError, TypeError):
+        return ("Estimates from a linear fit. The fit is on December–February; CPC's RONI outlook for "
+                f"December–February {winter} was not available this run, so how it compares with the strongest "
+                f"winter in the fit {rec} is not stated.")
+    oni_eq = djf["median"] + gap
+    side = ("a little above" if oni_eq - record["anom"] <= 0.5 else "well above") if oni_eq > record["anom"] \
+        else "within the range of"
+    return ("Estimates from a linear fit. "
+            f"The fit is on December–February, and CPC's median for December–February {winter} is RONI "
+            f"{djf['median']:+.2f}. ONI has been running about {abs(gap):.1f} °C {'above' if gap >= 0 else 'below'} "
+            f"RONI, so that is roughly ONI {oni_eq:+.1f}, {side} the strongest winter in the fit {rec}."
+            + (" A winter that strong could bring larger changes than those shown." if oni_eq > record["anom"] else ""))
 
 
 def month_span(months: list[int]) -> str:
@@ -447,10 +475,7 @@ def main() -> int:
     write_json("enso_outlook.json", {
         "cases": cases, "harvest_winter": f"DJF {jan_year - 1}-{str(jan_year)[2:]}",
         "method": "exp(fitted log-yield slope × ONI) − 1, × production, at two ONI values the record contains; value at stake = tonnes × latest World Bank price. No world-price model, no probability weighting.",
-        "honesty": ("Estimates from a linear fit. "
-                    "The fit is on December–February, and CPC's median for December–February 2026-27 is RONI +2.27. ONI has been "
-                    "running about 0.4 °C above RONI, so that is roughly ONI +2.7, a little above the strongest winter in the fit "
-                    "(ONI +2.5, 2015-16). A winter that strong could bring larger changes than those shown."),
+        "honesty": honesty_line(jan_year, record),
         "regions": out_regions,
         "crops": sorted(by_crop.values(), key=lambda c: c["loss_kt_record"]),
         "rows_all": rows_all,

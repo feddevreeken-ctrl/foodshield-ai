@@ -308,6 +308,9 @@ def main() -> int:
         spike = round(hist_max + 1.5, 2)
 
         def spike_enso(route):
+            # The page's freshness poll sends HEAD requests; they carry no body to rewrite.
+            if route.request.method == "HEAD":
+                return route.continue_()
             r = route.fetch()
             body = r.json()
             body["data"]["latest"]["anom"] = spike
