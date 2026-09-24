@@ -53,6 +53,7 @@ only "+2.0" would be meaningless, so the index and version travel with the data.
 from __future__ import annotations
 
 import json
+import math
 import os
 from datetime import datetime, timezone
 
@@ -81,6 +82,22 @@ def main() -> int:
     model = load("enso_model.json")
     psd = load("usda_psd.json")["data"]
 
+    # The map and the harvest ledger must tell one story (2026-09-24): the same
+    # El Niño-alone test as build_enso_outlook (Benjamini-Hochberg q on each
+    # pair's El Niño-slope p value, q < 0.10) and the same exp(b·ONI) − 1 form,
+    # since the slopes are in log points. The old linear form overstated large
+    # shocks (Zimbabwe's aggregate read below both of its crops).
+    pn = sorted(((c["p_nino"], (iso, crop)) for iso, cs in model["data"].items() for crop, c in cs.items()
+                 if isinstance(c, dict) and isinstance(c.get("p_nino"), (int, float))), key=lambda t: t[0])
+    q_nino, running = {}, 1.0
+    for rank in range(len(pn), 0, -1):
+        p_val, key = pn[rank - 1]
+        running = min(running, p_val * len(pn) / rank)
+        q_nino[key] = running
+
+    def change(b_pct: float, oni: float) -> float:
+        return math.exp(b_pct / 100.0 * oni) - 1.0
+
     out: dict = {}
     for iso3, commodities in model["data"].items():
         psd_c = psd.get(iso3, {})
@@ -99,8 +116,10 @@ def main() -> int:
         def enso_specific(e):
             return e.get("enso_specific") is not False
 
-        def counted(e):
-            return e.get("signal") and enso_specific(e)
+        def counted(e, oni=1.0):
+            # On the El Niño side a pair also needs its own El Niño slope to pass.
+            key = (iso3, next((k for k, v in commodities.items() if v is e), None))
+            return bool(e.get("signal") and enso_specific(e) and (oni < 0 or q_nino.get(key, 1) < 0.10))
 
         signal_prod = sum(e.get("mean_production_kt") or 0.0
                           for e in commodities.values() if counted(e))
@@ -123,21 +142,21 @@ def main() -> int:
                     continue
                 b = (e["yield_pct_per_oni_nino"] if oni >= 0
                      else e["yield_pct_per_oni_nina"])
-                kt += prod * (b / 100.0) * oni
+                kt += prod * change(b, oni)
             return kt
 
         levels: dict = {}
         for label, oni in LEVELS.items():
             shock_kt = 0.0
             for e in commodities.values():
-                if not counted(e):
+                if not counted(e, oni):
                     continue
                 prod = e.get("mean_production_kt") or 0.0
                 if prod <= 0:
                     continue
                 b = (e["yield_pct_per_oni_nino"] if oni >= 0
                      else e["yield_pct_per_oni_nina"])
-                shock_kt += prod * (b / 100.0) * oni
+                shock_kt += prod * change(b, oni)
             entry = {
                 "oni": oni,
                 "production_shock_kt": round(shock_kt, 1),

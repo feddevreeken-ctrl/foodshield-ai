@@ -294,6 +294,10 @@ def main() -> int:
                     buyers.append({"iso": d["iso3"], "share_pct": d["share_pct"], "kt": round(kt),
                                    "capped_at_imports": isinstance(cap, (int, float)) and cap > 0 and kt == cap})
                     other -= kt
+            # Five largest after the cap; the rest joins "other buyers".
+            buyers.sort(key=lambda x: -x["kt"])
+            other += sum(x["kt"] for x in buyers[5:])
+            buyers = buyers[:5]
             chain.append({
                 "iso": f["iso"], "crop": f["crop"], "harvest": f["harvest"], "loss_kt": round(loss),
                 "exports_kt": exports, "lost_exports_kt": round(lost_exports),
