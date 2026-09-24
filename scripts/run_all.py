@@ -78,6 +78,7 @@ import refresh_enso_news        # El Niño wire: headlines that name the event (
 import refresh_cpc_strengths    # CPC RONI strength odds by season (how strong, how long)
 import refresh_shipping_gauges  # Gatún, St. Louis (+ barge rate), Kaub, Rosario, Manaus: the water behind the lanes
 import refresh_import_ports     # PortWatch dry-bulk imports at the gateway ports of the El Niño concern regions
+import refresh_enso_freight     # USDA AgTransport: Gulf/PNW->Japan grain freight, export inspections, barged grain
 import build_enso_outlook       # El Niño outlook: fitted pairs x production x harvest, plus live signals per region
 import build_countries_dataset
 import snapshot_fdrs
@@ -161,6 +162,7 @@ STEPS = [
     ("CPC strength odds",      refresh_cpc_strengths.main,      "enso_strengths.json"),
     ("Shipping gauges",        refresh_shipping_gauges.main,    "enso_gauges.json"),
     ("Import ports",           refresh_import_ports.main,       "enso_ports.json"),
+    ("Grain freight (USDA)",   refresh_enso_freight.main,       "enso_freight.json"),
     # Derived, no network: reads the feeds above and the fitted model, so it runs after them.
     ("El Niño outlook",        build_enso_outlook.main,         "enso_outlook.json"),
     ("Countries dataset",      build_countries_dataset.main,    "countries.json"),

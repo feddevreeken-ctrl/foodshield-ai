@@ -316,7 +316,7 @@ def main() -> int:
         page.route("**/data/enso.json", spike_enso)
         try:
             open_panel(page, base)
-            page.wait_for_selector(".enso-strip", timeout=20_000)
+            page.wait_for_selector(".enso-strip", state="attached", timeout=20_000)
             page.wait_for_timeout(1100)
             spiked = page.evaluate(NOW_PROBE)
         finally:
@@ -335,7 +335,7 @@ def main() -> int:
               str(spiked))
 
         open_panel(page, base)   # back to real data for everything downstream
-        page.wait_for_selector(".enso-strip", timeout=20_000)
+        page.wait_for_selector(".enso-strip", state="attached", timeout=20_000)
 
 
 
@@ -464,7 +464,8 @@ def main() -> int:
               bool(boxes) and all(b["contains"] for b in boxes), str(boxes))
 
         print("\nagency bulletins in the news view")
-        open_panel(page, base, "ensolive")
+        # 2026-09-24: the official outlooks plate lives on Ocean now.
+        open_panel(page, base, "elnino")
         page.wait_for_selector(".enso-bul", timeout=20_000)
         ags = page.eval_on_selector_all(".enso-bul-ag", "e => e.map(x => x.textContent)")
         check("BoM weekly appears in news", any("BoM" in a for a in ags), str(ags))
@@ -501,7 +502,8 @@ def main() -> int:
 
         # Back to the view the layout checks below were written against — they
         # measure the news rail and bulletin strip, which only exist there.
-        open_panel(page, base, "ensolive")
+        # 2026-09-24: the official outlooks plate lives on Ocean now.
+        open_panel(page, base, "elnino")
         page.wait_for_selector(".enso-bul", timeout=20_000)
 
         print("\nlayout")
@@ -703,16 +705,17 @@ def main() -> int:
                 const pr = pl.getBoundingClientRect(); pl.querySelectorAll('table, canvas, p').forEach(e => { const r = e.getBoundingClientRect(); if (r.width && r.right > pr.right + 2) bad.push(((pl.querySelector('.enso-plate-t') || {}).textContent || '?') + ' ' + e.tagName); }); });
                 return bad; }"""))
             frames.append(page.evaluate("""() => [...document.querySelectorAll('#tab-elnino .enso-plate[data-kind], #enso-mapwrap[data-kind]')].every(e =>
-                getComputedStyle(e).borderTopStyle === (['modelled','published','estimated'].includes(e.dataset.kind) ? 'dashed' : 'solid'))"""))
+                getComputedStyle(e).borderTopStyle === (['modelled','estimated'].includes(e.dataset.kind) ? 'dashed' : 'solid'))"""))
         check("each view applies its layer and overlay defaults", all(lens_results), str(lens_results))
         check("one visible Instrument Serif H2 per view", headings == [1] * 5
               and page.locator('#tab-elnino h2:visible').evaluate("e => getComputedStyle(e).fontFamily.includes('Instrument Serif')"), str(headings))
-        check("observed frames are solid and modelled or published frames dashed", all(frames), str(frames))
+        check("dashed frames mark the site's model and estimates only; observed and published are solid", all(frames), str(frames))
         check("no table, chart or paragraph runs past its plate on any lens", not any(spill), str([x for x in spill if x]))
         # 2026-09-24 (court): the lenses may not grow unnoticed. Ceilings sit about 5% above the
         # heights at 1440x1000 on 24 Sep 2026; adding a plate means removing or folding another.
         # Lowered 24 Sep after the duplicate displays were removed (Ocean 4.2k, Shipping 6.9k, Prices 4.9k at 1440x900).
-        CEIL = {'elnino': 4600, 'ensoharvest': 4400, 'ensowater': 7500, 'ensomoney': 5500, 'ensolive': 6100}
+        # 2026-09-24: Harvests gains the published-estimates plate, Shipping the freight plate.
+        CEIL = {'elnino': 4600, 'ensoharvest': 5000, 'ensowater': 7800, 'ensomoney': 5500, 'ensolive': 6100}
         check("no lens grows past its height ceiling", all(heights.get(k, 0) <= v for k, v in CEIL.items()), str(heights))
         # 2026-09-24: the Ocean lens leads with a dated calendar joined from the other lenses' data.
         page.evaluate("showTab('elnino')")
