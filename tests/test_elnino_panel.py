@@ -914,10 +914,10 @@ def main() -> int:
         page.wait_for_selector('#subview-ensomoney.active #enso-c-ffpi')
         check("Who pays lists every modelled shortfall with its buyers from the outlook file", page.evaluate("""async () => {
             const W = (await (await fetch('data/enso_outlook.json')).json()).data.who_pays;
-            const rows = [...document.querySelectorAll('.enso-whopays-plate tbody tr:not(.enso-ol-total)')];
+            const rows = [...document.querySelectorAll('.enso-whopays-plate .enso-wp-row')];
             return rows.length === W.length && rows.every((r, i) => r.querySelector('button').dataset.mapCountry === W[i].iso)
                 && document.querySelector('.enso-whopays-plate').textContent.includes('hit twice')
-                && document.querySelectorAll('.enso-whopays-plate tr.enso-ol-total').length === ((await (await fetch('data/enso_outlook.json')).json()).data.who_pays_totals || []).length;
+                && document.querySelectorAll('.enso-whopays-plate .enso-wp-total').length === ((await (await fetch('data/enso_outlook.json')).json()).data.who_pays_totals || []).length;
         }"""))
         ffpi = page.evaluate("""() => {
             const c = Chart.getChart(document.getElementById('enso-c-ffpi'));
