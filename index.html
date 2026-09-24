@@ -44225,11 +44225,12 @@ function showCommodityDetail(key) {
         var h = await fetch('data/' + n + '.json', { method: 'HEAD', cache: 'no-store' }); if (!h.ok) return;
         var tag = feedTag(h); if (!tag) return;
         if (seen[n]) { if (seen[n] !== tag) changed = true; return; }
-        /* No baseline: the loaded copy failed. Wait out the file's backoff, then fetch just that file with the
+        /* No baseline: the loaded copy failed. Unless the version is new, wait out the file's backoff; then fetch just that file with the
            same validation the load uses, and redraw only if it now parses. A new version or a download that
            failed in transit recovers; a file that stays broken costs one download per backoff step. */
         var f = (S.failTags || {})[n];
-        if (f && Date.now() < f.until) return;
+        /* The wait applies only to the version that failed: a new version (a corrected file) is probed at once. */
+        if (f && f.tag === tag && Date.now() < f.until) return;
         var g = await fetch('data/' + n + '.json', { cache: 'no-cache' });
         if (!g.ok) { noteFeedFailure(n, tag); S.failed.pop(); return; }
         var j = null; try { j = await g.json(); } catch (e) {}
