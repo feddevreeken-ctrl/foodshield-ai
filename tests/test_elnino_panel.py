@@ -896,7 +896,7 @@ def main() -> int:
             const H = (await (await fetch('data/enso_hindcast.json')).json()).data.pairs;
             const txt = document.querySelector('.enso-outlook-plate').textContent;
             return Object.keys(H).length > 0 && Object.values(H).every(h => txt.includes('sign right ' + h.sign_right + ' of ' + h.events)) && document.querySelectorAll('.enso-ol-chart .enso-ol-row').length > 0
-                && [...document.querySelectorAll('.enso-ol-chart .enso-ol-num > span:not(.enso-ol-amt)')].every(sp => /^\d+\/\d+ right/.test(sp.textContent))
+                && [...document.querySelectorAll('.enso-ol-chart .enso-ol-row:not(.enso-ol-head):not(.enso-ol-axisrow) .enso-ol-skill')].every(sp => /^\d+\/\d+ right/.test(sp.textContent))
                 && !txt.includes('has not been scored') && txt.includes('held-out harvests');
         }"""))
         page.evaluate("showTab('ensowater')")
@@ -936,7 +936,7 @@ def main() -> int:
         check("Reported board distinguishes published stories and reported assessments",
               'Everything on this board is observed' not in page.locator('#enso-live').inner_text()
               and page.locator('#enso-live .enso-wire-plate').get_attribute('data-kind') == 'published'
-              and page.locator('#enso-live .enso-live-rail figure[data-kind="reported"]').count() >= 1)
+              and page.locator('#enso-live figure[data-kind="reported"]').count() >= 1)
         # Reported redesign (2026-09-23): decisions, regional concern, a country
         # ledger joined across feeds, then a deduplicated, food-first wire.
         check("Reported shows FEWS NET's regions, a country ledger and in-force measures with a countdown", page.evaluate("""async () => {
@@ -952,8 +952,13 @@ def main() -> int:
             const t = [...document.querySelectorAll('#enso-live .enso-wire-plate .enso-news-t')].map(a => a.textContent.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\\s+/g, ' ').trim().slice(0, 70));
             return t.length > 0 && new Set(t).size === t.length && !document.getElementById('enso-live').textContent.includes('&amp;');
         }"""))
-        check("humanitarian reports keep to hazards, food and anticipatory action",
-              'earthquake' not in page.locator('#enso-live .enso-live-rail').inner_text().lower())
+        # 2026-09-24: press headlines and ReliefWeb reports are one stream; reports skip
+        # monsoon/cyclone/earthquake sitreps and donor notices, and never repeat a wire story.
+        check("humanitarian reports keep to El Niño, drought and food security",
+              page.evaluate("""() => {
+                  const r = [...document.querySelectorAll('#enso-live .enso-wire-plate .is-report .enso-news-t')].map(a => a.textContent.toLowerCase());
+                  return r.every(x => !/earthquake|monsoon|cyclone|charity/.test(x));
+              }"""))
 
         print("\nstage H map interactions and ranked readings")
         # Capture the actual rebuilt Leaflet instance without adding a production test API.
