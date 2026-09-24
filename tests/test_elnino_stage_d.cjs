@@ -323,11 +323,9 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
   assert(node('enso-calendar').innerHTML.indexOf('cal-key')<node('enso-calendar').innerHTML.indexOf('class="enso-cal"'));
   // The sign rule moved into renderDetail (stubbed in this harness); the browser gate reads it from #enso-detail.
   S.sel='ZWE';api.renderCoeffs();assert(node('enso-coeffs').textContent.includes('Fitted crop responses'));assert(node('enso-coeffs').querySelector('#enso-detail'));
-  api.renderMoney();assert(node('enso-money').querySelector('#enso-c-record'));for(const label of ['Hatched: prices fall','Solid: prices rise','previous six months','same six months a year earlier'])assert(node('enso-money').textContent.includes(label));
+  api.renderMoney();assert(node('enso-money').querySelector('#enso-c-record'));for(const label of ['vs the previous six months','vs the same months a year earlier'])assert(node('enso-money').textContent.includes(label));
   api.drawCharts('ensowater');assert(ctx.charts['enso-c-panama'].keyNotes[0].includes('pale diamonds'));
   const ais=ctx.charts['enso-c-panama-daily'].keyNotes[0],dates=S.pwhist.chokepoints.panama.dates;const isoT=(d)=>{const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);return m?(+m[3])+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m[2]-1]+' '+m[1]:d;};for(const t of ['Points: observed daily','7-day means','slot limit from each advisory',isoT(dates[0]),isoT(dates[dates.length-1])])assert(ais.includes(t));
-  api.drawCharts('ensomoney');const ffpi=ctx.charts['enso-c-ffpi'].keyNotes[0];for(const t of ['Circles','triangles','diamond',S.ffpi.latest.month])assert(ffpi.includes(t));
-  const bars=ctx.charts['enso-c-rtfp'];assert(bars.keyNotes[0].includes('as of'));bars.data.datasets[0].data.forEach((v,i)=>assert.equal(bars.data.datasets[0].backgroundColor[i],api.rtfpColor(v)));
  });
  console.log(passed+'/'+passed+' Stage D non-browser checks passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

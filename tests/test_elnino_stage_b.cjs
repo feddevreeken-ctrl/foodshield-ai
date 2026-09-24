@@ -136,14 +136,10 @@ test('Panama chart retains every slot advisory with plain dates',()=>{
  assert.deepEqual(Array.from(c.data.datasets[1].data.slice(-p.live_2026.steps.length)),p.live_2026.steps.map(x=>x.total));
  assert(ctx.charts['enso-c-panama-daily'].plugins[0].id==='ensoRules');
 });
-test('prices have one seven-event surface and one FFPI canvas',()=>{
+test('prices show past El Niños as one dot plot and no duplicate food-inflation chart',()=>{
  api.renderMoney();const out=nodes['enso-money'].innerHTML;assert.equal((out.match(/class="enso-event"/g)||[]).length,7);
- assert.equal((out.match(/id="enso-c-ffpi"/g)||[]).length,1);assert(!out.includes('enso-money-story'));assert(!out.includes('id="enso-c-ffpilive"'));
- assert(out.includes('Disagreements and published critiques'));assert(out.includes(S.ffpi.latest.month));assert(out.includes(S.rtfp.AFG.as_of));
-});
-test('FFPI distinguishes latest month from annual averages without connecting gaps',()=>{
- api.drawCharts('ensomoney');const c=ctx.charts['enso-c-ffpi'];assert.equal(c.type,'scatter');assert.equal(c.data.datasets.length,3);assert(c.data.datasets.every(d=>!d.showLine));
- assert.equal(c.data.datasets[2].data[0].y,S.ffpi.latest.fpi);assert(c.data.datasets[2].label.includes(S.ffpi.latest.month));assert.notEqual(c.data.datasets[2].pointStyle,c.data.datasets[1].pointStyle);
+ assert(!out.includes('id="enso-c-ffpi"'));assert(!out.includes('id="enso-c-rtfp"'));assert(!out.includes('enso-money-story'));assert(!out.includes('id="enso-c-ffpilive"'));
+ assert(out.includes('Disagreements and published critiques'));assert(out.includes('Did world food prices rise'));
 });
 test('all eight limits and the entire rejected-claims register remain',()=>{
  api.renderLimits();const out=nodes['enso-limits'].innerHTML;assert.equal((out.match(/class="enso-lim"/g)||[]).length,8);

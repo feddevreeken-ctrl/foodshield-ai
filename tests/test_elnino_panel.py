@@ -911,7 +911,7 @@ def main() -> int:
               and page.locator('#enso-lane-story').count() == 0
               and page.locator('.enso-lanes-table').first.locator('th').count() == 2)
         page.evaluate("showTab('ensomoney')")
-        page.wait_for_selector('#subview-ensomoney.active #enso-c-ffpi')
+        page.wait_for_selector('#subview-ensomoney.active #enso-c-record')
         check("Who pays lists every modelled shortfall with its buyers from the outlook file", page.evaluate("""async () => {
             const W = (await (await fetch('data/enso_outlook.json')).json()).data.who_pays;
             const rows = [...document.querySelectorAll('.enso-whopays-plate .enso-wp-row')];
@@ -919,19 +919,16 @@ def main() -> int:
                 && document.querySelector('.enso-whopays-plate').textContent.includes('hit twice')
                 && document.querySelectorAll('.enso-whopays-plate .enso-wp-total').length === ((await (await fetch('data/enso_outlook.json')).json()).data.who_pays_totals || []).length;
         }"""))
-        ffpi = page.evaluate("""() => {
-            const c = Chart.getChart(document.getElementById('enso-c-ffpi'));
-            return c.data.datasets.map(d => ({label:d.label, line:!!d.showLine, style:d.pointStyle}));
-        }""")
-        check("Prices has one seven-event surface and distinct annual and monthly FFPI series",
+        # 2026-09-24: past El Niños and world prices are one dot plot; food inflation by country is the
+        # map and its ranked list only (the bar chart and 37-row table repeated it).
+        check("Prices shows past El Niños as one dot plot and food inflation once",
               page.locator('#enso-c-record .enso-event').count() == 7
-              and page.locator('#enso-c-ffpi').count() == 1
-              and page.locator('#enso-c-ffpilive, #enso-money-story').count() == 0
-              and len(ffpi) == 3 and all(not d['line'] for d in ffpi)
-              and 'monthly' in ffpi[2]['label'] and ffpi[1]['style'] != ffpi[2]['style'])
+              and page.locator('#enso-c-record .enso-pp-prev').count() == 7
+              and page.locator('#enso-c-ffpi, #enso-c-rtfp, #enso-c-ffpilive, #enso-money-story').count() == 0
+              and page.locator('.enso-pricewatch-plate .enso-price-spark').count() >= 4)
         # 2026-09-22: the humanitarian record sits inside the local-prices plate
         # (#enso-people-evidence), where the damage it describes lands.
-        check("reported humanitarian need sits in the local-prices plate",
+        check("reported humanitarian need sits in the estimates plate",
               page.locator('#subview-ensomoney figure #enso-people-evidence tr').count() >= 5
               and 'humanitarian' in page.locator('#enso-people-evidence').inner_text().lower())
         page.evaluate("showTab('ensolive')")
@@ -1298,26 +1295,6 @@ def main() -> int:
             return ramp && ramp.nextElementSibling.textContent === '0%50%100%'
                 && fills.USA && fills.ZAF && fills.USA !== fills.ZAF;
         }"""))
-        page.evaluate("showTab('ensomoney')")
-        page.wait_for_selector('#enso-c-rtfp', state='visible')
-        check("Stage J every price bar is a valued teleconnection country with unchanged data", page.evaluate("""async () => {
-            const regions = (await (await fetch('data/enso_regions.json')).json()).data.regions;
-            const rt = (await (await fetch('data/rtfp.json')).json()).data;
-            const tele = new Set(regions.flatMap(r => r.iso3));
-            const ds = Chart.getChart(document.getElementById('enso-c-rtfp')).data.datasets[0];
-            const expected = Object.keys(rt).filter(iso => tele.has(iso) && Number.isFinite(rt[iso].food_inflation_pct));
-            return ds.iso3.length === expected.length && new Set(ds.iso3).size === expected.length
-                && ds.iso3.every((iso,i) => expected.includes(iso) && ds.data[i] === rt[iso].food_inflation_pct
-                    && (!i || ds.data[i-1] >= ds.data[i]));
-        }"""))
-        check("Stage J price key names only hues present in the plot", page.evaluate("""() => {
-            const cv = document.getElementById('enso-c-rtfp'), values = Chart.getChart(cv).data.datasets[0].data;
-            const key = cv.closest('.enso-plate').querySelector('.enso-chart-notes').textContent;
-            return key.includes('Blue-grey') === values.some(v => v < 0)
-                && key.includes('Ochre to orange') === values.some(v => v > 0)
-                && key.includes('Ground grey') === values.some(v => v === 0);
-        }"""))
-
         for width, height in ((1280, 800), (1440, 900)):
             page.set_viewport_size({'width': width, 'height': height})
             for tab, labels in (

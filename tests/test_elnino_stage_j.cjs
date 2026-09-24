@@ -87,23 +87,4 @@ test('all five analog connectors end exactly at measured label edges after resiz
  }
  plot=null;
 });
-test('prices include every valued teleconnection country in descending order with exact source values',()=>{
- api.drawCharts('ensomoney');const c=ctx.charts['enso-c-rtfp'],ds=c.data.datasets[0];
- const expected=Object.keys(S.rtfp).filter(iso=>tele.has(iso)&&Number.isFinite(S.rtfp[iso].food_inflation_pct));
- assert.deepEqual([...ds.iso3].sort(),expected.sort());assert(ds.data.some(v=>v<0));
- ds.iso3.forEach((iso,i)=>{const r=S.rtfp[iso];assert.equal(ds.data[i],r.food_inflation_pct);if(i)assert(ds.data[i-1]>=ds.data[i]);
-  assert.equal(ds.backgroundColor[i],api.rtfpColor(r.food_inflation_pct));
-  const tip=c.options.plugins.tooltip.callbacks;assert(tip.label({dataIndex:i}).includes(r.markets+' markets · as of '+r.as_of));assert(tip.afterLabel({dataIndex:i}).includes(r.source_url));
- });
- api.renderMoney();const out=node('enso-money').innerHTML;assert(out.includes('Bars: '+expected.length+' teleconnection countries'));assert(!out.includes('highest eighteen'));
- for(const iso of expected){const r=S.rtfp[iso];assert(out.includes('data-price-iso="'+iso+'"'));assert(out.includes(r.as_of));}
-});
-test('price key never names a hue absent from positive-only, negative-only or zero-only plots',()=>{
- const saved=S.rtfp,iso=Object.keys(S.isoIndex)[0];
- for(const value of [2,-2,0]){
-  S.rtfp={[iso]:{food_inflation_pct:value,markets:1,as_of:'2026-08-01'}};api.drawCharts('ensomoney');
-  const key=ctx.charts['enso-c-rtfp'].keyNotes[0];assert.equal(key.includes('Blue-grey'),value<0);assert.equal(key.includes('Ochre to orange'),value>0);assert.equal(key.includes('Ground grey'),value===0);
- }
- S.rtfp=saved;
-});
 console.log(passed+'/'+passed+' Stage J non-browser checks passed');
