@@ -310,7 +310,8 @@ def main() -> int:
             chain.append({
                 "iso": f["iso"], "crop": f["crop"], "harvest": f["harvest"], "loss_kt": round(loss),
                 "exports_kt": exports, "lost_exports_kt": round(lost_exports),
-                "buyers": buyers, "other_buyers_kt": round(other) if other >= 1 else 0,
+                # "Other buyers" is what the rounded named buyers leave, so the parts add to the whole.
+                "buyers": buyers, "other_buyers_kt": max(0, round(lost_exports) - sum(b["kt"] for b in buyers)),
                 "buyers_basis": "UN Comtrade export shares by value, capped at each buyer's USDA PSD imports" if shares else None,
                 "extra_import_kt": round(extra_import),
                 "extra_import_usd_m": round(extra_import * 1000 * usd / 1e6) if usd else None,

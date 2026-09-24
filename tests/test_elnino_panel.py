@@ -896,7 +896,7 @@ def main() -> int:
             const H = (await (await fetch('data/enso_hindcast.json')).json()).data.pairs;
             const txt = document.querySelector('.enso-outlook-plate').textContent;
             return Object.keys(H).length > 0 && Object.values(H).every(h => txt.includes('sign right ' + h.sign_right + ' of ' + h.events)) && document.querySelectorAll('.enso-ol-chart .enso-ol-row').length > 0
-                && [...document.querySelectorAll('.enso-ol-chart .enso-ol-num > span')].every(sp => /^\d+\/\d+ right/.test(sp.textContent))
+                && [...document.querySelectorAll('.enso-ol-chart .enso-ol-num > span:not(.enso-ol-amt)')].every(sp => /^\d+\/\d+ right/.test(sp.textContent))
                 && !txt.includes('has not been scored') && txt.includes('held-out harvests');
         }"""))
         page.evaluate("showTab('ensowater')")
@@ -915,7 +915,7 @@ def main() -> int:
         page.wait_for_selector('#subview-ensomoney.active #enso-c-record')
         check("Who pays lists every modelled shortfall with its buyers from the outlook file", page.evaluate("""async () => {
             const W = (await (await fetch('data/enso_outlook.json')).json()).data.who_pays;
-            const rows = [...document.querySelectorAll('.enso-whopays-plate .enso-wp-row')];
+            const rows = [...document.querySelectorAll('.enso-whopays-plate .enso-wp-row:not(.enso-wp-head)')];
             return rows.length === W.length && rows.every((r, i) => r.querySelector('button').dataset.mapCountry === W[i].iso)
                 && document.querySelector('.enso-whopays-plate').textContent.includes('hit twice')
                 && document.querySelectorAll('.enso-whopays-plate .enso-wp-total').length === ((await (await fetch('data/enso_outlook.json')).json()).data.who_pays_totals || []).length;
