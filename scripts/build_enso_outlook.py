@@ -154,10 +154,19 @@ def main() -> int:
                     continue
                 slope = c["yield_pct_per_oni_nino"]
                 p = (psd.get(iso) or {}).get(PSD_KEY.get(crop, ""), {})
+                base_note = None
                 if isinstance(p.get("production_kt"), (int, float)):
                     prod, prod_basis = p["production_kt"], f"USDA PSD {p.get('_year_production_kt', p.get('year'))}"
+                    prev = p.get("production_kt_prev")
+                    # A single year that is far from the last one moves the tonnes; say so on the row.
+                    if isinstance(prev, (int, float)) and prev > 0 and abs(prod / prev - 1) >= 0.15:
+                        base_note = (f"{p.get('_year_production_kt')} crop {abs(round((prod / prev - 1) * 100))}% "
+                                     f"{'below' if prod < prev else 'above'} {p.get('_year_production_kt_prev')}; "
+                                     f"on the {p.get('_year_production_kt_prev')} crop the change would be "
+                                     f"{'+' if slope > 0 else '−'}{abs(round(prev * (math.exp(slope / 100 * 2.5) - 1) / 1000, 1))} Mt at ONI +2.5")
                 else:
                     prod, prod_basis = c.get("mean_production_kt"), "FAOSTAT 2015–2024 mean"
+                    base_note = "a ten-year mean, not this year’s crop; a fast-growing crop is understated"
                 harvest = (cal.get(iso) or {}).get(crop, {}).get("harvest") or []
                 hyear = jan_year if c.get("alignment") == "djf_same_year" else jan_year - 1
                 usd, plabel, pmonth = price(crop)
@@ -177,7 +186,7 @@ def main() -> int:
                                 if len(harvest) > 1 and harvest[-1] < harvest[0]
                                 else (month_span(harvest) + " " + str(hyear)).strip()),
                     "harvest_year": hyear,
-                    "production_kt": prod, "production_basis": prod_basis,
+                    "production_kt": prod, "production_basis": prod_basis, "production_note": base_note,
                     "exports_kt": p.get("exports_kt"), "imports_kt": p.get("imports_kt"),
                 }
                 # The fit is in log-points (pct = 100 x log slope), so the change at
