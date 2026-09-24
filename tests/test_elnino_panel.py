@@ -890,11 +890,12 @@ def main() -> int:
         check("hand-checked El Niño facts are within their review windows", not _stale, str(_stale))
         # 2026-09-24: the fit is scored on winters it was not fitted on, and each ledger row says how it did.
         page.evaluate("showTab('ensoharvest')")
-        page.wait_for_selector('#subview-ensoharvest.active .enso-outlook-table')
+        page.wait_for_selector('#subview-ensoharvest.active .enso-ol-chart')
         check("Harvests ledger reports the leave-one-El-Niño-out hindcast per row", page.evaluate("""async () => {
             const H = (await (await fetch('data/enso_hindcast.json')).json()).data.pairs;
             const txt = document.querySelector('.enso-outlook-plate').textContent;
-            return Object.keys(H).length > 0 && Object.values(H).every(h => txt.includes('sign right ' + h.sign_right + ' of ' + h.events))
+            return Object.keys(H).length > 0 && Object.values(H).every(h => txt.includes('sign right ' + h.sign_right + ' of ' + h.events)) && document.querySelectorAll('.enso-ol-chart .enso-ol-row').length > 0
+                && [...document.querySelectorAll('.enso-ol-chart .enso-ol-num > span')].every(sp => /^\d+\/\d+ right/.test(sp.textContent))
                 && !txt.includes('has not been scored') && txt.includes('held-out harvests');
         }"""))
         page.evaluate("showTab('ensowater')")
