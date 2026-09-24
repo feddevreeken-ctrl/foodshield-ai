@@ -12356,6 +12356,11 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-history-fold > summary { cursor:pointer; font:500 11px/1.4 'Geist Mono',monospace; letter-spacing:.04em; color:var(--t2); }
 #tab-elnino :is(.enso-pubfx-table,.enso-freight-table) :is(td,th) { white-space:normal; }
 #tab-elnino .enso-pubfx-table th:nth-child(3) { width:22%; }
+#tab-elnino .enso-review-due { margin:0 0 10px; font:11px/1.4 'Geist Mono',monospace; color:#e0864a; }
+#tab-elnino .enso-news-watch { margin:14px 0 0; padding-top:10px; border-top:1px solid var(--b1); }
+#tab-elnino .enso-news-watch > b { display:block; margin-bottom:6px; font:500 10.5px/1.4 'Geist Mono',monospace; letter-spacing:.05em; text-transform:uppercase; color:var(--t3); }
+#tab-elnino .enso-news-watch a { color:var(--t1); text-decoration:none; }
+#tab-elnino .enso-news-watch a:hover { text-decoration:underline; }
 #tab-elnino .enso-live-tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:0; border-top:1px solid var(--b2); border-bottom:1px solid var(--b2); margin:0 0 20px; }
 #tab-elnino .enso-live-tile { padding:14px 18px 14px 0; }
 #tab-elnino .enso-live-tile + .enso-live-tile { padding-left:18px; border-left:1px solid var(--b1); }
@@ -43442,7 +43447,9 @@ function showCommodityDetail(key) {
         var slot = document.getElementById('enso-water-lead'), lb = document.querySelector('#enso-water .enso-lane-board');
         if (slot && lb) { slot.innerHTML = ''; slot.appendChild(lb); }
       }
-      var lead = document.getElementById({ elnino: 'enso-strengths', ensoharvest: 'enso-outlook', ensowater: 'enso-water-lead', ensomoney: 'enso-whopays', ensolive: 'enso-live-lead' }[S.sub]);
+      /* Ocean is the landing view: the sea-surface map opens it, the strength odds follow. */
+      if (S.sub === 'elnino') { if (sv.firstElementChild !== grid) { sv.insertBefore(grid, sv.firstElementChild); resizeEnsoMap(); } return; }
+      var lead = document.getElementById({ ensoharvest: 'enso-outlook', ensowater: 'enso-water-lead', ensomoney: 'enso-whopays', ensolive: 'enso-live-lead' }[S.sub]);
       if (lead && lead.parentNode === sv && lead.nextSibling !== grid) { sv.insertBefore(grid, lead.nextSibling); resizeEnsoMap(); }
     } catch (e) {}
   }
@@ -43592,7 +43599,7 @@ function showCommodityDetail(key) {
     if (!R.length) { el.innerHTML = ''; return; }
     el.innerHTML = '<figure class="enso-plate is-published enso-pubfx-plate" data-kind="published">' +
       plateHead('Where the model is silent: what published studies found', 'Peer-reviewed papers and institutional reports, each opened and quoted', stamp(metaDate('pubfx')), 'published') +
-      '<div class="plate-body"><table class="enso-live-table enso-pubfx-table"><thead><tr><th scope="col">Country · crop</th><th scope="col">Past El Niño effect</th><th scope="col">Would show in</th><th scope="col">Source</th></tr></thead><tbody>' +
+      '<div class="plate-body">' + reviewDue('pubfx', 120) + '<table class="enso-live-table enso-pubfx-table"><thead><tr><th scope="col">Country · crop</th><th scope="col">Past El Niño effect</th><th scope="col">Would show in</th><th scope="col">Source</th></tr></thead><tbody>' +
       R.map(function (r) {
         return '<tr><th scope="row"><button type="button" data-map-country="' + esc(r.iso) + '">' + esc(r.country) + '</button><span class="enso-live-sub">' + esc(r.crop) + '</span></th>' +
           '<td>' + esc(r.effect_text) + '</td><td class="enso-ol-h">' + esc(r.harvest || '') + '</td>' +
@@ -44189,13 +44196,29 @@ function showCommodityDetail(key) {
       try {
         var tab = document.getElementById('tab-elnino');
         if (document.visibilityState !== 'visible' || !tab || !tab.classList.contains('active')) return;
-        var r = await fetch('data/enso.json', { cache: 'no-store' }); if (!r.ok) return;
-        var j = await r.json(); var stamp = j && j._meta && j._meta.generated_at;
-        if (stamp && S.meta && S.meta.enso && S.meta.enso.generated_at && stamp !== S.meta.enso.generated_at) {
-          if (typeof ensoRetry === 'function') ensoRetry();
-        }
+        /* Every feed the tab reads, not just the ENSO index: news, alerts, prices and the outlook
+           refresh every six hours, and an open page should follow them. A HEAD request per file
+           compares its ETag / Last-Modified with the last poll; any change redraws the tab. */
+        var names = Object.keys(S.feedNames || {}).map(function (k) { return S.feedNames[k]; });
+        var seen = S.feedTags || (S.feedTags = {}), changed = false;
+        await Promise.all(names.map(async function (n) {
+          try {
+            var h = await fetch('data/' + n + '.json', { method: 'HEAD', cache: 'no-store' }); if (!h.ok) return;
+            var tag = h.headers.get('etag') || h.headers.get('last-modified'); if (!tag) return;
+            if (seen[n] && seen[n] !== tag) changed = true;
+            seen[n] = tag;
+          } catch (e) {}
+        }));
+        if (changed && typeof ensoRetry === 'function') ensoRetry();
       } catch (e) { /* a failed poll changes nothing; the next one will try again */ }
-    }, 30 * 60 * 1000);
+    }, 15 * 60 * 1000);
+  }
+  /* Hand-checked files carry their review date; past the window they say so on the plate. */
+  function reviewDue(key, days) {
+    var d = Date.parse(((S.meta || {})[key] || {}).reviewed_at || metaDate(key) || '');
+    if (!d || isNaN(d)) return '';
+    var age = Math.floor((Date.now() - d) / 864e5);
+    return age > (days || 21) ? '<p class="enso-review-due">Checked by hand ' + age + ' days ago; newer reports may not be here yet.</p>' : '';
   }
   function wireRuler() {
     if (S.rulerCleanup) S.rulerCleanup();
@@ -46926,8 +46949,19 @@ function showCommodityDetail(key) {
     };
     var policyPlate = '<figure class="enso-plate is-published enso-policy-plate" data-kind="published">' +
       plateHead('Decisions affecting supply', 'Government notifications and wire reports, each checked by hand', stamp(metaDate('restrictions')), 'published') +
-      '<div class="plate-body">' + (live.length ? '<table class="enso-live-table"><thead><tr><th scope="col">Country</th><th scope="col">Commodity</th><th scope="col">Measure</th><th scope="col">Ends · next step</th><th scope="col">Status</th></tr></thead><tbody>' + live.map(policyRow).join('') + '</tbody></table>' : '<p class="ctr-note">No export restriction on record is in force today.</p>') +
+      '<div class="plate-body">' + reviewDue('restrictions', 14) + (live.length ? '<table class="enso-live-table"><thead><tr><th scope="col">Country</th><th scope="col">Commodity</th><th scope="col">Measure</th><th scope="col">Ends · next step</th><th scope="col">Status</th></tr></thead><tbody>' + live.map(policyRow).join('') + '</tbody></table>' : '<p class="ctr-note">No export restriction on record is in force today.</p>') +
       (live.some(function (r) { return r.ends_date && (Date.parse(r.ends_date + 'T00:00:00Z') - today) / day < 14; }) ? '<p class="enso-outlook-gap"><b>Review due:</b> ' + live.filter(function (r) { return r.ends_date && (Date.parse(r.ends_date + 'T00:00:00Z') - today) / day < 14 && Date.parse(r.ends_date + 'T23:59:59Z') >= today; }).map(function (r) { return esc(r.country) + '’s ' + esc(String(r.commodity).toLowerCase()) + ' ' + esc(r.measure) + ' ends ' + esc(fmtDate(r.ends_date)); }).join('; ') + ', and no extension is on record (checked ' + esc(stamp(metaDate('restrictions'))) + ').</p>' : '') +
+      (function () {
+        /* New measures reach the wire before they reach this hand-checked table: headlines about export
+           curbs on staples are listed as unverified until a notification is found and the row is added. */
+        var CURB = /export (ban|bans|curb|curbs|restriction|restrictions|quota|quotas|licen[cs]e|licensing|duty|tax)|ban(s|ned)? (on )?(\w+ )?exports?|halts? exports?|suspend(s|ed)? exports?/i;
+        var STAPLE = /rice|wheat|maize|corn|sugar|palm|soy|sorghum|millet|grain|cereal|flour|onion|vegetable oil|edible oil/i;
+        /* The commodity wire as well: an export ban rarely names El Niño in its headline. */
+        var cn = (typeof LIVE !== 'undefined' && LIVE.commodity_news) ? ((LIVE.commodity_news.data || LIVE.commodity_news).items || []) : [];
+        var pool = news.concat(cn.map(function (x) { return { x: x }; }));
+        var seenT = {}, hits = pool.filter(function (rec) { var t = rec.x.title || ''; if (!CURB.test(t) || !STAPLE.test(t)) return false; var k = t.toLowerCase().slice(0, 60); if (seenT[k]) return false; seenT[k] = 1; return true; }).slice(0, 4);
+        return hits.length ? '<div class="enso-news-watch"><b>In the news, not yet checked</b>' + bulletList(hits.map(function (rec) { var x = rec.x; return '<a href="' + esc(safeUrl(x.url)) + '" target="_blank" rel="noopener">' + esc(x.title) + '</a> <span class="enso-live-src">' + esc(x.source || '') + (x.published_at ? ', ' + esc(ago(x.published_at) || '') : '') + '</span>'; })) + '</div>' : '';
+      })() +
       (past.length ? '<details class="enso-ol-more"><summary>' + past.length + ' earlier measures on record</summary><table class="enso-live-table"><tbody>' + past.map(policyRow).join('') + '</tbody></table></details>' : '') +
       '</div><figcaption class="enso-log">Decisions, not observed shortages.</figcaption></figure>';
 
@@ -47046,7 +47080,7 @@ function showCommodityDetail(key) {
       few.regions.map(regionRow).join('') + '</tbody></table>' : '';
     var ledgerPlate = '<figure class="enso-plate enso-region-plate enso-ledger-plate" data-kind="reported">' +
       plateHead('Where food-security concern is concentrated', 'FEWS NET · Crop Monitor for Early Warning · JRC ASAP · GDACS · WFP and FAO–WFP · IPC and Cadre Harmonisé', stamp(metaDate('asap')), 'reported') +
-      '<div class="plate-body">' + regionTable +
+      '<div class="plate-body">' + reviewDue('situation', 21) + regionTable +
       '<div class="enso-sec-h"><span>Reported now</span> country by country, joined across the monitoring feeds; strongest signals first</div>' +
       '<table class="enso-live-table enso-ledger">' + lhead + '<tbody>' + ledger.slice(0, 12).map(ledgerRow).join('') + '</tbody></table>' +
       (ledger.length > 12 ? '<details class="enso-ol-more"><summary>' + (ledger.length - 12) + ' more countries with a signal</summary><table class="enso-live-table enso-ledger">' + lhead + '<tbody>' + ledger.slice(12).map(ledgerRow).join('') + '</tbody></table></details>' : '') +
@@ -47755,6 +47789,8 @@ function showCommodityDetail(key) {
     wireRasterPlates();
     finishPlates();
     renderSubviewMeta();
+    /* Again after the plate finishing pass, which reorders Ocean's plates. */
+    placeMap();
     drawCharts(S.sub);
     if (mechanismAlias) setTimeout(function () { if (S.sub === 'elnino') document.getElementById('enso-mech').scrollIntoView({ block: 'start' }); }, 100);
   };
