@@ -12114,6 +12114,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-pricewatch-plate .enso-ol-v { white-space:normal; min-width:18ch; }
 #tab-elnino tr.enso-ol-total > * { border-top:1px solid var(--b3); font-weight:500; }
 #tab-elnino .enso-port-spark { display:block; }
+#tab-elnino .enso-ledger td.is-stale { opacity:.55; }
 @media (max-width:700px){ #tab-elnino .enso-ports-table :is(th,td):nth-child(2), #tab-elnino .enso-ports-table :is(th,td):nth-child(6) { display:none; } #tab-elnino .enso-ports-table tr.enso-ol-year th { display:table-cell; } }
 #tab-elnino .enso-next12 { list-style:none; margin:0; padding:0; }
 #tab-elnino .enso-next12 li { display:grid; grid-template-columns:minmax(120px,150px) 92px 1fr; gap:4px 16px; align-items:baseline; padding:10px 0; border-top:1px solid var(--grid); }
@@ -43545,6 +43546,16 @@ function showCommodityDetail(key) {
         (bigMaize && rs.indexOf(bigMaize) >= 0 && tot.corn ? '; new maize import demand then comes to about ' + fmtKt(tot.corn.total_kt).replace('+', '') + ' (' + fmtKt(tot.corn.extra_import_kt).replace('+', '') + ' extra imports by the producers that lose, ' + fmtKt(tot.corn.replaced_kt).replace('+', '') + ' by South Africa’s buyers replacing its exports)' : '') +
         (rec ? ', if this winter reaches ONI ' + num(rec.oni, 1) : '') + '.', 'modelled', 'ensoharvest');
     });
+    /* World prices: published estimates peak about 16 months after onset (ECB, June 2023). Onset is the first
+       season of the current run at or above +0.5 °C on ONI; the implied month is a precedent, not a forecast. */
+    var tr = ((S.enso || {}).trajectory) || [], k = tr.length - 1, SEAS = ['DJF','JFM','FMA','MAM','AMJ','MJJ','JJA','JAS','ASO','SON','OND','NDJ'];
+    while (k > 0 && tr[k - 1].anom >= 0.5) k--;
+    if (tr[k] && tr[k].anom >= 0.5) {
+      var cm = SEAS.indexOf(tr[k].season); var onset = Date.UTC(tr[k].year, cm, 15);
+      var pk = new Date(onset); pk.setUTCMonth(pk.getUTCMonth() + 16);
+      add({ start: Date.UTC(pk.getUTCFullYear(), pk.getUTCMonth() - 1, 1), end: Date.UTC(pk.getUTCFullYear(), pk.getUTCMonth() + 2, 0) }, 'around ' + MON3[pk.getUTCMonth()] + ' ' + pk.getUTCFullYear(),
+        'World food-commodity prices: published estimates put any El Niño rise at up to +9%, peaking about 16 months after onset (ECB, June 2023); this event crossed +0.5 °C in ' + esc(tr[k].season) + ' ' + tr[k].year + '. Estimates differ by crop: the ECB finds upside for maize, rice and soybeans; Ubilava (2018) finds vegetable oils and soybeans respond and maize does not.', 'precedent', 'ensomoney');
+    }
     /* Export measures that end inside the year. */
     (S.restrictions || []).forEach(function (r) { if (r.status === 'historical' || !r.ends_date) return; var d = Date.parse(r.ends_date + 'T00:00:00Z'); add({ start: d, end: d }, stamp(new Date(d)), '<b>' + esc(r.country) + '</b> ' + esc(r.commodity.toLowerCase()) + ' ' + esc(r.measure.toLowerCase()) + ' ends; an extension would keep supply tight.', 'published', 'ensomoney'); });
     if (!items.length) { el.innerHTML = ''; return; }
@@ -46073,15 +46084,20 @@ function showCommodityDetail(key) {
       { k: 'Wheat', fit: gainers('wheat'), p: price('wheat'), prec: '', mon: [], pol: policy(/wheat/i), polRe: /wheat/i },
       { k: 'Rice', fit: fits('rice'), p: price('rice'), prec: past(/rice/i), mon: fits('rice').map(function (r) { return r.iso; }), pol: policy(/rice/i), polRe: /rice/i },
       { k: 'Sugar', fit: [], p: price('sugar'), prec: past(/sugar/i), now: nowNote(/sugar/i, /sugar/i), mon: [], pol: policy(/sugar/i), polRe: /sugar/i },
-      { k: 'Palm oil', fit: [], p: price('palm_oil'), prec: past(/oil/i), now: nowNote(/oil/i, /oil/i), mon: [], pol: policy(/palm|oil/i), polRe: /palm|oil/i }
-    ].filter(function (x) { return x.fit.length || x.prec || x.pol || x.now; });
+      { k: 'Palm oil', fit: [], p: price('palm_oil'), prec: past(/oil/i), now: nowNote(/oil/i, /oil/i), mon: [], pol: policy(/palm|oil/i), polRe: /palm|oil/i },
+      { k: 'Soybeans', fit: fits('soybeans'), p: price('soybeans'), prec: '', mon: [], pol: policy(/soy/i), polRe: /soy/i }
+    ];
+    /* What published models say about each world price, from the estimates table on this lens (ECB June 2023; Ubilava 2018). */
+    var LIT = { Maize: 'ECB (2023): upside; Ubilava (2018): no causal link', Wheat: 'ECB: positive but not significant; Ubilava (2017): tends to fall after El Niño', Rice: 'ECB: pronounced upside', Soybeans: 'ECB: pronounced upside; Ubilava: responds', 'Palm oil': 'Ubilava: vegetable oils respond most', Sugar: '' };
+    items.forEach(function (x) { if (LIT[x.k]) x.lit = LIT[x.k]; });
+    items = items.filter(function (x) { return x.fit.length || x.prec || x.pol || x.now || x.lit; });
     if (!items.length) { el.innerHTML = ''; return; }
     el.innerHTML = '<figure class="enso-plate enso-pricewatch-plate is-published" data-kind="published">' +
       plateHead('Which prices to watch, and when', 'This site’s fit · curated local-price precedents · World Bank Pink Sheet · World Bank RTFP · export measures in force', stamp(metaDate('outlook')), 'published') +
       '<div class="plate-body"><table class="enso-live-table"><thead><tr><th scope="col">Commodity</th><th scope="col">Where the fit sees a change</th><th scope="col">What happened last time</th><th scope="col">Local food inflation</th><th scope="col">Price now</th><th scope="col">Policy in force</th></tr></thead><tbody>' +
       items.map(function (x) {
         return '<tr><th scope="row">' + esc(x.k) + '</th><td>' + (x.fit.length ? line(x.fit) : '<span class="enso-ol-na">no fitted pair</span>') + '</td>' +
-          '<td>' + (x.prec || '<span class="enso-ol-na">—</span>') + '</td><td>' + (x.mon.length ? monitored(x.mon) : '<span class="enso-ol-na">—</span>') + '</td>' +
+          '<td>' + (x.prec || '<span class="enso-ol-na">—</span>') + (x.lit ? '<span class="enso-live-sub">Published estimates: ' + esc(x.lit) + '</span>' : '') + '</td><td>' + (x.mon.length ? monitored(x.mon) : '<span class="enso-ol-na">—</span>') + '</td>' +
           '<td class="enso-ol-v">' + (x.p ? '$' + Math.round(x.p.usd_per_t).toLocaleString('en-US') + '/t <span class="enso-live-sub">' + esc(x.p.series) + ', ' + esc(/^\d{4}-\d{2}$/.test(x.p.month) ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+x.p.month.slice(5) - 1] + ' ' + x.p.month.slice(0, 4) : x.p.month) + (x.p.mom != null ? ' · ' + (x.p.coarse ? '≈' : '') + pct(x.p.mom) + ' m/m' : '') + (x.p.yoy != null ? ' · ' + (x.p.coarse ? '≈' : '') + pct(x.p.yoy) + ' y/y' : '') + (x.p.coarse ? ' (published per kg to the cent, so changes are approximate)' : '') + '</span>' : '<span class="enso-ol-na">—</span>') + (x.now ? '<span class="enso-live-sub">FAO: ' + x.now + '</span>' : '') + '</td>' +
           '<td>' + (x.pol || '<span class="enso-ol-na">' + ((S.restrictions || []).some(function (r) { return x.polRe.test(r.commodity || ''); }) ? 'none in force' : 'not tracked') + '</span>') + '</td></tr>';
       }).join('') + '</tbody></table></div>' +
@@ -46423,7 +46439,7 @@ function showCommodityDetail(key) {
           var p = ipcOf(r.iso); if (!p || typeof p.phase3plus_count !== 'number') return '<td class="enso-ol-v"><span class="enso-ol-na">—</span></td>';
           var per = ipcPeriod(p), old = per.end != null && per.end < today - 365 * day;
           var m = function (n) { return (n / 1e6).toFixed(n >= 1e6 ? 1 : 2) + ' m'; };
-          return '<td class="enso-ol-v' + (old ? ' is-stale' : '') + '">' + m(p.phase3plus_count) +
+          return '<td class="enso-ol-v' + (old || (per.end != null && per.end < today) ? ' is-stale' : '') + '">' + m(p.phase3plus_count) +
             (p.phase5_count > 0 ? '<span class="enso-live-sub"><b>' + m(p.phase5_count) + ' in Phase 5</b></span>' : '') +
             (p.famine_risk ? '<span class="enso-live-sub"><b>' + esc(p.famine_risk.split(';')[0].replace(/^r/, 'R')) + '</b> · <a href="' + esc(safeUrl(p.url)) + '" target="_blank" rel="noopener">IPC, ' + esc(fmtDate(p.released)) + '</a></span>' : '') +
             '<span class="enso-live-sub">' + esc(per.text) + (per.status ? ' · ' + esc(per.status) : '') + ' · ' + esc(ipcSource(p)) + (old ? ' · older than 12 months' : per.end != null && per.end < today ? ' · period ended' : '') + '</span>' +
