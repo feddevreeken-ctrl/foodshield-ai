@@ -43431,6 +43431,9 @@ function showCommodityDetail(key) {
         '; weekly Niño 3.4 <span class="enso-num">' + num(w.anom, 1) + ' °C</span> and Niño 1+2 <span class="enso-num">' + num(w.nino12_anom, 1) + ' °C</span> (week of ' + esc(weeklyDate(w.date).replace(/\s+\d{4}$/, '')) + ')' +
         (eastBased ? ', the strongest warming in the east.' : '.')
       : 'Observed index comparison unavailable.';
+    /* Off the Ocean lens the reader came for an answer, so the state is one line with a link back. */
+    S.statusShort = roni && oni && season ? 'El Niño now: RONI <span class="enso-num">' + num(roni.value, 2) + ' °C</span> (' + intervalBand(roni.value).split(' ')[0].toLowerCase() + '), ONI <span class="enso-num">' + num(oni.value, 2) + ' °C</span> (' + intervalBand(oni.value).split(' ')[0].toLowerCase() + '), ' + esc(season[1]) + '. ' +
+      (oddsText ? 'NOAA CPC: ' + oddsText + '. ' : '') + '<a href="#" class="enso-inline-link" onclick="showTab(\'elnino\');return false">Forecast and timeline on Ocean →</a>' : '';
     return '<div class="enso-ocean-heading"><h2>' + esc(outlook ? 'El Niño strengthening toward a very strong event' : band) + '</h2>' +
       '<p id="enso-agency-status">' + forecast + observed + '</p>' +
       '<span class="enso-badge">Collected ' + esc(stamp(metaDate('enso'))) + '</span> · <a href="#enso-mech" onclick="showTab(\'ensomech\');return false">What is El Niño?</a></div>';
@@ -47196,7 +47199,8 @@ function showCommodityDetail(key) {
       var statusHome = S.sub === 'elnino'
         ? (document.querySelector('#enso-hero .enso-ocean-heading') || document.getElementById('enso-hero'))
         : document.getElementById('enso-status-home');
-      if (statusHome) statusHome.appendChild(agencyStatus);
+      if (S.sub === 'elnino' || !S.statusShort) { if (statusHome) statusHome.appendChild(agencyStatus); var sh = document.getElementById('enso-status-home'); if (sh && S.sub === 'elnino') sh.innerHTML = ''; }
+      else if (statusHome) statusHome.innerHTML = '<p id="enso-status-short">' + S.statusShort + '</p>';
     }
     /* Outside the sub-view branches: the banner must appear on whichever view is
        open, and must clear itself when a retry succeeds. */

@@ -747,11 +747,12 @@ def main() -> int:
         # evidence, so the fold moved from Ocean to Harvests.
         page.evaluate("showTab('ensoharvest')")
         page.wait_for_selector('#subview-ensoharvest.active .enso-subview-meta')
-        limits_ocean = page.locator('#enso-limits').is_visible() and page.locator('#enso-agency-status').is_visible()
+        # 2026-09-24 (court): off Ocean the state follows as one line (#enso-status-short) with a link back.
+        limits_ocean = page.locator('#enso-limits').is_visible() and page.locator('#enso-status-home #enso-status-short').is_visible()
         page.evaluate("showTab('ensowater')")
         page.wait_for_selector('#subview-ensowater.active .enso-subview-meta')
-        limits_elsewhere = (not page.locator('#enso-limits').is_visible()) and page.locator('#enso-agency-status').is_visible() \
-            and page.locator('#enso-status-home #enso-agency-status').count() == 1
+        limits_elsewhere = (not page.locator('#enso-limits').is_visible()) and page.locator('#enso-status-home #enso-status-short').is_visible() \
+            and page.locator('#enso-status-home #enso-status-short').count() == 1 and 'more than 90%' in page.locator('#enso-status-home').inner_text()
         check("limits show once, on Harvests, and the state sentence follows every view",
               limits_ocean and limits_elsewhere
               and page.locator('#enso-limits').evaluate("e => !e.closest('.subview')"))
