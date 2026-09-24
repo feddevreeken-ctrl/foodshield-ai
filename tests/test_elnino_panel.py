@@ -865,6 +865,22 @@ def main() -> int:
             return P.length >= 5 && rows.length === P.length && rows.every((r, i) => r.textContent.includes(P[i].name) || P.some(p => r.textContent.includes(p.name)))
                 && !document.querySelector('.enso-meet-plate').textContent.includes('not monitored');
         }"""))
+        # 2026-09-24 (court): hand-checked facts expire. A hand-kept file older than its review window,
+        # or an export measure past its end date still marked in force, fails the gate.
+        import json as _json, datetime as _dt
+        _today = _dt.date.today()
+        _stale = []
+        for _f, _days in (("enso_situation", 30), ("trade_restrictions", 14), ("enso_lanes", 30),
+                          ("enso_mechanism", 30), ("enso_econ", 45), ("enso_regions", 45)):
+            _m = _json.load(open(f"data/{_f}.json"))["_meta"]
+            _stamps = [str(_m.get(k) or "")[:10] for k in ("generated_at", "reviewed_at") if _m.get(k)]
+            _age = (_today - max(_dt.date.fromisoformat(x) for x in _stamps)).days if _stamps else 999
+            if _age > _days:
+                _stale.append(f"{_f} {_age}d > {_days}d")
+        for _r in _json.load(open("data/trade_restrictions.json"))["data"]:
+            if _r.get("status") in ("official", "reported") and _r.get("ends_date") and _dt.date.fromisoformat(_r["ends_date"]) < _today:
+                _stale.append(f"{_r['country']} {_r['commodity']} ended {_r['ends_date']} but still marked {_r['status']}")
+        check("hand-checked El Niño facts are within their review windows", not _stale, str(_stale))
         # 2026-09-24: the fit is scored on winters it was not fitted on, and each ledger row says how it did.
         page.evaluate("showTab('ensoharvest')")
         page.wait_for_selector('#subview-ensoharvest.active .enso-outlook-table')
