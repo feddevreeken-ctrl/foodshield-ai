@@ -357,7 +357,7 @@ def main() -> int:
     write_json("enso_outlook.json", {
         "cases": cases, "harvest_winter": f"DJF {jan_year - 1}-{str(jan_year)[2:]}",
         "method": "exp(fitted log-yield slope × ONI) − 1, × production, at two ONI values the record contains; value at stake = tonnes × latest World Bank price. No world-price model, no probability weighting.",
-        "honesty": "Conditional estimates from a linear fit without out-of-sample validation. CPC's OND 2026 RONI median (+2.67) sits above the fit's strongest winter (ONI +2.5, 2015-16); the fit has no data beyond it, so a stronger winter could bring larger changes than these.",
+        "honesty": "Conditional estimates from a linear fit, scored on held-out El Niño winters by build_enso_hindcast.py (direction mostly right, size rough). CPC's OND 2026 RONI median (+2.67) sits above the fit's strongest winter (ONI +2.5, 2015-16); the fit has no data beyond it, so a stronger winter could bring larger changes than these.",
         "regions": out_regions,
         "crops": sorted(by_crop.values(), key=lambda c: c["loss_kt_record"]),
         "rows_all": rows_all,

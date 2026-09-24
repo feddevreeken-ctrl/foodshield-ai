@@ -12114,6 +12114,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-pricewatch-plate .enso-ol-v { white-space:normal; min-width:18ch; }
 #tab-elnino tr.enso-ol-total > * { border-top:1px solid var(--b3); font-weight:500; }
 #tab-elnino .enso-port-spark { display:block; }
+#tab-elnino .enso-live-sub.is-warn { color:#e0864a; }
 #tab-elnino .enso-outlook-table .enso-ol-v .enso-live-sub { white-space:normal; max-width:30ch; }
 #tab-elnino .enso-ports-table .enso-ol-v, #tab-elnino .enso-ports-table thead th { white-space:normal !important; }
 #tab-elnino .enso-outlook-list { margin:4px 0 12px 1.1em; padding:0; color:var(--t1); }
@@ -42767,13 +42768,13 @@ function showCommodityDetail(key) {
                  'sst_anomaly', 'portwatch_history', 'crop_calendars',
                  'portwatch', 'rtfp', 'fao_ffpi',
                  'asap', 'gdacs', 'ipc', 'reliefweb_alerts',
-                 'enso_news', 'trade_restrictions', 'enso_outlook', 'enso_gauges', 'enso_situation', 'chokepoint_flows', 'enso_strengths', 'worldbank_pink_sheet', 'enso_ports'];
+                 'enso_news', 'trade_restrictions', 'enso_outlook', 'enso_gauges', 'enso_situation', 'chokepoint_flows', 'enso_strengths', 'worldbank_pink_sheet', 'enso_ports', 'enso_hindcast'];
     var out = await Promise.all(names.map(get));
     var keys = ['enso', 'exp', 'model', 'regions', 'lanes', 'corridors', 'econ', 'mech', 'indices', 'bulletins',
                 'sst', 'pwhist', 'calendars',
                 'portwatch', 'rtfp', 'ffpi',
                 'asap', 'gdacs', 'ipc', 'relief',
-                'news', 'restrictions', 'outlook', 'gauges', 'situation', 'chokeflows', 'strengths', 'pink', 'ports'];
+                'news', 'restrictions', 'outlook', 'gauges', 'situation', 'chokeflows', 'strengths', 'pink', 'ports', 'hindcast'];
     S.feedNames = {};
     S.oniLive = null;
     keys.forEach(function (k, i) {
@@ -43193,6 +43194,20 @@ function showCommodityDetail(key) {
     });
     return rows;
   }
+  /* How the fit did on past El Niño winters it was not fitted on (build_enso_hindcast.py). */
+  function hindcastOf(iso, crop) { var H = S.hindcast && S.hindcast.pairs; return H ? H[iso + '/' + crop] || null : null; }
+  function hindcastSummary() {
+    var H = S.hindcast && S.hindcast.pairs; if (!H) return 'The model has not been scored on harvests it was not trained on.';
+    var P = Object.keys(H).map(function (k) { return H[k]; }), sr = 0, ev = 0, beat = P.filter(function (p) { return p.beats_no_change; });
+    P.forEach(function (p) { sr += p.sign_right; ev += p.events; });
+    var miss = P.filter(function (p) { return !p.beats_no_change; }).map(function (p) { return nameFor(p.iso) + ' ' + ({ corn: 'maize' }[p.crop] || p.crop); });
+    return 'Tested on past El Niño winters it was not fitted on (each winter of ONI +1.0 or more held out in turn, detrended on earlier harvests only): the sign was right for ' + sr + ' of ' + ev + ' held-out harvests, and the fit beat a no-change forecast on size for ' + beat.length + ' of ' + P.length + ' pairs' +
+      (miss.length ? '; it did not for ' + miss.join(', ') : '') + '. Nine winters at most per pair, none above ONI +2.5.';
+  }
+  function hindcastLine(f) {
+    var h = hindcastOf(f.iso, f.crop); if (!h) return '';
+    return '<span class="enso-live-sub' + (h.sign_right * 2 <= h.events ? ' is-warn' : '') + '">past El Niños: sign right ' + h.sign_right + ' of ' + h.events + (h.beats_no_change ? '' : '; no better than “no change” on size') + '</span>';
+  }
   function renderOutlook() {
     var el = document.getElementById('enso-outlook'); if (!el) return;
     var O = S.outlook;
@@ -43222,13 +43237,14 @@ function showCommodityDetail(key) {
         'ONI, the index the fit reads, has run ' + (gap != null ? 'about ' + num(gap, 1).replace('+', '') + ' °C ' : '') + 'above RONI this year (a guide, not a conversion: the gap shifts through an event). ' +
         '<b>On that guide ONI ' + num(rec.oni, 1) + ', the strongest winter the fit has seen (' + esc(rec.label.replace(' record', '')) + '), is a plausible central case, with about a one-in-' + Math.max(2, Math.round(100 / Math.max(1, 100 - djf.classes['very strong El Niño']))) + ' chance of a weaker winter.</b> Above it the fit has no data, so a stronger winter could bring larger changes.' : '') +
       (med ? ' CPC’s October–December median is RONI ' + esc(med.med) + ' °C (5th–95th percentile ' + esc(med.lo) + ' to ' + esc(med.hi) + '); in past strong events December–February ran a little below the autumn peak.' : '') + '</p>' +
-      '<ul class="enso-outlook-list">' + down.concat(up).map(function (f) { return '<li>' + phrase(f) + ', harvest ' + esc(f.harvest) + (f === down[0] && typeof f.change_pct_observed === 'number' ? ' <span class="enso-live-sub">even at today’s ONI (' + num(S.oniLive, 1) + '): ' + num(f.change_pct_observed, 0) + '%' + (f.change_kt_observed != null ? ', ' + fmtKt(f.change_kt_observed) : '') + '</span>' : '') + '</li>'; }).join('') + '</ul>' +
+      '<ul class="enso-outlook-list">' + down.concat(up).map(function (f) { return '<li>' + phrase(f) + ', harvest ' + esc(f.harvest) + (f === down[0] && typeof f.change_pct_observed === 'number' ? ' <span class="enso-live-sub">even at today’s ONI (' + num(S.oniLive, 1) + '): ' + num(f.change_pct_observed, 0) + '%' + (f.change_kt_observed != null ? ', ' + fmtKt(f.change_kt_observed) : '') + '</span>' : '') + hindcastLine(f) + '</li>'; }).join('') + '</ul>' +
+      (S.hindcast && S.hindcast.pairs ? '<p class="enso-outlook-lead enso-hindcast-note">Scored on past El Niño winters it was not fitted on, the fit usually gets the direction right but is rough on size: read the percentages as direction and order of magnitude. Details under “How these numbers are made”.</p>' : '') +
       (now.length ? '<p class="enso-outlook-lead">Already in the field: the fit associates developing El Niño years with ' + now.map(function (f) { return esc(who(f)) + ' ' + num(f.change_pct_observed, 0) + '%'; }).join(', ') + ' at today’s ONI (an association, not an attribution); USDA’s in-season estimates already contain this season.</p>' : '');
     var band = function (x) { return x ? num(x[0], 0) + ' to ' + num(x[1], 0) + '%' : ''; };
     var rowAhead = function (f) {
       return '<tr class="is-' + (f.change_pct_record < 0 ? 'falls' : 'rises') + '"><td class="enso-ol-h">' + esc(f.harvest) + '</td>' +
         '<th scope="row"><button type="button" data-map-country="' + esc(f.iso) + '">' + esc(nameFor(f.iso)) + '</button> <span>' + esc(crop(f.crop)) + '</span></th>' +
-        '<td class="enso-ol-v"><b>' + num(f.change_pct_record, 0) + '%</b> <i>' + band(f.change_pct_record_90) + '</i></td>' +
+        '<td class="enso-ol-v"><b>' + num(f.change_pct_record, 0) + '%</b> <i>' + band(f.change_pct_record_90) + '</i>' + hindcastLine(f) + '</td>' +
         /* Every row names the crop the percentage is applied to, so an unusual year is visible. */
         '<td class="enso-ol-v">' + fmtKt(f.change_kt_record) + (f.production_kt ? '<span class="enso-live-sub">on ' + fmtKt(f.production_kt).replace('+', '') + ', ' + esc(f.production_basis || '') + (f.production_note && /USDA/.test(f.production_basis || '') ? '; ' + esc(f.production_note) : '') + '</span>' : '') + '</td>' +
         '<td class="enso-ol-v">' + (f.value_usd_m_record != null ? fmtUsd(f.value_usd_m_record) : '<span class="enso-ol-na">price not pulled</span>') + '</td>' +
@@ -43237,7 +43253,7 @@ function showCommodityDetail(key) {
     var rowNow = function (f) {
       return '<tr class="is-' + (f.change_pct_record < 0 ? 'falls' : 'rises') + '"><td class="enso-ol-h">' + esc(f.harvest) + '</td>' +
         '<th scope="row"><button type="button" data-map-country="' + esc(f.iso) + '">' + esc(nameFor(f.iso)) + '</button> <span>' + esc(crop(f.crop)) + '</span></th>' +
-        '<td class="enso-ol-v"><b>' + num(f.change_pct_record, 0) + '%</b> <i>' + band(f.change_pct_record_90) + '</i></td>' +
+        '<td class="enso-ol-v"><b>' + num(f.change_pct_record, 0) + '%</b> <i>' + band(f.change_pct_record_90) + '</i>' + hindcastLine(f) + '</td>' +
         '<td colspan="2" class="enso-ol-na">already in USDA’s in-season estimate; no tonnes added</td>' +
         '<td class="enso-ol-v enso-ol-rec">' + num(f.change_pct_observed, 0) + '%</td></tr>';
     };
@@ -43267,7 +43283,7 @@ function showCommodityDetail(key) {
       (gaps.length ? '<p class="enso-outlook-gap"><b>Where the fit is silent or partial.</b> ' + gaps.join('; ') + '. Where the fit covers no crop, see Reported for what is being observed.</p>' : '') +
       (iod && typeof iod.value === 'number' ? '<p class="enso-outlook-gap"><b>Also in play: the Indian Ocean Dipole</b> at ' + num(iod.value, 2) + ' °C (' + esc(iod.agency) + ', ' + esc(iod.window) + '; ' + esc(iod.state) + ' side of ±' + iod.threshold + ' °C). A positive IOD alongside El Niño usually means a wetter East African short-rains season and a drier Australian winter crop; ' + esc(iod.note) + '</p>' : '') +
       '</div><figcaption class="enso-log">Modelled, not observed: fitted sensitivities with a size attached, not a calibrated forecast. Tonnes are the yield change times the production named under each row (USDA PSD 2026 where pulled; a single year, so an unusually small or large crop moves the tonnes); the price column sizes what is at stake at today’s World Bank price and is not a price forecast.</figcaption>' +
-      '<details class="enso-evidence-note"><summary>How these numbers are made, and what is left out</summary><p>Each pair was fitted on detrended log-yield against winter ONI with Newey–West errors; a row is shown only when its El Niño slope survives Benjamini–Hochberg control on its own (q &lt; 0.10 across ' + O.rows_all.length + ' flagged pairs’ El Niño tests). The change at an ONI value is exp(b·ONI) − 1, the band 90% from the standard error. The model has not been scored on harvests it was not trained on. ' + esc(O.honesty) + '</p>' +
+      '<details class="enso-evidence-note"><summary>How these numbers are made, and what is left out</summary><p>Each pair was fitted on detrended log-yield against winter ONI with Newey–West errors; a row is shown only when its El Niño slope survives Benjamini–Hochberg control on its own (q &lt; 0.10 across ' + O.rows_all.length + ' flagged pairs’ El Niño tests). The change at an ONI value is exp(b·ONI) − 1, the band 90% from the standard error. ' + hindcastSummary() + ' ' + esc(O.honesty) + '</p>' +
       (excluded ? '<ul class="enso-ol-excluded">' + excluded + '</ul>' : '') + '</details></figure>';
     el.querySelectorAll('[data-map-country]').forEach(function (b) { b.onclick = function () { ensoFocus(b.getAttribute('data-map-country')); }; });
   }

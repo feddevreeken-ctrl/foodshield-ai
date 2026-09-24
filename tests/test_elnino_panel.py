@@ -865,6 +865,17 @@ def main() -> int:
             return P.length >= 5 && rows.length === P.length && rows.every((r, i) => r.textContent.includes(P[i].name) || P.some(p => r.textContent.includes(p.name)))
                 && !document.querySelector('.enso-meet-plate').textContent.includes('not monitored');
         }"""))
+        # 2026-09-24: the fit is scored on winters it was not fitted on, and each ledger row says how it did.
+        page.evaluate("showTab('ensoharvest')")
+        page.wait_for_selector('#subview-ensoharvest.active .enso-outlook-table')
+        check("Harvests ledger reports the leave-one-El-Niño-out hindcast per row", page.evaluate("""async () => {
+            const H = (await (await fetch('data/enso_hindcast.json')).json()).data.pairs;
+            const txt = document.querySelector('.enso-outlook-plate').textContent;
+            return Object.keys(H).length > 0 && Object.values(H).every(h => txt.includes('sign right ' + h.sign_right + ' of ' + h.events))
+                && !txt.includes('has not been scored') && txt.includes('held-out harvests');
+        }"""))
+        page.evaluate("showTab('ensowater')")
+        page.wait_for_selector('#subview-ensowater.active .enso-status-table')
         page.locator('[data-open-lane="rhine"]').click()
         check("lane board opens the matching folded record",
               page.locator('#enso-lane-record-rhine details').get_attribute('open') is not None
