@@ -362,12 +362,12 @@ def main() -> int:
                 n_sig += 1
                 e.update(pend)
                 if not e["enso_specific"]:
-                    e["note"] = ("Reported, but NOT ENSO-specific: adding the Indian Ocean "
+                    e["note"] = ("Reported, but not ENSO-specific: adding the Indian Ocean "
                                  "Dipole removes ENSO's incremental explanatory power. Treat "
                                  "as a shared Indo-Pacific teleconnection.")
             else:
                 e["note"] = ("no ENSO signal surviving false-discovery control across the "
-                             f"{m} pairs tested -- not modelled")
+                             f"{m} pairs tested, not modelled")
 
     payload = {"_meta": {
         "generated_at": datetime.now(timezone.utc).isoformat(), "version": "v2-faostat",
@@ -375,12 +375,16 @@ def main() -> int:
         "method": ("Per country x crop OLS of detrended log-yield anomaly on DJF ONI with "
                    "separate El Nino and La Nina slopes. FAOSTAT QCL, indexed by CALENDAR "
                    "HARVEST YEAR. Alignment is set by the harvest month from USDA/FAO-GIEWS "
-                   "crop calendars -- harvest Jan-Aug uses DJF(Y), Sep-Dec uses DJF(Y+1) -- "
-                   "never chosen by fit. Newey-West HAC errors and an HAC Wald joint test; "
+                   "crop calendars: harvest Jan-Aug uses DJF(Y) unless the crop is sown Mar-Aug, "
+                   "harvest Sep-Dec and spring-sown summer crops use DJF(Y+1); never chosen by fit. Newey-West HAC errors and an HAC Wald joint test; "
                    "Benjamini-Hochberg across the panel with q<0.10."),
         "sources": {"enso": ONI_URL, "iod": DMI_URL, "yields": FAOSTAT_URL},
+        # Page-facing strings are written plain here, so a refit cannot undo the copy pass.
+        "copy_pass": ("2026-09-07: prose fields rewritten for plain sentences (no em dashes or double "
+                      "hyphens, no shouting caps); labels use ' · '; numbers and sources unchanged. "
+                      "2026-09-24: kept in the builder itself."),
         "honesty": ("Coefficients are MEASURED, not taken from literature. Pairs without a "
-                    "verified harvest month get NO coefficient -- coverage is limited by the "
+                    "verified harvest month get NO coefficient; coverage is limited by the "
                     "crop calendar, which is the honest constraint. Absence of a reported "
                     "effect means no detectable signal, not zero effect. ENSO shifts the odds "
                     "of a yield outcome; it does not determine any single country-season."),
