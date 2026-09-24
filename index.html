@@ -44222,8 +44222,14 @@ function showCommodityDetail(key) {
       try {
         var h = await fetch('data/' + n + '.json', { method: 'HEAD', cache: 'no-store' }); if (!h.ok) return;
         var tag = feedTag(h); if (!tag) return;
-        /* No baseline means the loaded copy failed or is missing: the file answering now is a change. */
-        if (seen[n] ? seen[n] !== tag : tag !== (S.failTags || {})[n]) changed = true;
+        if (seen[n]) { if (seen[n] !== tag) changed = true; return; }
+        /* No baseline: the loaded copy failed. A new version is a change. The same version may have failed
+           only in transit (a dropped connection), so fetch that one file and redraw only if it now parses;
+           a file that is really broken costs one download per check, not a full redraw. */
+        if (tag !== (S.failTags || {})[n]) { changed = true; return; }
+        var g = await fetch('data/' + n + '.json', { cache: 'no-cache' }); if (!g.ok) return;
+        var j = await g.json();
+        if (j && typeof j === 'object' && (j.data || (n === 'chokepoint_flows' && j.chokepoints))) changed = true;
       } catch (e) {}
     }));
     return changed;
