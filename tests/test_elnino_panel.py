@@ -275,7 +275,7 @@ def main() -> int:
             const rows = [...document.querySelectorAll('.enso-strength-table tbody tr')];
             return rows.length > 0 && T.seasons.length === document.querySelectorAll('.enso-strength-table thead th').length - 1
                 && rows.every(r => { const c = r.querySelector('th').textContent;
-                    return [...r.querySelectorAll('td')].every((td, i) => (T.seasons[i].classes[c] ? T.seasons[i].classes[c] + '%' : '') === td.textContent); });
+                    return [...r.querySelectorAll('td')].every((td, i) => (T.seasons[i].classes[c] ? T.seasons[i].classes[c] + '%' : '<1%') === td.textContent); });
         }"""))
         check("capped-upwelling evidence follows the weekly Niño 1+2 feed",
               ("%+.1f °C" % weekly["nino12_anom"]).replace("-", "−") in upwelling, upwelling)

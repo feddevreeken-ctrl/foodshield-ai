@@ -176,7 +176,8 @@ test('Stage H alert keys count only mapped reports and rings contrast with both 
  assert.equal(S.alertPins.length,2);assert(api.alertLegend().includes('GDACS 1'));assert(api.alertLegend().includes('ReliefWeb 1'));
  function luminance(hex){const rgb=hex.match(/[0-9a-f]{2}/gi).map(h=>parseInt(h,16)/255).map(v=>v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4));return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;}
  for(const p of S.alertPins)for(const fill of ['#7d6a3e','#b4602c'])assert((luminance(p.options.color)+.05)/(luminance(fill)+.05)>3);
- assert(S.alertPins.every(p=>p.options.fillColor==='#11161e'&&p.options.fillOpacity===1));
+ // 2026-09-24: GDACS alerts fill with their alert level; ReliefWeb reports stay dark.
+ assert(S.alertPins.every(p=>p.options.fillOpacity===1&&(p.options.ensoSource==='gdacs'?['#e05a4a','#e0864a','#9a978d'].includes(p.options.fillColor):p.options.fillColor==='#11161e')));
  S.gdacs=oldG;S.relief=oldR;S.alertPins=oldPins;
 });
 test('Shipping keeps one unboxed SVG label per chokepoint, with no corridor chips',()=>{
@@ -289,7 +290,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    assert.equal(key.includes('dashed: published schematic corridor through named ports'),view==='ensowater');
    if(view==='ensowater'){assert.equal(S.corridorLines.filter(l=>S.map.hasLayer(l)).length,9);assert.equal(S.corridorLabels.length,0);for(const c of S.corridors.corridors){assert(legend.querySelector('details').textContent.includes(c.basis.replace(/'/g,'&#39;')));}}
    assert.equal(key.includes('GDACS drought'),view==='ensolive');
-   if(view==='ensolive')for(const label of ['hotspot','major hotspot','ReliefWeb humanitarian event'])assert(key.includes(label));
+   if(view==='ensolive')for(const label of ['hotspot','major hotspot','ReliefWeb report in an El Niño country'])assert(key.includes(label));
    if(view==='ensowater')for(const l of S.lanes.lanes)assert(legend.querySelector('details').textContent.includes(l.name));
    if(view==='ensomoney')for(const label of ['−10%','0%','+30%','Blue-grey','ground grey','ochre to orange','In the teleconnection layer, no value in either source','Paler: official food CPI (FAOSTAT)'])assert(key.includes(label));
    if(cycle||view!=='elnino')assert.equal(node('scroller').scrollTop,0);
