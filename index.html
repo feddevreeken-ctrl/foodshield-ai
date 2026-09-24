@@ -42973,6 +42973,9 @@ function showCommodityDetail(key) {
       try {
         var r = await fetch('data/' + n + '.json', opts);
         if (!r.ok) { S.failed.push(n); return null; }
+        /* The version actually loaded is the freshness baseline: taken from this response, not from a
+           later check, so a refresh that lands between the two cannot slip past. */
+        var tg = feedTag(r); if (tg) (S.feedTags || (S.feedTags = {}))[n] = tg;
         var j = await r.json();
         /* chokepoint_flows.json predates the data envelope: its body is the file itself. */
         var body = j && typeof j === 'object' ? (j.data || (n === 'chokepoint_flows' && j.chokepoints ? j : null)) : null;
@@ -44193,37 +44196,44 @@ function showCommodityDetail(key) {
      have moved through the refresh, reload the whole module. */
   /* One pass over every feed the tab reads: HEAD each file and compare its ETag / Last-Modified with
      the previous pass. Returns true when any file changed since then. */
+  /* A file's version: ETag (weak prefix and quotes stripped, so HEAD and GET compare alike) or Last-Modified. */
+  function feedTag(r) {
+    var t = r.headers.get('etag') || r.headers.get('last-modified');
+    return t ? String(t).replace(/^W\//, '').replace(/"/g, '') : null;
+  }
+  /* HEAD every feed the tab reads and compare with the version it loaded. A changed file is not marked
+     as seen here: only a successful reload (get() above) moves its baseline, so a failed redraw is
+     retried on the next check instead of being forgotten. */
   async function feedTagsChanged() {
     var names = Object.keys(S.feedNames || {}).map(function (k) { return S.feedNames[k]; });
     var seen = S.feedTags || (S.feedTags = {}), changed = false;
     await Promise.all(names.map(async function (n) {
       try {
         var h = await fetch('data/' + n + '.json', { method: 'HEAD', cache: 'no-store' }); if (!h.ok) return;
-        var tag = h.headers.get('etag') || h.headers.get('last-modified'); if (!tag) return;
-        if (seen[n] && seen[n] !== tag) changed = true;
-        seen[n] = tag;
+        var tag = feedTag(h); if (!tag) return;
+        if (!seen[n]) seen[n] = tag; else if (seen[n] !== tag) changed = true;
       } catch (e) {}
     }));
     return changed;
   }
+  /* News, alerts, prices and the outlook refresh every six hours; an open page follows them. Checked
+     every 15 minutes while the tab is in view, and at once when the reader comes back to it. */
+  async function ensoFreshCheck() {
+    var tab = document.getElementById('tab-elnino');
+    if (S.checking || !S.ready || document.visibilityState !== 'visible' || !tab || !tab.classList.contains('active')) return;
+    S.checking = true; S.lastCheck = Date.now();
+    try {
+      if (await feedTagsChanged() && typeof ensoRetry === 'function') {
+        S.forceFresh = true;
+        try { await ensoRetry(); } finally { S.forceFresh = false; }
+      }
+    } catch (e) { /* a failed check changes nothing; the next one tries again */ }
+    finally { S.checking = false; }
+  }
   function ensoPoll() {
     if (S.pollTimer) return;
-    /* The baseline is taken now, right after the load, so a refresh that lands before the first
-       interval is still noticed. */
-    feedTagsChanged();
-    S.pollTimer = setInterval(async function () {
-      try {
-        var tab = document.getElementById('tab-elnino');
-        if (document.visibilityState !== 'visible' || !tab || !tab.classList.contains('active')) return;
-        /* Every feed the tab reads, not just the ENSO index: news, alerts, prices and the outlook
-           refresh every six hours, and an open page should follow them. A HEAD request per file
-           compares its ETag / Last-Modified with the last poll; any change redraws the tab. */
-        if (await feedTagsChanged() && typeof ensoRetry === 'function') {
-          S.forceFresh = true;
-          try { await ensoRetry(); } finally { S.forceFresh = false; }
-        }
-      } catch (e) { /* a failed poll changes nothing; the next one will try again */ }
-    }, 15 * 60 * 1000);
+    S.pollTimer = setInterval(ensoFreshCheck, 15 * 60 * 1000);
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && Date.now() - (S.lastCheck || 0) > 60 * 1000) ensoFreshCheck(); });
   }
   /* Hand-checked files carry their review date; past the window they say so on the plate. */
   function reviewDue(key, days) {
@@ -47805,6 +47815,8 @@ function showCommodityDetail(key) {
     placeMap();
     drawCharts(S.sub);
     if (mechanismAlias) setTimeout(function () { if (S.sub === 'elnino') document.getElementById('enso-mech').scrollIntoView({ block: 'start' }); }, 100);
+    /* Coming back to the tab after a while checks the feeds at once rather than at the next tick. */
+    if (!S.lastCheck) S.lastCheck = Date.now(); else if (Date.now() - S.lastCheck > 60 * 1000) setTimeout(ensoFreshCheck, 0);
   };
 
   document.addEventListener('foodshield:chartjs-ready', function () {
