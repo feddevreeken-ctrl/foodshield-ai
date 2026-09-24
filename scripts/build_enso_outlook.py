@@ -16,8 +16,8 @@ Reads what the pipeline already holds and writes data/enso_outlook.json:
 TWO ANCHORED CASES, NO EXTRAPOLATION
 ------------------------------------
 The fit is linear in ONI and was trained on 1961-2024 winters, the largest of
-which is 2015-16 at +2.5. CPC's own outlook puts OND 2026 at RONI +2.67 (median),
-which is beyond anything the fit has seen. So this does not weight a probability
+which is 2015-16 at +2.5. CPC's own outlook puts DJF 2026-27 at RONI +2.27 (median);
+with ONI running ~0.4 above RONI that is about ONI +2.7, beyond anything the fit has seen. So this does not weight a probability
 table into a single forecast. It reports each fitted pair at two ONI values the
 record contains: the latest observed season, and the record winter. Anything
 stronger is stated as outside the fitted range.
@@ -49,7 +49,30 @@ from _common import write_json  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
-PSD_KEY = {"corn": "corn", "wheat": "wheat", "rice": "rice", "soybeans": "soybeans"}
+PSD_KEY = {"corn": "corn", "wheat": "wheat", "rice": "rice", "soybeans": "soybeans",
+           "sorghum": "sorghum", "barley": "barley", "millet": "millet"}
+# USDA PSD files each country-crop under a marketing year (MY) that is not
+# always the harvest year. Harvest year = MY + offset. Checked against the PSD
+# bulk production series on 2026-09-24 using known drought harvests:
+#   ZAF corn MY2023 = 13,425 kt (2024 drought harvest), MY2015 = 8,214 (2016)  -> +1
+#   ZAF sorghum MY2015 = 71 kt (2016 drought harvest)                           -> +1
+#   ZWE corn MY2024 = 635 kt (2024 drought harvest), MY2016 = 512 (2016)       -> 0
+#   ZWE sorghum MY2024 = 82 kt (2024 drought harvest)                          -> 0
+#   BRA rice MY2024 = 8,675 kt (2025 record crop), MY2015 = 7,210 (2016)       -> +1
+#   BRA sorghum MY2015 = 1,032 kt (2016 safrinha drought), same year as corn   -> +1
+#   BRA barley: winter crop filed like Brazil wheat (MY2022 = 2022 record)     -> 0
+#   USA wheat, USA soybeans: US MY starts at harvest (Jun / Sep)               -> 0
+#   IND millet MY2015 = 10,280 kt, MY2018 = 10,236 (poor-monsoon kharif)      -> 0
+#   AGO rice: series too flat to check; Angola maize MY2024 = 2,200 kt is the
+#   2024 drought harvest, so taken as the same year (inferred)               -> 0
+# Pairs not listed get no harvest label and base_is_target_harvest = null.
+PSD_HARVEST_OFFSET = {
+    ("ZAF", "corn"): 1, ("ZAF", "sorghum"): 1, ("ZWE", "corn"): 0, ("ZWE", "sorghum"): 0,
+    ("BRA", "rice"): 1, ("BRA", "sorghum"): 1, ("BRA", "barley"): 0, ("USA", "wheat"): 0,
+    ("USA", "soybeans"): 0, ("IND", "millet"): 0, ("AGO", "rice"): 0,
+}
+PSD_INFERRED = {("AGO", "rice"), ("BRA", "barley")}
+DOUBLE_COUNT = "USDA's estimate for this same harvest; if it already allows for El Niño, this change double counts."
 PRICE_KEY = {"corn": "maize", "wheat": "wheat", "rice": "rice", "soybeans": "soybeans"}
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 # The crops each published region is about. A country's other fitted crops are
@@ -95,6 +118,56 @@ def parse_date(s: str | None):
             return None
 
 
+def comtrade_year_of(doc: dict) -> int | None:
+    """The trade year behind comtrade_exports.json. The merged file carries no
+    year field, so fall back to the year its pipeline requests (config.YEAR)."""
+    import re
+    m = re.search(r"\b(20\d\d)\b", " ".join(str((doc.get("_meta") or {}).get(k, "")) for k in ("source", "notes", "year")))
+    if m:
+        return int(m.group(1))
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent / "trade_pipeline"))
+        import config as trade_config  # noqa: E402
+        return int(trade_config.YEAR)
+    except Exception:
+        return None
+
+
+def allocate_buyers(total: float, shares: list[dict], cap_of, top: int = 5) -> list[dict]:
+    """Split `total` kt over named buyers by value share. A buyer cannot lose more
+    than it normally imports (USDA PSD); the excess a cap removes is re-spread pro
+    rata over the named buyers still under their caps, repeated until none is
+    left or every buyer is capped. The five largest are returned with integer kt
+    whose sum never exceeds round(total); the caller books the rest as others."""
+    alloc = {d["iso3"]: total * d["share_pct"] / 100 for d in shares}
+    caps = {d["iso3"]: cap_of(d["iso3"]) for d in shares}
+    caps = {k: v for k, v in caps.items() if isinstance(v, (int, float)) and v > 0}
+    capped: set = set()
+    for _ in range(len(shares) + 1):
+        excess = 0.0
+        for iso3, kt in alloc.items():
+            if iso3 in caps and kt > caps[iso3]:
+                excess += kt - caps[iso3]
+                alloc[iso3] = caps[iso3]
+                capped.add(iso3)
+            elif iso3 in caps and kt >= caps[iso3]:
+                capped.add(iso3)
+        open_ = [d for d in shares if d["iso3"] not in capped]
+        if excess <= 1e-9 or not open_:
+            break
+        w = sum(d["share_pct"] for d in open_)
+        for d in open_:
+            alloc[d["iso3"]] += excess * d["share_pct"] / w
+    rows = [{"iso": d["iso3"], "share_pct": d["share_pct"], "kt": round(alloc[d["iso3"]]),
+             "capped_at_imports": d["iso3"] in capped} for d in shares if alloc[d["iso3"]] >= 1]
+    rows.sort(key=lambda x: -x["kt"])
+    rows = rows[:top]
+    over = sum(r["kt"] for r in rows) - round(total)
+    while over > 0 and rows:            # rounding up can overshoot by a tonne or two
+        r = max(rows, key=lambda x: x["kt"]); take = min(over, r["kt"]); r["kt"] -= take; over -= take
+    return rows
+
+
 def main() -> int:
     enso = body(load("enso.json"))
     model = body(load("enso_model.json"))
@@ -116,6 +189,12 @@ def main() -> int:
         "observed": {"oni": latest["anom"], "label": f"{latest['season']} {latest['year']} observed"},
         "record": {"oni": record["anom"], "label": f"DJF {record['year'] - 1}-{str(record['year'])[2:]} record"},
     }
+    # The fit is not extrapolated: an observed season stronger than the record
+    # winter is reported at the record value, flagged, with the raw ONI kept.
+    if latest["anom"] > record["anom"]:
+        cases["observed"].update(oni=record["anom"], oni_raw=latest["anom"], clamped=True)
+    else:
+        cases["observed"]["clamped"] = False
     jan_year = latest["year"] + 1 if latest["season"] not in ("DJF", "JFM", "FMA") else latest["year"]
     now = datetime.now(timezone.utc)
 
@@ -154,21 +233,31 @@ def main() -> int:
                     continue
                 slope = c["yield_pct_per_oni_nino"]
                 p = (psd.get(iso) or {}).get(PSD_KEY.get(crop, ""), {})
-                base_note = None
+                base_note, base_harvest = None, None
+                hyear = jan_year if c.get("alignment") == "djf_same_year" else jan_year - 1
                 if isinstance(p.get("production_kt"), (int, float)):
-                    prod, prod_basis = p["production_kt"], f"USDA PSD {p.get('_year_production_kt', p.get('year'))}"
+                    my = p.get("_year_production_kt", p.get("year"))
+                    off = PSD_HARVEST_OFFSET.get((iso, crop))
+                    base_harvest = my + off if isinstance(my, int) and off is not None else None
+                    milled = ", milled" if crop == "rice" else ""
+                    prod = p["production_kt"]
+                    prod_basis = (f"USDA {my}/{str(my + 1)[2:]} estimate{milled}"
+                                  + (f" ({base_harvest} harvest)" if base_harvest else ""))
                     prev = p.get("production_kt_prev")
+                    my_prev = p.get("_year_production_kt_prev")
+                    lab = (lambda y: str(y + off)) if off is not None else (lambda y: f"{y}/{str(y + 1)[2:]}")
                     # A single year that is far from the last one moves the tonnes; say so on the row.
-                    if isinstance(prev, (int, float)) and prev > 0 and abs(prod / prev - 1) >= 0.15:
-                        base_note = (f"{p.get('_year_production_kt')} crop {abs(round((prod / prev - 1) * 100))}% "
-                                     f"{'below' if prod < prev else 'above'} {p.get('_year_production_kt_prev')}; "
-                                     f"on the {p.get('_year_production_kt_prev')} crop the change would be "
+                    if isinstance(prev, (int, float)) and prev > 0 and abs(prod / prev - 1) >= 0.15 and isinstance(my_prev, int):
+                        base_note = (f"{lab(my)} crop {abs(round((prod / prev - 1) * 100))}% "
+                                     f"{'below' if prod < prev else 'above'} {lab(my_prev)}; "
+                                     f"on the {lab(my_prev)} crop the change would be "
                                      f"{'+' if slope > 0 else '−'}{abs(round(prev * (math.exp(slope / 100 * 2.5) - 1) / 1000, 1))} Mt at ONI +2.5")
+                    if base_harvest == hyear:
+                        base_note = (base_note + "; " if base_note else "") + DOUBLE_COUNT
                 else:
                     prod, prod_basis = c.get("mean_production_kt"), "FAOSTAT 2015–2024 mean"
                     base_note = "a ten-year mean, not this year’s crop; a fast-growing crop is understated"
                 harvest = (cal.get(iso) or {}).get(crop, {}).get("harvest") or []
-                hyear = jan_year if c.get("alignment") == "djf_same_year" else jan_year - 1
                 usd, plabel, pmonth = price(crop)
                 in_season = hyear < jan_year
                 row = {
@@ -187,6 +276,11 @@ def main() -> int:
                                 else (month_span(harvest) + " " + str(hyear)).strip()),
                     "harvest_year": hyear,
                     "production_kt": prod, "production_basis": prod_basis, "production_note": base_note,
+                    # True when USDA's production figure is its estimate of the very
+                    # harvest the row models; null when the PSD year mapping is unchecked.
+                    "base_is_target_harvest": (base_harvest == hyear) if base_harvest is not None else None,
+                    "production_base_harvest": base_harvest,
+                    "production_base_inferred": ((iso, crop) in PSD_INFERRED) if base_harvest is not None else None,
                     "exports_kt": p.get("exports_kt"), "imports_kt": p.get("imports_kt"),
                 }
                 # The fit is in log-points (pct = 100 x log slope), so the change at
@@ -266,6 +360,7 @@ def main() -> int:
     # Priced at today's World Bank price. Stocks are reported as a buffer in
     # weeks of use, not subtracted, because how much is drawn is a policy choice.
     COMTRADE_KEY = {"corn": "maize", "wheat": "wheat", "rice": "rice", "soybeans": "soybeans"}
+    comtrade_year = comtrade_year_of(load("comtrade_exports.json"))
     chain, seen_chain = [], set()
     for reg in out_regions:
         for f in reg["fitted"]:
@@ -290,29 +385,23 @@ def main() -> int:
             lost_exports = min(loss, exports)
             extra_import = loss - lost_exports
             dest = ((exports_dest.get(f["iso"]) or {}).get(COMTRADE_KEY.get(f["crop"], "")) or {}).get("top_destinations") or []
-            shares = [d for d in dest if isinstance(d.get("share_pct"), (int, float))]
-            # A buyer cannot lose more than it normally imports (USDA PSD); what the
-            # value shares would push past that goes to "other buyers".
-            buyers, other = [], lost_exports
-            for d in shares:
-                kt = lost_exports * d["share_pct"] / 100
-                cap = ((psd.get(d["iso3"]) or {}).get(PSD_KEY.get(f["crop"], "")) or {}).get("imports_kt")
-                if isinstance(cap, (int, float)) and cap > 0:
-                    kt = min(kt, cap)
-                if kt >= 1:
-                    buyers.append({"iso": d["iso3"], "share_pct": d["share_pct"], "kt": round(kt),
-                                   "capped_at_imports": isinstance(cap, (int, float)) and cap > 0 and kt == cap})
-                    other -= kt
-            # Five largest after the cap; the rest joins "other buyers".
-            buyers.sort(key=lambda x: -x["kt"])
-            other += sum(x["kt"] for x in buyers[5:])
-            buyers = buyers[:5]
+            shares = [d for d in dest if isinstance(d.get("share_pct"), (int, float)) and d["share_pct"] > 0]
+            buyers = allocate_buyers(lost_exports, shares, lambda iso3: (
+                ((psd.get(iso3) or {}).get(PSD_KEY.get(f["crop"], "")) or {}).get("imports_kt")))
+            lost_exports_kt = round(lost_exports)
+            b90 = f.get("change_pct_record_90") or [f["change_pct_record"], f["change_pct_record"]]
+            prod = f.get("production_kt") or 0
             chain.append({
                 "iso": f["iso"], "crop": f["crop"], "harvest": f["harvest"], "loss_kt": round(loss),
-                "exports_kt": exports, "lost_exports_kt": round(lost_exports),
-                # "Other buyers" is what the rounded named buyers leave, so the parts add to the whole.
-                "buyers": buyers, "other_buyers_kt": max(0, round(lost_exports) - sum(b["kt"] for b in buyers)),
-                "buyers_basis": "UN Comtrade export shares by value, capped at each buyer's USDA PSD imports" if shares else None,
+                # The loss at the 90% band ends of the record case, and at today's ONI.
+                "loss_kt_90": sorted([round(-b90[0] * prod / 100), round(-b90[1] * prod / 100)]),
+                "loss_kt_observed": round(-(f.get("change_kt_observed") or 0)),
+                "exports_kt": exports, "lost_exports_kt": lost_exports_kt,
+                # "Other buyers" is what the named buyers leave, so the parts add to the whole.
+                "buyers": buyers, "other_buyers_kt": lost_exports_kt - sum(b["kt"] for b in buyers),
+                "buyers_basis": ("UN Comtrade export shares by value, capped at each buyer's USDA PSD imports; "
+                                 "what a cap removes is spread over the uncapped named buyers") if shares else None,
+                "comtrade_year": comtrade_year if shares else None,
                 "extra_import_kt": round(extra_import),
                 "extra_import_usd_m": round(extra_import * 1000 * usd / 1e6) if usd else None,
                 "lost_exports_usd_m": round(lost_exports * 1000 * usd / 1e6) if usd else None,
@@ -358,13 +447,16 @@ def main() -> int:
     write_json("enso_outlook.json", {
         "cases": cases, "harvest_winter": f"DJF {jan_year - 1}-{str(jan_year)[2:]}",
         "method": "exp(fitted log-yield slope × ONI) − 1, × production, at two ONI values the record contains; value at stake = tonnes × latest World Bank price. No world-price model, no probability weighting.",
-        "honesty": "Estimates from a linear fit, tested on past El Niño winters it was not fitted on: direction mostly right, size rough. CPC's Oct–Dec 2026 median (RONI +2.67) is above the strongest winter in the fit (ONI +2.5, 2015-16), so a stronger winter could bring larger changes.",
+        "honesty": ("Estimates from a linear fit, tested on past El Niño winters it was not fitted on: direction mostly right, size rough. "
+                    "The fit is on December–February, and CPC's median for December–February 2026-27 is RONI +2.27. ONI has been "
+                    "running about 0.4 °C above RONI, so that is roughly ONI +2.7, a little above the strongest winter in the fit "
+                    "(ONI +2.5, 2015-16). A winter that strong could bring somewhat larger changes than those shown."),
         "regions": out_regions,
         "crops": sorted(by_crop.values(), key=lambda c: c["loss_kt_record"]),
         "rows_all": rows_all,
         "who_pays": chain, "who_pays_totals": who_pays_totals,
         "who_pays_case": "record",
-        "who_pays_rule": "At the fit's strongest winter (ONI +2.5). Shortfall cuts exports first, allocated to buyers by Comtrade value share; any remainder is extra import need. Priced at the latest World Bank price. Stocks shown, not subtracted.",
+        "who_pays_rule": "At the fit's strongest winter (ONI +2.5). Shortfall cuts exports first, allocated to buyers by Comtrade value share, each capped at its usual imports (USDA) with the capped excess spread over the other named buyers; any remainder is extra import need. Priced at the latest World Bank price. Stocks shown, not subtracted.",
     }, source="Derived: enso_regions, enso_model, crop_calendars, USDA PSD, World Bank Pink Sheet; live signals from JRC ASAP, GDACS, World Bank RTFP, ReliefWeb, El Niño news feed, trade_restrictions",
        notes="Tonnes first; value at stake is tonnes × latest World Bank price, not a price forecast.", status="ok")
     print(f"[OK] enso_outlook: {len(out_regions)} regions, {sum(len(r['fitted']) for r in out_regions)} fitted rows, "

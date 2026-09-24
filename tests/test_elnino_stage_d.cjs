@@ -90,7 +90,7 @@ test('Stage I transit rings join actual lane values and distinguish zero, missin
  S.lanes.lanes.forEach((ln,i)=>{
   const m=api.laneMeasurement(ln),html=S.lanePins[i].options.icon.html,pw=S.portwatch[ln.portwatch_key];
   if(!pw){assert.equal(m,null);assert(!html.includes('no transit data'));assert(S.lanePins[i].options.icon.className.includes('no-transit'));assert(!html.includes('enso-transit-ring'));}
-  else {const dry=Number.isFinite(pw.yoy.dry_bulk_pct)&&Number.isFinite(pw.transits_per_day.dry_bulk),pct=dry?pw.yoy.dry_bulk_pct:pw.yoy.total_pct;assert.equal(m.pct,pct);assert.equal(m.total,pw.transits_per_day.total);assert(html.includes('data-yoy="'+pct+'"'));assert(html.includes('<circle'));assert(html.includes('stroke="'+(['el_nino','la_nina'].includes(ln.phase)?'#dd5a3a':'#8fb1cf')+'"'));}
+  else {const dry=Number.isFinite(pw.yoy.dry_bulk_pct)&&Number.isFinite(pw.transits_per_day.dry_bulk),pct=dry?pw.yoy.dry_bulk_pct:pw.yoy.total_pct;assert.equal(m.pct,pct);assert.equal(m.total,pw.transits_per_day.total);assert(html.includes('data-yoy="'+pct+'"'));assert(html.includes('<circle'));assert(html.includes('stroke="'+(['el_nino','la_nina'].includes(ln.phase)&&ln.attribution!=='weak'?'#dd5a3a':'#8fb1cf')+'"'));}
  });
  const original=S.portwatch,ln={portwatch_key:'fixture'};
  try {
@@ -135,10 +135,10 @@ test('Stage I price rail lists every teleconnection country, valued first, and n
  const teleShown=shown.filter(k=>tele.includes(k)), teleValued=teleShown.filter(valued);
  assert.deepEqual(teleShown.slice(0,teleValued.length),teleValued,'valued teleconnection rows lead');
  teleValued.forEach((k,i)=>{if(i)assert(saved[teleValued[i-1]].food_inflation_pct>=saved[k].food_inflation_pct);});
- teleValued.forEach(k=>{assert(list.textContent.includes(((d)=>{const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);return m?(+m[3])+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m[2]-1]+' '+m[1]:d;})(saved[k].as_of)));assert(list.textContent.includes(saved[k].markets+' markets'));});
+ teleValued.forEach(k=>{assert(list.textContent.includes(((d)=>{const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);return m?['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m[2]-1]+' '+m[1]:d;})(saved[k].as_of)));assert(list.textContent.includes(saved[k].markets+' markets'));});
  // 2026-09-24: unmonitored countries rank by official food CPI or are named as having no value.
  if(teleShown.length>teleValued.length)assert(list.textContent.includes('official food CPI')||list.textContent.includes('No value in either source'));
- assert.equal(api.mapState().title,'Where food prices are rising fastest');assert(api.priceMapSentence().includes('as of August 2026'));
+ assert.equal(api.mapState().title,'Food inflation, year on year');assert(api.priceMapSentence().includes('August 2026'));
  S.isoIndex={ZWE:[{}],KEN:[{}]};
  S.rtfp={ZWE:{food_inflation_pct:0,markets:2,as_of:'2026-07-01'},USA:{food_inflation_pct:-2,markets:3,as_of:'2026-08-01'},BAD:{food_inflation_pct:null},NAN:{food_inflation_pct:NaN}};
  api.renderMapRanking();

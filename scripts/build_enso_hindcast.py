@@ -12,12 +12,17 @@ Two choices keep the test honest:
   - The detrend looks back only (the mean of up to eight earlier log yields).
     The fit on the page uses a centred window, which borrows the four harvests
     after each year; a live forecast cannot, so the hindcast does not either.
-  - The score is compared with "no change" (anomaly 0), the forecast anyone
-    could make without a model.
+  - A trailing mean lags a rising yield trend, so most anomalies come out
+    positive and a fit scores the "sign" from trend alone. v2 therefore scores
+    only the El Nino part: the training intercept b0 carries the trend, the
+    El Nino component is b1*ONI, and a year counts as right when
+    sign(actual - b0) == sign(b1*ONI). The benchmark is b0 alone (same
+    training years), so "beats" means the El Nino term moved the forecast
+    closer, not that the trend did.
 
-Per pair: sign right (n of N), mean absolute error against no change, and how
-many held-out harvests fell inside the 90% prediction band. Nothing here moves
-the published coefficients; it says how far to trust them.
+Per pair: sign right (n of N), mean absolute error against the intercept-only
+forecast, and how many held-out harvests fell inside the 90% prediction band.
+Nothing here moves the published coefficients; it says how far to trust them.
 
 Run by hand after build_enso_model.py, with the same FAOSTAT cache
 (FOODSHIELD_CACHE).
@@ -79,15 +84,24 @@ def main() -> int:
         for hy, act, o in [d for d in data if d[2] >= EVENT_ONI]:
             train = [d for d in data if d[0] != hy]
             b, cov, s = ols([d[2] for d in train], [d[1] for d in train])
-            pred = b[0] + b[1] * o
+            # The yardstick is the model without the El Nino term, refit on the same
+            # years: an intercept-only fit, i.e. the mean training anomaly (it carries
+            # the trend the trailing detrend leaves in). The fit's own intercept b0 is
+            # not that model and made too gentle a benchmark.
+            base = float(np.mean([d[1] for d in train]))
+            pred = float(b[0] + b[1] * o)
+            enso = pred - base                    # what the El Nino term adds over the yardstick
             sd = math.sqrt(cov[0, 0] + o * o * cov[1, 1] + 2 * o * cov[0, 1] + s * s)
             held.append({
                 "harvest_year": int(hy), "djf_oni": round(float(o), 2),
                 "actual_pct": round((math.exp(act) - 1) * 100, 1),
                 "predicted_pct": round((math.exp(pred) - 1) * 100, 1),
-                "sign_right": bool((act < 0) == (pred < 0)),
+                "baseline_pct": round((math.exp(base) - 1) * 100, 1),
+                "elnino_actual_log_pts": round((act - base) * 100, 1),
+                "elnino_predicted_log_pts": round(enso * 100, 1),
+                "sign_right": bool(((act - base) < 0) == (enso < 0)),
                 "in_band": bool(pred - 1.645 * sd <= act <= pred + 1.645 * sd),
-                "abs_err": abs(act - pred), "abs_err_zero": abs(act),
+                "abs_err": abs(act - pred), "abs_err_zero": abs(act - base),
             })
         n = len(held)
         if not n:
@@ -106,13 +120,16 @@ def main() -> int:
             "held_out": held,
         }
         print(f"  {key}: sign {out[key]['sign_right']}/{n}, band {out[key]['in_band']}/{n}, "
-              f"error {mae * 100:.1f} vs no change {mae0 * 100:.1f}")
+              f"error {mae * 100:.1f} vs baseline {mae0 * 100:.1f}")
     payload = {"_meta": {
-        "generated_at": datetime.now(timezone.utc).isoformat(), "version": "v1",
-        "method": (f"Leave-one-El-Niño-out: each winter with DJF ONI ≥ +{EVENT_ONI} is held out, the two-slope fit "
-                   f"re-estimated on the other years, and that harvest predicted from its ONI. Trailing detrend "
-                   f"(mean of up to {TRAIL} earlier log yields), so no future harvest informs a prediction. Scored "
-                   "against 'no change'. The 90% prediction band includes residual variance."),
+        "generated_at": datetime.now(timezone.utc).isoformat(), "version": "v2", "method_version": "v2",
+        "method": (f"Each El Niño winter (DJF ONI of +{EVENT_ONI} or more) is left out in turn and the fit is "
+                   "redone on the other years. A harvest is measured against the average of up to "
+                   f"{TRAIL} earlier harvests, so no later year informs it. Because yields trend upward, that "
+                   "average runs low. The yardstick is the same fit without its El Niño term (the average "
+                   "of the other years), which carries that trend. 'Sign right' means the fit and the harvest "
+                   "both landed on the same side of the yardstick; beating it means the El Niño term moved the "
+                   "forecast closer to what happened. The 90% band includes year-to-year noise."),
         "source": "FAOSTAT QCL yields; NOAA CPC ONI (oni.ascii.txt); pairs as shown in enso_outlook.json",
         "caveat": ("Nine winters per pair at most, and none above ONI +2.5, so this tests direction and rough size "
                    "in past events, not the size of a stronger winter."),

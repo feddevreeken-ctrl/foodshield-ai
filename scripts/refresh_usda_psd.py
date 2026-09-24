@@ -31,6 +31,9 @@ COMMODITIES (PSD codes, verified May 2026):
   422110   Rice, Milled
   440000   Corn
   2222000  Soybeans
+  0459200  Sorghum   (added Sep 2026 for the El Nino harvest outlook)
+  0430000  Barley
+  0459100  Millet
 
 FAS COUNTRY CODES → ISO3:
   PSD uses 2-char FAS codes (e.g. US, AR, BR, IN, CN, AU, RU). Most equal
@@ -76,10 +79,19 @@ COMMODITY_TO_KEY = {
     "0422110":  "rice",
     "0440000":  "corn",
     "2222000":  "soybeans",
+    # Coarse grains for the El Nino harvest outlook (build_enso_outlook.py):
+    # without them sorghum fell back to a FAOSTAT 2015-24 mean (Brazil 2.7 Mt
+    # against USDA's 6.5 Mt).
+    "0459200":  "sorghum",
+    "0430000":  "barley",
+    "0459100":  "millet",
     # Some PSD vintages drop the leading zero in the CSV — accept both
     "410000":   "wheat",
     "422110":   "rice",
     "440000":   "corn",
+    "459200":   "sorghum",
+    "430000":   "barley",
+    "459100":   "millet",
 }
 
 # PSD attribute IDs we care about. Use string-match on Attribute_Description as
@@ -521,7 +533,7 @@ def main():
             f"Observed production / imports / exports / consumption / stocks per country "
             f"per staple per marketing year. Latest marketing year per (country, commodity, "
             f"attribute). Values in 1000 metric tonnes. Commodities: wheat, rice (milled), "
-            f"corn, soybeans. {len(by_country)} countries covered; "
+            f"corn, soybeans, sorghum, barley, millet. {len(by_country)} countries covered; "
             f"imports captured for {n_imp}, exports for {n_exp}. "
             f"Source refreshes monthly on WASDE release day; cron pulls every 6h but "
             f"upstream data rarely changes between WASDE windows. "

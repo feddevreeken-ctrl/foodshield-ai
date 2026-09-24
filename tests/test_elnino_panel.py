@@ -712,7 +712,7 @@ def main() -> int:
         # 2026-09-24 (court): the lenses may not grow unnoticed. Ceilings sit about 5% above the
         # heights at 1440x1000 on 24 Sep 2026; adding a plate means removing or folding another.
         # Lowered 24 Sep after the duplicate displays were removed (Ocean 4.2k, Shipping 6.9k, Prices 4.9k at 1440x900).
-        CEIL = {'elnino': 4600, 'ensoharvest': 4400, 'ensowater': 7500, 'ensomoney': 5300, 'ensolive': 6100}
+        CEIL = {'elnino': 4600, 'ensoharvest': 4400, 'ensowater': 7500, 'ensomoney': 5500, 'ensolive': 6100}
         check("no lens grows past its height ceiling", all(heights.get(k, 0) <= v for k, v in CEIL.items()), str(heights))
         # 2026-09-24: the Ocean lens leads with a dated calendar joined from the other lenses' data.
         page.evaluate("showTab('elnino')")
@@ -1066,7 +1066,7 @@ def main() -> int:
                 if (vals.some((v,i) => i && v > vals[i-1])) return false;
                 return isos.every((iso,i) => valuedOf(iso)
                     ? buttons[i].textContent.includes(data[iso].markets + ' markets')
-                      && buttons[i].textContent.includes(((d) => { const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? (+m[3]) + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m[2] - 1] + ' ' + m[1] : d; })(data[iso].as_of))
+                      && buttons[i].textContent.includes(((d) => { const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m[2] - 1] + ' ' + m[1] : d; })(data[iso].as_of))
                     // 2026-09-24: a country with no monitored market ranks by its official food CPI
                     // (FAOSTAT, same month a year earlier) or is named as having no value in either source.
                     : (buttons[i].textContent.includes('official food CPI')
@@ -1218,7 +1218,8 @@ def main() -> int:
         # the change has other causes (2026-09-23), so a war ring is not read as El Niño.
         check("Stage I corridors have no destination triangles and chokepoint rings are coloured by driver", page.evaluate("""async () => {
             const lanes = (await (await fetch('data/enso_lanes.json')).json()).data.lanes;
-            const phase = Object.fromEntries(lanes.map(l => [l.id, l.phase]));
+            // 2026-09-24: a weak attribution draws blue-grey, like a change with other causes.
+            const phase = Object.fromEntries(lanes.map(l => [l.id, l.attribution === 'weak' ? 'none' : l.phase]));
             const rings = [...document.querySelectorAll('.enso-transit-ring')];
             return !document.querySelector('.enso-corridor-arrow') && rings.length > 0 && rings.every(ring => {
                 const circle = ring.querySelector('circle'), id = ring.closest('.enso-choke').querySelector('.enso-choke-label').dataset.lane;

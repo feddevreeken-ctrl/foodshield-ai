@@ -123,7 +123,7 @@ test('shipping leads with nine lane answers and paired published limits and date
  api.renderWater();const out=nodes['enso-water'].innerHTML;assert(out.indexOf('id="enso-c-panama"')<out.indexOf('id="enso-c-panama-daily"'));
  assert(out.indexOf('enso-lane-board')<out.indexOf('enso-panama-pair'));
  assert.equal((out.match(/data-board-lane=/g)||[]).length,9);
- const pan=S.lanes.lanes.find(l=>l.id==='panama');assert(out.includes(pan.live_2026.steps.at(-1).total+' slots/day from'));
+ const pan=S.lanes.lanes.find(l=>l.id==='panama');assert(out.includes(pan.live_2026.steps.at(-1).total+' slots/day for transits from'));
  for (const id of ['amazon','rhine','mississippi']) { const row=out.match(new RegExp('data-board-lane="'+id+'"[\\s\\S]*?</tr>'))[0]; assert(row.includes('2026'),id+' has a dated September observation'); }
  api.drawCharts('ensowater');const key=ctx.charts['enso-c-panama'].keyNotes.join(' ');
  assert(key.includes('Ordinal steps'));assert(key.includes('not to scale in time'));assert(out.includes('Sep 2025'));assert(out.includes('Sep 2026'));

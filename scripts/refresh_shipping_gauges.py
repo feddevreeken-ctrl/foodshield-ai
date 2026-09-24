@@ -197,13 +197,18 @@ def gulf_loadings(today: date) -> dict:
         raise RuntimeError(f"Gulf vessel loadings last reported {last['date']}, {age} days ago: stale")
     prior = [p["loaded"] for p in pts
              if last["year"] - 5 <= p["year"] < last["year"] and abs(p["week"] - last["week"]) <= 1]
+    # The mean is kept, but a single disrupted season drags it down (Hurricane
+    # Ida shut Gulf elevators in weeks 35-37 of 2021), so the median is the
+    # baseline to read against.
     return {
         "name": "Grain ships loaded at the US Gulf, past 7 days", "unit": "ocean-going vessels",
         "source": "USDA AMS Grain Transportation Report, via AgTransport",
         "url": "https://agtransport.usda.gov/d/uiht-9xts",
         "latest": {"date": last["date"], "value": last["loaded"], "due_10_days": last["due"]},
-        "same_week_5y": {"mean": round(statistics.mean(prior), 1), "n": len(prior),
-                         "years": f"{last['year'] - 5}-{last['year'] - 1}"} if len(prior) >= 5 else None,
+        "same_week_5y": {"mean": round(statistics.mean(prior), 1), "median": round(statistics.median(prior), 1),
+                         "n": len(prior), "years": f"{last['year'] - 5}-{last['year'] - 1}",
+                         "window_label": f"weeks {last['week'] - 1}–{last['week'] + 1}, {last['year'] - 5}–{last['year'] - 1}"}
+                        if len(prior) >= 5 else None,
         "weekly_52": [{"date": p["date"], "value": p["loaded"]} for p in reversed(pts[:52])],
     }
 
