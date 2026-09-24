@@ -136,13 +136,14 @@ test('Stage I price rail lists every teleconnection country, valued first, and n
  assert.deepEqual(teleShown.slice(0,teleValued.length),teleValued,'valued teleconnection rows lead');
  teleValued.forEach((k,i)=>{if(i)assert(saved[teleValued[i-1]].food_inflation_pct>=saved[k].food_inflation_pct);});
  teleValued.forEach(k=>{assert(list.textContent.includes(((d)=>{const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);return m?(+m[3])+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m[2]-1]+' '+m[1]:d;})(saved[k].as_of)));assert(list.textContent.includes(saved[k].markets+' markets'));});
- if(teleShown.length>teleValued.length)assert(list.textContent.includes('have no monitored market:'));
+ // 2026-09-24: unmonitored countries rank by official food CPI or are named as having no value.
+ if(teleShown.length>teleValued.length)assert(list.textContent.includes('official food CPI')||list.textContent.includes('No value in either source'));
  assert.equal(api.mapState().title,'Where food prices are rising fastest');assert(api.priceMapSentence().includes('as of August 2026'));
  S.isoIndex={ZWE:[{}],KEN:[{}]};
  S.rtfp={ZWE:{food_inflation_pct:0,markets:2,as_of:'2026-07-01'},USA:{food_inflation_pct:-2,markets:3,as_of:'2026-08-01'},BAD:{food_inflation_pct:null},NAN:{food_inflation_pct:NaN}};
  api.renderMapRanking();
  assert.deepEqual(list.querySelectorAll('button').map(b=>b.getAttribute('data-map-country')),['ZWE','KEN','USA']);
- assert(list.textContent.includes('have no monitored market:'));
+ assert(list.textContent.includes('No value in either source')||list.textContent.includes('official food CPI'));
  assert(list.textContent.includes('1 monitored countries outside the layer'));
  assert(api.priceMapSentence().includes('July 2026 to August 2026'));
  S.rtfp={};api.renderMapRanking();
@@ -290,7 +291,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    assert.equal(key.includes('GDACS drought'),view==='ensolive');
    if(view==='ensolive')for(const label of ['hotspot','major hotspot','ReliefWeb humanitarian event'])assert(key.includes(label));
    if(view==='ensowater')for(const l of S.lanes.lanes)assert(legend.querySelector('details').textContent.includes(l.name));
-   if(view==='ensomoney')for(const label of ['−10%','0%','+30%','Blue-grey','ground grey','ochre to orange','In the teleconnection layer, no monitored market'])assert(key.includes(label));
+   if(view==='ensomoney')for(const label of ['−10%','0%','+30%','Blue-grey','ground grey','ochre to orange','In the teleconnection layer, no value in either source','Paler: official food CPI (FAOSTAT)'])assert(key.includes(label));
    if(cycle||view!=='elnino')assert.equal(node('scroller').scrollTop,0);
   });
  }

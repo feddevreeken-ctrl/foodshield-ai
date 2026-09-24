@@ -113,13 +113,25 @@ def _finalize(by_iso, source, note_extra=""):
             "inflation_shock": bool(yoy is not None and yoy > 15),
             "months_in_latest_year": len([v for v in ys.get(latest_y, []) if isinstance(v, (int, float))]),
         }
+        # Same-month change: the latest month on record against that month a
+        # year earlier. This is the usual CPI year-on-year figure; the annual
+        # field above compares a part-year mean with a full-year mean.
+        mon = ys.get("_m") or {}
+        if mon:
+            (ly, lm) = max(mon)
+            prev = mon.get((ly - 1, lm))
+            if prev and prev > 0:
+                out[iso3]["food_cpi_latest_month"] = f"{ly}-{lm:02d}"
+                out[iso3]["food_cpi_yoy_month_pct"] = round((mon[(ly, lm)] - prev) / prev * 100, 2)
     write_json(
         "faostat_food.json",
         out,
         source=source,
         notes=(
             "Consumer Prices Food Index (2015=100), annual average. "
-            "food_cpi_yoy_pct = % change vs prior year. inflation_shock = >15% YoY. "
+            "food_cpi_yoy_pct = % change of the latest year's mean (months present) vs the prior year's mean. "
+            "food_cpi_yoy_month_pct = latest month vs the same month a year earlier (food_cpi_latest_month). "
+            "inflation_shock = >15% YoY. "
             f"Covered {len(out)} countries.{note_extra}"
         ),
     )
@@ -237,6 +249,11 @@ def _try_bulk():
                 continue
             d = by_iso.setdefault(iso3, {})
             d.setdefault(year, []).append(val)   # accumulate monthly values per year
+            # Keep the month too, so a year-on-year change can compare the same
+            # month, not a part-year mean against a full-year mean.
+            mcode = _int(row.get(C_MONTHS)) if C_MONTHS else None
+            if mcode is not None and 7001 <= mcode <= 7012:
+                d.setdefault("_m", {})[(year, mcode - 7000)] = val
             d["_name"] = row.get(C_AREANAME) if C_AREANAME else iso3
             rows_kept += 1
             if rows_seen % 500000 == 0:

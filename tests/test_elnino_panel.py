@@ -1067,7 +1067,10 @@ def main() -> int:
                 return isos.every((iso,i) => valuedOf(iso)
                     ? buttons[i].textContent.includes(data[iso].markets + ' markets')
                       && buttons[i].textContent.includes(((d) => { const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? (+m[3]) + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m[2] - 1] + ' ' + m[1] : d; })(data[iso].as_of))
-                    : buttons[i].closest('.enso-rank-missing').textContent.includes('have no monitored market:'));
+                    // 2026-09-24: a country with no monitored market ranks by its official food CPI
+                    // (FAOSTAT, same month a year earlier) or is named as having no value in either source.
+                    : (buttons[i].textContent.includes('official food CPI')
+                       || (buttons[i].closest('.enso-rank-missing') || {textContent: ''}).textContent.includes('No value in either source')));
             }""", feed)
             first = page.locator('#enso-map-ranking button').first
             iso = first.get_attribute('data-map-country')
@@ -1305,7 +1308,7 @@ def main() -> int:
             page.set_viewport_size({'width': width, 'height': height})
             for tab, labels in (
                 ('ensowater', ['No land layer', 'Shipping']),
-                ('ensomoney', ['Food inflation', 'Hazards']),
+                ('ensomoney', ['Food inflation', 'Grain imports']),
                 ('elnino', ['Sea-surface']),
                 ('ensoharvest', ['Production shock', 'Strongest crop', 'Coverage', 'Teleconnections']),
                 ('ensolive', ['Hotspots', 'IPC', 'Hazards'])):
@@ -1330,6 +1333,11 @@ def main() -> int:
             check(f"Prices at {width}: all teleconnection outlines and faint unmonitored land", page.evaluate("""async () => {
                 const regions = (await (await fetch('data/enso_regions.json')).json()).data.regions;
                 const rt = (await (await fetch('data/rtfp.json')).json()).data;
+                const fc = (await (await fetch('data/faostat_food.json')).json()).data;
+                // 2026-09-24: with no monitored market, the official food CPI (same month a year
+                // earlier, under 400 days old) paints paler; only a country with neither is faint.
+                const cpi = iso => { const f = fc[iso]; return f && Number.isFinite(f.food_cpi_yoy_month_pct) && /^\d{4}-\d{2}$/.test(f.food_cpi_latest_month || '')
+                    && Date.now() - Date.UTC(+f.food_cpi_latest_month.slice(0, 4), +f.food_cpi_latest_month.slice(5) - 1, 1) < 400 * 864e5; };
                 const tele = new Set(regions.flatMap(r => r.iso3)), seen = new Set();
                 let good = true;
                 _stageHMap.eachLayer(l => {
@@ -1338,7 +1346,7 @@ def main() -> int:
                     seen.add(iso);
                     good = good && l.options.opacity >= .6 && l.options.weight >= .7;
                     if (!Number.isFinite((rt[iso] || {}).food_inflation_pct))
-                        good = good && l.options.fillColor === '#e6e3da' && l.options.fillOpacity === .06;
+                        good = good && (cpi(iso) ? l.options.fillOpacity === .42 : l.options.fillColor === '#e6e3da' && l.options.fillOpacity === .06);
                 });
                 const pane = _stageHMap.getPane('ensoGraticule');
                 return good && seen.size === tele.size && pane.style.zIndex === '210'
