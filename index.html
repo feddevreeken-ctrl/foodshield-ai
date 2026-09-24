@@ -43460,8 +43460,8 @@ function showCommodityDetail(key) {
       type: 'line',
       data: { labels: h.dates, datasets: [
         { label: 'all vessels, single day', data: h.total, showLine: false, pointRadius: 1.3, pointBackgroundColor: 'rgba(182,184,190,.38)', borderWidth: 0 },
-        { label: 'all vessels, 7-day mean', data: mean7(h.total), borderColor: '#ebe9e2', borderWidth: 1.7, pointRadius: 0, tension: 0, spanGaps: false },
-        { label: 'dry bulk, 7-day mean', data: mean7(h.dry_bulk), borderColor: '#c9773a', borderWidth: 1.7, pointRadius: 0, tension: 0, spanGaps: false }
+        /* Dry bulk is drawn once, against Suez and the Cape, in the reroute plate below. */
+        { label: 'all vessels, 7-day mean', data: mean7(h.total), borderColor: '#ebe9e2', borderWidth: 1.7, pointRadius: 0, tension: 0, spanGaps: false }
       ] },
       plugins: [rule],
       options: defaults({
@@ -45935,7 +45935,7 @@ function showCommodityDetail(key) {
     var dG = Date.parse(metaDate('gauges') || 0) || 0, dP = Date.parse(metaDate('portwatch') || 0) || 0;
     if (dG || dP) readOn = stamp(new Date(Math.max(dG, dP)));
     var order = {el_nino:0,la_nina:1,none:2};
-    return '<figure class="enso-plate enso-lane-board">' + plateHead('Lane status', 'Measured now from each lane’s gauge or AIS · outlook rule: El Niño lane with strong or moderate attribution while ONI ≥ 1.5 (this page’s trigger, not a CPC class) = Elevated; weak attribution = Watch; a gauge below its navigation reference = Restricted now', readOn, 'reported') +
+    return '<figure class="enso-plate enso-lane-board">' + plateHead('Which grain lanes are restricted now, and which are at risk', 'Measured now from each lane’s gauge or AIS · outlook rule: El Niño lane with strong or moderate attribution while ONI ≥ 1.5 (this page’s trigger, not a CPC class) = Elevated; weak attribution = Watch; a gauge below its navigation reference = Restricted now', readOn, 'reported') +
       '<div class="plate-body"><table class="enso-status-table"><thead><tr><th scope="col">Lane</th><th scope="col">ENSO link</th><th scope="col">Measured now</th><th scope="col">Outlook for this event</th></tr></thead><tbody>' +
       lanes.slice().sort(function (a,b) { return order[a.phase] - order[b.phase]; }).map(function (ln) {
         return '<tr data-board-lane="' + esc(ln.id) + '"><th scope="row"><button type="button" data-open-lane="' + esc(ln.id) + '" aria-controls="enso-lane-record-' + esc(ln.id) + '">' + esc(laneName(ln)) + '</button></th>' +
@@ -45977,15 +45977,15 @@ function showCommodityDetail(key) {
     var g = G.gatun;
     if (g && g.band && g.band.length) {
       var c = g.climatology_today || {};
-      out += '<figure class="enso-plate enso-gatun-plate">' + plateHead('Gatún Lake against its record', 'Panama Canal Authority daily level since 1965 · 60-day ACP projection', gd, 'observed') +
+      out += '<figure class="enso-plate enso-gatun-plate">' + plateHead('Gatún Lake against normal for the date', 'Panama Canal Authority daily level since 1965 · 60-day ACP projection', gd, 'observed') +
         '<div class="plate-body"><p class="enso-plate-lede">' + g.latest.value.toFixed(2) + ' ft on ' + esc(stamp(new Date(g.latest.date))) + ', ' + num(g.vs_median_ft, 1) + ' ft against the median for the date (' + (c.p10 != null ? '10th–90th percentile ' + c.p10.toFixed(1) + '–' + c.p90.toFixed(1) + ' ft, ' : '') + (c.n_years || '') + ' years). ' +
         'Past El Niño lows came in both seasons: April 1998 and May 2016 at the end of the dry season, July 2023 in the wet season of the onset year, which is why the Canal can cut slots and drafts in any month of an event like this one.</p>' +
         '<div class="enso-chart enso-gatun-chart"><canvas id="enso-c-gatun"></canvas></div></div>' +
-        '<figcaption class="enso-log">Band: 10th–90th percentile of 1966–2025 for each week; line: median. Dashed: the same weeks in three El Niño years. Dotted: the Canal’s own projection, which is an estimate; drafts are set only by Advisories to Shipping.</figcaption></figure>';
+        '<figcaption class="enso-log">The Canal’s projection is its own estimate; drafts are set only by Advisories to Shipping.</figcaption></figure>';
     }
     var H = S.pwhist && S.pwhist.chokepoints;
     if (H && H.panama && H.suez) {
-      out += '<figure class="enso-plate enso-reroute-plate">' + plateHead('Dry-bulk ships at Panama, Suez and the Cape', 'IMF PortWatch · dry-bulk transits (grain, coal, ore, fertiliser), seven-day means, last 12 months', stamp(metaDate('pwhist')), 'observed') +
+      out += '<figure class="enso-plate enso-reroute-plate">' + plateHead('Is grain rerouting from Panama to Suez or the Cape?', 'IMF PortWatch · dry-bulk transits (grain, coal, ore, fertiliser), seven-day means, last 12 months', stamp(metaDate('pwhist')), 'observed') +
         '<div class="plate-body"><div class="enso-chart enso-daily-chart"><canvas id="enso-c-reroute"></canvas></div></div>' +
         '<figcaption class="enso-log">Watch for Panama falling while the Cape rises: that is how the 2023-24 diversion of Gulf grain showed (it is older than this 12-month window). Today all three are below a year ago, so no reroute is visible yet; the Suez line also carries the Red Sea security story.</figcaption></figure>';
     }
@@ -45994,7 +45994,7 @@ function showCommodityDetail(key) {
       ['kaub', 'Rhine at Kaub', 'cm', 'enso-c-kaub'], ['rosario', 'Paraná at Rosario', 'm', 'enso-c-rosario'], ['manaus', 'Rio Negro at Manaus', 'm', 'enso-c-manaus']
     ].filter(function (x) { return G[x[0]]; });
     if (cells.length) {
-      out += '<figure class="enso-plate enso-gauge-plate">' + plateHead('Rivers and barges', 'NOAA NWPS · USDA AgTransport and Grain Transportation Report · WSV PEGELONLINE · INA Argentina · ANA Brazil', gd, 'observed') +
+      out += '<figure class="enso-plate enso-gauge-plate">' + plateHead('River levels and barge costs now', 'NOAA NWPS · USDA AgTransport and Grain Transportation Report · WSV PEGELONLINE · INA Argentina · ANA Brazil', gd, 'observed') +
         plateKey([['is-line', '#ebe9e2', 'Measured'], ['is-dash', '#e0864a', 'Reference named under each gauge'], ['is-dash', '#ebe9e2', 'Dotted: NWS forecast (St. Louis)']]) +
         '<div class="plate-body enso-gauge-grid">' + cells.map(function (x) {
           var r = G[x[0]], v = r.latest.value;
@@ -46012,29 +46012,9 @@ function showCommodityDetail(key) {
         '<figcaption class="enso-log">Each gauge from the agency that owns it. River stage, barge rate and Gulf loadings are one chain: low water at St. Louis raises barge freight first and, if it lasts, shows up as fewer ocean ships loading grain at the Gulf. The Mississippi and Rhine have no published El Niño link; they are drawn because low water there compounds grain logistics whatever the Pacific does.' +
         ((S.gauges.unavailable || []).length ? ' Not reached this run: ' + S.gauges.unavailable.map(function (u) { return esc(u.key); }).join(', ') + '.' : '') + '</figcaption></figure>';
     }
-    /* When the harvests meet the lanes: a join, no new claims. Each lane's origin
-       countries, the fit's harvest rows there (with their windows) and the lane's
-       outlook from the board above. Southern Africa's import route is named as
-       unmonitored rather than left out. */
-    var ORIGIN = { panama: ['USA'], mississippi: ['USA'], parana: ['ARG', 'URY', 'PRY'], amazon: ['BRA'] };
-    /* Only the crops each lane's cited food role names: the Amazon's northern arc
-       moves Mato Grosso soy and maize, not the south's rice and barley. */
-    var LANE_CROPS = { panama: ['corn', 'soybeans', 'sorghum'], mississippi: ['corn', 'soybeans', 'wheat', 'sorghum'], parana: ['corn', 'soybeans', 'wheat'], amazon: ['corn', 'soybeans'] };
-    var rowsAll = (S.outlook && S.outlook.rows_all) || [];
-    var cropName = function (c) { return { corn: 'maize' }[c] || c; };
-    var meet = lanes.filter(function (ln) { return ORIGIN[ln.id]; }).map(function (ln) {
-      var fits = rowsAll.filter(function (r) { return ORIGIN[ln.id].indexOf(r.iso) >= 0 && LANE_CROPS[ln.id].indexOf(r.crop) >= 0 && (r.status === 'shown' || r.status === 'no_el_nino_slope'); });
-      var v = laneVerdict(ln);
-      return '<tr><th scope="row">' + esc(laneName(ln)) + '</th><td>' + esc(ORIGIN[ln.id].map(nameFor).join(', ')) + '</td><td>' +
-        (fits.length ? fits.map(function (r) { return esc(cropName(r.crop)) + ' ' + esc(r.harvest) + (r.status !== 'shown' ? ' <span class="enso-ol-na">no El Niño slope</span>' : r.in_season ? ' <b>' + num(r.change_pct_observed, 0) + '%</b> <span class="enso-ol-na">at today’s ONI; already in USDA’s estimate</span>' : ' <b>' + num(r.change_pct_record, 0) + '%</b>'); }).join('<br>') : '<span class="enso-ol-na">no fitted pair for this lane’s ' + esc(LANE_CROPS[ln.id].map(cropName).join(', ')) + '</span>') + '</td>' +
-        '<td class="enso-lane-verdict is-' + v.level + '"><b>' + esc({ elevated: 'Elevated', watch: 'Watch', eases: 'Usually eases', other: 'Other causes', restricted: 'Restricted now · not ENSO' }[v.level]) + '</b></td></tr>';
-    });
-    var zaf = rowsAll.filter(function (r) { return r.iso === 'ZAF' && r.crop === 'corn' && r.status === 'shown'; })[0];
-    if (zaf) meet.push('<tr><th scope="row">Southern Africa import route</th><td>South Africa to Zimbabwe, Namibia, Botswana, Mozambique, eSwatini</td><td>maize ' + esc(zaf.harvest) + ' <b>' + num(zaf.change_pct_record, 0) + '%</b></td><td><span class="enso-ol-na">gateway ports measured in the plate below (IMF PortWatch)</span></td></tr>');
-    if (meet.length) out += '<figure class="enso-plate enso-meet-plate" data-kind="modelled">' + plateHead('When the harvests meet the lanes', 'This site’s fit by origin country × the lane board above', stamp(metaDate('outlook')), 'modelled') +
-      '<div class="plate-body"><table class="enso-live-table"><thead><tr><th scope="col">Lane</th><th scope="col">Origin</th><th scope="col">Fitted harvest: modelled change if this winter reaches ONI ' + num(((S.outlook || {}).cases || {record:{oni:2.5}}).record.oni, 1) + ' (crops in the field: at today’s ONI)</th><th scope="col">Lane outlook</th></tr></thead><tbody>' + meet.join('') + '</tbody></table></div>' +
-      '<figcaption class="enso-log">A join of two things already on this page: the harvest ledger by origin country and the lane board. It shows which lanes a changed harvest normally uses, not how much will move or which route exporters choose. US Gulf grain reaches the Gulf by Mississippi barge and then goes via Panama, the Cape or Suez, with Pacific Northwest ports as the alternative, so the Mississippi and Panama rows are two legs of one flow.</figcaption></figure>';
-
+    /* The harvest × lane table repeated the harvest ledger and mostly read "no El Niño slope";
+       its one useful join, the southern African shortfall that these ports must replace, opens the ports plate. */
+    var zafRow = ((S.outlook && S.outlook.rows_all) || []).filter(function (r) { return r.iso === 'ZAF' && r.crop === 'corn' && r.status === 'shown'; })[0];
     /* The import end: gateway ports of the FEWS NET concern regions. A drought
        year shows here as dry-bulk imports running above their own record for the
        season; one bulk carrier is 30–60 kt, so a 28-day window is read against
@@ -46050,8 +46030,8 @@ function showCommodityDetail(key) {
         return '<svg class="enso-port-spark" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" role="img" aria-label="Monthly dry-bulk imports, ' + esc(pts[0].month) + ' to ' + esc(pts[pts.length - 1].month) + '"><path d="' + d + '" fill="none" stroke="#ebe9e2" stroke-width="1.2"/></svg>';
       };
       var regs = []; P.forEach(function (p) { if (regs.indexOf(p.region) < 0) regs.push(p.region); });
-      out += '<figure class="enso-plate enso-ports-plate" data-kind="observed">' + plateHead('The import end: gateway ports', 'IMF PortWatch · dry-bulk imports estimated from AIS · ' + P[0].window_days + ' days to ' + stamp(new Date(P[0].latest_date + 'T12:00:00Z')), stamp(metaDate('ports')), 'observed') +
-        '<div class="plate-body"><p class="enso-plate-lede">Where a failed harvest has to be replaced. In a drought year these ports carry the extra grain, so the signal to watch, from early 2027 once grain-fill fails, is dry-bulk imports running well above their 2019–2025 average for the same weeks, and the Beira and Nacala corridors filling for Zimbabwe, Malawi and Zambia.</p>' +
+      out += '<figure class="enso-plate enso-ports-plate" data-kind="observed">' + plateHead('Are African import ports taking in more grain yet?', 'IMF PortWatch · dry-bulk imports estimated from AIS · ' + P[0].window_days + ' days to ' + stamp(new Date(P[0].latest_date + 'T12:00:00Z')), stamp(metaDate('ports')), 'observed') +
+        '<div class="plate-body"><p class="enso-plate-lede">' + (zafRow ? 'If this winter reaches ONI ' + num(((S.outlook || {}).cases || { record: { oni: 2.5 } }).record.oni, 1) + ', the model has South Africa’s maize ' + num(zafRow.change_pct_record, 0) + '% (' + fmtKt(zafRow.change_kt_record) + ', harvest ' + esc(zafRow.harvest) + '): the region’s replacement grain comes through these ports. ' : '') + 'Where a failed harvest has to be replaced. In a drought year these ports carry the extra grain, so the signal to watch, from early 2027 once grain-fill fails, is dry-bulk imports running well above their 2019–2025 average for the same weeks, and the Beira and Nacala corridors filling for Zimbabwe, Malawi and Zambia.</p>' +
         '<table class="enso-live-table enso-ports-table"><thead><tr><th scope="col">Port</th><th scope="col">Serves</th><th scope="col">Dry-bulk imports, last ' + P[0].window_days + ' days</th><th scope="col">vs a year earlier</th><th scope="col">vs ' + esc(P[0].prior_years || '') + ' average, same weeks</th><th scope="col">Monthly, two years</th></tr></thead><tbody>' +
         regs.map(function (rg) {
           return '<tr class="enso-ol-year"><th colspan="6" scope="rowgroup">' + esc(rg) + '</th></tr>' + P.filter(function (p) { return p.region === rg; }).map(function (p) {
@@ -46062,25 +46042,17 @@ function showCommodityDetail(key) {
         '<figcaption class="enso-log">Estimated tonnes from AIS draught changes, by IMF PortWatch; not customs data. Dry bulk carries grain but also fertiliser, coal and ore, so a move here is a prompt to look, not a grain figure. A grain carrier discharges 30–60 kt, so 28-day changes are noisy; call counts include ships loading exports (Maputo and Nacala are mainly coal and ore export ports, so their import tonnes are small whatever the call count); the monthly line leaves out the part-month.' +
         ((S.ports.unavailable || []).length ? ' Not reached this run: ' + S.ports.unavailable.map(function (u) { return esc(u.port); }).join(', ') + '.' : '') + '</figcaption></figure>';
     }
-    /* Who depends on each lane: the lane's own cited food role, and for Panama
-       the importers the chokepoint flows file cites by name. Inferred shares are
-       labelled as inference. */
-    var flows = (S.chokeflows && S.chokeflows.chokepoints) || null;
-    var rows = lanes.filter(function (ln) { return ln.food_role; }).map(function (ln) {
-      var cf = flows && flows[ln.portwatch_key === 'bosporus' ? 'turkish_straits' : ln.portwatch_key];
-      var cited = cf ? (cf.exposed || []).filter(function (e) { return e.basis === 'food_role_cited' && typeof e.share_of_imports_pct === 'number'; }) : [];
-      return '<tr><th scope="row">' + esc(laneName(ln)) + '</th><td>' + esc(ln.food_role) + '</td><td>' +
-        (cited.length ? (function () {
-          /* The source gives one combined figure for Japan's maize and wheat; it is shown once, as combined. */
-          var byIso = {}; cited.forEach(function (e) { var k = e.iso + '|' + e.share_of_imports_pct; (byIso[k] = byIso[k] || { iso: e.iso, pct: e.share_of_imports_pct, c: [] }).c.push(e.commodity); });
-          return Object.keys(byIso).map(function (k) { var x = byIso[k]; return esc(nameFor(x.iso)) + ' ' + esc(x.c.join(' and ')) + (x.c.length > 1 ? ' combined' : '') + ' about ' + Math.round(x.pct) + '%'; }).join(' · ');
-        })() : '<span class="enso-ol-na">no cited importer share</span>') + '</td></tr>';
-    });
-    out += '<figure class="enso-plate is-published enso-exposed-plate" data-kind="published">' + plateHead('Who depends on these lanes', 'Cited trade roles per lane · importer shares where a source names them', stamp(metaDate('lanes') || metaDate('chokeflows')), 'published') +
-      /* Reference material: folded, with the one line a reader needs in the summary. */
-      '<div class="plate-body"><details class="enso-ol-more"><summary>What each lane carries and which importers depend on it (' + rows.length + ' lanes)</summary><table class="enso-live-table"><thead><tr><th scope="col">Lane</th><th scope="col">What moves through it</th><th scope="col">Importers named in a source · share of their imports</th></tr></thead><tbody>' + rows.join('') + '</tbody></table></details></div>' +
-      '<figcaption class="enso-log">Importer shares are of each importer’s imports of that commodity, from Chatham House, <i>Chokepoints in Global Food Trade</i> (2017), older than the current trade pattern; shares inferred from geography alone are not shown.</figcaption></figure>';
     return out;
+  }
+  /* Importers a source names for a lane (Chatham House 2017), shown inside that lane's evidence. */
+  function laneImporters(ln) {
+    var flows = (S.chokeflows && S.chokeflows.chokepoints) || null;
+    var cf = flows && flows[ln.portwatch_key === 'bosporus' ? 'turkish_straits' : ln.portwatch_key];
+    var cited = cf ? (cf.exposed || []).filter(function (e) { return e.basis === 'food_role_cited' && typeof e.share_of_imports_pct === 'number'; }) : [];
+    if (!cited.length) return '';
+    /* The source gives one combined figure for Japan's maize and wheat; it is shown once, as combined. */
+    var byIso = {}; cited.forEach(function (e) { var k = e.iso + '|' + e.share_of_imports_pct; (byIso[k] = byIso[k] || { iso: e.iso, pct: e.share_of_imports_pct, c: [] }).c.push(e.commodity); });
+    return 'Importers that depend on it (share of their imports, Chatham House 2017): ' + Object.keys(byIso).map(function (k) { var x = byIso[k]; return nameFor(x.iso) + ' ' + x.c.join(' and ') + (x.c.length > 1 ? ' combined' : '') + ' about ' + Math.round(x.pct) + '%'; }).join(' · ') + '.';
   }
   function gaugeCharts() {
     var G = (S.gauges && S.gauges.gauges) || {};
@@ -46187,7 +46159,7 @@ function showCommodityDetail(key) {
         return (i === 3 ? '</tbody></table><details class="enso-lanes-more"><summary>' + (lanes.length-3) + ' more lanes</summary><table class="enso-tbl enso-lanes-table"><thead><tr><th scope="col">Lane / phase</th><th scope="col">What the record shows</th></tr></thead><tbody>' : '') + '<tr id="enso-lane-record-' + esc(ln.id) + '" data-lane="' + esc(ln.id) + '" title="' + esc(ln.name + ' · ' + phase) + '"><td class="nm">' + esc(ln.name) + '<p>' + phase + '</p><span class="enso-meta">Attribution: ' + esc(ln.attribution || 'none') + '</span></td>' +
           '<td><p>' + esc(briefs[ln.id] || String(ln.mechanism || '').split(/(?<=\.)\s/)[0]) + '</p>' +
           (pw ? '<p class="enso-meta">' + pw.transits_per_day.total.toFixed(1) + ' transits/day · ' + num(pw.yoy.total_pct,1) + '% y/y · ' + esc(pwWindow(pw.window)) + '</p>' : '') +
-          '<details class="enso-evidence-note"><summary>Evidence and sources · ' + esc(readOn) + '</summary><div class="enso-evidence-columns"><div><p>' + esc(ln.mechanism || '') + '</p><p>' + esc(ln.events || ln.prior_events || '') + '</p><p>' + esc(ln.food_role || '') + '</p></div><div><p>' + esc(ln.counter_evidence || '') + '</p><p>' + esc(ln.attribution_caveat || '') + '</p>' +
+          '<details class="enso-evidence-note"><summary>Evidence and sources · ' + esc(readOn) + '</summary><div class="enso-evidence-columns"><div><p>' + esc(ln.mechanism || '') + '</p><p>' + esc(ln.events || ln.prior_events || '') + '</p><p>' + esc(ln.food_role || '') + (laneImporters(ln) ? ' ' + esc(laneImporters(ln)) : '') + '</p></div><div><p>' + esc(ln.counter_evidence || '') + '</p><p>' + esc(ln.attribution_caveat || '') + '</p>' +
           (pw ? '<p class="enso-meta">Baseline ' + esc(pwWindow(pw.baseline_window)) + ' · IMF PortWatch, read ' + esc(stamp(metaDate('portwatch'))) + '</p>' : ln.portwatch_key ? '<p>AIS data unavailable; awaiting the next PortWatch update.</p>' : '') +
           (ln.sources || []).map(function (src) { return '<p><a href="' + esc(safeUrl(src.url)) + '" target="_blank" rel="noopener">' + esc(src.label) + '</a></p>'; }).join('') + '</div></div></details></td></tr>';
       }).join('') + '</tbody></table>' + (lanes.length > 3 ? '</details>' : '') + '</div><figcaption class="enso-log">Published ENSO attribution describes the lane mechanism; current transit changes have multiple causes.</figcaption></figure>';
