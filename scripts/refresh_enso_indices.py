@@ -154,8 +154,8 @@ def main() -> int:
             "window": f"week centred on {d.strftime('%-d %b %Y')} ({(d - timedelta(days=3)).strftime('%-d')}–{(d + timedelta(days=3)).strftime('%-d %b')})",
             "window_kind": "weekly",
             "region": N34, "baseline": WK_BASE, "threshold": None,
-            "note": "A single week, not a season, from a different SST analysis (OISST) "
-                    "on a fixed base, so it is not ONI's weekly value.",
+            "note": "One week, from a different SST analysis (OISST) "
+                    "on a fixed base. It is not a weekly version of ONI.",
             "url": WEEKLY_URL,
         }
 
@@ -167,8 +167,8 @@ def main() -> int:
             "window": f"week {_d(start)} – {_d(end)}", "window_kind": "weekly",
             "region": N34, "baseline": REL_BASE,
             "threshold": 0.8,
-            "note": "BoM's operational ocean index since Sept 2025, and it uses a higher "
-                    "threshold (+0.8) than CPC (+0.5): the same water clears a different bar.",
+            "note": "BoM's operational ocean index since Sept 2025. Its threshold is +0.8, "
+                    "higher than CPC's +0.5.",
             "url": BOM_RNINO_URL,
         }
 
@@ -179,8 +179,9 @@ def main() -> int:
             "value": v, "unit": "index",
             "window": f"30 days to {_d(end)}", "window_kind": "atmospheric",
             "region": "Tahiti–Darwin pressure", "baseline": "n/a", "threshold": -7,
-            "note": "The ATMOSPHERE, not the ocean. Negative is El Niño-like. Shows the "
-                    "ocean signal is coupled rather than SST-only.",
+            "note": "Air pressure between Tahiti and Darwin, not sea temperature. Negative is "
+                    "El Niño-like. A negative reading means the atmosphere is responding to the "
+                    "ocean, so the signal is coupled rather than SST-only.",
             "url": BOM_SOI_URL,
         }
 
@@ -207,14 +208,14 @@ def main() -> int:
     # file exists to prevent. So the invariant is derived from the rows.
     FIELDS = ("agency", "region", "baseline", "window")
     READINGS = {
-        "baseline": "A like-for-like comparison: same agency, region and window. The gap is RONI's "
-                    "baseline (tropical-mean removal plus rescaling), which takes out both long-term "
-                    "warming and this event's own warming of the tropics.",
-        "window": "NOT a disagreement. The gap is arithmetic: one number has been averaged "
-                  "down over a longer period and the other has not.",
-        "agency": "Same water, same window, same baseline: the gap is two agencies' "
-                  "processing chains, not two different climates.",
-        "region": "Different boxes of ocean. The gap is where you look, not how you measure.",
+        "baseline": "Same agency, region and window. The gap comes from RONI's baseline: it "
+                    "subtracts the tropical mean and rescales, which removes long-term warming "
+                    "and this event's own warming of the tropics.",
+        "window": "The gap is arithmetic: one number is averaged over a longer period and "
+                  "the other is not. It does not mean the two disagree.",
+        "agency": "Same water, window and baseline. The gap comes from the two agencies' "
+                  "processing.",
+        "region": "Different boxes of ocean. The gap reflects where each index looks.",
     }
     CANDIDATES = [("oni", "roni"), ("oni", "wk34"), ("wk34", "bom_rel")]
 
@@ -240,9 +241,8 @@ def main() -> int:
                 "a": ka, "b": kb, "differs": detail,
                 "why": f"{len(diffs)} variables are free at once ("
                        + "; ".join(f"{d['field']}: {d['a']} vs {d['b']}" for d in detail)
-                       + "). Any gap between these two numbers is a mix of all of them, so "
-                         "it cannot be attributed to a cause and must not be read as "
-                         "agreement or disagreement.",
+                       + "). The gap mixes these differences, so no single cause can be "
+                         "read from it.",
             })
 
     # The Indian Ocean Dipole is not an ENSO index, so it stays out of the
@@ -272,11 +272,11 @@ def main() -> int:
     write_json(
         "enso_indices.json", payload,
         source="NOAA CPC (ONI, RONI, weekly Niño 3.4); BoM Australia (relative Niño 3.4, Troup SOI)",
-        notes="Five indices, each parsed from a machine-readable feed. NO global spread is "
-              "published: the indices differ in region, baseline AND averaging window, so a "
-              "min/max across all of them would be the exact error the panel warns against. "
-              "Only pairs with a single free variable are comparable, and those are listed "
-              "explicitly. A source that fails is omitted, never back-filled.",
+        notes="Five indices, each parsed from a machine-readable feed. No single spread is "
+              "given across all five: they differ in region, baseline and averaging window, so "
+              "a min/max across them would mix all three. Only pairs that differ in one "
+              "variable are compared, and each is listed. A source that fails is omitted, "
+              "never back-filled.",
         status="ok" if not unavailable else "partial",
     )
     print(f"enso_indices: {len(indices)} indices, {len(comparisons)} valid pairs, "
