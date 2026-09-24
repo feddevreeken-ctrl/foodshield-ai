@@ -42972,18 +42972,23 @@ function showCommodityDetail(key) {
       var opts = (n === 'enso') ? { cache: 'no-store' } : S.forceFresh ? { cache: 'no-cache' } : {};
       try {
         var r = await fetch('data/' + n + '.json', opts);
-        if (!r.ok) { S.failed.push(n); return null; }
-        /* The version actually loaded is the freshness baseline: taken from this response, not from a
-           later check, so a refresh that lands between the two cannot slip past. */
-        var tg = feedTag(r); if (tg) (S.feedTags || (S.feedTags = {}))[n] = tg;
+        var tags = S.feedTags || (S.feedTags = {});
+        /* A failed file has no baseline, so the next check re-fetches it once it is back. */
+        if (!r.ok) { delete tags[n]; S.failed.push(n); return null; }
+        var tg = feedTag(r);
         var j = await r.json();
         /* chokepoint_flows.json predates the data envelope: its body is the file itself. */
         var body = j && typeof j === 'object' ? (j.data || (n === 'chokepoint_flows' && j.chokepoints ? j : null)) : null;
         if (!body || typeof body !== 'object') {
-          S.failed.push(n); return null;
+          /* Remember which version failed, so a file that stays broken is not redrawn every check. */
+          delete tags[n]; if (tg) (S.failTags || (S.failTags = {}))[n] = tg; S.failed.push(n); return null;
         }
+        /* The version actually loaded is the freshness baseline, taken from this response once its
+           body has parsed: a refresh landing after it is noticed, a broken download is not recorded. */
+        if (tg) tags[n] = tg; else delete tags[n];
+        if (S.failTags) delete S.failTags[n];
         return { meta: j._meta || {}, data: body };
-      } catch (e) { S.failed.push(n); return null; }
+      } catch (e) { if (S.feedTags) delete S.feedTags[n]; S.failed.push(n); return null; }
     };
     var names = ['enso', 'enso_exposure', 'enso_model', 'enso_regions',
                  'enso_lanes', 'enso_corridors', 'enso_econ', 'enso_mechanism', 'enso_indices', 'enso_bulletins',
@@ -44211,7 +44216,8 @@ function showCommodityDetail(key) {
       try {
         var h = await fetch('data/' + n + '.json', { method: 'HEAD', cache: 'no-store' }); if (!h.ok) return;
         var tag = feedTag(h); if (!tag) return;
-        if (!seen[n]) seen[n] = tag; else if (seen[n] !== tag) changed = true;
+        /* No baseline means the loaded copy failed or is missing: the file answering now is a change. */
+        if (seen[n] ? seen[n] !== tag : tag !== (S.failTags || {})[n]) changed = true;
       } catch (e) {}
     }));
     return changed;
