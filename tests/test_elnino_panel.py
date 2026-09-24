@@ -713,6 +713,12 @@ def main() -> int:
                 && harv.every(r => text.includes(r.harvest))
                 && (text.match(/more maize from abroad/g) || []).length <= 1;
         }"""))
+        # The month-axis timeline: one bar per line, each bar inside its own row (the tab's 44px
+        # touch minimum once made every bar 44px tall and pushed them off their labels).
+        check("next-twelve-months timeline draws one bar per line, each inside its row", page.evaluate("""() => {
+            const bars = [...document.querySelectorAll('.enso-next12-bar')], items = document.querySelectorAll('.enso-next12 li');
+            return bars.length === items.length && bars.every(b => { const r = b.getBoundingClientRect(), row = b.parentElement.getBoundingClientRect(); return r.top >= row.top - 1 && r.bottom <= row.bottom + 1; });
+        }"""))
         check("one persistent map instance across all five views", page.evaluate("""() =>
             document.querySelectorAll('#enso-map').length === 1 && document.getElementById('enso-map') === window._stageAMap
             && window._stageAMap._leaflet_id === window._stageAMapId
