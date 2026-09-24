@@ -701,7 +701,7 @@ def main() -> int:
         check("no table, chart or paragraph runs past its plate on any lens", not any(spill), str([x for x in spill if x]))
         # 2026-09-24: the Ocean lens leads with a dated calendar joined from the other lenses' data.
         page.evaluate("showTab('elnino')")
-        page.wait_for_selector('#subview-elnino.active .enso-next12 li')
+        page.wait_for_selector('#subview-elnino.active .enso-next12-bar')
         check("Ocean leads with the next twelve months, each line typed and linked to its lens", page.evaluate("""async () => {
             const O = (await (await fetch('data/enso_outlook.json')).json()).data;
             const items = [...document.querySelectorAll('.enso-next12 li')];
