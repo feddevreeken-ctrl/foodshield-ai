@@ -43456,13 +43456,19 @@ function showCommodityDetail(key) {
       idx.forEach(function (m, k) { var x = xs.getPixelForValue(m.i); ctx.beginPath(); ctx.moveTo(x, ys.top); ctx.lineTo(x, ys.bottom); ctx.stroke(); });
       ctx.restore();
     } };
-    mk(id, { keyNotes: ['Points: observed daily transits; lines: trailing 7-day means; dashed vertical rules: published advisory effective dates. IMF PortWatch · ' + isoText(h.dates[0]) + ' to ' + isoText(h.dates[h.dates.length - 1])],
+    mk(id, { keyNotes: ['Points: observed daily transits; solid lines: trailing 7-day means; dashed blue step: the published slot limit from each advisory’s effective date. IMF PortWatch · ' + isoText(h.dates[0]) + ' to ' + isoText(h.dates[h.dates.length - 1])],
       type: 'line',
       data: { labels: h.dates, datasets: [
         { label: 'all vessels, single day', data: h.total, showLine: false, pointRadius: 1.3, pointBackgroundColor: 'rgba(182,184,190,.38)', borderWidth: 0 },
-        /* Dry bulk is drawn once, against Suez and the Cape, in the reroute plate below. */
-        { label: 'all vessels, 7-day mean', data: mean7(h.total), borderColor: '#ebe9e2', borderWidth: 1.7, pointRadius: 0, tension: 0, spanGaps: false }
-      ] },
+        { label: 'all vessels, 7-day mean', data: mean7(h.total), borderColor: '#ebe9e2', borderWidth: 1.7, pointRadius: 0, tension: 0, spanGaps: false },
+        { label: 'dry bulk, 7-day mean', data: mean7(h.dry_bulk), borderColor: '#c9773a', borderWidth: 1.7, pointRadius: 0, tension: 0, spanGaps: false }
+      ].concat((function () {
+        /* Capacity and use on one axis: the published slot limit as a step from its first advisory in the window. */
+        var steps = (marks || []).filter(function (m) { return typeof m.total === 'number'; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+        if (!steps.length) return [];
+        return [{ label: 'published slot limit', data: h.dates.map(function (d) { var cur = null; steps.forEach(function (st) { if (st.date <= d) cur = st.total; }); return cur; }),
+          borderColor: '#8fb1cf', borderWidth: 1.5, borderDash: [5, 3], pointRadius: 0, stepped: true, spanGaps: false }];
+      })()) },
       plugins: [rule],
       options: defaults({
         interaction: { mode: 'index', intersect: false },
@@ -45983,12 +45989,8 @@ function showCommodityDetail(key) {
         '<div class="enso-chart enso-gatun-chart"><canvas id="enso-c-gatun"></canvas></div></div>' +
         '<figcaption class="enso-log">The Canal’s projection is its own estimate; drafts are set only by Advisories to Shipping.</figcaption></figure>';
     }
-    var H = S.pwhist && S.pwhist.chokepoints;
-    if (H && H.panama && H.suez) {
-      out += '<figure class="enso-plate enso-reroute-plate">' + plateHead('Is grain rerouting from Panama to Suez or the Cape?', 'IMF PortWatch · dry-bulk transits (grain, coal, ore, fertiliser), seven-day means, last 12 months', stamp(metaDate('pwhist')), 'observed') +
-        '<div class="plate-body"><div class="enso-chart enso-daily-chart"><canvas id="enso-c-reroute"></canvas></div></div>' +
-        '<figcaption class="enso-log">Watch for Panama falling while the Cape rises: that is how the 2023-24 diversion of Gulf grain showed (it is older than this 12-month window). Today all three are below a year ago, so no reroute is visible yet; the Suez line also carries the Red Sea security story.</figcaption></figure>';
-    }
+    /* The Panama/Suez/Cape dry-bulk chart could not show a reroute in a 12-month window and redrew
+       Panama's dry bulk; Panama's dry bulk sits on the Panama chart, Suez and the Cape on the lane board. */
     var cells = [
       ['stlouis', 'Mississippi at St. Louis', 'ft', 'enso-c-stl'], ['barge_stlouis', 'St. Louis barge rate', '% of tariff', 'enso-c-barge'], ['gulf_loadings', 'Grain ships loaded, US Gulf', 'ships in 7 days', 'enso-c-gulf'],
       ['kaub', 'Rhine at Kaub', 'cm', 'enso-c-kaub'], ['rosario', 'Paraná at Rosario', 'm', 'enso-c-rosario'], ['manaus', 'Rio Negro at Manaus', 'm', 'enso-c-manaus']
@@ -46007,7 +46009,7 @@ function showCommodityDetail(key) {
           } else if (x[0] === 'kaub' && r.reference && r.reference.NW) ctx = 'lowest daily ' + r.reference.NW.from.slice(0, 4) + '–' + r.reference.NW.to.slice(0, 4) + ': ' + Math.round(r.reference.NW.value) + ' cm';
           else if (x[0] === 'stlouis' && r.forecast_max && r.forecast_min) ctx = 'NWS: crest ' + r.forecast_max.ft.toFixed(1) + ' ft, then ' + r.forecast_min.ft.toFixed(1) + ' ft by ' + esc(stamp(new Date(r.forecast_min.t)));
           return '<section class="enso-gauge"><h4>' + esc(x[1]) + '</h4><p class="enso-gauge-v"><b>' + (x[2] === 'm' ? v.toFixed(2) : Math.round(v)) + '</b> ' + esc(x[2]) + ' <span>' + esc(stamp(new Date(String(r.latest.date).slice(0, 10) + 'T12:00:00Z'))) + '</span>' + (ctx ? '<span class="enso-live-sub">' + ctx + '</span>' : '') + '</p>' +
-            '<div class="enso-chart enso-gauge-chart"><canvas id="' + x[3] + '"></canvas></div></section>';
+            (x[0] === 'rosario' || x[0] === 'manaus' ? '<p class="enso-live-sub">No seasonal reference on this feed, so the level is shown, not charted.</p>' : '<div class="enso-chart enso-gauge-chart"><canvas id="' + x[3] + '"></canvas></div>') + '</section>';
         }).join('') + '</div>' +
         '<figcaption class="enso-log">Each gauge from the agency that owns it. River stage, barge rate and Gulf loadings are one chain: low water at St. Louis raises barge freight first and, if it lasts, shows up as fewer ocean ships loading grain at the Gulf. The Mississippi and Rhine have no published El Niño link; they are drawn because low water there compounds grain logistics whatever the Pacific does.' +
         ((S.gauges.unavailable || []).length ? ' Not reached this run: ' + S.gauges.unavailable.map(function (u) { return esc(u.key); }).join(', ') + '.' : '') + '</figcaption></figure>';
@@ -46025,10 +46027,12 @@ function showCommodityDetail(key) {
       var sgn = function (v) { return v == null ? '<span class="enso-ol-na">—</span>' : num(v, 0) + '%'; };
       var spark = function (m) {
         var pts = (m || []).slice(0, -1).slice(-24); if (pts.length < 3) return '';
-        var mx = Math.max.apply(null, pts.map(function (x) { return x.t; })) || 1, w = 120, h = 28;
+        /* One scale for every port, so Durban's volumes and Maputo's are not drawn alike. */
+        var mx = portMax || 1, w = 120, h = 28;
         var d = pts.map(function (x, i) { return (i ? 'L' : 'M') + (i * w / (pts.length - 1)).toFixed(1) + ',' + (h - x.t / mx * (h - 2) - 1).toFixed(1); }).join(' ');
         return '<svg class="enso-port-spark" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" role="img" aria-label="Monthly dry-bulk imports, ' + esc(pts[0].month) + ' to ' + esc(pts[pts.length - 1].month) + '"><path d="' + d + '" fill="none" stroke="#ebe9e2" stroke-width="1.2"/></svg>';
       };
+      var portMax = Math.max.apply(null, [0].concat.apply([], P.map(function (p) { return (p.monthly_t || []).slice(0, -1).slice(-24).map(function (x) { return x.t; }); })));
       var regs = []; P.forEach(function (p) { if (regs.indexOf(p.region) < 0) regs.push(p.region); });
       out += '<figure class="enso-plate enso-ports-plate" data-kind="observed">' + plateHead('Are African import ports taking in more grain yet?', 'IMF PortWatch · dry-bulk imports estimated from AIS · ' + P[0].window_days + ' days to ' + stamp(new Date(P[0].latest_date + 'T12:00:00Z')), stamp(metaDate('ports')), 'observed') +
         '<div class="plate-body"><p class="enso-plate-lede">' + (zafRow ? 'If this winter reaches ONI ' + num(((S.outlook || {}).cases || { record: { oni: 2.5 } }).record.oni, 1) + ', the model has South Africa’s maize ' + num(zafRow.change_pct_record, 0) + '% (' + fmtKt(zafRow.change_kt_record) + ', harvest ' + esc(zafRow.harvest) + '): the region’s replacement grain comes through these ports. ' : '') + 'Where a failed harvest has to be replaced. In a drought year these ports carry the extra grain, so the signal to watch, from early 2027 once grain-fill fails, is dry-bulk imports running well above their 2019–2025 average for the same weeks, and the Beira and Nacala corridors filling for Zimbabwe, Malawi and Zambia.</p>' +
@@ -46080,15 +46084,6 @@ function showCommodityDetail(key) {
           plugins: { tooltip: { filter: function (i) { return i.parsed.y != null && !/percentile/.test(i.dataset.label); }, callbacks: { label: function (c) { return c.dataset.label + ': ' + c.parsed.y.toFixed(2) + ' ft'; } } } },
           scales: { x: Object.assign(axis(''), { grid: { display: false } }), y: axis('feet above sea level') } }) });
     }
-    var H = S.pwhist && S.pwhist.chokepoints;
-    if (H && H.panama && H.suez) {
-      var mean7 = function (arr) { return arr.map(function (_, i) { var s = 0, n = 0; for (var k = Math.max(0, i - 6); k <= i; k++) { if (arr[k] != null) { s += arr[k]; n++; } } return n === 7 ? +(s / n).toFixed(2) : null; }); };
-      var rds = [line('Panama, dry bulk', mean7(H.panama.dry_bulk), '#e0864a', [], 1.8), line('Suez, dry bulk', mean7(H.suez.dry_bulk), '#8fb1cf', [], 1.5)];
-      if (H.cape_of_good_hope) rds.push(line('Cape of Good Hope, dry bulk', mean7(H.cape_of_good_hope.dry_bulk), '#b6b8be', [4, 3], 1.3));
-      mk('enso-c-reroute', { keyNotes: ['Orange: Panama; blue-grey: Suez; dashed grey: Cape of Good Hope. Dry-bulk transits per day, seven-day means, IMF PortWatch ' + H.panama.dates[0] + ' to ' + H.panama.dates[H.panama.dates.length - 1] + '.'],
-        type: 'line', data: { labels: H.panama.dates, datasets: rds },
-        options: defaults({ interaction: { mode: 'index', intersect: false }, scales: { x: Object.assign(axis(''), { grid: { display: false } }), y: Object.assign(axis('dry-bulk transits per day'), { beginAtZero: true }) } }) });
-    }
     var small = function (id, labels, data, ref, refLabel, unit) {
       var ds2 = [line(unit, data, '#ebe9e2', [], 1.6)];
       if (ref != null) ds2.push(line(refLabel, labels.map(function () { return ref; }), '#e0864a', [4, 3], 1));
@@ -46106,7 +46101,7 @@ function showCommodityDetail(key) {
     /* Read against its own year; the 2022 record stays in the text, because as a line it flattened the climb. */
     if (G.barge_stlouis) { var bw = G.barge_stlouis.weekly_52 || [], bmean = bw.length ? bw.reduce(function (a, p) { return a + p.pct_tariff; }, 0) / bw.length : null; small('enso-c-barge', bw.map(function (p) { return p.date.slice(2, 7); }), bw.map(function (p) { return p.pct_tariff; }), bmean, bmean != null ? '52-week mean ' + Math.round(bmean) + '%' : '', '% of tariff'); }
     if (G.gulf_loadings) { var gw = G.gulf_loadings.weekly_52 || [], gmean = gw.length ? gw.reduce(function (a, p) { return a + p.value; }, 0) / gw.length : null; small('enso-c-gulf', gw.map(function (p) { return p.date.slice(2, 10); }), gw.map(function (p) { return p.value; }), gmean, gmean != null ? '52-week mean ' + Math.round(gmean) + ' ships' : '', 'ships'); }
-    if (G.kaub) { var kd = G.kaub.daily_30d || [], nw = (G.kaub.reference || {}).NW; small('enso-c-kaub', kd.map(function (p) { return p.date.slice(5); }), kd.map(function (p) { return p.cm; }), nw && nw.value, nw ? 'lowest daily ' + nw.from.slice(0, 4) + '–' + nw.to.slice(0, 4) + ', ' + Math.round(nw.value) + ' cm' : '', 'cm'); }
+    if (G.kaub) { var kd = G.kaub.daily_30d || [], gw = (G.kaub.reference || {}).GlW; small('enso-c-kaub', kd.map(function (p) { return p.date.slice(5); }), kd.map(function (p) { return p.cm; }), gw && gw.value, gw ? 'navigation reference (GlW), ' + Math.round(gw.value) + ' cm' : '', 'cm'); }
     if (G.rosario) { var rd = G.rosario.daily_45d || []; small('enso-c-rosario', rd.map(function (p) { return p.date.slice(5); }), rd.map(function (p) { return p.m; }), null, '', 'm'); }
     if (G.manaus) { var md = G.manaus.daily_30d || []; small('enso-c-manaus', md.map(function (p) { return p.date.slice(5); }), md.map(function (p) { return p.m; }), null, '', 'm'); }
   }
@@ -46134,8 +46129,6 @@ function showCommodityDetail(key) {
       if (h && h.dates && h.dates.length) {
         out += '<figure class="enso-plate">' + plateHead('Panama AIS vessel transits', 'IMF PortWatch · daily counts and seven-day means · ' + isoText(h.dates[0]) + ' to ' + isoText(h.dates[h.dates.length - 1]), stamp(metaDate('pwhist')), 'observed') +
           '<div class="plate-body">' + dailyChartHTML('panama') +
-          (lv ? '<div class="enso-rule-key">Advisory effective dates: ' + (lv.steps || []).map(function (st) { return '<span>' + esc(isoText(st.effective)) + ' · ' + st.total + ' slots/day</span>'; }).join(' · ') + '</div>' : '') +
-          (pw ? '<p class="enso-log">' + pw.transits_per_day.total.toFixed(1) + ' transits/day · ' + esc(pwWindow(pw.window)) + ' · ' + num(pw.yoy.total_pct, 1) + '% y/y against ' + esc(pwWindow(pw.baseline_window)) + ' · IMF PortWatch, read ' + esc(stamp(metaDate('portwatch'))) + '</p>' : '') +
           '</div></figure>';
       }
     }
@@ -46158,7 +46151,7 @@ function showCommodityDetail(key) {
         };
         return (i === 3 ? '</tbody></table><details class="enso-lanes-more"><summary>' + (lanes.length-3) + ' more lanes</summary><table class="enso-tbl enso-lanes-table"><thead><tr><th scope="col">Lane / phase</th><th scope="col">What the record shows</th></tr></thead><tbody>' : '') + '<tr id="enso-lane-record-' + esc(ln.id) + '" data-lane="' + esc(ln.id) + '" title="' + esc(ln.name + ' · ' + phase) + '"><td class="nm">' + esc(ln.name) + '<p>' + phase + '</p><span class="enso-meta">Attribution: ' + esc(ln.attribution || 'none') + '</span></td>' +
           '<td><p>' + esc(briefs[ln.id] || String(ln.mechanism || '').split(/(?<=\.)\s/)[0]) + '</p>' +
-          (pw ? '<p class="enso-meta">' + pw.transits_per_day.total.toFixed(1) + ' transits/day · ' + num(pw.yoy.total_pct,1) + '% y/y · ' + esc(pwWindow(pw.window)) + '</p>' : '') +
+
           '<details class="enso-evidence-note"><summary>Evidence and sources · ' + esc(readOn) + '</summary><div class="enso-evidence-columns"><div><p>' + esc(ln.mechanism || '') + '</p><p>' + esc(ln.events || ln.prior_events || '') + '</p><p>' + esc(ln.food_role || '') + (laneImporters(ln) ? ' ' + esc(laneImporters(ln)) : '') + '</p></div><div><p>' + esc(ln.counter_evidence || '') + '</p><p>' + esc(ln.attribution_caveat || '') + '</p>' +
           (pw ? '<p class="enso-meta">Baseline ' + esc(pwWindow(pw.baseline_window)) + ' · IMF PortWatch, read ' + esc(stamp(metaDate('portwatch'))) + '</p>' : ln.portwatch_key ? '<p>AIS data unavailable; awaiting the next PortWatch update.</p>' : '') +
           (ln.sources || []).map(function (src) { return '<p><a href="' + esc(safeUrl(src.url)) + '" target="_blank" rel="noopener">' + esc(src.label) + '</a></p>'; }).join('') + '</div></div></details></td></tr>';
@@ -46815,16 +46808,6 @@ function showCommodityDetail(key) {
     if (frame && S.charts[id]) {
       var old = frame.querySelector('.enso-chart-legend'); if (old) old.remove();
       var oldAxis = frame.querySelector('.enso-axis-key'); if (oldAxis) oldAxis.remove();
-      if (id === 'enso-c-panama') {
-        var axisKey = document.createElement('ol'); axisKey.className = 'enso-axis-key';
-        cfg.data.labels.forEach(function (label, i) {
-          var item = document.createElement('li');
-          var values = cfg.data.datasets.map(function (ds) { return ds.data[i]; }).filter(function (v) { return v != null; });
-          item.textContent = label + (values.length ? ': ' + values.join(' / ') + ' slots/day' : ' slots/day');
-          axisKey.appendChild(item);
-        });
-        cv.closest('.enso-chart').after(axisKey);
-      }
 
       var legend = document.createElement('div'); legend.className = 'enso-chart-legend';
       legend.setAttribute('aria-label', 'Toggle chart series');
@@ -46866,7 +46849,7 @@ function showCommodityDetail(key) {
   function drawCharts(sub) {
     var E = S.econ || {};
     var want = { ensomoney: ['enso-c-ffpi', 'enso-c-rtfp'],
-                 ensowater: ['enso-c-panama', 'enso-c-panama-daily', 'enso-c-gatun', 'enso-c-reroute', 'enso-c-stl', 'enso-c-barge', 'enso-c-gulf', 'enso-c-kaub', 'enso-c-rosario', 'enso-c-manaus'] }[sub];
+                 ensowater: ['enso-c-panama', 'enso-c-panama-daily', 'enso-c-gatun', 'enso-c-stl', 'enso-c-barge', 'enso-c-gulf', 'enso-c-kaub', 'enso-c-rosario', 'enso-c-manaus'] }[sub];
     if (sub && !want) return;
     S._chartFilter = want || null;
     /* 2 — FFPI at event peaks */
@@ -46931,7 +46914,7 @@ function showCommodityDetail(key) {
       });
       (function () {
         var pan = ((S.lanes && S.lanes.lanes) || []).filter(function (l) { return l.id === 'panama'; })[0];
-        var marks = pan && pan.live_2026 && pan.live_2026.steps ? pan.live_2026.steps.map(function (st) { return { date: st.effective, label: 'slots ' + st.total + '/day' }; }) : [];
+        var marks = pan && pan.live_2026 && pan.live_2026.steps ? pan.live_2026.steps.map(function (st) { return { date: st.effective, total: st.total, label: 'slots ' + st.total + '/day' }; }) : [];
         dailyChart('panama', 'enso-c-panama-daily', marks);
       })();
       gaugeCharts();
