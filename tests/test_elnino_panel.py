@@ -711,7 +711,8 @@ def main() -> int:
         check("no table, chart or paragraph runs past its plate on any lens", not any(spill), str([x for x in spill if x]))
         # 2026-09-24 (court): the lenses may not grow unnoticed. Ceilings sit about 5% above the
         # heights at 1440x1000 on 24 Sep 2026; adding a plate means removing or folding another.
-        CEIL = {'elnino': 5150, 'ensoharvest': 5250, 'ensowater': 9650, 'ensomoney': 6300, 'ensolive': 6200}
+        # Lowered 24 Sep after the duplicate displays were removed (Ocean 4.2k, Shipping 6.9k, Prices 4.9k at 1440x900).
+        CEIL = {'elnino': 4600, 'ensoharvest': 4400, 'ensowater': 7500, 'ensomoney': 5300, 'ensolive': 6100}
         check("no lens grows past its height ceiling", all(heights.get(k, 0) <= v for k, v in CEIL.items()), str(heights))
         # 2026-09-24: the Ocean lens leads with a dated calendar joined from the other lenses' data.
         page.evaluate("showTab('elnino')")
