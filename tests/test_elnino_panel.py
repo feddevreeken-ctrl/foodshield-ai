@@ -680,6 +680,7 @@ def main() -> int:
         print("\nstage A shared structure and lens contracts")
         open_panel(page, base)
         lens_results, headings, frames, lens_texts, spill = [], [], [], [], []
+        heights = {}
         page.evaluate("window._stageAMap = document.getElementById('enso-map'); window._stageAMapId = window._stageAMap._leaflet_id")
         for tab, mode in (("elnino", "sst"), ("ensoharvest", "impact"), ("ensowater", "none"), ("ensomoney", "rtfp"), ("ensolive", "asap")):
             page.evaluate("tab => showTab(tab)", tab)
@@ -697,6 +698,7 @@ def main() -> int:
                 check("rtfp legend states the shared country date once", legend.count("for every country") == 1)
             headings.append(page.locator('#tab-elnino h2:visible').count())
             # 2026-09-24: a no-wrap table once pushed the Reported ledger 557px past its plate.
+            heights[tab] = page.evaluate("() => document.querySelector('#tab-elnino .content-page').scrollHeight")
             spill.append(page.evaluate("""() => { const bad = []; document.querySelectorAll('#tab-elnino .enso-plate').forEach(pl => { if (!pl.offsetParent) return;
                 const pr = pl.getBoundingClientRect(); pl.querySelectorAll('table, canvas, p').forEach(e => { const r = e.getBoundingClientRect(); if (r.width && r.right > pr.right + 2) bad.push(((pl.querySelector('.enso-plate-t') || {}).textContent || '?') + ' ' + e.tagName); }); });
                 return bad; }"""))
@@ -707,6 +709,10 @@ def main() -> int:
               and page.locator('#tab-elnino h2:visible').evaluate("e => getComputedStyle(e).fontFamily.includes('Instrument Serif')"), str(headings))
         check("observed frames are solid and modelled or published frames dashed", all(frames), str(frames))
         check("no table, chart or paragraph runs past its plate on any lens", not any(spill), str([x for x in spill if x]))
+        # 2026-09-24 (court): the lenses may not grow unnoticed. Ceilings sit about 5% above the
+        # heights at 1440x1000 on 24 Sep 2026; adding a plate means removing or folding another.
+        CEIL = {'elnino': 5150, 'ensoharvest': 5250, 'ensowater': 9650, 'ensomoney': 6300, 'ensolive': 6200}
+        check("no lens grows past its height ceiling", all(heights.get(k, 0) <= v for k, v in CEIL.items()), str(heights))
         # 2026-09-24: the Ocean lens leads with a dated calendar joined from the other lenses' data.
         page.evaluate("showTab('elnino')")
         page.wait_for_selector('#subview-elnino.active .enso-next12-bar')
