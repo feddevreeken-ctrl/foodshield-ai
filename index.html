@@ -12176,7 +12176,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-ol-na { color:var(--t3); font-size:11px; }
 #tab-elnino .enso-outlook-table tr.is-falls .enso-ol-v b { color:#d9a05b; }
 #tab-elnino .enso-outlook-table tr.is-rises .enso-ol-v b { color:#8fbf8f; }
-#tab-elnino .enso-outlook-table th[scope=row] button { min-height:0; min-width:0; }
+#tab-elnino .enso-outlook-table th[scope=row] button { min-height:0; min-width:0; text-align:left; }
 #tab-elnino .enso-outlook-table tr.enso-ol-year th { padding-top:14px; font:11px/1.4 'Geist Mono',monospace; color:var(--t3); letter-spacing:.04em; text-transform:uppercase; border-bottom-color:var(--b3); }
 #tab-elnino .enso-ol-more { margin-top:10px; }
 #tab-elnino .cal-k.is-muted { opacity:.6; }
@@ -12193,7 +12193,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-live-table thead th { font:11px/1.4 'Geist Mono',monospace; color:var(--t3); font-weight:400; }
 @media(min-width:900px) { #tab-elnino .enso-live-table thead th { white-space:nowrap; } }
 #tab-elnino .enso-live-table th[scope=row] { font-weight:500; white-space:nowrap; }
-#tab-elnino .enso-live-table th[scope=row] button { background:none; border:0; padding:0; min-height:0; min-width:0; color:var(--t1); font:inherit; cursor:pointer; text-decoration:underline; text-decoration-color:var(--grid); text-underline-offset:3px; }
+#tab-elnino .enso-live-table th[scope=row] button { background:none; border:0; padding:0; min-height:0; min-width:0; text-align:left; color:var(--t1); font:inherit; cursor:pointer; text-decoration:underline; text-decoration-color:var(--grid); text-underline-offset:3px; }
 #tab-elnino .enso-live-sub { display:block; color:var(--t3); font-size:12px; margin-top:2px; }
 #tab-elnino .enso-live-now { color:var(--t2); font-size:12.5px; }
 #tab-elnino .enso-concern { white-space:nowrap; font:11px/1 'Geist Mono',monospace; text-transform:uppercase; letter-spacing:.05em; color:var(--t2); }
@@ -43031,7 +43031,7 @@ function showCommodityDetail(key) {
       '<div class="enso-ramp enso-sst-ramp">' + ramp + '</div>' +
       '<div style="display:flex;justify-content:space-between;font-family:\'Geist Mono\',monospace;font-size:9px;color:var(--t3);width:150px;margin-top:3px;">' +
       '<span>≤ −5</span><span>0</span><span>≥ +5</span></div>' +
-      '<div class="ctr-note" style="max-width:34ch;margin-top:5px;">' + esc(g.product || 'OISST') + ', seven-day mean ' + esc(g.time_start || '') + ' to ' + esc(g.time_end || '') +
+      '<div class="ctr-note" style="max-width:34ch;margin-top:5px;">' + esc(g.product || 'OISST') + ', seven-day mean ' + esc(isoText(g.time_start || '')) + ' to ' + esc(isoText(g.time_end || '')) +
       ', against OISST’s 1971–2000 daily base. The whole sea-surface anomaly, not an ENSO attribution. One 0.25° sample in eight in each direction, not an area mean, so the Peruvian coast is under-sampled. Poleward of the sea-ice edge the surface is held at the freezing point by OISST, so those cells read near zero. ' +
       (g.range_c ? 'This week’s field runs ' + num(g.range_c[0], 1) + ' to ' + num(g.range_c[1], 1) + ' °C; beyond ±5 the end colours are shared. ' : '') +
       'The field is interpolated between 2 degree samples for display; hover shows the nearest sample. The ONI uses ERSST against centred 30-year base periods that CPC updates every five years, so this picture and that number are not the same instrument.</div></div>';
@@ -43215,14 +43215,12 @@ function showCommodityDetail(key) {
     /* Three parts: how strong the winter may get, the losses as a list, the crops already in the field. */
     var gap = (function () { var I = (S.indices && S.indices.indices) || [], o = I.filter(function (r) { return r.key === 'oni'; })[0], r = I.filter(function (r) { return r.key === 'roni'; })[0]; return o && r ? o.value - r.value : null; })();
     var lead = '<p class="enso-outlook-lead">' +
-      (med ? 'CPC’s October–December outlook is a median of RONI ' + esc(med.med) + ' °C (5th–95th percentile ' + esc(med.lo) + ' to ' + esc(med.hi) + ')' + (djf ? ', with ' + djf.classes['very strong El Niño'] + '% odds that December–February is very strong' : '') + '. ' +
-        'The fit reads ONI, which has run ' + (gap != null ? 'about ' + num(gap, 1).replace('+', '') + ' °C' : '') + ' above RONI this year (the gap shifts through an event, so this is a guide, not a conversion). ' + (function () {
-          /* Only claim what the numbers show: the median (and the low end) on today's gap, against the fit's strongest winter. */
-          var pf = function (x) { return parseFloat(String(x).replace('−', '-')); };
-          var mo = gap != null ? pf(med.med) + gap : null, lo = gap != null ? pf(med.lo) + gap : null;
-          if (mo == null || mo <= rec.oni) return 'The fit is read at ONI ' + num(rec.oni, 1) + ', its strongest winter (' + esc(rec.label.replace(' record', '')) + ').';
-          return 'On that guide CPC’s median is above anything in the fit’s record' + (lo >= rec.oni ? ', and even its low end reaches ONI ' + num(rec.oni, 1) + ', the strongest winter the fit has seen (' + esc(rec.label.replace(' record', '')) + ')' : '') + '. <b>So the figures below, read at ONI ' + num(rec.oni, 1) + ', are more likely too small than too large.</b>';
-        })() : '') + '</p>' +
+      /* The fit is aligned to December–February, so the winter's own odds decide how to read it. */
+      (djf ? 'The fit is aligned to the December–February winter. For that season CPC gives ' + djf.classes['very strong El Niño'] + '% odds of a very strong event (RONI ≥ +2.0 °C)' +
+        (djf.classes['strong El Niño'] != null ? ', ' + djf.classes['strong El Niño'] + '% strong' : '') + (djf.classes['moderate El Niño'] ? ' and ' + djf.classes['moderate El Niño'] + '% moderate' : '') + '. ' +
+        'ONI, the index the fit reads, has run ' + (gap != null ? 'about ' + num(gap, 1).replace('+', '') + ' °C ' : '') + 'above RONI this year (a guide, not a conversion: the gap shifts through an event). ' +
+        '<b>On that guide ONI ' + num(rec.oni, 1) + ', the strongest winter the fit has seen (' + esc(rec.label.replace(' record', '')) + '), is a plausible central case, with about a one-in-' + Math.max(2, Math.round(100 / Math.max(1, 100 - djf.classes['very strong El Niño']))) + ' chance of a weaker winter.</b> Above it the fit has no data, so a stronger winter could bring larger changes.' : '') +
+      (med ? ' CPC’s October–December median is RONI ' + esc(med.med) + ' °C (5th–95th percentile ' + esc(med.lo) + ' to ' + esc(med.hi) + '); in past strong events December–February ran a little below the autumn peak.' : '') + '</p>' +
       '<ul class="enso-outlook-list">' + down.concat(up).map(function (f) { return '<li>' + phrase(f) + ', harvest ' + esc(f.harvest) + (f === down[0] && typeof f.change_pct_observed === 'number' ? ' <span class="enso-live-sub">even at today’s ONI (' + num(S.oniLive, 1) + '): ' + num(f.change_pct_observed, 0) + '%' + (f.change_kt_observed != null ? ', ' + fmtKt(f.change_kt_observed) : '') + '</span>' : '') + '</li>'; }).join('') + '</ul>' +
       (now.length ? '<p class="enso-outlook-lead">Already in the field: the fit associates developing El Niño years with ' + now.map(function (f) { return esc(who(f)) + ' ' + num(f.change_pct_observed, 0) + '%'; }).join(', ') + ' at today’s ONI (an association, not an attribution); USDA’s in-season estimates already contain this season.</p>' : '');
     var band = function (x) { return x ? num(x[0], 0) + ' to ' + num(x[1], 0) + '%' : ''; };
@@ -43299,7 +43297,7 @@ function showCommodityDetail(key) {
           cells += '<i class="cal-c' + (harvest ? ' h ' + sign : plant ? ' p ' + sign : '') +
             (m === 12 || m <= 2 ? ' djf' : '') + (m === m0 ? ' now' : '') + '" title="' + esc(nameFor(r.iso) + ' ' + r.crop + ' · ' + MON[m - 1] + (harvest ? ' · harvest' : plant ? ' · planting' : '') + (c.note ? ' · ' + c.note : '')) + '"></i>';
         }
-        return (i === 2 ? '<details class="enso-cal-more"><summary>' + (list.length-2) + ' more crop calendars · ' + esc(key) + '</summary><div class="enso-cal">' : '') + '<div class="cal-row" data-iso="' + esc(r.iso) + '" data-crop="' + esc(r.crop) + '" data-st="' + esc(key) + '" title="' + esc(c.note || '') + '"><span class="cal-k' + (r.passes ? '' : ' is-muted') + '">' + esc(nameFor(r.iso)) + ' <i>' + esc(r.crop) + (r.why ? ' · ' + esc(r.why) : r.c.enso_specific === false ? ' · shared with IOD' : '') + '</i>' +
+        return (i === 2 ? '<details class="enso-cal-more"><summary>' + (list.length-2) + ' more crop calendars · ' + esc(key) + '</summary><div class="enso-cal">' : '') + '<div class="cal-row" data-iso="' + esc(r.iso) + '" data-crop="' + esc(r.crop) + '" data-st="' + esc(key) + '" title="' + esc(c.note || '') + '"><span class="cal-k' + (r.passes ? '' : ' is-muted') + '">' + esc(nameFor(r.iso)) + ' <i>' + esc(r.crop === 'corn' ? 'maize' : r.crop) + (r.why ? ' · ' + esc(r.why) : r.c.enso_specific === false ? ' · shared with IOD' : '') + '</i>' +
           '<span class="cal-mobile-stage">' + esc(key) + '</span>' + (r.season.djf ? '<small class="cal-djf-marker">grows through DJF</small>' : '') + '</span>' + cells + '<span class="cal-s">' + esc(key) + '</span></div>';
       }).join('') + (list.length > 2 ? '</div></details>' : '');
     }).join('');
@@ -43336,7 +43334,7 @@ function showCommodityDetail(key) {
       idx.forEach(function (m, k) { var x = xs.getPixelForValue(m.i); ctx.beginPath(); ctx.moveTo(x, ys.top); ctx.lineTo(x, ys.bottom); ctx.stroke(); });
       ctx.restore();
     } };
-    mk(id, { keyNotes: ['Points: observed daily transits; lines: trailing 7-day means; dashed vertical rules: published advisory effective dates. IMF PortWatch · ' + h.dates[0] + ' to ' + h.dates[h.dates.length - 1]],
+    mk(id, { keyNotes: ['Points: observed daily transits; lines: trailing 7-day means; dashed vertical rules: published advisory effective dates. IMF PortWatch · ' + isoText(h.dates[0]) + ' to ' + isoText(h.dates[h.dates.length - 1])],
       type: 'line',
       data: { labels: h.dates, datasets: [
         { label: 'all vessels, single day', data: h.total, showLine: false, pointRadius: 1.3, pointBackgroundColor: 'rgba(182,184,190,.38)', borderWidth: 0 },
@@ -44351,7 +44349,7 @@ function showCommodityDetail(key) {
   function rtfpReadout(iso) {
     var r = S.rtfp && S.rtfp[iso];
     return r && rtfpColor(r.food_inflation_pct) ? 'Observed domestic food inflation, year on year: ' + num(r.food_inflation_pct, 1) +
-      '% · ' + esc(r.markets) + ' monitored markets · as of ' + esc(r.as_of) +
+      '% · ' + esc(r.markets) + ' monitored markets · as of ' + esc(isoText(r.as_of)) +
       '<br>World Bank RTFP via HDX · derived median across monitored markets' : 'Domestic food inflation: no data · World Bank RTFP via HDX';
   }
 
@@ -44388,7 +44386,7 @@ function showCommodityDetail(key) {
       (has ? '<span class="enso-rank-value" style="color:var(--t1)">' + num(r.food_inflation_pct, 1) + '%</span>'
            : '<span class="enso-rank-value enso-rank-none">no value</span>') + '</span>' +
       '<span class="enso-rank-meta">' + (has
-        ? esc(r.markets == null ? 'Unknown' : r.markets) + ' markets · as of ' + esc(r.as_of || 'unavailable')
+        ? esc(r.markets == null ? 'Unknown' : r.markets) + ' markets · as of ' + esc(r.as_of ? isoText(r.as_of) : 'unavailable')
         : 'No monitored market in the World Bank RTFP feed') + '</span></button></li>';
   }
   function rankedHotspots() {
@@ -44463,7 +44461,7 @@ function showCommodityDetail(key) {
     var key = {impact:'exp',crop:'model',coverage:'model'}[S.mode] || S.mode;
     /* RTFP fills and extends market prices with a model, so it is an estimate, not a reading. */
     var kind = modelled ? 'modelled' : S.mode === 'sst' ? 'observed' : S.mode === 'rtfp' ? 'estimated' : S.mode === 'none' ? (S.showLanes ? 'published' : 'reference') : 'reported';
-    var date = S.mode === 'sst' && S.sst ? 'seven-day mean ' + S.sst.time_start + ' to ' + S.sst.time_end :
+    var date = S.mode === 'sst' && S.sst ? 'seven-day mean ' + isoText(S.sst.time_start) + ' to ' + isoText(S.sst.time_end) :
       S.mode === 'none' ? (S.showLanes ? 'observed IMF PortWatch transit changes at chokepoints, collected ' + stamp(metaDate('portwatch')) + '; published schematic corridors reviewed ' + stamp(metaDate('corridors')) + ', with published ENSO phase tags reviewed ' + stamp(metaDate('lanes')) : 'reference geography only; choose a layer above to paint the land, and add overlays to any of them') :
       'collected ' + stamp(metaDate(key)) + (modelled ? '' : '; assessment periods vary by record');
     if (S.mode === 'rtfp') date = rtfpNote();
@@ -44916,6 +44914,13 @@ function showCommodityDetail(key) {
   /* Orange where the lane has a published ENSO link; blue-grey where the
      change has other causes (war, security), so a big ring is not read as El Niño. */
   function ringStroke(ln) { return ln.phase === 'el_nino' || ln.phase === 'la_nina' ? '#dd5a3a' : '#8fb1cf'; }
+  /* ISO dates in reader text: "2026-08-20" -> "20 Aug 2026", "2026-08" -> "Aug 2026"; anything else passes through. */
+  function isoText(v) {
+    var t = String(v == null ? '' : v), mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var m = t.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return (+m[3]) + ' ' + mo[m[2] - 1] + ' ' + m[1];
+    m = t.match(/^(\d{4})-(\d{2})$/); if (m) return mo[m[2] - 1] + ' ' + m[1];
+    return t;
+  }
   /* PortWatch windows arrive as "2026-08-24..2026-09-20"; readers get "24 Aug–20 Sep 2026". */
   function pwWindow(w) {
     var m = /^(\d{4})-(\d{2})-(\d{2})\.\.(\d{4})-(\d{2})-(\d{2})$/.exec(String(w || ''));
@@ -45755,7 +45760,7 @@ function showCommodityDetail(key) {
         })() };
     }
     if (ln.id === 'rhine' && G.kaub && (G.kaub.reference || {}).GlW && G.kaub.latest.value < G.kaub.reference.GlW.value)
-      return { level: 'restricted', text: 'Restricted now: Kaub at ' + Math.round(G.kaub.latest.value) + ' cm is below its ' + Math.round(G.kaub.reference.GlW.value) + ' cm navigation reference (GlW)' + (G.kaub.reference.NW && G.kaub.latest.value < G.kaub.reference.NW.value ? ' and below the lowest daily level of ' + G.kaub.reference.NW.from.slice(0, 4) + '–' + G.kaub.reference.NW.to.slice(0, 4) + ' (' + Math.round(G.kaub.reference.NW.value) + ' cm)' : '') + '. No published ENSO link; it compounds European grain logistics on its own.' };
+      return { level: 'restricted', text: 'Restricted now: Kaub at ' + Math.round(G.kaub.latest.value) + ' cm is below its ' + Math.round(G.kaub.reference.GlW.value) + ' cm navigation reference (GlW)' + (G.kaub.reference.NW && G.kaub.latest.value < G.kaub.reference.NW.value ? ' and below ' + Math.round(G.kaub.reference.NW.value) + ' cm, the lowest daily level of ' + G.kaub.reference.NW.from.slice(0, 4) + '–' + G.kaub.reference.NW.to.slice(0, 4) + ' (the October 2018 record low), so this is a new low on the agency’s reading' : '') + '. No published ENSO link; it compounds European grain logistics on its own.' };
     if (ln.phase === 'la_nina') return { level: 'eases', text: 'La Niña is the damaging phase here; El Niño usually eases this lane.' };
     return { level: 'other', text: 'No published ENSO link; changes here have other causes and compound the grain routes rather than follow El Niño.' };
   }
@@ -45856,7 +45861,7 @@ function showCommodityDetail(key) {
           var ctx = '';
           if (x[0] === 'barge_stlouis' && r.weekly_52 && r.weekly_52.length) {
             var vals = r.weekly_52.map(function (p) { return p.pct_tariff; }), hi = Math.max.apply(null, vals), yr = r.weekly_52[0];
-            ctx = (v >= hi ? '12-month high' : 'high ' + Math.round(hi) + '%') + '; a year ago ' + Math.round(yr.pct_tariff) + '%' + (r.record ? '; record ' + Math.round(r.record.value) + '%, ' + esc(r.record.date.slice(0, 7)) : '');
+            ctx = (v >= hi ? '12-month high' : 'high ' + Math.round(hi) + '%') + '; a year ago ' + Math.round(yr.pct_tariff) + '%' + (r.record ? '; record ' + Math.round(r.record.value) + '%, ' + esc(isoText(r.record.date.slice(0, 7))) : '');
           } else if (x[0] === 'gulf_loadings' && r.same_week_5y) {
             ctx = 'same week ' + esc(r.same_week_5y.years.replace('-', '–')) + ': ' + Math.round(r.same_week_5y.mean) + ' on average' + (r.latest.due_10_days != null ? '; ' + r.latest.due_10_days + ' due in the next 10 days' : '');
           } else if (x[0] === 'kaub' && r.reference && r.reference.NW) ctx = 'lowest daily ' + r.reference.NW.from.slice(0, 4) + '–' + r.reference.NW.to.slice(0, 4) + ': ' + Math.round(r.reference.NW.value) + ' cm';
@@ -46006,17 +46011,17 @@ function showCommodityDetail(key) {
         out += '<figure class="enso-plate is-published">' + plateHead('Panama published slot limits since 2023', 'Panama Canal Authority advisories · slots per day', readOn, 'published') +
           '<div class="plate-body"><div class="enso-chart"><canvas id="enso-c-panama"></canvas></div>' +
           '<details class="enso-evidence-note"><summary>Advisories and operating context</summary><p>' + esc(pr.grain) + '</p><p>' + esc(pr.lake) + '</p><p>' + esc(pr.queue) + '</p><p>' + esc(pr.outturn) + '</p>' +
-          (pr.urls || []).map(function (url, i) { return '<a href="' + esc(safeUrl(url)) + '" target="_blank" rel="noopener">2023 record source ' + (i + 1) + '</a> '; }).join('') +
-          (lv ? '<p><a href="' + esc(safeUrl(lv.url)) + '" target="_blank" rel="noopener">' + esc(lv.advisory) + '</a> · ' + esc(lv.advisory_date) + ' · ' + esc(lv.signed) + '</p><p>' + esc(lv.date_note) + '</p>' +
+          (pr.urls || []).map(function (url, i) { return '<a href="' + esc(safeUrl(url)) + '" target="_blank" rel="noopener">' + esc((function (u) { var h = ''; try { h = new URL(u).hostname.replace(/^www\./, ''); } catch (e) {} return ({ 'pancanal.com': 'Panama Canal Authority', 'freightwaves.com': 'FreightWaves', 'chsinc.com': 'CHS Inc.' })[h] || h || 'source'; })(url)) + '</a> '; }).join('') +
+          (lv ? '<p><a href="' + esc(safeUrl(lv.url)) + '" target="_blank" rel="noopener">' + esc(lv.advisory) + '</a> · ' + esc(isoText(lv.advisory_date)) + ' · ' + esc(lv.signed) + '</p><p>' + esc(lv.date_note) + '</p>' +
           '<p>Watershed ' + esc(lv.deficit_period) + ': rainfall ' + num(lv.rainfall_deficit_pct, 0) + '%, inflows ' + num(lv.inflow_deficit_pct, 0) + '%.</p><blockquote>“' + esc(lv.el_nino_quote) + '”</blockquote><p>' + esc(lv.draft) + '</p>' +
           (lv.draft_advisory ? '<a href="' + esc(safeUrl(lv.draft_advisory.url)) + '" target="_blank" rel="noopener">' + esc(lv.draft_advisory.advisory) + ' · ' + esc(lv.draft_advisory.advisory_date) + '</a>' : '') : '') +
           '</details></div><figcaption class="enso-log">Slots per day: published canal capacity.</figcaption></figure>';
       }
       var h = S.pwhist && S.pwhist.chokepoints && S.pwhist.chokepoints.panama;
       if (h && h.dates && h.dates.length) {
-        out += '<figure class="enso-plate">' + plateHead('Panama AIS vessel transits', 'IMF PortWatch · daily counts and seven-day means · ' + h.dates[0] + ' to ' + h.dates[h.dates.length - 1], stamp(metaDate('pwhist')), 'observed') +
+        out += '<figure class="enso-plate">' + plateHead('Panama AIS vessel transits', 'IMF PortWatch · daily counts and seven-day means · ' + isoText(h.dates[0]) + ' to ' + isoText(h.dates[h.dates.length - 1]), stamp(metaDate('pwhist')), 'observed') +
           '<div class="plate-body">' + dailyChartHTML('panama') +
-          (lv ? '<div class="enso-rule-key">Advisory effective dates: ' + (lv.steps || []).map(function (st) { return '<span>' + esc(st.effective) + ' · ' + st.total + ' slots/day</span>'; }).join(' · ') + '</div>' : '') +
+          (lv ? '<div class="enso-rule-key">Advisory effective dates: ' + (lv.steps || []).map(function (st) { return '<span>' + esc(isoText(st.effective)) + ' · ' + st.total + ' slots/day</span>'; }).join(' · ') + '</div>' : '') +
           (pw ? '<p class="enso-log">' + pw.transits_per_day.total.toFixed(1) + ' transits/day · ' + esc(pwWindow(pw.window)) + ' · ' + num(pw.yoy.total_pct, 1) + '% y/y against ' + esc(pwWindow(pw.baseline_window)) + ' · IMF PortWatch, read ' + esc(stamp(metaDate('portwatch'))) + '</p>' : '') +
           '</div></figure>';
       }
@@ -46042,7 +46047,7 @@ function showCommodityDetail(key) {
           '<td><p>' + esc(briefs[ln.id] || String(ln.mechanism || '').split(/(?<=\.)\s/)[0]) + '</p>' +
           (pw ? '<p class="enso-meta">' + pw.transits_per_day.total.toFixed(1) + ' transits/day · ' + num(pw.yoy.total_pct,1) + '% y/y · ' + esc(pwWindow(pw.window)) + '</p>' : '') +
           '<details class="enso-evidence-note"><summary>Evidence and sources · ' + esc(readOn) + '</summary><div class="enso-evidence-columns"><div><p>' + esc(ln.mechanism || '') + '</p><p>' + esc(ln.events || ln.prior_events || '') + '</p><p>' + esc(ln.food_role || '') + '</p></div><div><p>' + esc(ln.counter_evidence || '') + '</p><p>' + esc(ln.attribution_caveat || '') + '</p>' +
-          (pw ? '<p class="enso-meta">Baseline ' + esc(pw.baseline_window) + ' · IMF PortWatch, read ' + esc(stamp(metaDate('portwatch'))) + '</p>' : ln.portwatch_key ? '<p>AIS data unavailable; awaiting the next PortWatch update.</p>' : '') +
+          (pw ? '<p class="enso-meta">Baseline ' + esc(pwWindow(pw.baseline_window)) + ' · IMF PortWatch, read ' + esc(stamp(metaDate('portwatch'))) + '</p>' : ln.portwatch_key ? '<p>AIS data unavailable; awaiting the next PortWatch update.</p>' : '') +
           (ln.sources || []).map(function (src) { return '<p><a href="' + esc(safeUrl(src.url)) + '" target="_blank" rel="noopener">' + esc(src.label) + '</a></p>'; }).join('') + '</div></div></details></td></tr>';
       }).join('') + '</tbody></table>' + (lanes.length > 3 ? '</details>' : '') + '</div><figcaption class="enso-log">Published ENSO attribution describes the lane mechanism; current transit changes have multiple causes.</figcaption></figure>';
     el.innerHTML = out;
@@ -46099,7 +46104,7 @@ function showCommodityDetail(key) {
         /* Each price series says where it is quoted; the freight note applies to the southern African maize rows only. */
         var BASIS = { 'Maize': 'US No. 2 yellow maize, US Gulf, free on board', 'Rice, Thai 5%': 'Thai 5% white rice, Bangkok, free on board' };
         var series = {}; W.forEach(function (c) { if (c.price && c.price.series) series[c.price.series] = c.price; });
-        var basis = Object.keys(series).map(function (k) { return (BASIS[k] || k) + ' ($' + Math.round(series[k].usd_per_t) + '/t, ' + esc(series[k].month) + ')'; }).join('; ');
+        var basis = Object.keys(series).map(function (k) { return (BASIS[k] || k) + ' ($' + Math.round(series[k].usd_per_t) + '/t, ' + esc(isoText(series[k].month)) + ')'; }).join('; ');
         var pk = S.pink && S.pink.series && S.pink.series.maize, yy = null;
         if (pk && pk.history && pk.history.length) { var last = pk.history[pk.history.length - 1], ya = pk.history.filter(function (p) { return p.month === (Number(pk.latest_month.slice(0, 4)) - 1) + pk.latest_month.slice(4); })[0]; if (ya) yy = (last.value / ya.value - 1) * 100; }
         return '<figcaption class="enso-log">Modelled accounting. ' + esc(O.who_pays_rule) + ' Buyer shares are Comtrade values, not tonnes, top five buyers only; * marks a buyer capped at its normal imports (USDA PSD), with the rest under other buyers. ' +
@@ -46194,7 +46199,7 @@ function showCommodityDetail(key) {
     if (E.ffpi && E.ffpi.series) {
       out += '<figure class="enso-plate">' + plateHead('FAO Food Price Index: peak years and latest month', 'FAO · annual nominal and real averages · 2014–2016 = 100', readOn, 'observed') +
         '<div class="plate-body"><div class="enso-chart"><canvas id="enso-c-ffpi"></canvas></div>' +
-        (latest ? '<p class="enso-log">Latest monthly nominal reading: ' + esc(latest.month) + ' · ' + latest.fpi + ' · FAO, read ' + esc(stamp(metaDate('ffpi'))) + '</p>' : '') +
+        (latest ? '<p class="enso-log">Latest monthly nominal reading: ' + esc(isoText(latest.month)) + ' · ' + latest.fpi + ' · FAO, read ' + esc(stamp(metaDate('ffpi'))) + '</p>' : '') +
         '<details class="enso-evidence-note"><summary>Index coverage</summary><p>' + esc(E.ffpi.note || '') + '</p><p>' + esc(E.ffpi.gap || '') + '</p></details></div>' +
         '</figure>';
     }
@@ -46335,6 +46340,8 @@ function showCommodityDetail(key) {
   }
   function isoChips(list) {
     return (list || []).slice(0, 4).map(function (i) {
+      /* ReliefWeb tags global reports WLD; that is not a country to fly to. */
+      if (i === 'WLD') return '<span class="enso-chip">Global</span>';
       return '<button class="enso-chip" onclick="ensoFocus(\'' + esc(i) + '\')" title="Show ' +
         esc(nameFor(i)) + ' on the map">' + esc(nameFor(i)) + '</button>';
     }).join('');
@@ -47075,7 +47082,7 @@ function showCommodityDetail(key) {
   window.ensoSST = {
     layer: null,
     state: function () {
-      return this.layer && this.layer._map && S.sst ? 'Observed ocean: NOAA OISST anomaly, seven-day mean ' + S.sst.time_start + ' to ' + S.sst.time_end + '.' : 'Sea temperature unavailable or loading.';
+      return this.layer && this.layer._map && S.sst ? 'Observed ocean: NOAA OISST anomaly, seven-day mean ' + isoText(S.sst.time_start) + ' to ' + isoText(S.sst.time_end) + '.' : 'Sea temperature unavailable or loading.';
     },
     legend: function () {
       var g = S.sst; if (!g || !g.anom) return '';

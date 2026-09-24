@@ -62,6 +62,14 @@ NOW_PROBE = """() => {
             overflow: (document.querySelector('.enso-overflow') || {}).textContent || ''};
 }"""
 
+
+def iso_text(d):
+    # The page prints ISO dates as "21 Sep 2025" (isoText in index.html).
+    import re as _re
+    m = _re.match(r"^(\d{4})-(\d{2})-(\d{2})", str(d))
+    mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    return f"{int(m.group(3))} {mo[int(m.group(2)) - 1]} {m.group(1)}" if m else str(d)
+
 def check(label: str, ok: bool, detail: str = "") -> None:
     global CHECKS
     CHECKS += 1
@@ -827,7 +835,7 @@ def main() -> int:
         lane_count = page.evaluate("async () => (await (await fetch('data/enso_lanes.json')).json()).data.lanes.length")
         check("published Panama limits lead observed AIS with its actual coverage",
               water['lead'] and water['slot'] == 'published' and water['ais'] == 'observed'
-              and history[0] in water['source'] and history[-1] in water['source'])
+              and iso_text(history[0]) in water['source'] and iso_text(history[-1]) in water['source'])
         board_slots = page.evaluate("async () => (await (await fetch('data/enso_lanes.json')).json()).data.lanes.find(l => l.id === 'panama').live_2026.steps.at(-1).total")
         check("Shipping leads with nine lane answers sourced from the current JSON",
               page.locator('.enso-status-table tbody tr').count() == 9
@@ -1020,7 +1028,7 @@ def main() -> int:
                 if (vals.some((v,i) => i && v > vals[i-1])) return false;
                 return isos.every((iso,i) => valuedOf(iso)
                     ? buttons[i].textContent.includes(data[iso].markets + ' markets')
-                      && buttons[i].textContent.includes(data[iso].as_of)
+                      && buttons[i].textContent.includes(((d) => { const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? (+m[3]) + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m[2] - 1] + ' ' + m[1] : d; })(data[iso].as_of))
                     : buttons[i].closest('.enso-rank-missing').textContent.includes('have no monitored market:'));
             }""", feed)
             first = page.locator('#enso-map-ranking button').first

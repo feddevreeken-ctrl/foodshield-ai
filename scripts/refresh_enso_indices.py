@@ -52,10 +52,10 @@ LABELS = {"oni": "ONI", "roni": "RONI", "wk34": "Weekly Niño 3.4",
           "bom_rel": "Relative Niño 3.4", "soi": "Troup SOI"}
 N34 = "Niño 3.4 (170°W–120°W)"
 # ONI and the weekly file are both absolute anomalies but NOT on one baseline:
-# ONI is ERSST v5 against centred 30-year periods CPC moves every five years,
+# ONI is ERSST v6 (CPC oni.ascii.txt; its values no longer match the v5 record) against centred 30-year periods CPC moves every five years,
 # the weekly file is OISST v2.1 against a fixed 1991-2020 climatology. Sharing
 # one string made ONI vs weekly look like a window-only (arithmetic) gap.
-ONI_BASE = "ERSST v5, centred 30-year base periods"
+ONI_BASE = "ERSST v6, centred 30-year base periods"
 WK_BASE = "OISST v2.1, fixed 1991–2020"
 REL_BASE = "relative to the tropical mean"
 
