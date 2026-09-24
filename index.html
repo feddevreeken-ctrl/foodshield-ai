@@ -42969,13 +42969,13 @@ function showCommodityDetail(key) {
     S.failed = [];
     var get = async function (n) {
       /* A redraw triggered by a changed feed revalidates every file, so the browser cache cannot serve the old copy. */
-      var opts = (n === 'enso') ? { cache: 'no-store' } : S.forceFresh ? { cache: 'no-cache' } : {};
+      var opts = (n === 'enso') ? { cache: 'no-store' } : S.forceFresh ? { cache: 'no-cache' } : {}, tg = null;
       try {
         var r = await fetch('data/' + n + '.json', opts);
         var tags = S.feedTags || (S.feedTags = {});
         /* A failed file has no baseline, so the next check re-fetches it once it is back. */
         if (!r.ok) { delete tags[n]; S.failed.push(n); return null; }
-        var tg = feedTag(r);
+        tg = feedTag(r);
         var j = await r.json();
         /* chokepoint_flows.json predates the data envelope: its body is the file itself. */
         var body = j && typeof j === 'object' ? (j.data || (n === 'chokepoint_flows' && j.chokepoints ? j : null)) : null;
@@ -42988,7 +42988,13 @@ function showCommodityDetail(key) {
         if (tg) tags[n] = tg; else delete tags[n];
         if (S.failTags) delete S.failTags[n];
         return { meta: j._meta || {}, data: body };
-      } catch (e) { if (S.feedTags) delete S.feedTags[n]; S.failed.push(n); return null; }
+      } catch (e) {
+        /* Malformed JSON lands here: remember the version that failed, like a bad envelope, so a file that
+           stays broken is retried only when it changes, not reloaded on every check. */
+        if (S.feedTags) delete S.feedTags[n];
+        if (tg) (S.failTags || (S.failTags = {}))[n] = tg;
+        S.failed.push(n); return null;
+      }
     };
     var names = ['enso', 'enso_exposure', 'enso_model', 'enso_regions',
                  'enso_lanes', 'enso_corridors', 'enso_econ', 'enso_mechanism', 'enso_indices', 'enso_bulletins',
