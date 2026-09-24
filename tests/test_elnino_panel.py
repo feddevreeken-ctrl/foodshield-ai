@@ -844,6 +844,13 @@ def main() -> int:
                 && ['1997-98', '2015-16', '2023-24', '2026'].every(l => labels.includes(l))
                 && document.querySelector('.enso-exposed-plate').textContent.includes('Japan maize');
         }"""))
+        # 2026-09-24: the import end of the chain, from PortWatch's daily ports feed.
+        check("Shipping measures the gateway import ports, one row per port in the feed", page.evaluate("""async () => {
+            const P = (await (await fetch('data/enso_ports.json')).json()).data.ports;
+            const rows = [...document.querySelectorAll('.enso-ports-table tbody tr:not(.enso-ol-year)')];
+            return P.length >= 5 && rows.length === P.length && rows.every((r, i) => r.textContent.includes(P[i].name) || P.some(p => r.textContent.includes(p.name)))
+                && !document.querySelector('.enso-meet-plate').textContent.includes('not monitored');
+        }"""))
         page.locator('[data-open-lane="rhine"]').click()
         check("lane board opens the matching folded record",
               page.locator('#enso-lane-record-rhine details').get_attribute('open') is not None

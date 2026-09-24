@@ -123,6 +123,7 @@ EXPECTED_FILES = {
     'enso_news.json':             ('soft',     'dict_or_empty'),
     'enso_outlook.json':          ('soft',     'dict_or_empty'),
     'enso_gauges.json':           ('soft',     'dict_or_empty'),
+    'enso_ports.json':            ('soft',     'dict_or_empty'),
     'enso_situation.json':        ('soft',     'dict_or_empty'),
     'enso_strengths.json':        ('soft',     'dict_or_empty'),
     # Build-time commodity interpretation. SOFT, and additionally listed in

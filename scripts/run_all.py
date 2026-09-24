@@ -77,6 +77,7 @@ import refresh_commodity_news   # v46 — GDELT + EC RSS commodity headlines (cl
 import refresh_enso_news        # El Niño wire: headlines that name the event (claims, not data)
 import refresh_cpc_strengths    # CPC RONI strength odds by season (how strong, how long)
 import refresh_shipping_gauges  # Gatún, St. Louis (+ barge rate), Kaub, Rosario, Manaus: the water behind the lanes
+import refresh_import_ports     # PortWatch dry-bulk imports at the gateway ports of the El Niño concern regions
 import build_enso_outlook       # El Niño outlook: fitted pairs x production x harvest, plus live signals per region
 import build_countries_dataset
 import snapshot_fdrs
@@ -159,6 +160,7 @@ STEPS = [
     ("El Niño news",           refresh_enso_news.main,          "enso_news.json"),
     ("CPC strength odds",      refresh_cpc_strengths.main,      "enso_strengths.json"),
     ("Shipping gauges",        refresh_shipping_gauges.main,    "enso_gauges.json"),
+    ("Import ports",           refresh_import_ports.main,       "enso_ports.json"),
     # Derived, no network: reads the feeds above and the fitted model, so it runs after them.
     ("El Niño outlook",        build_enso_outlook.main,         "enso_outlook.json"),
     ("Countries dataset",      build_countries_dataset.main,    "countries.json"),
