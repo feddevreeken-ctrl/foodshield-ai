@@ -42970,31 +42970,19 @@ function showCommodityDetail(key) {
     var get = async function (n) {
       /* A redraw triggered by a changed feed revalidates every file, so the browser cache cannot serve the old copy. */
       var opts = (n === 'enso') ? { cache: 'no-store' } : S.forceFresh ? { cache: 'no-cache' } : {}, tg = null;
+      var tags = S.feedTags || (S.feedTags = {});
       try {
         var r = await fetch('data/' + n + '.json', opts);
-        var tags = S.feedTags || (S.feedTags = {});
-        /* A failed file has no baseline, so the next check re-fetches it once it is back. */
-        if (!r.ok) { delete tags[n]; S.failed.push(n); return null; }
+        if (!r.ok) { noteFeedFailure(n, null); return null; }
         tg = feedTag(r);
-        var j = await r.json();
-        /* chokepoint_flows.json predates the data envelope: its body is the file itself. */
-        var body = j && typeof j === 'object' ? (j.data || (n === 'chokepoint_flows' && j.chokepoints ? j : null)) : null;
-        if (!body || typeof body !== 'object') {
-          /* Remember which version failed, so a file that stays broken is not redrawn every check. */
-          delete tags[n]; if (tg) (S.failTags || (S.failTags = {}))[n] = tg; S.failed.push(n); return null;
-        }
+        var j = await r.json(), body = feedBody(n, j);
+        if (!body) { noteFeedFailure(n, tg); return null; }
         /* The version actually loaded is the freshness baseline, taken from this response once its
            body has parsed: a refresh landing after it is noticed, a broken download is not recorded. */
         if (tg) tags[n] = tg; else delete tags[n];
         if (S.failTags) delete S.failTags[n];
         return { meta: j._meta || {}, data: body };
-      } catch (e) {
-        /* Malformed JSON lands here: remember the version that failed, like a bad envelope, so a file that
-           stays broken is retried only when it changes, not reloaded on every check. */
-        if (S.feedTags) delete S.feedTags[n];
-        if (tg) (S.failTags || (S.failTags = {}))[n] = tg;
-        S.failed.push(n); return null;
-      }
+      } catch (e) { noteFeedFailure(n, tg); return null; }
     };
     var names = ['enso', 'enso_exposure', 'enso_model', 'enso_regions',
                  'enso_lanes', 'enso_corridors', 'enso_econ', 'enso_mechanism', 'enso_indices', 'enso_bulletins',
@@ -44207,6 +44195,20 @@ function showCommodityDetail(key) {
      have moved through the refresh, reload the whole module. */
   /* One pass over every feed the tab reads: HEAD each file and compare its ETag / Last-Modified with
      the previous pass. Returns true when any file changed since then. */
+  /* One validation for the load and the recovery check: the data envelope, or chokepoint_flows' bare body. */
+  function feedBody(n, j) {
+    var body = j && typeof j === 'object' ? (j.data || (n === 'chokepoint_flows' && j.chokepoints ? j : null)) : null;
+    return body && typeof body === 'object' ? body : null;
+  }
+  /* A failed file loses its baseline. The first retry is at the next check; each further failure of the
+     same version doubles the wait (15 minutes, 30, 60 … capped at six hours), so a file that stays broken
+     costs a bounded number of downloads and redraws. */
+  function noteFeedFailure(n, tag) {
+    if (S.feedTags) delete S.feedTags[n];
+    var F = S.failTags || (S.failTags = {}), prev = F[n], tries = prev && prev.tag === tag ? prev.tries + 1 : 1;
+    F[n] = { tag: tag, tries: tries, until: Date.now() + (tries === 1 ? 0 : Math.min(15 * 60 * 1000 * Math.pow(2, tries - 2), 6 * 3600 * 1000)) };
+    S.failed.push(n);
+  }
   /* A file's version: ETag (weak prefix and quotes stripped, so HEAD and GET compare alike) or Last-Modified. */
   function feedTag(r) {
     var t = r.headers.get('etag') || r.headers.get('last-modified');
@@ -44223,13 +44225,15 @@ function showCommodityDetail(key) {
         var h = await fetch('data/' + n + '.json', { method: 'HEAD', cache: 'no-store' }); if (!h.ok) return;
         var tag = feedTag(h); if (!tag) return;
         if (seen[n]) { if (seen[n] !== tag) changed = true; return; }
-        /* No baseline: the loaded copy failed. A new version is a change. The same version may have failed
-           only in transit (a dropped connection), so fetch that one file and redraw only if it now parses;
-           a file that is really broken costs one download per check, not a full redraw. */
-        if (tag !== (S.failTags || {})[n]) { changed = true; return; }
-        var g = await fetch('data/' + n + '.json', { cache: 'no-cache' }); if (!g.ok) return;
-        var j = await g.json();
-        if (j && typeof j === 'object' && (j.data || (n === 'chokepoint_flows' && j.chokepoints))) changed = true;
+        /* No baseline: the loaded copy failed. Wait out the file's backoff, then fetch just that file with the
+           same validation the load uses, and redraw only if it now parses. A new version or a download that
+           failed in transit recovers; a file that stays broken costs one download per backoff step. */
+        var f = (S.failTags || {})[n];
+        if (f && Date.now() < f.until) return;
+        var g = await fetch('data/' + n + '.json', { cache: 'no-cache' });
+        if (!g.ok) { noteFeedFailure(n, tag); S.failed.pop(); return; }
+        var j = null; try { j = await g.json(); } catch (e) {}
+        if (feedBody(n, j)) changed = true; else { noteFeedFailure(n, tag); S.failed.pop(); }
       } catch (e) {}
     }));
     return changed;
