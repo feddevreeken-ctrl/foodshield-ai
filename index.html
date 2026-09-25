@@ -1039,16 +1039,17 @@ body {
 }
 
 @media (max-width: 1180px) {
-  #tab-country .ctr-head-board { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* Four cells: two by two, never three plus an orphan. */
+  #tab-country .ctr-head-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   #tab-country .ctr-head-cell {
     padding-right: 14px;
     border-right: 1px solid var(--b1);
   }
-  #tab-country .ctr-head-cell:nth-child(3n) {
+  #tab-country .ctr-head-cell:nth-child(2n) {
     border-right: 0;
     padding-right: 0;
   }
-  #tab-country .ctr-head-cell:nth-child(n+4) { border-top: 1px solid var(--b1); }
+  #tab-country .ctr-head-cell:nth-child(n+3) { border-top: 1px solid var(--b1); }
 }
 
 @media (max-width: 720px) {
@@ -1106,8 +1107,9 @@ body {
 .ctr-more-count { font-family: 'Geist Mono', monospace; font-size: 9.5px; color: var(--t3); letter-spacing: 0.04em; }
 .ctr-more-body { padding: 16px 0 4px; }
 
-.ctr-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 34px; }
-@media (max-width: 900px) { .ctr-2 { grid-template-columns: 1fr; gap: 24px; } }
+.ctr-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 34px; }
+@media (max-width: 900px) { .ctr-2 { grid-template-columns: minmax(0, 1fr); gap: 24px; } }
+.ctr-tbl td.num { white-space: nowrap; }
 
 /* ── News: a quiet list. Low visual weight IS the signal that these are
       third-party claims rather than anything FoodShield measured. ── */
@@ -10768,7 +10770,14 @@ table.enso-tbl thead th:first-child { z-index:3; }
 .fs-cflag-src{color:var(--accent);text-decoration:none;white-space:nowrap;font-size:11px;}
 @media (max-width:760px){
   .fs-cflag-row{grid-template-columns:1fr auto;gap:2px 12px;}
+  .fs-cflag-row > .fs-cbadge, .fs-cflag-row > [class*="badge"]{justify-self:start;}
   .fs-cflag-exp{text-align:left;}
+}
+@media (max-width:600px){
+  /* Eight columns do not fit a phone: keep commodity, score, supplier, share, volume. */
+  #tab-country .ctr-tbl.ctr-risk th:nth-child(2), #tab-country .ctr-tbl.ctr-risk td:nth-child(2),
+  #tab-country .ctr-tbl.ctr-risk th:nth-child(7), #tab-country .ctr-tbl.ctr-risk td:nth-child(7),
+  #tab-country .ctr-tbl.ctr-risk th:nth-child(8), #tab-country .ctr-tbl.ctr-risk td:nth-child(8){display:none;}
 }
 /* v40 — MAP LAYERS panel (below the stat strip on the Global Map)
    v67.1 — slimmed: narrower, lighter border, no drop-shadow slab; the map is
@@ -18716,7 +18725,9 @@ function criticalLiveFeedIssues() {
     }));
 }
 function liveFeedWarningHTML(c, opts = {}) {
-  const issues = criticalLiveFeedIssues();
+  /* Name a degraded feed only on countries it covers: HungerMap reaches ~56 countries, not the Netherlands or US states. */
+  const FEED_LIVE = { wfp_hungermap: 'wfp', wfp_country: 'wfp_country', ipc: 'ipc' };
+  const issues = criticalLiveFeedIssues().filter(i => !c || !c.iso || !FEED_LIVE[i.key] || !!((LIVE[FEED_LIVE[i.key]] || {})[c.iso]));
   const conf = c?._nowcastConfidence || null;
   if (!issues.length && conf !== 'low' && conf !== 'none') return '';
   const body = [];
@@ -18725,7 +18736,7 @@ function liveFeedWarningHTML(c, opts = {}) {
     // v34 — say WHY: an empty payload means the upstream API broke/moved (returns
     // nothing on refresh), which is different from a snapshot merely being old.
     const allEmpty = issues.every(i => /empty/i.test(i.reason || ''));
-    body.push(`${names} are degraded in this build${allEmpty ? ' (upstream API returns no data: a feed break, not a stale copy)' : ''}`);
+    body.push(`${names} ${issues.length === 1 ? 'is' : 'are'} unavailable in this build${allEmpty ? ' (upstream API returns no data: a feed break, not a stale copy)' : ''}`);
   }
   if (conf === 'low') body.push('this country nowcast is using secondary signals or fallbacks');
   if (conf === 'none') body.push('this country is currently rendering the structural score without a live nowcast lift');
@@ -20314,6 +20325,7 @@ async function loadLiveData() {
     wb_wfso: _fetchData('wb_wfso'),
     worldbank_bulk: _fetchData('worldbank_bulk'),
     usda_psd: _fetchData('usda_psd'),
+    net_food_trade: _fetchData('net_food_trade'),
     chokepoint_flows: _fetchData('chokepoint_flows'),
     precedents: _fetchData('precedents'),
     scenario_profiles: _fetchData('scenario_profiles'),
@@ -20364,6 +20376,10 @@ async function loadLiveData() {
     const psdEnv = await _deferred.usda_psd;
     LIVE.psd = (psdEnv && (psdEnv.data || psdEnv)) || {};
   } catch (e) { LIVE.psd = {}; }
+  try {
+    const nftEnv = await _deferred.net_food_trade;
+    LIVE.net_food_trade = (nftEnv && (nftEnv.data || nftEnv)) || {};
+  } catch (e) { LIVE.net_food_trade = {}; }
 
   // v64 — chokepoint route map (who ships which staple through which strait,
   // derived from the cited food_role claims + commodity_flows supplier lists).
@@ -21084,8 +21100,8 @@ function calibrationAnchors(c) {
   if (wc.food_inflation_pct != null)              { food_infl = wc.food_inflation_pct; food_infl_src='HungerMap'; food_infl_label='food inflation'; }
   else if (typeof rt.food_inflation_pct === 'number' && isFinite(rt.food_inflation_pct)) { food_infl = rt.food_inflation_pct; food_infl_src='World Bank RTFP ' + mon(rt.as_of); food_infl_label='food inflation, monitored markets'; }
   else if (es.food_hicp_yoy_pct != null)          { food_infl = es.food_hicp_yoy_pct;  food_infl_src='Eurostat ' + (mon(es.month) || es.month || ''); food_infl_label='food HICP YoY'; }
-  else if (typeof fs.food_cpi_yoy_month_pct === 'number' && fresh(fs.food_cpi_latest_month)) { food_infl = fs.food_cpi_yoy_month_pct; food_infl_src='FAOSTAT ' + mon(fs.food_cpi_latest_month); food_infl_label='food CPI YoY'; }
-  else if (fs.food_cpi_yoy_pct != null)           { food_infl = fs.food_cpi_yoy_pct;   food_infl_src='FAOSTAT ' + (fs.year_latest||'') + ' annual'; food_infl_label='food CPI, annual mean'; }
+  else if (typeof fs.food_cpi_yoy_month_pct === 'number' && fs.food_cpi_yoy_month_pct !== 0 && fresh(fs.food_cpi_latest_month)) { food_infl = fs.food_cpi_yoy_month_pct; food_infl_src='FAOSTAT ' + mon(fs.food_cpi_latest_month); food_infl_label='food CPI YoY'; }
+  else if (fs.food_cpi_yoy_pct != null && (fs.year_latest || 0) >= new Date().getUTCFullYear() - 1) { food_infl = fs.food_cpi_yoy_pct; food_infl_src='FAOSTAT ' + (fs.year_latest||'') + ' annual'; food_infl_label='food CPI, annual mean'; }
   else if (wb['FP.CPI.TOTL.ZG']?.value != null)   { food_infl = wb['FP.CPI.TOTL.ZG'].value; food_infl_src='WB ' + (wb['FP.CPI.TOTL.ZG'].year || ''); food_infl_label='all-items CPI (not food)'; }
   return {
     undernourishment_pct: wb['SN.ITK.DEFC.ZS']?.value ?? null,
@@ -25110,6 +25126,8 @@ function onCountryFlowsSelect() {
   // v46 — one selector, one renderer. There is no second view to branch on.
   syncCountryFlowsSelect();
   if (typeof renderCountryTab === 'function') renderCountryTab();
+  /* Keep the choice in the address bar so the report can be shared. */
+  try { const v = document.getElementById('country-sel')?.value; if (v && typeof updateURL === 'function') updateURL({ country: v }); } catch (e) {}
 }
 
 function showGroup(group, btn) {
@@ -25800,6 +25818,9 @@ function _beefData() {
 function _curatedKey(commodity) {
   if (!commodity) return null;
   const k = String(commodity).toLowerCase();
+  /* A curated key or its own display label maps to itself before any regex: "Salmon", "Frozen potato" and
+     "Oilseeds (rapeseed/sunflower)" used to fall into fish / potatoes / vegoils and duplicate those rows. */
+  try { for (const key in _CURATED_LABEL) if (key === k || String(_CURATED_LABEL[key]).toLowerCase() === k) return key; } catch (e) {}
   // map free-form commodity labels to curated-flow keys
   if (/beef|bovine|cattle/.test(k)) return 'beef';
   if (/wheat/.test(k)) return 'wheat';
@@ -26110,7 +26131,9 @@ function restrictionsAffecting(iso) {
     const share = _supplierSharePct(sup, m);
     if (share > 0) hits.push({ r, share_pct: Math.round(share) });
   }
-  hits.sort((a, b) => b.share_pct - a.share_pct);
+  /* Measures in force first, then by exposure; lifted or expired measures follow and are labelled as such. */
+  const isLive = h => String(h.r.status || '').toLowerCase() !== 'historical' && !h.r.lifted_date;
+  hits.sort((a, b) => (isLive(b) - isLive(a)) || (b.share_pct - a.share_pct));
   return hits;
 }
 
@@ -26147,12 +26170,14 @@ function countryRestrictionFlagHTML(iso) {
       + `<b>${r.country || _nameFromISO(r.iso)}</b>`
       + `<span class="fs-cflag-msr">${r.measure || 'export restriction'}</span>`
       + `<b>${r.commodity}</b>`
-      + `<span class="fs-cflag-exp">${h.share_pct}% of imports</span>`
+      + `<span class="fs-cflag-exp">${h.share_pct}% of ${String(r.commodity || '').toLowerCase()} imports</span>`
       + `${restrictionStatusBadge(r.status)}`
+      + (r.lifted_date ? `<span class="fs-cflag-msr">lifted ${r.lifted_date}</span>` : '')
       + `<a href="${r.source_url}" target="_blank" rel="noopener" class="fs-cflag-src">source ↗</a>`
       + `</div>`;
   }).join('');
-  return `<div class="fs-cflag"><div class="fs-cflag-cap">Export restrictions on record affecting this country</div>${rows}</div>`;
+  const nLive = hits.filter(h => String(h.r.status || '').toLowerCase() !== 'historical' && !h.r.lifted_date).length;
+  return `<div class="fs-cflag"><div class="fs-cflag-cap">Export restrictions affecting this country · ${nLive ? nLive + ' in force' : 'none in force; on record only'}</div>${rows}</div>`;
 }
 
 function commodityDestinations(c, commodity) {
@@ -27569,7 +27594,7 @@ function openPanel(c, skipDrilldown) {
     // never a 0 a reader could mistake for a genuinely scored zero.
     const un = (i===7||i===8) && !(Array.isArray(c.c) && typeof c.c[i]==='number' && isFinite(c.c[i]));
     if (un) return `
-    <div class="comp-row" style="opacity:.55" title="${tip ? tip+' · ' : ''}No source data for this country; counted 0 (resilient) in the score rather than estimated.">
+    <div class="comp-row" style="opacity:.55" title="${tip ? tip+' · ' : ''}No source data for this country; left out of the score and the other weights renormalised.">
       <div class="comp-label">${compLabels[i]}<span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:var(--t3);background:var(--bg3);padding:1px 4px;border-radius:3px;margin-left:4px;letter-spacing:.04em;">NO DATA · left out, weights renormalised</span></div>
       <div class="comp-weight">${compWeights[i]}</div>
       <div class="comp-track" style="position:relative;"><div class="comp-fill" style="width:0%"></div></div>
@@ -27631,7 +27656,7 @@ function openPanel(c, skipDrilldown) {
     if (td == null) return calPart;
     /* A figure from the menu fallback, not a USDA balance, says so. */
     const crop = { w: 'Wheat', r: 'Rice', m: 'Maize' }[String(field || '').charAt(0)] || null;
-    const modeled = crop && commodityTradeBasis(c, crop) !== 'psd';
+    const modeled = crop && !/^psd/.test(commodityTradeBasis(c, crop) || '');
     return calPart.replace('</span>', ` · <span class="mono" style="color:var(--accent);" title="${modeled ? 'Estimated from import and export lists: no current USDA balance for this crop' : 'Net imports ÷ consumption, USDA PSD'}">${td}% trade${modeled ? ' (modeled)' : ''}</span></span>`);
   };
   document.getElementById('sp-metrics').innerHTML = `
@@ -28122,7 +28147,8 @@ function countryNewsBlockHTML(iso, name, limit) {
         const via = e.role !== 'direct' && e.via
           ? ` <span class="cnb-via">via ${_escFeed(e.via)}</span>` : '';
         return `<div class="cnb-row">
-          ${_newsThumb(it)}
+          ${/* the tile prints this country's tonnage, the same figure as "reaches" below, not the story's total */''}
+          ${_newsThumb(e.kt > 0 ? Object.assign({}, it, { exposure_kt: e.kt }) : it)}
           <div class="cnb-body">
             <div class="cnb-kick">
               ${kick ? `<span class="cnb-commodity">${_escFeed(_newsCommodityLabel(kick))}</span>` : ''}
@@ -28157,7 +28183,7 @@ function countryNewsBlockHTML(iso, name, limit) {
 
   return `<div class="cnb">
     <div class="cnb-head"><span class="cnb-dot"></span>Biggest food headlines</div>
-    <div class="cnb-sub">out of ${_escFeed(name)}</div>
+    <div class="cnb-sub">reaching ${_escFeed(name)}</div>
     ${body}
     <div class="cnb-foot">Trade-press reports touching ${_escFeed(name)}. Which
       country a headline names is <b>modeled</b>: our keyword match on the
@@ -28985,7 +29011,7 @@ function populateSelects() {
   const usStates  = COUNTRIES.filter(c=>c.iso.startsWith('US-')).sort((a,b)=>a.name.localeCompare(b.name));
   const countryOpts = countries.map(c=>`<option value="${c.iso}">${c.name}</option>`).join('');
   const stateOpts   = usStates.map(c=>`<option value="${c.iso}">${c.name}</option>`).join('');
-  const opts = countryOpts + `<optgroup label="─── United States ───"></optgroup>` + stateOpts;
+  const opts = countryOpts + `<optgroup label="United States">${stateOpts}</optgroup>`;
   ['country-sel','trade-sel','forecast-sel','cmp-a','cmp-b'].forEach(id=>{
     const el = document.getElementById(id); if(el) el.innerHTML=opts;
   });
@@ -29628,7 +29654,6 @@ function ctrNewsSectionHTML(c, opts) {
       ? `<div class="ctr-rail-h">What is moving · third-party claims</div>`
       : `<div class="ctr-sec">
       <span class="ctr-sec-h">What is moving right now</span>
-      <span class="ctr-sec-d">third-party claims</span>
     </div>`}
     <p class="ctr-note" style="max-width:68ch;font-size:11px;">
       Headlines for the commodities ${_escFeed(c.name)} actually imports, most-depended-on first.
@@ -29651,8 +29676,7 @@ function _ctrMountCharts(c) {
   try { destroyChart('trade-trend-chart'); chartInstances['trade-trend-chart'] = mkTradeTrendChart('trade-trend-chart', c); } catch (e) {}
   try {
     destroyChart('fdrs-history-ct');
-    chartInstances['fdrs-history-ct'] = mkFDRSHistoryChart('fdrs-history-ct', c);
-    renderFDRSEvents('fdrs-hist-events-' + c.iso, c);
+    chartInstances['fdrs-history-ct'] = mkFDRSRecordChart('fdrs-history-ct', c);
   } catch (e) {}
   // Supplier doughnut — the same aggregation the supplier TABLE above it shows,
   // drawn. Falls back to the heritage flat list, and says so in its own title,
@@ -29735,6 +29759,26 @@ function ctrBarChart(rows, opts) {
 // its weight. An unscored component (no source data, omitted from the formula)
 // renders as an empty track and says so; it never draws a 0-length bar a reader
 // could mistake for a measured "resilient".
+/* The bars alone never summed to the headline: the amplifier, the live nowcast and (US states) the Feeding America
+   blend sit on top. Spell the chain out so the reader can add it up. */
+function ctrScoreArithmetic(c) {
+  const d = FoodShieldScore.decomposition(c.c, c._sce);
+  const renorm = d.base;   // contributions are already renormalised over the observed weight
+  const fmt = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1);
+  const parts = ['components <b>' + renorm.toFixed(1) + '</b>'];
+  if (d.amp >= 0.05) parts.push('amplifier <b>' + fmt(d.amp) + '</b>');
+  let line = parts.join(' ') + ' = structural <b>' + c._fdrsRaw + '</b>';
+  const fa = (LIVE.feeding_america || {})[c.iso];
+  if (c.iso.indexOf('US-') === 0 && fa && fa.food_insecurity_pct != null) {
+    const mmg = Math.max(0, Math.min(100, Math.round((fa.food_insecurity_pct - 5) / 15 * 75 + 10)));
+    line += ' · Feeding America blend 0.7 × ' + mmg + ' + 0.3 × ' + c._fdrsRaw + ' = <b>' + c._fdrsStructural + '</b>';
+  }
+  const adj = Number(c._fdrsAdj) || 0;
+  line += adj ? ' · live nowcast <b>' + (adj > 0 ? '+' : '−') + Math.abs(adj) + '</b>' : ' · live nowcast <b>0</b>';
+  line += ' → <b>' + c.fdrs + '</b>';
+  return '<p class="ctr-note ctr-arith">' + line + (d.observedWeight < 0.999 ? ' <span style="color:var(--t3)">(weights renormalised over the ' + Math.round(d.observedWeight * 100) + '% observed)</span>' : '') + '</p>';
+}
+
 function ctrScoreComponentsChart(c, comp9, labels, weights, weightsNum) {
   var decomposition = FoodShieldScore.decomposition(c.c, c._sce);
   var rows = decomposition.components.map(function (v, i) {
@@ -29781,9 +29825,10 @@ function ctrSupplierChart(supplierRows, cname) {
   const _named = _all.slice(0, 4);
   const _rest = _all.slice(4);
   const _restPct = _rest.reduce((a, s) => a + (s.pct || 0), 0);
+  const _restN = _rest.reduce((a, s) => a + (s.other ? (s.n || 1) : 1), 0);
   const _restKt = _rest.reduce((a, s) => a + (s.kt || 0), 0);
   const _shown = _restPct >= 1
-    ? _named.concat([{ name: `Other (${_rest.length})`, pct: Math.round(_restPct),
+    ? _named.concat([{ name: `Other (${_restN})`, pct: Math.round(_restPct),
                        kt: _restKt || null, _other: true }])
     : _named;
   const rows = _shown.map(s => ({
@@ -29796,16 +29841,16 @@ function ctrSupplierChart(supplierRows, cname) {
     color: s._other ? 'var(--t4)'
          : s.pct >= 50 ? '#c44b3c' : s.pct >= 30 ? '#d27a3e' : 'var(--accent)',
     title: s._other
-      ? `The remaining ${s.pct}% of ${cname}’s tracked food imports, spread across `
+      ? `The remaining ${s.pct}% of ${cname}’s cited food imports, spread across `
         + `suppliers outside the top four.`
-      : s.name + ' supplies ' + s.pct + '% of ' + cname + '’s tracked food imports'
+      : s.name + ' supplies ' + s.pct + '% of ' + cname + '’s cited food imports'
         + (s.kt ? ' (' + _ctrKt(s.kt) + ')' : '') + '. '
         + (supplierRows.real ? 'Aggregated from cited bilateral flows.' : 'Heritage ranking: not from cited flows.')
   }));
   if (!rows.length) return '';
   return ctrBarChart(rows, {
     threshold: 30, thresholdLabel: '30% concentration threshold',
-    aria: 'Share of tracked food imports by supplier for ' + cname,
+    aria: 'Share of cited food imports by supplier for ' + cname,
     caption: (supplierRows.real ? 'Cited bilateral import flows' : 'Heritage ranking · share not cited')
       + ' · red ≥50%, orange ≥30%'
   });
@@ -29845,6 +29890,7 @@ function ctrCorridorChart(deps, cname) {
   });
 }
 
+function esc0(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]); }
 function renderCountryTab() {
   const c = byISO(document.getElementById('country-sel').value); if (!c) return;
   const col = riskColor(c.fdrs);
@@ -29854,13 +29900,13 @@ function renderCountryTab() {
   const compLabels = ['Staple import dependence','Supplier concentration','Production trend','Food inflation','Climate volatility','Conflict / logistics','Supply-chain exposure','Economic access','Grain reserve buffer'];
   const compWeights = ['23%','16%','11%','9%','9%','8%','6%','12%','6%'];
   const compW = [0.23,0.16,0.11,0.09,0.09,0.08,0.06,0.12,0.06];
-  // Migration-safe 9-vector (c[6] → live SCE fallback, c[7]/c[8] → 0).
+  // 9-vector: c[6] falls back to live SCE; any other missing component stays null (left out, never a zero).
   const ctSceFb = (typeof c._sce === 'number') ? c._sce : ((typeof supplyChainExposure === 'function') ? supplyChainExposure(c) : 0);
   const ctComp9 = [0,1,2,3,4,5,6,7,8].map(i => {
     const v = Array.isArray(c.c) ? c.c[i] : undefined;
     if (typeof v === 'number' && isFinite(v)) return v;
-    if (i === 6) return (typeof ctSceFb === 'number' && isFinite(ctSceFb)) ? ctSceFb : 0;
-    return 0;
+    if (i === 6) return (typeof ctSceFb === 'number' && isFinite(ctSceFb)) ? ctSceFb : null;
+    return null;
   });
   const ctEconProv  = (c?._provenance?.econ_access?.quality_flag) || (c?._provenance?.econ_access) || 'modeled';
   const ctGrainProv = (c?._provenance?.grain_buffer?.quality_flag) || (c?._provenance?.grain_buffer) || 'modeled';
@@ -29877,7 +29923,9 @@ function renderCountryTab() {
   const isExporter = c.net >= 0;
   const netCol = isExporter ? '#6ba36b' : '#c44b3c';
   const importsTotal = Math.abs(Math.min(c.net,0)/1000).toFixed(1);
-  const exportsTotal = Math.max(c.net,0)/1000 > 0 ? (c.net/1000).toFixed(1) : '< 1';
+  /* Gross food exports (FAOSTAT), not the net balance this line used to print. */
+  const nft = (LIVE.net_food_trade || {})[c.iso] || {};
+  const exportsTotal = typeof nft.exports_musd === 'number' ? (nft.exports_musd >= 1000 ? (nft.exports_musd / 1000).toFixed(1) + 'B' : Math.round(nft.exports_musd) + 'M') : 'n/a';
 
   // The two components actually carrying the score, by weighted contribution.
   var driverDecomposition = FoodShieldScore.decomposition(c.c, ctSceFb);
@@ -29888,7 +29936,7 @@ function renderCountryTab() {
   const d1 = drivers[0], d2 = drivers[1];
 
   const deps = (typeof rankedDependencies === 'function') ? rankedDependencies(c) : [];
-  const worstHHI = deps.slice().sort((a,b) => b.hhi - a.hhi)[0] || null;
+  const worstHHI = deps.filter(d => !d.single).sort((a,b) => b.hhi - a.hhi)[0] || null;
   // v48.1 — pick the top dependency by cited TONNAGE, not by the leader's share.
   // deps[0] is share-ranked, which floats any commodity with a single cited
   // corridor to the top: Egypt showed "100% Flour, pasta & malt · Turkey · 1
@@ -29897,7 +29945,7 @@ function renderCountryTab() {
   // our citation coverage, not about the country's exposure — and it is the
   // most prominent number on the page, so it must not be an artifact.
   const topDep = (deps || [])
-    .filter(d => (d.totalKt || 0) > 0)
+    .filter(d => (d.totalKt || 0) > 0 && d.key !== 'fertilizer')
     .slice()
     .sort((a, b) => (b.totalKt || 0) - (a.totalKt || 0))[0] || deps[0] || null;
   const supMix = commoditySuppliers(c, null) || [];
@@ -29911,13 +29959,26 @@ function renderCountryTab() {
     let rows = null, real = false;
     if (deps.length) {
       const bySup = new Map();
-      deps.slice(0,12).forEach(d => (d.rows||[]).forEach(r => {
-        if (r.name && r.kt > 0) bySup.set(r.name, (bySup.get(r.name)||0) + r.kt);
+      /* Every cited dependency, once per corridor (paired labels such as Potatoes / Frozen potato carry the same rows),
+         and the share against ALL cited tonnage; the tail folds into "Other". It used to divide by the top six
+         suppliers of the top twelve commodities, which inflated the leader (Italy: Brazil 40% vs 6% of all tonnage). */
+      const seenRow = new Set();
+      /* Fertilizer is an input, not food: at 71% of Brazil's cited tonnage it swamped the food-import shares. */
+      deps.filter(d => d.key !== 'fertilizer').forEach(d => (d.rows||[]).forEach(r => {
+        if (!(r.name && r.kt > 0)) return;
+        const sig = r.name + '|' + r.kt + '|' + (r.year || '') + '|' + (r.src || r.source || '');
+        if (seenRow.has(sig)) return; seenRow.add(sig);
+        bySup.set(r.name, (bySup.get(r.name)||0) + r.kt);
       }));
       if (bySup.size) {
-        const ranked = [...bySup.entries()].sort((a,b) => b[1]-a[1]).slice(0,6);
-        const total = ranked.reduce((a,[,kt]) => a+kt, 0);
-        if (total > 0) { rows = ranked.map(([n,kt]) => ({ name:n, pct: Math.round(kt/total*100), kt })); real = true; }
+        const all = [...bySup.entries()].sort((a,b) => b[1]-a[1]);
+        const total = all.reduce((a,[,kt]) => a+kt, 0);
+        const ranked = all.slice(0,6), rest = all.slice(6);
+        if (total > 0) {
+          rows = ranked.map(([n,kt]) => ({ name:n, pct: Math.round(kt/total*100), kt }));
+          if (rest.length) { const okt = rest.reduce((a,[,kt]) => a+kt, 0); rows.push({ name: 'Other (' + rest.length + ')', pct: Math.round(okt/total*100), kt: okt, other: true, n: rest.length }); }
+          real = true;
+        }
       }
     }
     if (!rows) rows = supMix.slice().sort((a,b) => (b.pct||0)-(a.pct||0)).map(s => ({ name:s.name, pct:s.pct, kt:null }));
@@ -29941,11 +30002,13 @@ function renderCountryTab() {
   const topDepColor = topDepShare != null
     ? (topDepShare >= 50 ? '#c44b3c' : topDepShare >= 30 ? '#d27a3e' : 'var(--t1)')
     : (topSup && topSup.pct != null ? (topSup.pct >= 50 ? '#c44b3c' : topSup.pct >= 30 ? '#d27a3e' : 'var(--t1)') : 'var(--t1)');
-  const netTradeValue = `${c.net >= 0 ? '+' : ''}${(c.net/1000).toFixed(1)}B`;
+  /* Millions under $1B: small islands printed "−0.0B". */
+  const _ctrMoney = v => (Math.abs(v) >= 1000 ? (Math.abs(v) / 1000).toFixed(1) + 'B' : Math.round(Math.abs(v)) + 'M');
+  const netTradeValue = `${c.net >= 0 ? '+' : '−'}${_ctrMoney(c.net)}`;
   const netTradeMeta = `${isExporter ? 'net food exporter' : 'net food importer'} · agri-food USD`;
   const trendMeta = delta === 0
     ? 'no modeled change vs today'
-    : `${Math.abs(delta)} point${Math.abs(delta)===1?'':'s'} ${trendUp ? 'worse' : 'better'} vs today`;
+    : `${Math.abs(delta)} point${Math.abs(delta)===1?'':'s'} ${trendUp ? 'worse' : 'better'} than structural ${c._fdrsRaw}`;
   const denominatorNote = (topSup && topSup.name && supplierRows.real)
     ? `<div class="ctr-head-note"><b>${railSupplierLabel}</b> = ${railSupplierShareMeta}. The cited-flow mix below uses tracked bilateral food-import tonnage across commodities.</div>`
     : '';
@@ -29993,26 +30056,27 @@ function renderCountryTab() {
                 correlates 0.679 with severe food insecurity, so a hunger
                 component would largely double-count an existing weight. */''}
           <div class="ctr-head-cell">
+            <span class="ctr-head-lbl">${(typeof riskLabel === 'function') ? riskLabel(c.fdrs) : 'Risk'} · FDRS</span>
+            <span class="ctr-head-val" style="color:${col}">${c.fdrs}</span>
+            <span class="ctr-head-meta">${(() => {
+              /* The shared count (supply-chain exposure is computed live, so a null stored slot is not a gap). */
+              const comp = c._completeness || { real: 0, total: 9, missing: [] };
+              const split = (c._fdrsAdj ? ' · structural ' + c._fdrsStructural + (c._fdrsAdj > 0 ? ' + ' : ' − ') + Math.abs(c._fdrsAdj) + ' live' : '');
+              if (comp.real >= comp.total) return 'all ' + comp.total + ' components' + split;
+              return `<span style="color:#c9a957" title="Missing: ${esc0(comp.missing.join(', '))}. Missing components are left out and the observed weights renormalised; a partial score has less evidence.">${comp.real}/${comp.total} components</span>${split}`;
+            })()}</span>
+          </div>
+          <div class="ctr-head-cell">
             <span class="ctr-head-lbl">Undernourished</span>
             ${(() => {
               const a = (typeof calibrationAnchors === 'function') ? calibrationAnchors(c) : {};
               const u = a && a.undernourishment_pct;
               if (u == null) return '<span class="ctr-head-val" style="color:var(--t3)" title="FAO prevalence of undernourishment is not published for this country.">n/a</span>'
-                + '<span class="ctr-head-meta">FAO · undernourishment figure unavailable</span>';
-              return `<span class="ctr-head-val" style="color:${u >= 20 ? '#d23a2a' : (u >= 10 ? '#e0b94a' : 'var(--t1)')}">${u}%</span>`
+                + '<span class="ctr-head-meta">FAO publishes no figure for this area</span>';
+              /* The World Bank series floors at 2.5: it means "under 2.5%", not 2.5%. */
+              return `<span class="ctr-head-val" style="color:${u >= 20 ? '#d23a2a' : (u >= 10 ? '#e0b94a' : 'var(--t1)')}">${u <= 2.5 ? '&lt;2.5' : u}%</span>`
                 + `<span class="ctr-head-meta" title="FAO prevalence of undernourishment, via World Bank SN.ITK.DEFC.ZS. An OUTCOME measure, how many people are actually undernourished, and independent of the FDRS exposure score beside it.">FAO · share of population</span>`;
             })()}
-          </div>
-          <div class="ctr-head-cell">
-            <span class="ctr-head-lbl">${(typeof riskLabel === 'function') ? riskLabel(c.fdrs) : 'Risk'} · FDRS</span>
-            <span class="ctr-head-val" style="color:${col}">${c.fdrs}</span>
-            <span class="ctr-head-meta">${(() => {
-              const vec = Array.isArray(c.c) ? c.c : [];
-              const have = vec.filter((v, i) => i < 9 && v != null).length;
-              if (have >= 9) return 'FDRS · all 9 components sourced';
-              const miss = 9 - have;
-              return `<span style="color:#c9a957" title="Missing components are omitted and observed weights are renormalised; a partial score has less evidence.">FDRS · ${have}/9 components · ${miss} not sourced</span>`;
-            })()}</span>
           </div>
           ${/* v54: the Band cell is gone. A score and its band are the same
                 fact stated twice, once as a number and once as a word; giving
@@ -30025,11 +30089,6 @@ function renderCountryTab() {
             <span class="ctr-head-lbl">${topDepLabel}</span>
             <span class="ctr-head-val" style="color:${topDepColor}">${topDepValue}</span>
             <span class="ctr-head-meta">${topDepMeta}</span>
-          </div>
-          <div class="ctr-head-cell">
-            <span class="ctr-head-lbl">Concentration</span>
-            <span class="ctr-head-val" style="color:${riskCol(concentration)}">${concentration != null ? concentration : '—'}</span>
-            <span class="ctr-head-meta">top-5 import sources · 0–100</span>
           </div>
           <div class="ctr-head-cell">
             <span class="ctr-head-lbl">Net trade</span>
@@ -30060,11 +30119,11 @@ function renderCountryTab() {
             })()}</p>`
           : `<p class="ctr-read">Structural detail is not yet sourced for this country, so the read below rests on the score components alone. <b>Treat it as low confidence.</b></p>`}
         <p class="ctr-read">
-          Most of the score comes from <b>${d1.label.toLowerCase()}</b> (<span class="num">${d1.v}</span>/100, ${d1.wLabel} of the weight)
-          and <b>${d2.label.toLowerCase()}</b> (<span class="num">${d2.v}</span>/100, ${d2.wLabel}).
+          Most of the score comes from <b>${d1.label.toLowerCase()}</b> (<span class="num">${Math.round(d1.v)}</span>/100, ${d1.wLabel} of the weight)
+          and <b>${d2.label.toLowerCase()}</b> (<span class="num">${Math.round(d2.v)}</span>/100, ${d2.wLabel}).
           The 2030 modeled outlook is <span class="num" style="color:${riskColor(c.f2030)}">${c.f2030}</span> —
           ${delta === 0 ? 'unchanged' : `<span style="color:${trendCol}">${Math.abs(delta)} point${Math.abs(delta)===1?'':'s'} ${trendUp ? 'worse' : 'better'}</span>`}.
-          That figure is a curated baseline plus a small modeled overlay, <b>not a back-tested forecast</b>.
+          Curated baseline plus a modeled overlay, <b>not a tested forecast</b>.
         </p>
         ${countryRestrictionFlagHTML(c.iso)}
       </div>
@@ -30075,12 +30134,12 @@ function renderCountryTab() {
 
     <!-- ═══ 01 · HOW EXPOSED ═══ -->
     <div class="ctr-sec">
-      <span class="ctr-sec-h">What could break first</span>
-      <span class="ctr-sec-d">the indicators behind the score</span>
+      <span class="ctr-sec-h">What drives the score</span>
     </div>
 
-    <p class="ctr-lead">Why the score is <span class="num" style="color:${col}">${c.fdrs}</span>: the nine components below, each scored 0–100 and ordered by how much of the composite it actually carries: its own value times its weight. Hover a bar for the arithmetic.</p>
+    <p class="ctr-lead">Why the score is <span class="num" style="color:${col}">${c.fdrs}</span>: nine components scored 0–100, sorted by points contributed (value × weight).</p>
     ${ctrScoreComponentsChart(c, ctComp9, compLabels, compWeights, compW)}
+    ${ctrScoreArithmetic(c)}
     ${chartSourceFooter('Composite · 9 weighted components · FAO + USDA + WB + ND-GAIN + INFORM + WGI + LPI', (sourceManifestSummary()||{}).loaded_at)}
 
     <div class="ctr-h">The indicators underneath</div>
@@ -30109,11 +30168,15 @@ function renderCountryTab() {
       //
       // The per-field provenance is already carried on c._provenance (populated
       // at :16556) and was simply never read here.
-      const calCell = (cal, td) => {
+      /* Which balance the "% of trade" came from: a country's own USDA row, the EU bloc's, or the menu heuristic. */
+      let basisTag = '';
+      const calCell = (cal, td, crop) => {
+        const b = crop ? commodityTradeBasis(c, crop) : null;
+        basisTag = b === 'psd-eu27' ? ' (EU-27 bloc, extra-EU)' : b === 'heuristic' ? ' (heuristic)' : '';
         const v = cal == null ? '<span style="color:var(--t3)">not sourced</span>'
                 : cal === 0   ? '&lt;0.5%'
                               : cal + '%';
-        return v + (td != null ? ` <span style="color:var(--t3)">· ${td}% of trade</span>` : '');
+        return v + (td != null ? ` <span style="color:var(--t3)">· ${td}% of trade${basisTag}</span>` : '');
       };
       // Label the row by what the field IS for this country, not by what the
       // field is nominally meant to hold.
@@ -30132,13 +30195,18 @@ function renderCountryTab() {
           : name + ', share of calories';
       };
       const rows = [];
-      rows.push([calLabel('w', 'Wheat'), calCell(c.w, wTd), calBasis('w'), '', TIP_COMMODITY]);
-      rows.push([calLabel('r', 'Rice'), calCell(c.r, rTd), calBasis('r'), '', TIP_COMMODITY]);
-      rows.push(['Food inflation',
-        `<span style="color:${inflVal > 15 ? '#c44b3c' : inflVal > 8 ? '#d27a3e' : 'var(--t1)'}">${Number(inflVal).toFixed(1)}%/yr</span>${inflVal > 15 ? ' <span style="color:#c44b3c" title="Above the 15% shock threshold">▲</span>' : inflVal > 8 ? ' <span style="color:#d27a3e">▲</span>' : ''}`,
-        liveInfl != null ? (inflSrc || 'live feed') : 'legacy value: no live feed for this country',
-        '', 'Live food-inflation. Source priority: HungerMap > Eurostat > FAOSTAT > World Bank fallback.']);
-      if (c.c && c.c[1] != null) rows.push(['Supplier concentration', `<span style="color:${riskColor(c.c[1])}">${c.c[1]}</span>/100`, 'HHI of the top-5 import sources', '', '100 = single-source monopoly; 0 = perfectly diversified.']);
+      rows.push([calLabel('w', 'Wheat'), calCell(c.w, wTd, 'Wheat'), calBasis('w'), '', TIP_COMMODITY]);
+      rows.push([calLabel('r', 'Rice'), calCell(c.r, rTd, 'Rice'), calBasis('r'), '', TIP_COMMODITY]);
+      /* Same chain as every other surface (foodInflation); all-items CPI is labelled as such, and an old year says so. */
+      const fiv = foodInflation(c);
+      const fiYear = fiv ? Math.max(0, ...((String(fiv.src || '') + ' ' + String(fiv.label || '')).match(/\b(19|20)\d{2}\b/g) || []).map(Number)) : 0;
+      const fiStale = fiYear && fiYear < new Date().getFullYear() - 1;
+      if (fiv) rows.push([fiv.food ? 'Food inflation' : 'Inflation (all items)',
+        `<span style="color:${fiv.v > 15 ? '#c44b3c' : fiv.v > 8 ? '#d27a3e' : 'var(--t1)'}">${fiv.v.toFixed(1)}%/yr</span>${fiv.v > 15 ? ' <span style="color:#c44b3c" title="Above the 15% shock threshold">▲</span>' : fiv.v > 8 ? ' <span style="color:#d27a3e">▲</span>' : ''}`,
+        esc0(fiv.src || 'live feed') + (fiStale ? ' <span style="color:#c9a957">· stale</span>' : ''),
+        '', 'Source priority: HungerMap > World Bank RTFP > Eurostat > FAOSTAT > World Bank all-items CPI.']);
+      else rows.push(['Food inflation', '<span style="color:var(--t3)">not sourced</span>', 'no feed covers this country', '', '']);
+      if (c.c && c.c[1] != null) rows.push(['Supplier concentration', `<span style="color:${riskColor(c.c[1])}">${c.c[1]}</span>/100`, 'damped HHI of import sources', '', '100 = single-source monopoly; 0 = perfectly diversified.']);
       rows.push(['Supply-chain exposure', `<span style="color:${riskColor(sce)}">${sce}</span>/100`, 'composite of sourced inputs',
         (typeof provenanceBadge === 'function') ? provenanceBadge((typeof sceProvenance === 'function') ? sceProvenance(c) : 'modeled') : '', TIP_SCE]);
       if (c.c && c.c[4] != null) rows.push(['Climate volatility', `<span style="color:${riskColor(c.c[4])}">${c.c[4]}</span>/100`, 'ND-GAIN · Aqueduct · CCKP', '', 'Climate vulnerability composite, where sourced.']);
@@ -30156,7 +30224,7 @@ function renderCountryTab() {
           </tbody>
         </table>
       </div>
-      ${chartSourceFooter('FAOSTAT TCL · USDA PSD trade dependency · HungerMap food CPI · ND-GAIN · INFORM', chartSourceTime('faostat_trade'))}`;
+      ${chartSourceFooter('FAOSTAT food balance · USDA PSD trade dependency · food CPI chain (HungerMap, RTFP, Eurostat, FAOSTAT) · ND-GAIN · Aqueduct · INFORM · WGI · LPI', chartSourceTime('faostat_trade'))}`;
     })()}
 
     <details class="ctr-more" ontoggle="_ctrRemount()">
@@ -30173,8 +30241,8 @@ function renderCountryTab() {
                   // A stored null at c[7]/c[8] means UNSCORED (no source data; counts 0 =
                   // resilient in the formula). Render "—", never a 0 a reader could mistake
                   // for a genuinely scored zero (e.g. the Netherlands' economic access).
-                  const un = (i===7||i===8) && !(Array.isArray(c.c) && typeof c.c[i]==='number' && isFinite(c.c[i]));
-                  if (un) return `<tr style="opacity:.55" title="${tip ? tip.replace(/"/g,'&quot;')+' · ' : ''}No source data for this country; the component is counted 0 (resilient) in the score rather than estimated.">
+                  const un = v == null;
+                  if (un) return `<tr style="opacity:.55" title="${tip ? tip.replace(/"/g,'&quot;')+' · ' : ''}No source data for this country; the component is left out and the other weights renormalised.">
                     <td class="nm">${compLabels[i]} <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:var(--t3);">NO DATA · left out, weights renormalised</span></td>
                     <td class="num">${compWeights[i]}</td>
                     <td class="num" style="color:var(--t3)">—</td>
@@ -30187,7 +30255,7 @@ function renderCountryTab() {
                 }).join('')}
                 ${(function(){
                   // Bounded double-bind amplifier (import-dep × economic-access), capped +6, MODELED.
-                  const amp = (typeof fdrsV2Amp === 'function') ? fdrsV2Amp(ctComp9, ctSceFb) : 0;
+                  const amp = FoodShieldScore.decomposition(c.c, ctSceFb).amp || 0;
                   if (c.iso && c.iso.startsWith('US-')) return '';
                   const ampZero = amp < 0.05;
                   // A 0 amplifier is information, not absence — always render the row.
@@ -30207,7 +30275,7 @@ function renderCountryTab() {
           </div>
           <div>
             <div class="ctr-h" style="margin-top:0">Shape of the risk</div>
-            <div class="ctr-note">The same nine components, drawn: useful for spotting whether exposure is broad or concentrated in one axis.</div>
+            <div class="ctr-note">The same nine components as a radar. A missing component is a gap, not a zero.</div>
             <div style="display:flex;justify-content:center;align-items:center;height:260px;">
               <canvas id="radar-ct" style="max-height:260px;max-width:340px;"></canvas>
             </div>
@@ -30218,11 +30286,10 @@ function renderCountryTab() {
     </details>
 
     <details class="ctr-more" ontoggle="_ctrRemount()">
-      <summary>Where the score has been since 2018 <span class="ctr-more-count">illustrative reconstruction, not observed</span></summary>
+      <summary>The score's daily record <span class="ctr-more-count">${(function(){ const r = fdrsRecord(c); return r.length ? r.length + ' days since ' + r[0].date : 'no days on record'; })()}</span></summary>
       <div class="ctr-more-body">
-        <div class="ctr-note">Reconstructed from the current score, the 2030 trajectory, and known global shocks (COVID 2020, Ukraine 2022, El Niño 2023). <b>Illustrative reconstruction, not observed.</b> Source: FoodShield reconstruction; current model as of ${fdrsDataDate() || 'unavailable'}.</div>
+        <div class="ctr-note">One stored snapshot a day (data/fdrs_history.json). The structural score is the nine-component composite; the live line adds the nowcast and starts when the snapshot began storing it. A change of method breaks the line, because scores from two methods do not compare.</div>
         <div style="height:200px;"><canvas id="fdrs-history-ct"></canvas></div>
-        <div style="margin-top:14px;"><div class="fdrs-hist-timeline" id="fdrs-hist-events-${c.iso}"></div></div>
       </div>
     </details>
 
@@ -30264,19 +30331,21 @@ function renderCountryTab() {
     <!-- ═══ 02 · WHO IT DEPENDS ON ═══ -->
     <div class="ctr-sec">
       <span class="ctr-sec-h">Where the food comes from</span>
-      <span class="ctr-sec-d">suppliers · concentration · chokepoints</span>
     </div>
 
     ${(function(){
       const parts = [];
-      if (supplierRows.rows.length && supplierRows.rows[0].pct) {
+      if (supplierRows.rows.length && supplierRows.rows[0].pct && !supplierRows.real) {
         const r0 = supplierRows.rows[0];
-        parts.push(`<b>${c.name}</b> draws <span class="num" style="color:${r0.pct>=50?'#c44b3c':r0.pct>=30?'#d27a3e':'var(--t1)'}">${r0.pct}%</span> of its tracked food imports from <b>${r0.name}</b>${supplierRows.rows[1] ? `, and ${supplierRows.rows[1].pct}% from ${supplierRows.rows[1].name}` : ''}.`);
+        parts.push(`The older supplier ranking for <b>${c.name}</b> puts <b>${r0.name}</b> first (${r0.pct}%, unsourced share); no bilateral food flows are cited.`);
+      } else if (supplierRows.rows.length && supplierRows.rows[0].pct) {
+        const r0 = supplierRows.rows[0];
+        parts.push(`<b>${c.name}</b> draws <span class="num" style="color:${r0.pct>=50?'#c44b3c':r0.pct>=30?'#d27a3e':'var(--t1)'}">${r0.pct}%</span> of its cited food imports from <b>${r0.name}</b>${supplierRows.rows[1] ? `, and ${supplierRows.rows[1].pct}% from ${supplierRows.rows[1].name}` : ''}.`);
       }
       if (topDep) {
         // "highest-risk", not "largest" — rankedDependencies sorts by the risk
         // score (concentration × single-supplier reliance × food weight), not by tonnage.
-        parts.push(`Its highest-risk dependency is <b>${topDep.label}</b>: <span class="num">${_ctrKt(topDep.totalKt)}</span> of it, <span class="num">${_ctrPct(topDep.topShare)}</span> from ${topDep.topSupplier}.`);
+        parts.push(`Its largest cited dependency is <b>${topDep.label}</b>: <span class="num">${_ctrKt(topDep.totalKt)}</span> of it, <span class="num">${_ctrPct(topDep.topShare)}</span> from ${topDep.topSupplier}.`);
       }
       if (worstHHI) {
         const tier = worstHHI.hhi>2500?'highly concentrated':worstHHI.hhi>1500?'moderately concentrated':'competitively supplied';
@@ -30290,13 +30359,19 @@ function renderCountryTab() {
 
     ${(function(){
       // The chokepoint verdict — a left rule, not another bordered card.
-      const topPct = topSup.pct || 0;
-      const topName = topSup.name || '';
+      /* The verdict reads the same aggregate as the sentence above it (all cited tonnage), not one basis
+         commodity's Comtrade share; a supplier list built from a single mirror row is not a chokepoint finding. */
+      const lead = supplierRows.real ? supplierRows.rows.find(r => !r.other) : null;
+      const topPct = lead ? lead.pct : (topSup.pct || 0);
+      const topName = lead ? lead.name : (topSup.name || '');
       const topImport = importItems[0] || 'food imports';
+      if ((fieldProvenance(c, 'supPct') || {}).coverage === 'top_partner_only' && !lead) {
+        return `<div class="ctr-absence" style="border-left-color:var(--t3)"><span class="tag" style="color:var(--t3)">no chokepoint finding</span>The supplier share on record is one mirror-trade row, too thin to call a chokepoint.</div>`;
+      }
       if (!topName || concentration < 35) {
         return `<div class="ctr-absence" style="border-left-color:#6ba36b">
           <span class="tag" style="color:#6ba36b">no chokepoint flagged</span>
-          Top-2 supplier concentration is <b>${concentration}/100</b>, below the 35 threshold at which we call concentration a risk. The supplier and commodity detail below still applies.
+          Supplier-concentration component (damped HHI) is <b>${concentration}/100</b>, below the 35 threshold at which we call concentration a risk. The supplier and commodity detail below still applies.
         </div>`;
       }
       const sev = concentration > 60 ? 'severe' : 'moderate';
@@ -30312,17 +30387,16 @@ function renderCountryTab() {
       return `<div class="ctr-absence" style="border-left-color:${ccol};border-left-width:3px;background:${ctint};padding:14px 16px;border-radius:2px;">
         <span class="tag" style="color:${ccol}">${sev === 'severe' ? 'severe chokepoint risk' : 'moderate concentration risk'}</span>
         <span style="color:var(--t2);font-size:12.5px;line-height:1.7;">
-          <b>${c.name}</b> sources <b style="color:${ccol}">${topPct}%</b> of its tracked food imports from <b>${topName}</b>, with ${_escFeed(String(topImport).toLowerCase())} first in its structural import basket.
-          A route disruption or political event in ${topName} would reach ${c.name}'s food supply within ${sev === 'severe' ? 'weeks' : 'months'}: at this concentration there is little diversified fallback among its other suppliers.
-          Top-2 concentration index <b>${concentration}/100</b> across <b>${importItems.length}</b> tracked critical food imports.
+          <b>${c.name}</b> sources <b style="color:${ccol}">${topPct}%</b> of its ${lead ? 'cited food imports' : _escFeed(supplierBasisLabelLc) + ' imports'} from <b>${topName}</b>. A disruption in ${topName} would hit that share directly.
+          Supplier-concentration component (damped HHI) <b>${concentration}/100</b>.
         </span>
       </div>`;
     })()}
 
     <div class="ctr-h">Suppliers, ranked</div>
     <div class="ctr-note">${supplierRows.real
-      ? 'Aggregated from this country’s <b>cited bilateral import flows</b>: each supplier’s tonnage summed across its top imported commodities.'
-      : 'Heritage supplier ranking: <b>not</b> derived from cited bilateral flows.'} ${structuralCaption(c, 'suppliers', 'Structural supplier ranking')}</div>
+      ? 'Each supplier’s tonnage summed across every <b>cited bilateral food flow</b> (fertilizer excluded), as a share of all cited tonnage.'
+      : 'Older ranking, <b>not</b> from cited flows: shares are unsourced. ' + structuralCaption(c, 'suppliers', 'Structural supplier ranking')}</div>
     ${ctrSupplierChart(supplierRows, c.name)}
     ${/* v55 — the supplier TABLE is gone. This one aggregation was drawn three
           times on a single page: as SVG bars directly above, as this table, and
@@ -30337,10 +30411,10 @@ function renderCountryTab() {
 
     ${deps.length ? `
     <div class="ctr-h">Import dependencies, ranked by risk</div>
-    <div class="ctr-note">Scored from cited bilateral flows: concentration × single-supplier reliance × food-security weight. Select a row for the full supplier mix and volumes.
+    <div class="ctr-note">Score = concentration × single-supplier reliance × food-security weight, from cited flows. A commodity with one cited corridor ranks last: its 100% share measures our coverage, not the country. Select a row for all suppliers.
       <button type="button" class="tr-method-link" onclick="scrollTradeMethod()">how this is scored ↗</button></div>
     <div class="ctr-tbl-wrap">
-      <table class="ctr-tbl">
+      <table class="ctr-tbl ctr-risk">
         <thead><tr>
           <th>Commodity</th><th style="width:120px">Risk</th><th class="num">Score</th>
           <th>Top supplier</th><th class="num">Share</th><th class="num">Volume</th><th class="num">HHI</th><th class="num">Basis</th>
@@ -30348,8 +30422,8 @@ function renderCountryTab() {
         <tbody>
           ${deps.slice(0,8).map(d => `<tr class="rowlink" tabindex="0" role="button"
               aria-label="Open the supplier mix and volumes for ${_ctrQ(d.label)}"
-              onclick="openCommodityDrilldown('${_ctrQ(d.label)}','${c.iso}')" onkeydown="_kbdClick(event)">
-            <td class="nm">${d.label}</td>
+              onclick="openCommodityDrilldown('${_ctrQ(d.label)}','${c.iso}',{stay:true})" onkeydown="_kbdClick(event)">
+            <td class="nm">${d.label}${d.single ? ' <span style="color:var(--t3);font-size:10px;white-space:nowrap">· 1 corridor</span>' : ''}</td>
             <td>${_ctrMeter(d.score, riskCol(d.score))}</td>
             <td class="num" style="color:${riskCol(d.score)}">${d.score}</td>
             <td>${_escFeed(d.topSupplier)}</td>
@@ -30365,7 +30439,7 @@ function renderCountryTab() {
     <details class="ctr-more" ontoggle="_ctrRemount()">
       <summary>${deps.length ? 'The structural food-import basket, and the supplier mix drawn' : 'The structural food-import basket'} <span class="ctr-more-count">${importItems.length} line${importItems.length===1?'':'s'} · rank order only, share not cited</span></summary>
       <div class="ctr-more-body">
-        <div class="ctr-note">This is the curated structural snapshot the risk score reads. It is kept apart from the cited-flow ranking above because <b>only its rank order is structural</b>: it carries no sourced share. ${structuralCaption(c, 'imports', 'Food-only structural snapshot')}</div>
+        <div class="ctr-note">This is the curated structural snapshot the risk score reads. Order only: <b>no sourced shares</b>. ${structuralCaption(c, 'imports', 'Food-only structural snapshot')}</div>
         ${importItems.length ? `
         <div class="ctr-tbl-wrap">
           <table class="ctr-tbl">
@@ -30379,7 +30453,7 @@ function renderCountryTab() {
                 const fb = (commoditySuppliers(c, im)[0] || {}).name || '';
                 return `<tr class="rowlink" tabindex="0" role="button"
                     aria-label="Open the supplier mix and volumes for ${_ctrQ(im)}"
-                    onclick="openCommodityDrilldown('${_ctrQ(im)}','${c.iso}')" onkeydown="_kbdClick(event)">
+                    onclick="openCommodityDrilldown('${_ctrQ(im)}','${c.iso}',{stay:true})" onkeydown="_kbdClick(event)">
                   <td class="num" style="text-align:left;color:var(--t3)">${String(i+1).padStart(2,'0')}</td>
                   <td class="nm">${im}</td>
                   <td>${s ? _escFeed(s.name) : (fb ? _escFeed(fb) : '<span style="color:var(--t-meta)">not cited</span>')}</td>
@@ -30403,16 +30477,14 @@ function renderCountryTab() {
     <!-- ═══ 03 · WHAT FLOWS ═══ -->
     <div class="ctr-sec">
       <span class="ctr-sec-h">The flows in detail</span>
-      <span class="ctr-sec-d">commodity tonnage · cited corridors</span>
     </div>
 
     <p class="ctr-lead">
       ${c.name} runs a net agri-food ${isExporter ? 'surplus' : 'deficit'} of
-      <span class="num" style="color:${netCol}" title="${provenanceTooltip(c, 'net')}">${isExporter?'+':''}${(c.net/1000).toFixed(1)}B USD</span>
+      <span class="num" style="color:${netCol}" title="${provenanceTooltip(c, 'net')}">${_ctrMoney(c.net)} USD</span>
       ${provenanceBadge(fieldProvenance(c, 'net')?.quality_flag || 'legacy_curated')} —
       <b>${isExporter ? 'a net food exporter' : 'a net food importer'}</b>.
-      ${isExporter ? '' : `That is roughly <span class="num">$${importsTotal}B</span> more food bought than sold each year.`}
-      The tables below are cited bilateral tonnage, not dollar value, so the two figures answer different questions.
+      The tables below are in tonnes, not dollars.
     </p>
 
     ${/* v52 — the second live-confidence banner is gone. liveFeedWarningHTML
@@ -30432,7 +30504,7 @@ function renderCountryTab() {
       const ch = ctrCorridorChart(deps, c.name);
       if (!ch) return '';
       return `<div class="ctr-h">Top import corridors</div>
-        <div class="ctr-note">Supplier → commodity, by cited bilateral tonnage. The whole-world corridor picture lives on the Global Map tab; this is only what reaches ${_escFeed(c.name)}.</div>
+        <div class="ctr-note">Supplier → commodity, by cited tonnage.</div>
         ${ch}`;
     })()}
 
@@ -30456,7 +30528,7 @@ function renderCountryTab() {
             <thead><tr><th>Commodity</th><th style="width:110px">Share</th><th class="num">Volume</th><th class="num">Top supplier</th></tr></thead>
             <tbody>${rows.slice(0,10).map(r => `<tr class="rowlink" tabindex="0" role="button"
                 aria-label="Open the supplier mix and volumes for ${_ctrQ(r.label)}"
-                onclick="openCommodityDrilldown('${_ctrQ(r.label)}','${c.iso}')" onkeydown="_kbdClick(event)">
+                onclick="openCommodityDrilldown('${_ctrQ(r.label)}','${c.iso}',{stay:true})" onkeydown="_kbdClick(event)">
               <td class="nm">${r.label}</td>
               <td>${_ctrMeter(Math.round(r.kt/grand*100), '#c44b3c')}</td>
               <td class="num">${_ctrKt(r.kt)}</td>
@@ -30484,14 +30556,14 @@ function renderCountryTab() {
             <thead><tr><th>Commodity</th><th style="width:110px">Share</th><th class="num">Volume</th><th class="num">Top destination</th></tr></thead>
             <tbody>${rows.slice(0,10).map(r => `<tr class="rowlink" tabindex="0" role="button"
                 aria-label="Open the destination mix and volumes for ${_ctrQ(r.label)}"
-                onclick="openCommodityDrilldown('${_ctrQ(r.label)}','${c.iso}')" onkeydown="_kbdClick(event)">
+                onclick="openCommodityDrilldown('${_ctrQ(r.label)}','${c.iso}',{stay:true})" onkeydown="_kbdClick(event)">
               <td class="nm">${r.label}</td>
               <td>${_ctrMeter(Math.round(r.kt/grand*100), '#6ba36b')}</td>
               <td class="num">${_ctrKt(r.kt)}</td>
               <td class="num" style="font-size:11px;">${r.topName ? _ctrPct(r.topShare) + ' ' + _escFeed(r.topName) : '—'}</td>
             </tr>`).join('')}</tbody>
           </table></div>
-          <div class="ctr-note" style="margin-top:9px;">Cited export tonnage · share of country total · ${exportsTotal}B USD</div>`;
+          <div class="ctr-note" style="margin-top:9px;">Cited export tonnage · share of country total · gross food exports ${exportsTotal} USD (FAOSTAT)</div>`;
         })()}
       </div>
     </div>
@@ -30531,7 +30603,6 @@ function renderCountryTab() {
     <!-- ═══ 04 · HOW WE KNOW ═══ -->
     <div class="ctr-sec">
       <span class="ctr-sec-h">How we know</span>
-      <span class="ctr-sec-d">provenance · sources · method</span>
     </div>
 
     ${/* v56 — the four trust cards are folded. Each carries a badge, source
@@ -30545,7 +30616,7 @@ function renderCountryTab() {
           check basis can, and a reader who does not is not made to scroll past
           it. */''}
     <details class="ctr-more">
-      <summary>Where these trade figures come from <span class="ctr-more-count">import basket · supplier mix · export basket · destination mix: basis, coverage and as-of for each</span></summary>
+      <summary>Where these trade figures come from <span class="ctr-more-count">source, basis and date per table</span></summary>
       <div class="ctr-more-body">
         ${tradeTrustGridHTML(c)}
       </div>
@@ -30573,50 +30644,8 @@ function renderCountryTab() {
         while the main column carries what they READ THROUGH. -->
    <aside class="ctr-rail">
 
-     ${/* v53 — the rail's Risk block is gone. It reprinted the score, the band
-           and the 2030 outlook that the head board shows at the top of the same
-           screen, plus a second copy of the "not a back-tested forecast"
-           caveat. A rail earns its column by showing what the main text does
-           not; repeating the headline number is not a glance aid, it is the
-           same number twice. The 2030 outlook was printed FOUR times on this
-           page — head board, driver paragraph, folded analysis card, and here.
-           Kept: the two figures below that appear nowhere else. */''}
-     <div class="ctr-rail-sec">
-       <div class="ctr-rail-h">Key figures</div>
-       <div class="ctr-kf">
-         ${/* v53 — three rows removed from this rail, and the whole Risk block
-               above it.
-
-               Risk block: reprinted the score, the band and the 2030 outlook
-               that the head board shows at the top of the same screen, plus a
-               second copy of the "not a back-tested forecast" caveat. The 2030
-               figure was on this page FOUR times — head board, driver
-               paragraph, folded analysis card, and here. A rail earns its
-               column by showing what the main text does not.
-
-               Largest supplier + concentration: both already in the head board.
-               The supplier row was the worse copy — it used a DIFFERENT
-               denominator from the head board's, which is why the page carried
-               a `denominatorNote` whose only job was stopping readers
-               conflating the two. Delete the duplicate, delete the note that
-               existed to explain it.
-
-               What remains below appears nowhere else on the page. */''}
-         <div class="ctr-kf-row">
-           <span class="ctr-kf-lbl">Staple import dependence</span>
-           <span class="ctr-kf-val" style="color:${riskCol(ctComp9[0])}">${(Array.isArray(c.c) && c.c[0] != null) ? c.c[0] : '—'}<span class="sub">component · 0–100</span></span>
-         </div>
-         <div class="ctr-kf-row">
-           <span class="ctr-kf-lbl">Net food trade</span>
-           <span class="ctr-kf-val" style="color:${netCol}" title="${provenanceTooltip(c, 'net')}">${netTradeValue}<span class="sub">USD · ${isExporter ? 'net exporter' : 'net importer'}</span></span>
-         </div>
-         ${worstHHI ? `<div class="ctr-kf-row">
-           <span class="ctr-kf-lbl">Most concentrated flow</span>
-           <span class="ctr-kf-val">${Math.round(worstHHI.hhi).toLocaleString()}<span class="sub">HHI · ${worstHHI.label || worstHHI.name || ''}</span></span>
-         </div>` : ''}
-       </div>
-     </div>
-
+     ${/* The rail's key figures and biggest-flow list are gone: every number in them was already in the head board,
+           the lead paragraph or the Imports table. The rail carries headlines only. */''}
      ${/* v51 — country-axis headlines replace the commodity-axis section here.
            The old block picked the country's top commodities and listed
            headlines per commodity; on a country page the reader is asking what
@@ -30626,39 +30655,8 @@ function renderCountryTab() {
      ${(typeof countryNewsBlockHTML === 'function')
         ? `<div class="ctr-rail-sec">${countryNewsBlockHTML(c.iso, c.name)}</div>` : ''}
 
-     ${(() => {
-       // Rank by VOLUME, not by the leader's share. Ranking on share alone floats
-       // commodities that have exactly one cited corridor to the top: a single
-       // 22kt flow reads as "100% from Turkey" and outranks wheat at 69% of
-       // millions of tonnes. Those are cited-coverage artifacts, not dependencies.
-       // A one-corridor commodity is still shown when it is genuinely large, but
-       // it is labelled so the 100% is not read as concentration.
-       const ranked = (deps || [])
-         .filter(d => (d.totalKt || 0) > 0)
-         .slice()
-         .sort((a, b) => (b.totalKt || 0) - (a.totalKt || 0))
-         .slice(0, 5);
-       if (!ranked.length) return '';
-       return `<div class="ctr-rail-sec">
-         <div class="ctr-rail-h">Biggest import flows</div>
-         <div class="ctr-kf">
-           ${ranked.map(d => {
-             const rows = (d.rows || []).filter(r => (r.kt || 0) > 0);
-             const lead = rows.slice().sort((a,b) => (b.kt||0)-(a.kt||0))[0];
-             const share = (lead && d.totalKt) ? Math.round((lead.kt / d.totalKt) * 100) : null;
-             const single = rows.length === 1;
-             return `<div class="ctr-kf-row">
-               <span class="ctr-kf-lbl">${d.label || d.name || ''}<span style="display:block;color:var(--t-meta);font-size:9px;letter-spacing:.05em;">${Math.round(d.totalKt).toLocaleString()} kt cited</span></span>
-               <span class="ctr-kf-val">${share != null ? share + '%' : '—'}<span class="sub">${lead && lead.name ? lead.name : 'no cited flow'}${single ? ' · 1 corridor' : ''}</span></span>
-             </div>`;
-           }).join('')}
-         </div>
-         <div class="ctr-note" style="margin-top:10px;">Ranked by cited tonnage. The percentage is the single largest supplier's share of that commodity. “1 corridor” means only one bilateral flow is cited, so the share reflects coverage, not concentration.</div>
-       </div>`;
-     })()}
-
      <div class="ctr-rail-sec">
-       <div class="ctr-note">Score components are one <b>modeled</b> vector; anything unsourced reads “no data”, never zero. Flows carry per-row provenance.
+       <div class="ctr-note">The score is <b>modeled</b>. Missing inputs show “no data”, not zero.
          <button type="button" class="ctr-link" style="padding:0;margin-left:4px;" onclick="showTab('methodology')">Method ↗</button>
        </div>
      </div>
@@ -30738,7 +30736,8 @@ function dependencyRisk(c, label){
   const fw = (typeof window!=='undefined' && window.FOOD_WEIGHT && key && typeof window.FOOD_WEIGHT[key]==='number')
     ? window.FOOD_WEIGHT[key] : 0.5;
   const risk = 100 * fw * (0.6*hhiNorm + 0.4*topShare);
-  return { score: Math.round(risk), hhi, topShare, foodWeight: fw,
+  const corridors = s.rows.filter(r => (r.kt || 0) > 0).length;
+  return { score: Math.round(risk), hhi, topShare, foodWeight: fw, corridors, single: corridors < 2,
            topSupplier: s.rows[0] ? s.rows[0].name : '—', totalKt: s.totalKt,
            observedShare: s.observedShare, rows: s.rows };
 }
@@ -30753,7 +30752,9 @@ function rankedDependencies(c){
     const dr = dependencyRisk(c, label);
     if (dr && dr.totalKt > 0) out.push({ key, label, ...dr });
   }
-  return out.sort((a,b)=> b.score - a.score);
+  /* One cited corridor makes HHI 10,000 and share 100% by construction: that measures citation coverage, not
+     exposure, so single-corridor commodities rank after every multi-corridor one. */
+  return out.sort((a,b)=> (a.single - b.single) || (b.score - a.score));
 }
 
 // Jump to the Methodology tab's trade-formula block from the Trade tab.
@@ -30870,7 +30871,7 @@ function renderScoreTab() {
                     let v = Array.isArray(c.c)?c.c[j]:undefined;
                     if (!(typeof v==='number' && isFinite(v))) {
                       if (j===6 && typeof sceFb==='number' && isFinite(sceFb)) v = Math.round(sceFb);
-                      else if (j===7||j===8) return `<td style="color:var(--t-meta);font-family:'Geist Mono';font-size:11px" title="No source data: counted 0 (resilient) in the score">—</td>`;
+                      else if (j===7||j===8) return `<td style="color:var(--t-meta);font-family:'Geist Mono';font-size:11px" title="No source data: left out of the score, weights renormalised">—</td>`;
                       else v = 0;
                     }
                     return `<td style="color:${riskColor(v)};font-family:'Geist Mono';font-size:11px">${v}</td>`;
@@ -35482,14 +35483,14 @@ const CHART_DEFAULTS = {
 function mkRadar(id, c, title) {
   const ctx = document.getElementById(id); if(!ctx) return;
   const col = riskColor(c.fdrs);
-  // v2 — 9-component radar. Migration-safe: c[6] falls back to live SCE, c[7]/c[8] to 0.
+  // 9-component radar: c[6] falls back to live SCE; a missing component is a gap, not a zero (it reads as "resilient").
   const sceFb = (c && typeof c._sce === 'number') ? c._sce
               : ((c && typeof supplyChainExposure === 'function') ? supplyChainExposure(c) : 0);
   const radar9 = [0,1,2,3,4,5,6,7,8].map(i => {
     const v = c && Array.isArray(c.c) ? c.c[i] : undefined;
     if (typeof v === 'number' && isFinite(v)) return v;
-    if (i === 6) return (typeof sceFb === 'number' && isFinite(sceFb)) ? sceFb : 0;
-    return 0;
+    if (i === 6) return (typeof sceFb === 'number' && isFinite(sceFb)) ? sceFb : null;
+    return null;
   });
   return _safeChart(ctx,{
     type:'radar',
@@ -36595,9 +36596,12 @@ function _modeledVolumeFallback(country, commodity, supplierIdx) {
   return { usdM, kt, provenance: 'modeled' };
 }
 
-function openCommodityDrilldown(commodity, importerIso){
+function openCommodityDrilldown(commodity, importerIso, opts){
   const c = byISO(importerIso);
   if (!c) return;
+  /* From the Country report the modal opens in place: it used to jump to the Global map and leave the reader there. */
+  const stay = !!(opts && opts.stay);
+  const opener = document.activeElement;
   // v20.34 — push commodity + country to URL so this drill-down is shareable.
   try {
     const comLower = String(commodity || '').toLowerCase();
@@ -36652,6 +36656,13 @@ function openCommodityDrilldown(commodity, importerIso){
     // counterparty.
     return { country: sup, pct, vol, companies: [] };
   }).filter(s => s.pct == null || s.pct > 0);
+  /* Where the atlas cites bilateral tonnage for this commodity, the modal shows those rows, the same numbers as the
+     row that opened it, instead of the modeled supplier mix. */
+  const _real = (typeof realShares === 'function') ? realShares(c, commodity, 'import') : null;
+  if (_real && _real.rows.length) {
+    suppliers.length = 0;
+    _real.rows.slice(0, 5).forEach(r => suppliers.push({ country: r.name, pct: Math.round(r.share * 100), vol: { usdM: null, kt: r.kt, provenance: r.obs ? 'observed' : 'modeled' }, companies: [] }));
+  }
 
   // Total estimate (now always finite because of vol defensive wrap above).
   // kt is intentionally nullable when the underlying data didn't carry it
@@ -36659,7 +36670,7 @@ function openCommodityDrilldown(commodity, importerIso){
   // that have a real kt value so totalKT stays null when nobody has it.
   const totalUSD = suppliers.reduce((s,x) => s + (x.vol.usdM || 0), 0);
   const ktContributors = suppliers.filter(x => Number.isFinite(x.vol.kt));
-  const totalKT  = ktContributors.length
+  const totalKT  = _real && _real.rows.length ? Math.round(_real.totalKt) : ktContributors.length
     ? ktContributors.reduce((s,x) => s + x.vol.kt, 0)
     : null;
   // v20.28 — collective provenance: 'observed' if any supplier returned PSD/Comtrade
@@ -36673,14 +36684,14 @@ function openCommodityDrilldown(commodity, importerIso){
   // v20.28 — fixed: showTab takes 1 arg (the 2nd was unused and the previous
   // querySelector('.nav-btn') picked the wrong button anyway, same fix as
   // v20.17 disturbance click handler).
-  if (typeof showTab === 'function') {
+  if (!stay && typeof showTab === 'function') {
     if (!document.getElementById('tab-global')?.classList.contains('active')) {
       showTab('global');
     }
   }
-  document.getElementById('sidepanel')?.classList.add('hidden');
-  document.getElementById('impact-panel')?.classList.add('hidden');
-  if (window.Globe && window.Globe.drawCommodityFlows) {
+  if (!stay) document.getElementById('sidepanel')?.classList.add('hidden');
+  if (!stay) document.getElementById('impact-panel')?.classList.add('hidden');
+  if (!stay && window.Globe && window.Globe.drawCommodityFlows) {
     setTimeout(()=>Globe.drawCommodityFlows(c.iso, commodity, suppliers), 50);
   }
 
@@ -36696,17 +36707,19 @@ function openCommodityDrilldown(commodity, importerIso){
   const provBadge = collectiveProvenance === 'observed'
     ? `<span style="font-family:'Geist Mono',monospace;font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;margin-left:8px;">Observed</span>`
     : `<span style="font-family:'Geist Mono',monospace;font-size:9px;color:#c47a3c;background:#c47a3c22;border:1px solid #c47a3c44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;margin-left:8px;">Modeled</span>`;
-  const provSubtitle = collectiveProvenance === 'observed'
+  const provSubtitle = _real && _real.rows.length
+    ? `Cited bilateral tonnage of <b style="color:var(--t1)">${commodity.toLowerCase()}</b> into <b style="color:var(--t1)">${c.name}</b>, from the trade atlas.`
+    : collectiveProvenance === 'observed'
     ? `Volumes for <b style="color:var(--t1)">${commodity.toLowerCase()}</b> into <b style="color:var(--t1)">${c.name}</b> are observed (USDA PSD / UN Comtrade). No trading company is attributed to any of these lanes: see the trader note at the foot of this panel.`
     : `Modeled routing for <b style="color:var(--t1)">${commodity.toLowerCase()}</b> into <b style="color:var(--t1)">${c.name}</b>, anchored to the structural supplier snapshot, not an observed customs ledger.`;
 
   modal.innerHTML = `
     <div class="commodity-sheet" onclick="event.stopPropagation()">
       <div class="commodity-head">
-        <div class="commodity-eyebrow">${c.name} · Structural import dependency drilldown ${provBadge}</div>
+        <div class="commodity-eyebrow">${c.name} · ${_real && _real.rows.length ? 'Import suppliers' : 'Structural import dependency drilldown'} ${provBadge}</div>
         <div class="commodity-name">${commodity}</div>
         <div class="commodity-sub">${provSubtitle}</div>
-        <button class="commodity-close" onclick="document.getElementById('commodity-modal').remove()">✕</button>
+        <button class="commodity-close" aria-label="Close" onclick="document.getElementById('commodity-modal').remove();try{window.__drillOpener&&window.__drillOpener.focus()}catch(e){}">✕</button>
       </div>
 
       <div class="commodity-quantgrid">
@@ -36724,14 +36737,15 @@ function openCommodityDrilldown(commodity, importerIso){
             // _fmtMoneyUSD already handles raw-USD → $B/$M/$K formatting.
             // The old `(totalUSD/1000).toFixed(1) + 'B'` assumed USD millions
             // but _estimateVolume now returns raw USD consistently.
+            _real && _real.rows.length ? '<span style="color:var(--t3);font-size:14px;font-weight:400;">not cited</span>' :
             typeof _fmtMoneyUSD === 'function'
               ? _fmtMoneyUSD(totalUSD)
               : ('$' + (totalUSD/1e9).toFixed(2) + 'B')
-          }<span class="commodity-quant-unit">/ yr</span></div>
+          }${_real && _real.rows.length ? '' : '<span class="commodity-quant-unit">/ yr</span>'}</div>
         </div>
         <div class="commodity-quant">
           <div class="commodity-quant-label">Top source</div>
-          <div class="commodity-quant-val" style="font-size:17px;">${topSup.country}<span class="commodity-quant-unit">${topSup.pct}%</span></div>
+          <div class="commodity-quant-val" style="font-size:17px;">${topSup.country}<span class="commodity-quant-unit">${topSup.pct != null ? topSup.pct + '%' : 'share not cited'}</span></div>
         </div>
       </div>
 
@@ -36741,7 +36755,7 @@ function openCommodityDrilldown(commodity, importerIso){
           <div class="commodity-supplier" style="grid-template-columns:1fr 140px;">
             <div>
               <div class="commodity-supplier-country">${s.country}</div>
-              <div class="commodity-supplier-pct">${s.pct}% of imports</div>
+              <div class="commodity-supplier-pct">${s.pct != null ? s.pct + '% of ' + _escFeed(String(commodity).toLowerCase()) + ' imports' : 'share not cited'}</div>
             </div>
             <div class="commodity-supplier-vol">
               ${Number.isFinite(s.vol.kt)
@@ -36754,7 +36768,7 @@ function openCommodityDrilldown(commodity, importerIso){
               ${/* usdM carries raw USD despite its name (see _estimateVolume), so
                     the old hand-rolled M suffix printed things like 412000000M.
                     Use the same formatter as the totals row above it. */''}
-              <span class="vol-sub">≈ ${typeof _fmtMoneyUSD === 'function' ? _fmtMoneyUSD(s.vol.usdM) : ('$' + s.vol.usdM)}</span>
+              ${s.vol.usdM == null ? '' : `<span class="vol-sub">≈ ${typeof _fmtMoneyUSD === 'function' ? _fmtMoneyUSD(s.vol.usdM) : ('$' + s.vol.usdM)}</span>`}
             </div>
           </div>`).join('')
           : '<div style="color:var(--t3);font-size:12px;padding:8px 0;">No supplier data available for this country.</div>'}
@@ -36778,14 +36792,20 @@ function openCommodityDrilldown(commodity, importerIso){
         })()}
 
         <div class="commodity-note">
-          ${collectiveProvenance === 'observed'
+          ${_real && _real.rows.length
+            ? 'Cited bilateral tonnage from the trade atlas, the same rows as the Country report; shares are of all cited ' + _escFeed(String(commodity).toLowerCase()) + ' tonnage. No dollar value is cited for these flows.'
+            : collectiveProvenance === 'observed'
             ? 'Source countries + volumes come from USDA PSD (production/imports) and/or UN Comtrade Plus (bilateral USD flows).'
             : 'Source countries come from the structural supplier snapshot. Volumes are modeled estimates for directional analysis only, not observed bilateral shipment data.'}
         </div>
       </div>
     </div>`;
-  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  window.__drillOpener = opener;
+  const _closeDrill = () => { modal.remove(); try { opener && opener.focus && opener.focus(); } catch (e) {} };
+  modal.addEventListener('click', e => { if (e.target === modal) _closeDrill(); });
+  modal.addEventListener('keydown', e => { if (e.key === 'Escape') _closeDrill(); });
   document.body.appendChild(modal);
+  try { modal.querySelector('.commodity-close').focus(); } catch (e) {}
 }
 
 // ════════════════════════════════════════════════════
@@ -39725,6 +39745,46 @@ const GLOBAL_FOOD_EVENTS = {
   2024: 'Red Sea shipping attacks; El Niño drought slashes Southern African maize (Zambia, Zimbabwe, Malawi emergencies)',
 };
 
+/* The stored daily record for one country, oldest first: [{date, structural, displayed, method}]. */
+function fdrsRecord(c) {
+  const h = (c && typeof LIVE !== 'undefined' && LIVE.fdrs_history) ? LIVE.fdrs_history[c.iso] : null;
+  if (!h) return [];
+  return Object.keys(h).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().map(d => {
+    const e = h[d] || {};
+    return { date: d, structural: typeof e.structural === 'number' ? e.structural : e.fdrs, displayed: typeof e.displayed === 'number' ? e.displayed : null, method: e.method || 'earlier' };
+  }).filter(r => typeof r.structural === 'number');
+}
+
+function mkFDRSRecordChart(canvasId, c) {
+  const ctx = document.getElementById(canvasId); if (!ctx) return null;
+  const rec = fdrsRecord(c);
+  if (rec.length < 2) { ctx.parentNode.innerHTML = '<div class="ctr-note">Fewer than two days on record.</div>'; return null; }
+  const methods = [...new Set(rec.map(r => r.method))];
+  const col = riskColor(c.fdrs);
+  const datasets = methods.map((m, k) => ({
+    label: 'Structural' + (methods.length > 1 ? (m === 'earlier' ? ' (earlier method)' : ' (current method)') : ''),
+    data: rec.map(r => r.method === m ? r.structural : null),
+    borderColor: k === methods.length - 1 ? col : '#6a685e', borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, spanGaps: false, tension: 0,
+  }));
+  if (rec.some(r => r.displayed != null)) datasets.push({
+    label: 'Live (with nowcast)', data: rec.map(r => r.displayed), borderColor: '#ebe9e2', borderDash: [4, 3], borderWidth: 1.5,
+    pointRadius: rec.filter(r => r.displayed != null).length < 3 ? 3 : 0, spanGaps: false, tension: 0,
+  });
+  return _safeChart(ctx, {
+    type: 'line',
+    data: { labels: rec.map(r => r.date), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: true, labels: { color: '#9a988f', boxWidth: 14, font: { size: 10.5, family: 'Geist' } } },
+        tooltip: { callbacks: { label: (t) => ` ${t.dataset.label}: ${t.parsed.y}` } } },
+      scales: {
+        x: { grid: { color: '#1f1f27' }, ticks: { color: '#6a685e', font: { size: 10 }, maxTicksLimit: 6 } },
+        y: { min: 0, max: 100, grid: { color: '#1f1f27' }, ticks: { color: '#6a685e', font: { size: 10 }, stepSize: 25 } }
+      }
+    }
+  });
+}
+
 function mkFDRSHistoryChart(canvasId, c) {
   const ctx = document.getElementById(canvasId); if (!ctx) return null;
   const hist = getFDRSHistory(c);
@@ -39849,8 +39909,8 @@ async function fetchAINarrative(iso, forceRefresh, targetElId) {
   // Show loading
   textEl.innerHTML = '<span style="color:var(--t3);font-style:italic;">Generating live analysis…</span>';
 
-  const hist = getFDRSHistory(c);
-  const histStr = Object.entries(hist).sort().map(([y,s])=>`${y}:${s}`).join(', ');
+  const rec = fdrsRecord(c);
+  const histStr = rec.length ? rec[0].date + ': ' + rec[0].structural + ' → ' + rec[rec.length - 1].date + ': ' + rec[rec.length - 1].structural : 'none';
   // v20: pull live shock anchors so the brief reflects current conditions
   const a = (typeof calibrationAnchors === 'function') ? calibrationAnchors(c) : {};
   const liveShocks = [];
@@ -39895,7 +39955,7 @@ async function fetchAINarrative(iso, forceRefresh, targetElId) {
   const prompt = `You are a food security analyst. Write a concise 3-sentence analysis (max 90 words) for ${c.name}:
 - Current FDRS score: ${c.fdrs}/100 (${riskLabel(c.fdrs)}): structural ${c._fdrsStructural||c.fdrs} ${adjStr !== '0' ? `with live nowcast ${adjStr}` : ''}
 - 2030 forecast: ${c.f2030}/100
-- Illustrative reconstruction, not observed; current model as of ${fdrsDataDate()}: ${histStr}
+- Stored structural score, first and latest day on record: ${histStr}
 - Structural import dependencies: ${displayImportList(c).slice(0,3).join(', ')}
 - Structural suppliers: ${_aiSupNames.join(', ')}
 - Food inflation: ${c.fi}%/yr
@@ -39911,18 +39971,23 @@ If active live shocks are listed, your analysis MUST acknowledge at least one of
 
     // Generate template narrative from data (live-shock aware)
     if (!narrative) {
-      const trend = c.f2030 > c.fdrs ? 'deteriorating' : 'improving';
-      const delta = Math.abs(c.f2030 - c.fdrs);
-      const histArr = Object.values(hist).sort();
-      const peak = Math.max(...histArr);
-      const peakYear = Object.entries(hist).find(([y,s])=>s===peak)?.[0] || '2022';
-      const mainRisk = c.c[0] > 70 ? 'extreme staple import dependency' :
-                       c.c[1] > 65 ? 'high supplier concentration risk' :
-                       c.c[5] > 60 ? 'conflict-driven logistics disruption' :
-                       c.c[4] > 60 ? 'climate vulnerability' :
-                       c.c[3] > 50 ? 'persistent food inflation' : 'no single dominant component';
-      // v21.x — same helper-routed names as the prompt above.
-      const suppliers = _aiSupNames.slice(0,2).join(' and ');
+      /* Trend and shift both measured from the structural score, so the word cannot contradict the number. */
+      const fd = f2030Delta(c);
+      const trend = fd > 0 ? 'deteriorating' : fd < 0 ? 'improving' : 'flat';
+      /* The largest weighted contributor, as in the component chart, not fixed thresholds. */
+      const NARR_NAMES = ['staple import dependence','supplier concentration','a weak production trend','food inflation','climate vulnerability','conflict and logistics risk','supply-chain exposure','weak economic access','a thin grain reserve buffer'];
+      const dec = FoodShieldScore.decomposition(c.c, c._sce);
+      const topI = dec.contributions.map((v, i) => [v == null ? -1 : v, i]).sort((x, y) => y[0] - x[0])[0];
+      const mainRisk = topI && topI[0] > 0 ? NARR_NAMES[topI[1]] + ' (' + Math.round(dec.components[topI[1]]) + '/100)' : 'no single dominant component';
+      /* Suppliers from cited food flows where they exist, so the prose matches the report's supplier table. */
+      let citedSup = [];
+      try {
+        const agg = new Map();
+        (typeof rankedDependencies === 'function' ? rankedDependencies(c) : []).filter(d => d.key !== 'fertilizer')
+          .forEach(d => (d.rows || []).forEach(r => { if (r.name && r.kt > 0) agg.set(r.name, (agg.get(r.name) || 0) + r.kt); }));
+        citedSup = [...agg.entries()].sort((x, y) => y[1] - x[1]).slice(0, 2).map(x => x[0]);
+      } catch (e) {}
+      const suppliers = (citedSup.length ? citedSup : _aiSupNames.slice(0,2)).join(' and ');
       // v20: live-shock sentence
       let liveSentence = '';
       /* Name what actually moved the nowcast, largest first, from its own components; structural inputs
@@ -39936,7 +40001,7 @@ If active live shocks are listed, your analysis MUST acknowledge at least one of
       if (topNc.length && Math.abs(c._fdrsAdj || 0) >= 1) {
         liveSentence = ` Live signals ${c._fdrsAdj > 0 ? 'lift' : 'lower'} the score ${c._fdrsAdj > 0 ? '+' : ''}${c._fdrsAdj} above structural, mostly ${topNc.map(k => NC_NAMES[k] + ' (+' + ncc[k] + ')').join(' and ')}.`;
       }
-      narrative = `${c.name}'s food security trajectory is ${trend}, with FDRS projected to ${f2030Delta(c) > 0 ? 'rise to' : f2030Delta(c) < 0 ? 'fall to' : 'hold at'} ${c.f2030} by 2030: a ${f2030Delta(c) > 0 ? '+' : ''}${f2030Delta(c)} point shift from today’s structural score. Biggest driver: ${mainRisk}${suppliers ? `, with heavy reliance on ${suppliers}` : ''}.${liveSentence} The modeled backcast peaks in ${peakYear} (score: ${peak}): a reconstruction, not a measured history; the current reading of ${c.fdrs} reflects ${c.fdrs < peak ? 'partial stabilization' : 'ongoing stress'}.`;
+      narrative = `${c.name}'s food security trajectory is ${trend}, with FDRS projected to ${f2030Delta(c) > 0 ? 'rise to' : f2030Delta(c) < 0 ? 'fall to' : 'hold at'} ${c.f2030} by 2030: a ${f2030Delta(c) > 0 ? '+' : ''}${f2030Delta(c)} point shift from today’s structural score. Biggest driver: ${mainRisk}${suppliers ? `, with heavy reliance on ${suppliers}` : ''}.${liveSentence}`;
     }
 
     _aiNarrativeCache[cacheKey] = narrative;

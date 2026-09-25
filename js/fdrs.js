@@ -46,14 +46,15 @@ function commodityTradeDependency(c, commodity, live, menus) {
   var psdKey = ({ Wheat: 'wheat', Rice: 'rice', Maize: 'corn', Corn: 'corn', Soybeans: 'soybeans' })[commodity];
   var psd = live.psd || {};
   var current = function (r) { return r && finite(r.year) && r.year >= PSD_MIN_YEAR ? r : null; };
-  var psdRow = psdKey ? current((psd[c.iso] || {})[psdKey]) : null;
-  if (!psdRow && psdKey && EU27.indexOf(c.iso) >= 0) psdRow = current((psd.EU27 || {})[psdKey]);
+  var psdRow = psdKey ? current((psd[c.iso] || {})[psdKey]) : null, bloc = false;
+  if (!psdRow && psdKey && EU27.indexOf(c.iso) >= 0) { psdRow = current((psd.EU27 || {})[psdKey]); bloc = !!psdRow; }
   if (psdRow && psdRow.consumption_kt > 0 && psdRow.imports_kt != null) {
     var imports = Math.max(0, psdRow.imports_kt);
     var exports = Math.max(0, psdRow.exports_kt || 0);
     var cons    = psdRow.consumption_kt;
 
-    if (commodityTradeDependency.basisOut) commodityTradeDependency.basisOut.basis = 'psd';
+    /* 'psd-eu27': the member carries the EU bloc's extra-EU balance, not its own position. */
+    if (commodityTradeDependency.basisOut) commodityTradeDependency.basisOut.basis = bloc ? 'psd-eu27' : 'psd';
     var netImports = imports - exports;
     var ratio = (netImports > 0) ? Math.round((netImports / cons) * 100) : Math.max(0, Math.round((imports / (cons + exports)) * 100));
     return Math.max(0, Math.min(100, ratio));
