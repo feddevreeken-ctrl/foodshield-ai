@@ -148,6 +148,10 @@ def _has_existing_data(filename):
     except Exception:
         return False
     payload = obj.get("data") if isinstance(obj, dict) else obj
+    if payload is None and isinstance(obj, dict):
+        # Some files keep their payload under another key (scenario_profiles: "profiles").
+        # Checking only "data" let a timeout stub overwrite 140 good profiles on 2026-09-16.
+        payload = {k: v for k, v in obj.items() if k != "_meta" and v not in (None, {}, [], "")}
     if payload is None:
         return False
     if isinstance(payload, (list, dict, str)) and len(payload) == 0:
