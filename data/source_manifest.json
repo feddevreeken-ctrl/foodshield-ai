@@ -1,21 +1,22 @@
 {
   "_meta": {
-    "generated_at": "2026-09-25T11:42:15.156986+00:00",
+    "generated_at": "2026-09-25T12:37:26.628048+00:00",
     "source": "FoodShield source manifest",
-    "notes": "Derived from the current data/ snapshots. Status categories: ok, manual, degraded, setup_required, failed.",
+    "notes": "Derived from the current data/ snapshots. Status categories: ok, manual, stale (file refreshed but newest DATA older than 7d daily / 21d weekly / 60d monthly — see latest_data_date), degraded, setup_required, failed.",
     "version": "v23"
   },
   "data": {
     "summary": {
-      "total_sources": 56,
-      "ok_sources": 48,
+      "total_sources": 57,
+      "ok_sources": 47,
       "manual_sources": 6,
       "degraded_sources": 2,
       "setup_required_sources": 0,
-      "failed_sources": 0,
-      "healthy_sources": 54,
-      "stale_sources": 1,
-      "loaded_at": "2026-09-25T11:42:15.098804+00:00",
+      "failed_sources": 1,
+      "healthy_sources": 53,
+      "stale_sources": 3,
+      "stale_data_sources": 1,
+      "loaded_at": "2026-09-25T12:34:17.192832+00:00",
       "headline_status": "attention"
     },
     "sources": {
@@ -92,6 +93,10 @@
         "notes": "Monthly nominal USD benchmark prices parsed from the World Bank Pink Sheet historical workbook. Used for commodity cards and live market benchmarks.",
         "latest_period": "2026-08",
         "age_days": 0,
+        "latest_data_date": "2026-08-31",
+        "data_age_days": 25,
+        "data_granularity": "monthly",
+        "data_stale_after_days": 60,
         "stale": false
       },
       "fao_ffpi": {
@@ -107,6 +112,10 @@
         "notes": "Freshest official monthly nominal FFPI CSV resolved from the FAO Food Price Index page; legacy fallback retained only if newer source is unavailable.",
         "latest_period": "2026-08",
         "age_days": 0,
+        "latest_data_date": "2026-08-31",
+        "data_age_days": 25,
+        "data_granularity": "monthly",
+        "data_stale_after_days": 60,
         "stale": false
       },
       "eurostat_food": {
@@ -116,12 +125,16 @@
         "reason": "healthy",
         "cadence": "daily fetch / monthly upstream",
         "mode": "reference",
-        "generated_at": "2026-09-25T11:32:54.440475+00:00",
+        "generated_at": "2026-09-25T12:34:17.192832+00:00",
         "count": 30,
-        "source": "Eurostat HICP food (ec.europa.eu/eurostat/api · prc_hicp_manr, CP011)",
-        "notes": "Annual rate of change in food + non-alcoholic beverages CPI per EU member state. inflation_shock = food HICP > 8.0% (lower EU threshold). Covered 30 countries.",
+        "source": "Eurostat HICP (ec.europa.eu/eurostat/api · prc_hicp_minr, ECOICOP v2, RCH_A, CP011 Food)",
+        "notes": "Annual rate of change in the HICP 'Food' index (CP011, ECOICOP v2) per EU/EEA country. Replaces prc_hicp_manr, discontinued after 2025-12. inflation_shock = food HICP > 8.0% (lower EU threshold). Covered 30 countries; latest month(s): 2026-08.",
         "latest_period": null,
         "age_days": 0,
+        "latest_data_date": "2026-08-31",
+        "data_age_days": 25,
+        "data_granularity": "monthly",
+        "data_stale_after_days": 60,
         "stale": false
       },
       "faostat_food": {
@@ -152,13 +165,17 @@
         "notes": "",
         "latest_period": null,
         "age_days": 0,
+        "latest_data_date": "2026-09-24",
+        "data_age_days": 1,
+        "data_granularity": "daily",
+        "data_stale_after_days": 7,
         "stale": false
       },
       "acled": {
         "label": "ACLED",
         "file": "acled.json",
-        "status": "ok",
-        "reason": "healthy",
+        "status": "stale",
+        "reason": "latest data 2025-09-25 is 365d old (> 7d for daily data), although the file was regenerated 0d ago",
         "cadence": "daily",
         "mode": "live",
         "generated_at": "2026-09-25T10:41:18.357881+00:00",
@@ -167,7 +184,11 @@
         "notes": "STRUCTURAL conflict baseline — this myACLED tier is restricted to data ≥12 months old, so events are a 12-month window ending 2025-09-25 (NOT live). Feeds the FDRS conflict/logistics component as a structural signal only; is_live=false so the frontend must exclude it from the Live Disturbances feed. Covered 172 countries from 200000 events (2024-09-25→2025-09-25). Intensity = events ÷ 6000 cap × 100.",
         "latest_period": null,
         "age_days": 0,
-        "stale": false
+        "latest_data_date": "2025-09-25",
+        "data_age_days": 365,
+        "data_granularity": "daily",
+        "data_stale_after_days": 7,
+        "stale": true
       },
       "comtrade_staples": {
         "label": "UN Comtrade Plus",
@@ -377,6 +398,10 @@
         "notes": "Live hazard events from the keyless GDACS event API, one row per event. Included: DR (Drought), FL (Flood), TC (Tropical Cyclone) — the hazard classes that move food security directly, through lost production (drought), drowned crops and cut feeder roads (flood), and flattened pre-harvest crops and closed ports (tropical cyclone). Omitted: EQ (Earthquake), WF (Wildfire), VO (Volcano) — earthquake is available behind FOODSHIELD_GDACS_TYPES but is off by default because its food impact runs through logistics already covered by LPI and the trade layers, and it is frequent enough to swamp the map; wildfire measures burned forest hectares, a poor cropland proxy, and remains a genuine coverage gap left by the dead NASA FIRMS feed. Alert levels Orange and Red only — GDACS Green means no significant impact expected and outnumbers the rest ~15:1. Window: events whose end date falls within the last 90 days, or which have not ended. is_current is derived here from the event dates (end date not more than 7 days past, or still in the future), NOT from GDACS's own iscurrent flag, which means 'in the live homepage feed' and reads false for droughts that are running today; their flag is preserved as gdacs_iscurrent. severity_score (0-100) is a rendering weight derived from the GDACS alert band, the only cross-hazard-comparable figure in the feed; the raw severity_value carries incompatible units per type (km2 for drought, magnitude for quake, km/h for cyclone, hectares for fire, and nothing at all for flood) and must never be compared across types. population_affected is null on every row: GDACS publishes no consistent affected-population figure in this API — the Sendai records mix 'out of contact' and 'rescued' counts into the 'affected' tag and the RSS population field mixes deaths, displaced and shaking-intensity exposure — so no number is published rather than an invented one. Counts: DR=5, FL=6, TC=7. 9 current.",
         "latest_period": null,
         "age_days": 0,
+        "latest_data_date": "2026-09-25",
+        "data_age_days": 0,
+        "data_granularity": "daily",
+        "data_stale_after_days": 7,
         "stale": false
       },
       "asap": {
@@ -392,6 +417,10 @@
         "notes": "Current-season agricultural stress from the EC Joint Research Centre's ASAP monthly expert assessment. Latest assessment per country from the full 2016-present series; most recent date in this run 2026-08-11. hotspot_code: 0 no hotspot, 1 hotspot, 2 major hotspot. ASAP's raw hs_code 3 means NOT ASSESSED, not a severity above 2 — those countries (8 in this run) carry hotspot_code null and stress_score null. NULL IS NOT ZERO: no assessment is not an all-clear, and several unassessed countries have dozens of subnational crop warnings standing (units_crop_warning is populated regardless of code). stress_score 0-100 is banded by the JRC verdict (0-20 / 40-70 / 75-100 for codes 0/1/2) and spread within band by units_crop_warning normalised against that country's own historical maximum — so the expert verdict always dominates the ranking and the count only breaks ties. COVERAGE IS NOT GLOBAL: ASAP monitors 79 food-insecure countries only. A country absent from this payload is one ASAP does not watch (USA, Ukraine, Brazil, India, Australia among them) — absence must NOT be presented as an absence of stress. Unlike Aqueduct baseline and CCKP normals, this is a current-season signal and goes stale monthly; ASAP publishes around the 10th.",
         "latest_period": null,
         "age_days": 0,
+        "latest_data_date": "2026-08-31",
+        "data_age_days": 25,
+        "data_granularity": "monthly",
+        "data_stale_after_days": 60,
         "stale": false
       },
       "hapi_conflict": {
@@ -407,6 +436,10 @@
         "notes": "Rolling 90-day conflict events and fatalities per country, from ACLED via the OCHA HDX HAPI conflict-events endpoint (start_date=2026-06-27). Buckets are calendar-monthly and the newest month is IN PROGRESS, so its counts will rise on the next refresh; the window is the calendar months overlapping the last 90 days, not an exact 90-day slice. Admin levels partition the world — admin2 24 countries, admin0 218 countries, total 242 — and per country only the finest level with rows is counted, never summed across levels. intensity_score = min(100, 25*log10(1+fatalities_90d)); 100 at 10,000 fatalities/90d. is_live=true: this is a current-quarter observation, not an annual index. ATTRIBUTION REQUIRED: Armed Conflict Location & Event Data Project (ACLED); acleddata.com, redistributed by OCHA HDX under ACLED terms.",
         "latest_period": null,
         "age_days": 0,
+        "latest_data_date": "2026-08-31",
+        "data_age_days": 25,
+        "data_granularity": "monthly",
+        "data_stale_after_days": 60,
         "stale": false
       },
       "rtfp": {
@@ -422,6 +455,10 @@
         "notes": "Year-on-year food price inflation from the World Bank Real-Time Food Prices index, distributed via HDX (CC BY 4.0). One row per country: the MEDIAN of inflation_food_price_index across that country's markets at that country's own latest reporting month — median, not mean, because market-level price series carry outliers a single blown-out market must not be allowed to set. Every row's as_of is a real date read from the source's DATES column. Coverage is 37 crisis-exposed countries (as_of 2026-08-01). This does NOT replace FAOSTAT globally — FAOSTAT still carries the other ~125 countries, and RTFP is simply the better source where it exists. RTFP is a market-basket price index, not a national CPI food component: it is measured where humanitarian monitoring runs, so it reflects the markets poor households actually buy in, and it is not directly comparable with a FAOSTAT consumer price index.",
         "latest_period": null,
         "age_days": 0,
+        "latest_data_date": "2026-08-31",
+        "data_age_days": 25,
+        "data_granularity": "monthly",
+        "data_stale_after_days": 60,
         "stale": false
       },
       "portwatch": {
@@ -437,6 +474,10 @@
         "notes": "Daily AIS-derived transit counts for 28 maritime chokepoints. Each row is the mean transits/day over the 28 days ending 2026-09-20 (2026-08-24..2026-09-20), compared with the SAME calendar window one year earlier (2025-08-24..2025-09-20) — a calendar baseline, not a rolling average, because shipping seasonality is real. PortWatch publishes with a lag; this run is 5 days behind. Status: collapsed = total down >=50% YoY; disrupted = total down >=10% or any of dry bulk / tanker / container down >=25%; else normal. Chokepoints averaging under 1 transits/day in the baseline are never flagged (percentage change on near-zero traffic is noise) and carry low_volume=true. Counts are transits, not tonnage or cargo value. Source: IMF PortWatch (portwatch.imf.org), redistributed with attribution under IMF terms.",
         "latest_period": null,
         "age_days": 0,
+        "latest_data_date": "2026-09-20",
+        "data_age_days": 5,
+        "data_granularity": "daily",
+        "data_stale_after_days": 7,
         "stale": false
       },
       "enso": {
@@ -482,6 +523,10 @@
         "notes": "Agency products, not press coverage — the news view keeps them in their own strip. Every item carries the date its agency published it, parsed from the page; an undated item is dropped rather than stamped with the collection time. Items past their cadence are flagged stale rather than hidden. NOAA Climate.gov's ENSO blog is probed every run and deliberately excluded: it returns 200 with a fresh Last-Modified while its newest post is more than a year old.",
         "latest_period": null,
         "age_days": 0,
+        "latest_data_date": "2026-09-23",
+        "data_age_days": 2,
+        "data_granularity": "weekly",
+        "data_stale_after_days": 21,
         "stale": false
       },
       "sst_anomaly": {
@@ -497,6 +542,10 @@
         "notes": "Seven-day mean sea-surface temperature anomaly on a 2-degree grid, 60S-60N, for the El Nino map. Anomaly base is OISST's 1971-2000 climatology; do not read box means as the ONI.",
         "latest_period": null,
         "age_days": 0,
+        "latest_data_date": "2026-09-23",
+        "data_age_days": 2,
+        "data_granularity": "daily",
+        "data_stale_after_days": 7,
         "stale": false
       },
       "portwatch_history": {
@@ -512,6 +561,10 @@
         "notes": "Daily transit counts (total, dry bulk, tanker, container) for 8 chokepoints over the last 365 days, from the same PortWatch daily layer as portwatch.json. Counts are vessel transits per calendar day as PortWatch publishes them; no smoothing is applied here.",
         "latest_period": null,
         "age_days": 0,
+        "latest_data_date": "2026-09-20",
+        "data_age_days": 5,
+        "data_granularity": "daily",
+        "data_stale_after_days": 7,
         "stale": false
       },
       "enso_model": {
@@ -843,6 +896,10 @@
         "notes": "Third-party headlines only. Every item is a CLAIM by its publisher, not measured data — quality_flag='claim' on all items. Commodity AND country attribution are MODELED (our keyword match against the headline), never sourced; corridor TONNAGES are sourced from commodity_flows.json. Those two are different kinds of claim and the UI must not blur them: a modeled country match pointing at a sourced tonnage is still a modeled claim about relevance. Exposure means a headline TOUCHES a corridor — no causal claim is made about prices. Headlines are stored verbatim with a link; no article body, summary, snippet or image is stored. Relevance, publisher-trust and recency scores are internal ranking inputs and are deliberately not published. Sources are the publishers' own syndication feeds — no search-engine aggregator. No Google News: its feed terms forbid this use. No WTO: its robots.txt disallows all non-Google automated fetching. SOURCE HEALTH: 55 of 57 publisher feeds returned data; 2 FAILED (ok): Farmers Weekly SA, ReliefWeb. A headline count cannot show this — one working feed still fills the page — so the ratio is reported explicitly. Corridor attribution ACTIVE: 21 of 62 items joined.",
         "latest_period": null,
         "age_days": 0,
+        "latest_data_date": "2026-09-25",
+        "data_age_days": 0,
+        "data_granularity": "daily",
+        "data_stale_after_days": 7,
         "stale": false
       },
       "enso_news": {
@@ -858,7 +915,26 @@
         "notes": "Headlines that name El Niño, La Niña or ENSO, from the humanitarian reports API, the publisher feeds the commodity wire reads, and one GDELT query. Third-party CLAIMS with links, never measured data; nothing scores off this file. Country tags are keyword matches. Last-good items are kept for 21 days so a throttled or failed run does not blank the wire.",
         "latest_period": null,
         "age_days": 0,
+        "latest_data_date": "2026-09-25",
+        "data_age_days": 0,
+        "data_granularity": "daily",
+        "data_stale_after_days": 7,
         "stale": false
+      },
+      "nasa_firms": {
+        "label": "NASA FIRMS active fires (VIIRS NRT)",
+        "file": "nasa_firms.json",
+        "status": "failed",
+        "reason": "API key rejected by upstream — 0 rows served; re-provision the secret",
+        "cadence": "daily fetch / daily upstream",
+        "mode": "live",
+        "generated_at": "2026-08-03T10:08:45.930384+00:00",
+        "count": 0,
+        "source": "NASA FIRMS VIIRS NRT (firms.modaps.eosdis.nasa.gov)",
+        "notes": "NASA_FIRMS_MAP_KEY is set but REJECTED by FIRMS (HTTP 4xx, body 'Invalid API call.'). That is an expired or unregistered MAP_KEY — NOT an upstream outage and NOT a quiet week for fires. Re-provision at https://firms.modaps.eosdis.nasa.gov/api/map_key/ and update the NASA_FIRMS_MAP_KEY repository secret.",
+        "latest_period": null,
+        "age_days": 53,
+        "stale": true
       }
     }
   }

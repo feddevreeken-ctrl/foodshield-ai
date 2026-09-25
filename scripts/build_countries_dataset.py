@@ -57,6 +57,9 @@ STRUCTURAL_FIELDS = [
     "prod_trend",
     # Pinned so the sourced/heritage blend cannot ratchet across nightly rebuilds.
     "c_heritage",
+    # Pinned original 2030 projection + the score it was authored against; f2030
+    # itself is re-based onto the current structural score in publish_displayed().
+    "f2030_heritage",
 ]
 
 # FDRS v2 weight vector (Option B, 9 components — see FDRS_V2_IMPLEMENTATION_SPEC §2).
@@ -79,7 +82,11 @@ QUALITY_FLAGS = {
 FIELD_DESCRIPTIONS = {
     "fdrs": "Composite Food Dependency Risk Score 0-100.",
     "c": "9-component structural FDRS vector [import_dep, supplier_conc, prod_trend, food_infl, climate, conflict, supply_chain_exposure, econ_access, grain_buffer].",
-    "f2030": "Structural 2030 FDRS projection.",
+    "f2030": ("Structural 2030 FDRS projection on the CURRENT score scale: "
+              "fdrs_displayed_base + the authored 2030 drift (f2030_heritage.drift), clipped 0-100."),
+    "f2030_heritage": ("Pinned hand-authored 2030 projection (value) and the embedded heritage "
+                       "score it was written against (heritage_fdrs); drift = value - heritage_fdrs. "
+                       "Kept for audit; f2030 is re-based from it every build."),
     "w": "Wheat caloric share % (fraction of national caloric supply).",
     "r": "Rice caloric share %.",
     "m": "Maize caloric share %.",
@@ -382,6 +389,39 @@ def main():
             if field == "fi" and iso in food_inflation:
                 continue
             target[field] = meta
+
+    # f2030 re-base, step 1: pin the authored 2030 projection ONCE, together with
+    # the score it was authored against. The embedded COUNTRIES literal carries
+    # both `fdrs` and `f2030` as a hand-written pair: f2030 - fdrs has median +2
+    # and sd 2.6 across all 264 rows, i.e. a small authored trend. Scored on the
+    # c_heritage vector under the v2 formula the same gap has sd 6.6, so that
+    # pairing would fold a v1-vs-v2 method difference into the "trend". The
+    # current score, meanwhile, moved to a different scale (NLD heritage 15 vs
+    # structural 35), which left a 2030 projection of 12 sitting 23 points below
+    # today — a trend nobody authored. publish_displayed() re-applies the pinned
+    # drift to the current structural score. Pinned from the embedded literal,
+    # never from countries.json, so a re-based f2030 can never be re-pinned.
+    for iso, row in countries.items():
+        if isinstance(row.get("f2030_heritage"), dict):
+            continue
+        leg = legacy_rows.get(iso) or {}
+        f_h, s_h = leg.get("f2030"), leg.get("fdrs")
+        if not isinstance(f_h, (int, float)) or not isinstance(s_h, (int, float)):
+            continue
+        _hv = (row.get("c_heritage") or {}).get("value")
+        row["f2030_heritage"] = {
+            "value": f_h,
+            "heritage_fdrs": s_h,
+            "drift": f_h - s_h,
+            "heritage_v2_score": _fdrs_v2(_hv) if isinstance(_hv, list) else None,
+            "source": LEGACY_SOURCE,
+            "as_of": "2026-05",
+            "method": ("Hand-authored 2030 projection and the embedded heritage FDRS it was "
+                       "written against, pinned from index.html. drift = value - heritage_fdrs "
+                       "is the authored 2030 trend. heritage_v2_score (c_heritage under the v2 "
+                       "formula) is recorded for audit only."),
+            "quality_flag": "heritage",
+        }
 
     for iso, payload in caloric_shares.items():
         if iso not in countries:
@@ -774,6 +814,7 @@ def publish_displayed():
     snapshot = displayed_snapshot()
     envelope = json.loads(OUT_PATH.read_text())
     at = datetime.now(timezone.utc).isoformat()
+    rebased = 0
     for iso, row in envelope["data"]["countries"].items():
         score = snapshot["scores"][iso]
         row["fdrs_displayed"] = score["displayed"]
@@ -781,8 +822,41 @@ def publish_displayed():
         row["fdrs_nowcast_delta"] = score["delta"]
         row["fdrs_displayed_at"] = at
         row["fdrs_displayed_inputs"] = snapshot["inputs"]
+        if _rebase_f2030(row, score["base"]):
+            rebased += 1
+    envelope.setdefault("_meta", {})["f2030_rebase"] = (
+        "f2030 = clip(fdrs_displayed_base + f2030_heritage.drift, 0, 100), rounded. The authored "
+        "2030 projection was written against the embedded heritage score, which sits on a "
+        "different scale from the current structural score; the pinned original is kept in "
+        f"f2030_heritage. Re-based {rebased} rows at {at}.")
     OUT_PATH.write_text(json.dumps(envelope, indent=2, ensure_ascii=False))
-    print(f"[OK] published displayed scores for {len(snapshot['scores'])} countries")
+    print(f"[OK] published displayed scores for {len(snapshot['scores'])} countries; "
+          f"re-based f2030 for {rebased}")
+
+
+def _rebase_f2030(row, base):
+    """f2030 re-base, step 2: current structural score + pinned authored drift."""
+    her = row.get("f2030_heritage")
+    if not isinstance(her, dict) or not isinstance(base, (int, float)):
+        return False
+    drift = her.get("drift")
+    if not isinstance(drift, (int, float)):
+        return False
+    meta = row.get("f2030") if isinstance(row.get("f2030"), dict) else {}
+    meta.update({
+        "value": int(_clip(base + drift) + 0.5),
+        "source": LEGACY_SOURCE,
+        "as_of": her.get("as_of", "2026-05"),
+        "method": ("Re-based 2030 projection: current structural score (fdrs_displayed_base) + "
+                   "the authored 2030 drift pinned in f2030_heritage, clipped 0-100."),
+        "quality_flag": "modeled",
+        "note": ("A forward projection, never an observed value. The trend is hand-authored "
+                 "(heritage); only its anchor follows the current score."),
+        "rebase": {"structural_base": base, "drift": drift,
+                   "heritage_value": her.get("value"), "heritage_fdrs": her.get("heritage_fdrs")},
+    })
+    row["f2030"] = meta
+    return True
 
 
 def _extract_legacy_rows():

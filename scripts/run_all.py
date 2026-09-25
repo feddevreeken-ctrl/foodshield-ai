@@ -168,9 +168,6 @@ STEPS = [
     # Derived, no network: reads the feeds above and the fitted model, so it runs after them.
     ("El Niño outlook",        build_enso_outlook.main,         "enso_outlook.json"),
     ("Countries dataset",      build_countries_dataset.main,    "countries.json"),
-    # v40 — daily point-in-time snapshot of the structural FDRS (idempotent/preserve-safe);
-    # builds the immutable history the hindcast/validation needs. Reads the fresh countries.json.
-    ("FDRS snapshot",          snapshot_fdrs.main,              "fdrs_history.json"),
     # v40 — structural validation of FDRS against independent IPC/FEWS crisis ground
     # truth (ROC-AUC / Spearman / hits+misses). Keeps data/fdrs_validation.json fresh so
     # the methodology whitepaper and any in-app credibility surface stay current.
@@ -187,6 +184,11 @@ STEPS = [
     ("Trade lineage honesty (v41)", _trade_honesty_remediation.build, "countries.json"),
     ("Nowcast build",          build_nowcast.main,              "nowcast.json"),
     ("Displayed FDRS",         build_countries_dataset.publish_displayed, "countries.json"),
+    # v40 — daily point-in-time snapshot of the structural FDRS (idempotent/preserve-safe);
+    # builds the immutable history the hindcast/validation needs. Runs after "Displayed
+    # FDRS" so each entry can also record structural (fdrs_displayed_base), displayed and
+    # the re-based f2030 — "Countries dataset" drops the displayed tier until then.
+    ("FDRS snapshot",          snapshot_fdrs.main,              "fdrs_history.json"),
     ("Daily summary",          build_daily_summary.main,        "daily_summary.json"),
     ("Source manifest",        build_source_manifest.main,      "source_manifest.json"),
     ("Companies aggregate",    build_companies.main,            "companies.json"),

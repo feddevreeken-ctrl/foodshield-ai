@@ -437,7 +437,50 @@ SOURCES = [
         "cadence": "6h fetch / continuous upstream",
         "mode": "live",
     },
+    {
+        # Registered so a dead feed cannot hide by simply being absent from the
+        # manifest: the collector has written 0 rows with status auth_failed
+        # (MAP_KEY rejected by FIRMS) since 2026-08-03.
+        "key": "nasa_firms",
+        "file": "nasa_firms.json",
+        "label": "NASA FIRMS active fires (VIIRS NRT)",
+        "cadence": "daily fetch / daily upstream",
+        "mode": "live",
+    },
 ]
+
+# Data-vintage freshness. A file regenerated today can still carry months-old
+# DATA: Eurostat's discontinued prc_hicp_manr kept returning 2025-12 readings
+# every night and the manifest called it "ok · healthy" because it only looked
+# at generated_at. For each feed below, the named payload field is the date of
+# the observation itself; the newest one across the payload is compared with a
+# threshold for the granularity of the data (not the fetch cadence). Monthly
+# values are dated at the END of their month, so a normal ~6-week publication
+# lag does not trip the check. Feeds whose dates are irregular analysis dates
+# (IPC, HungerMap) or annual/structural vintages are deliberately not listed.
+DATA_STALE_DAYS = {"daily": 7, "weekly": 21, "monthly": 60}
+DATA_DATE = {
+    "worldbank_pink_sheet": ("as_of_month", "monthly"),
+    "fao_ffpi": ("month", "monthly"),
+    "eurostat_food": ("month", "monthly"),
+    "reliefweb_alerts": ("date", "daily"),
+    # myACLED tier: rolling window that ends >=12 months ago by licence. Listed so
+    # the manifest stops calling a year-old window "ok"; is_live=false upstream too.
+    "acled": ("window_end", "daily"),
+    "gdacs": ("to_date", "daily"),
+    "asap": ("assessment_date", "monthly"),
+    # Calendar-monthly buckets (see the collector's notes), so monthly granularity.
+    "hapi_conflict": ("window_end", "monthly"),
+    # RTFP is a monthly index; as_of is the first day of the reporting month.
+    "rtfp": ("as_of", "monthly"),
+    "portwatch": ("latest_date", "daily"),
+    "portwatch_history": ("end", "daily"),
+    "sst_anomaly": ("time_end", "daily"),
+    "enso_bulletins": ("published", "weekly"),
+    "commodity_news": ("published_at", "daily"),
+    "enso_news": ("published_at", "daily"),
+    # nasa_firms rows are undated 7-day counts, so only file age applies to it.
+}
 
 
 def read_envelope(path: Path):
@@ -495,6 +538,41 @@ def parse_month_token(value):
         return None
 
 
+def _period_end(value, every):
+    """Parse YYYY-MM / YYYY-MM-DD (or an ISO datetime) into the date the datum
+    describes; monthly data resolve to the last day of their month."""
+    if not isinstance(value, str) or len(value) < 7 or value[4] != "-":
+        return None
+    try:
+        y, m = int(value[:4]), int(value[5:7])
+        d = date(y, m, int(value[8:10])) if len(value) >= 10 and value[7] == "-" else date(y, m, 1)
+    except ValueError:
+        return None
+    if every == "monthly":
+        nxt = date(y + (m == 12), m % 12 + 1, 1)
+        d = date.fromordinal(nxt.toordinal() - 1)
+    return d
+
+
+def latest_data_date(payload, field, every, _depth=0):
+    """Newest date stored under `field` anywhere in the payload (bounded walk)."""
+    if _depth > 6:
+        return None
+    best = None
+    items = (payload.items() if isinstance(payload, dict)
+             else enumerate(payload) if isinstance(payload, list) else ())
+    for k, v in items:
+        if k == field:
+            d = _period_end(v, every)
+        elif isinstance(v, (dict, list)):
+            d = latest_data_date(v, field, every, _depth + 1)
+        else:
+            d = None
+        if d and (best is None or d > best):
+            best = d
+    return best
+
+
 def infer_period(key, payload):
     if not isinstance(payload, dict):
         return None
@@ -539,6 +617,10 @@ def infer_status(spec, envelope, count, period):
     if explicit == "manual":
         return ("manual", f"curated snapshot; {spec['cadence']}") if count else ("degraded", "manual source has no rows")
     if explicit == "auth_failed":
+        # No rows at all means nothing is being served: that is a failure, not a
+        # pending setup step. With last-good rows still present it stays setup_required.
+        if not count:
+            return "failed", "API key rejected by upstream — 0 rows served; re-provision the secret"
         return "setup_required", "API key rejected by upstream — re-provision the secret"
     if explicit == "degraded_fallback":
         return "degraded", "serving a fallback tier, not the primary source"
@@ -605,6 +687,7 @@ def main():
         "failed_sources": 0,
         "healthy_sources": 0,
         "stale_sources": 0,
+        "stale_data_sources": 0,
         "loaded_at": None,
     }
 
@@ -647,14 +730,40 @@ def main():
         }
         if "review_days" in spec:
             rows[spec["key"]]["review_days"] = spec["review_days"]
+        # Data-vintage check (see DATA_DATE). Only an "ok" feed is demoted; a feed
+        # already degraded/failed keeps the more specific reason.
+        _data_stale = False
+        if spec["key"] in DATA_DATE:
+            _field, _every = DATA_DATE[spec["key"]]
+            _latest = latest_data_date(payload, _field, _every)
+            _limit = DATA_STALE_DAYS[_every]
+            _data_age = (TODAY - _latest).days if _latest else None
+            rows[spec["key"]].update({
+                "latest_data_date": _latest.isoformat() if _latest else None,
+                "data_age_days": _data_age,
+                "data_granularity": _every,
+                "data_stale_after_days": _limit,
+            })
+            if _data_age is not None and _data_age > _limit:
+                _data_stale = True
+                if status == "ok":
+                    status = "stale"
+                    reason = (f"latest data {_latest.isoformat()} is {_data_age}d old "
+                              f"(> {_limit}d for {_every} data), although the file was "
+                              f"regenerated {rows[spec['key']]['age_days']}d ago")
+                    rows[spec["key"]]["status"] = status
+                    rows[spec["key"]]["reason"] = reason
         # v38 — flag stale (refresh overdue). Exempt manual/annual snapshots and
         # static deep-link helpers, which are expected to be old by design.
         _age = rows[spec["key"]]["age_days"]
         _is_manual = (status == "manual") or (spec.get("mode") == "manual")
         _is_stale = (_age is not None) and (_age > STALE_AFTER_DAYS) and not _is_manual
-        rows[spec["key"]]["stale"] = bool(_is_stale)
-        if _is_stale:
+        rows[spec["key"]]["stale"] = bool(_is_stale or _data_stale)
+        if _data_stale:
+            summary["stale_data_sources"] += 1
+        if _is_stale or _data_stale:
             summary["stale_sources"] += 1
+        if _is_stale:
             # v79i — a stale feed is not a healthy feed. Until now `stale` was
             # computed and stored but never allowed to touch `status`, so a feed
             # that had not refreshed in four weeks still rendered as
@@ -678,6 +787,8 @@ def main():
             summary["degraded_sources"] += 1
         elif status == "setup_required":
             summary["setup_required_sources"] += 1
+        elif status == "stale":
+            pass  # counted in stale_sources / stale_data_sources above; not healthy
         else:
             summary["failed_sources"] += 1
 
@@ -699,7 +810,8 @@ def main():
         source="FoodShield source manifest",
         notes=(
             "Derived from the current data/ snapshots. Status categories: ok, manual, "
-            "degraded, setup_required, failed."
+            "stale (file refreshed but newest DATA older than 7d daily / 21d weekly / "
+            "60d monthly — see latest_data_date), degraded, setup_required, failed."
         ),
     )
 

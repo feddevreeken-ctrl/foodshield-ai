@@ -514,8 +514,10 @@ def main():
         inform_amp = 0
         inf_row = inform.get(iso) or {}
         inform_score = inf_row.get("inform_risk")
+        # 2026-09-25 — zeroed: INFORM risk already feeds the structural score's
+        # conflict/governance component c[5] (js/fdrs.js), so this counted it twice.
         if isinstance(inform_score, (int, float)) and inform_score > 7.0:
-            inform_amp = min(3, (inform_score - 7.0) * 1.5)
+            inform_amp = 0 * min(3, (inform_score - 7.0) * 1.5)
 
         # v20.27 — Governance drag: WGI rule_of_law below -1.0 reflects an
         # institutional brittleness that lengthens recovery from any shock.
@@ -524,8 +526,10 @@ def main():
         governance_drag = 0
         wgi_row = wgi.get(iso) or {}
         rol = (wgi_row.get("rule_of_law") or {}).get("value")
+        # 2026-09-25 — zeroed: WGI rule of law already feeds c[5] in the structural
+        # score; one home per input.
         if isinstance(rol, (int, float)) and rol < -1.0:
-            governance_drag = min(2, (abs(rol) - 1.0) * 1.5)
+            governance_drag = 0 * min(2, (abs(rol) - 1.0) * 1.5)
 
         # USDA PSD production-shortfall kick — a TRUE year-on-year anomaly.
         #

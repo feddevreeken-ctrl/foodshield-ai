@@ -35,21 +35,31 @@ var US_STATE_PRODUCERS = {
   'Maize': ['US-IA','US-IL','US-NE','US-MN','US-IN','US-OH','US-WI','US-SD','US-MO','US-KS','US-MI','US-KY','US-PA','US-ND'],
 };
 
+/* USDA PSD rows older than this are ignored (the bulk still carries 1998 pre-accession rows for some
+   EU members); EU members without a current national row use the EU27 bloc balance. */
+var PSD_MIN_YEAR = 2022;
+var EU27 = ['AUT','BEL','BGR','HRV','CYP','CZE','DNK','EST','FIN','FRA','DEU','GRC','HUN','IRL','ITA','LVA','LTU','LUX','MLT','NLD','POL','PRT','ROU','SVK','SVN','ESP','SWE'];
+
 function commodityTradeDependency(c, commodity, live, menus) {
   if (!c || !c.iso) return null;
 
   var psdKey = ({ Wheat: 'wheat', Rice: 'rice', Maize: 'corn', Corn: 'corn', Soybeans: 'soybeans' })[commodity];
-  var psdRow = psdKey ? ((live.psd || {})[c.iso] || {})[psdKey] : null;
+  var psd = live.psd || {};
+  var current = function (r) { return r && finite(r.year) && r.year >= PSD_MIN_YEAR ? r : null; };
+  var psdRow = psdKey ? current((psd[c.iso] || {})[psdKey]) : null;
+  if (!psdRow && psdKey && EU27.indexOf(c.iso) >= 0) psdRow = current((psd.EU27 || {})[psdKey]);
   if (psdRow && psdRow.consumption_kt > 0 && psdRow.imports_kt != null) {
     var imports = Math.max(0, psdRow.imports_kt);
     var exports = Math.max(0, psdRow.exports_kt || 0);
     var cons    = psdRow.consumption_kt;
 
+    if (commodityTradeDependency.basisOut) commodityTradeDependency.basisOut.basis = 'psd';
     var netImports = imports - exports;
     var ratio = (netImports > 0) ? Math.round((netImports / cons) * 100) : Math.max(0, Math.round((imports / (cons + exports)) * 100));
     return Math.max(0, Math.min(100, ratio));
   }
 
+  if (commodityTradeDependency.basisOut) commodityTradeDependency.basisOut.basis = 'heuristic';
   var inImports = menus.imports.some(function (x) { return (x || '').toLowerCase().indexOf(commodity.toLowerCase()) >= 0; });
   var inExports = menus.exports.some(function (x) { return (x || '').toLowerCase().indexOf(commodity.toLowerCase()) >= 0; });
   var isProducer = (COMMODITY_PRODUCERS[commodity] || []).indexOf(c.iso) >= 0
@@ -65,11 +75,11 @@ function commodityTradeDependency(c, commodity, live, menus) {
       dep = 5;
     } else if (inExports && inImports) {
 
-      var trend = (c.c || [])[2] || 50;
+      var trend = finite((c.c || [])[2]) ? c.c[2] : 50;
       dep = Math.round(15 + trend * 0.35);
     } else if (inImports) {
 
-      var trend = (c.c || [])[2] || 50;
+      var trend = finite((c.c || [])[2]) ? c.c[2] : 50;
       dep = Math.round(25 + trend * 0.5);
     } else {
 
@@ -77,7 +87,8 @@ function commodityTradeDependency(c, commodity, live, menus) {
     }
   } else if (isCoreStaple) {
 
-    dep = inExports ? 90 : 95;
+    /* A listed exporter of a core staple is not import-dependent for it. */
+    dep = inExports ? 10 : 95;
   } else {
 
     if (inImports) dep = 90;
@@ -117,9 +128,9 @@ function commodityTradeDependency(c, commodity, live, menus) {
     if (asap.stress_score != null) parts.push({v:clip(asap.stress_score),w:0.20});
     if (ccp.warming_c != null) parts.push({v:clip(ccp.warming_c*50),w:0.20});
     if (ndg.food_vulnerability != null && parts.length >= 2) cv[4]=Math.round(original[4]*0.4+composite(parts)*0.6);
-    var inf=row('inform'), wgi=row('wgi'), lpi=row('lpi'), hcf=row('hapi_conflict'); parts=[];
-    var intensity=hcf.intensity_score_pc != null ? hcf.intensity_score_pc : hcf.intensity_score;
-    if (hcf.is_live && intensity != null) parts.push({v:clip(intensity),w:0.35});
+    /* Structural governance and risk only. Live conflict intensity (HAPI) is counted once, in the
+       nowcast's conflict_kick, not here as well. */
+    var inf=row('inform'), wgi=row('wgi'), lpi=row('lpi'); parts=[];
     if (inf.inform_risk != null) parts.push({v:inf.inform_risk*10,w:0.30});
     if (value(wgi.rule_of_law) != null) parts.push({v:clip((2.5-value(wgi.rule_of_law))*20),w:0.20});
     if (value(lpi.overall) != null) parts.push({v:clip((5-value(lpi.overall))*25),w:0.15});
@@ -128,13 +139,19 @@ function commodityTradeDependency(c, commodity, live, menus) {
     var fa=row('feeding_america');
     if (iso.indexOf('US-') === 0 && fa.food_insecurity_pct != null) {
       var mmg=clip(Math.round((fa.food_insecurity_pct-5)/15*75+10));
-      base=mmg*0.7+structural*0.3;
+      base=Math.round(mmg*0.7+structural*0.3);
     }
     var adjustment=row('nowcast').adjustment || 0;
     var displayed=clip(Math.round(base+adjustment));
     return {displayed:displayed, base:base, delta:displayed-base, structural:structural,
       adjustment:adjustment, components:cv, sce:sce, decomposition:d};
   }
+  /* Where a trade-dependency figure came from: 'psd' (a current USDA balance) or 'heuristic' (menu fallback). */
+  function commodityTradeBasis(c, commodity, live, menus) {
+    var out = { basis: null }; commodityTradeDependency.basisOut = out;
+    try { commodityTradeDependency(c, commodity, live, menus); } finally { commodityTradeDependency.basisOut = null; }
+    return out.basis;
+  }
   return {weights:weights, score:score, decomposition:decomposition, displayed:displayed,
-    supplyChainExposure:supplyChainExposure, commodityTradeDependency:commodityTradeDependency};
+    supplyChainExposure:supplyChainExposure, commodityTradeDependency:commodityTradeDependency, commodityTradeBasis:commodityTradeBasis};
 }));
