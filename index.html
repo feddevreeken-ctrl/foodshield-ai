@@ -2135,10 +2135,10 @@ body {
 .map-ocean-label {
   font-family: 'Instrument Serif', Georgia, serif !important;
   font-style: italic;
-  font-size: 12.5px;
-  letter-spacing: 0.18em;
+  font-size: 11px;
+  letter-spacing: 0.24em;
   line-height: 1;
-  color: #6d7a86;
+  color: #4d5864;
   text-transform: uppercase;
   white-space: nowrap;
   transform: translate(-50%, -50%);
@@ -2300,6 +2300,13 @@ body {
 /* Legend */
 /* v68 — cartographic ramp legend: a continuous scale bar, band names under
    their segments, breakpoint values on a tick row. Small, quiet, standard. */
+/* 2026-09-25 — phones: the legend folds to its ramp and band names, the status strip to two lines, so the
+   overlays stop covering half the map. */
+@media (max-width:600px) {
+  #map-legend .legend-range, #map-legend .legend-title { display:none; }
+  #map-legend { padding:6px 8px; }
+  #map-state { display:none !important; }
+}
 #map-legend {
   position: absolute;
   bottom: 26px; left: 18px;
@@ -12684,11 +12691,11 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
           <span class="legend-nd legend-item"><span class="legend-swatch legend-nodata"></span><span class="legend-label">Unscored</span></span>
         </div>
         <div class="legend-ramp">
-          <div class="legend-item" title="Low exposure · 0–25 · supply-shock exposure, not hunger"><span class="legend-swatch" style="background:#5fa85f"></span><span class="legend-label">Low exposure</span><span class="legend-range">0–25</span></div>
-          <div class="legend-item" title="Exposed · 26–50"><span class="legend-swatch" style="background:#e0b94a"></span><span class="legend-label">Exposed</span><span class="legend-range">26–50</span></div>
-          <div class="legend-item" title="Dependent · 51–75"><span class="legend-swatch" style="background:#e07a2e"></span><span class="legend-label">Dependent</span><span class="legend-range">51–75</span></div>
-          <div class="legend-item" title="Vulnerable · 76–88"><span class="legend-swatch" style="background:#d23a2a"></span><span class="legend-label">Vulnerable</span><span class="legend-range">76–88</span></div>
-          <div class="legend-item" title="Severe · 89–100"><span class="legend-swatch" style="background:#b3245f"></span><span class="legend-label">Severe</span><span class="legend-range">89–100</span></div>
+          <div class="legend-item" title="Low exposure · 0–25 · supply-shock exposure, not hunger"><span class="legend-swatch" style="background:#3d5c55"></span><span class="legend-label">Low exposure</span><span class="legend-range">0–25</span></div>
+          <div class="legend-item" title="Exposed · 26–50"><span class="legend-swatch" style="background:#9a8747"></span><span class="legend-label">Exposed</span><span class="legend-range">26–50</span></div>
+          <div class="legend-item" title="Dependent · 51–75"><span class="legend-swatch" style="background:#dc7a33"></span><span class="legend-label">Dependent</span><span class="legend-range">51–75</span></div>
+          <div class="legend-item" title="Vulnerable · 76–88"><span class="legend-swatch" style="background:#e8472d"></span><span class="legend-label">Vulnerable</span><span class="legend-range">76–88</span></div>
+          <div class="legend-item" title="Severe · 89–100"><span class="legend-swatch" style="background:#e0306f"></span><span class="legend-label">Severe</span><span class="legend-range">89–100</span></div>
         </div>
         <div id="map-legend-date" class="legend-date" hidden></div>
       </div>
@@ -12892,7 +12899,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18v.5"/></svg>
           Most Vulnerable
         </div>
-        <div class="rank-key">Chips: score trend on the daily record · live signals against the structural score · today’s score</div>
+        <div class="rank-key">Trend · live vs structural · score</div>
         <div id="rail-vulnerable"></div>
       </div>
       <div class="rail-card">
@@ -21133,10 +21140,12 @@ function riskColor(s) {
   // whole point, rendered nearly invisible on --bg0. Lightened to AA-legible
   // coral-reds (>=4.5:1) while keeping severe visibly deeper than vulnerable.
   // The map keeps its own saturated palette (mapRiskColor) so gravitas is intact.
-  if (s <= 25) return '#6ba36b';
-  if (s <= 50) return '#c9a957';
-  if (s <= 75) return '#d27a3e';
-  if (s <= 88) return '#e58a78';  /* vulnerable: was #c44b3c (4.1:1) */
+  /* 2026-09-25 — the text colours follow the map's hue families (teal, ochre, orange, vermilion, magenta),
+     lifted to stay >=4.5:1 on the near-black ground. */
+  if (s <= 25) return '#72a398';
+  if (s <= 50) return '#c4ae6b';
+  if (s <= 75) return '#e08a45';
+  if (s <= 88) return '#f07a5f';
   return '#ef7fb0';               /* severe: a hue step (red → magenta) so it reads apart from vulnerable; >=4.5:1 on --bg0 */
 }
 
@@ -21148,11 +21157,13 @@ function riskColor(s) {
 // map layer (line 11475); all charts, badges, panels still use riskColor()
 // so the editorial palette stays intact.
 function mapRiskColor(s) {
-  if (s <= 25) return '#5fa85f';   // resilient — slightly cleaner green
-  if (s <= 50) return '#e0b94a';   // exposed   — brighter gold, more separation
-  if (s <= 75) return '#e07a2e';   // dependent — saturated burnt orange
-  if (s <= 88) return '#d23a2a';   // vulnerable — clay-red
-  return '#b3245f';                // severe — magenta-crimson: a hue step from vulnerable's clay-red, not a near-identical red; >=3:1 on the map base. — was #8e1f17 (1.95:1 vs map base, sub-3:1 non-text). Lifted for visibility; the most critical countries must read clearly against ocean/no-data.
+  /* 2026-09-25 — the fill ramp lets low exposure recede and risk carry the colour: muted teal, dim ochre,
+     orange, vermilion, magenta. The old traffic-light fills made half the world shout green and gold. */
+  if (s <= 25) return '#3d5c55';   // low exposure — muted teal, recedes on the dark ground
+  if (s <= 50) return '#9a8747';   // exposed      — dim ochre
+  if (s <= 75) return '#dc7a33';   // dependent    — orange
+  if (s <= 88) return '#e8472d';   // vulnerable   — vermilion
+  return '#e0306f';                // severe — magenta-crimson: a hue step from vulnerable's clay-red, not a near-identical red; >=3:1 on the map base. — was #8e1f17 (1.95:1 vs map base, sub-3:1 non-text). Lifted for visibility; the most critical countries must read clearly against ocean/no-data.
 }
 function riskLabel(s) {
   if (s <= 25) return 'Low exposure';   // v?? — was 'Resilient'. The vector measures exposure
@@ -23942,6 +23953,9 @@ function _simulateScenario(c, selected, severityById, paramsById) {
 
   function onEachFeature(f, layer) {
     const c = lookupCountry(f);
+    /* Antarctica carries no score and no people; it is ground, not a country to hover. */
+    const fp = f && f.properties || {};
+    if ((fp.ISO_A3 || fp.ADM0_A3 || fp.iso_a3) === 'ATA' || /antarctica/i.test(fp.NAME || fp.name || fp.ADMIN || '')) { layer.options.interactive = false; return; }
     layer.on({
       mouseover: function (e) {
         const l = e.target;
@@ -23956,11 +23970,12 @@ function _simulateScenario(c, selected, severityById, paramsById) {
         G.countryLayer.resetStyle(e.target);
         hideTooltip();
         if (G.selectedISO && c && c.iso === G.selectedISO) {
-          e.target.setStyle({ weight: 1.7, color: '#8aa6c4' });
+          e.target.setStyle({ weight: 2.5, color: '#f2efe6' });
           try { e.target.bringToFront(); } catch (err) {}
         }
       },
       click: function () {
+        hideTooltip();
         if (c && typeof openPanel === 'function') openPanel(c);
       },
     });
@@ -24018,10 +24033,10 @@ function _simulateScenario(c, selected, severityById, paramsById) {
         G.selectedLayer = layer;
         try {
           layer.bringToFront();
-          layer.setStyle({ weight: 1.7, color: '#8aa6c4' });
+          layer.setStyle({ weight: 2.5, color: '#f2efe6' });
           const bounds = layer.getBounds();
           G.map.flyToBounds(bounds, {
-            maxZoom: 4,
+            maxZoom: 3.5,
             padding: [80, 80],
             duration: 0.9,
             easeLinearity: 0.4,
@@ -24048,7 +24063,7 @@ function _simulateScenario(c, selected, severityById, paramsById) {
   function render() {
     if (G.countryLayer) G.countryLayer.setStyle(styleFeature);
     if (G.selectedLayer) {
-      G.selectedLayer.setStyle({ weight: 1.7, color: '#8aa6c4' });
+      G.selectedLayer.setStyle({ weight: 2.5, color: '#f2efe6' });
       try { G.selectedLayer.bringToFront(); } catch (e) {}
     }
   }
@@ -35755,11 +35770,13 @@ function populateCommodityFlowSelect() {
   const sel = document.getElementById('map-commodity-flows');
   if (!sel || sel.options.length > 1) return;
   try {
+    /* The four staples first (the ones the score reads), then the rest A–Z; "Corn" reads "Maize" as elsewhere. */
+    const FIRST = ['Wheat', 'Rice', 'Corn', 'Soybeans'];
     const metas = (typeof COMMODITY_META !== 'undefined' ? COMMODITY_META : [])
-      .slice().sort((a,b)=> a.key.localeCompare(b.key));
+      .slice().sort((a,b)=> ((FIRST.indexOf(a.key) + 1 || 99) - (FIRST.indexOf(b.key) + 1 || 99)) || a.key.localeCompare(b.key));
     metas.forEach(m => {
       const o = document.createElement('option');
-      o.value = m.dataKey; o.textContent = m.key;
+      o.value = m.dataKey; o.textContent = m.key === 'Corn' ? 'Maize' : m.key;
       sel.appendChild(o);
     });
   } catch(e) {}
@@ -35899,7 +35916,8 @@ function renderMapLayers(){
     return '<button type="button" class="mlp-row" aria-pressed="'+on+'" onclick="'+handler+'(event)">'+chk(on)+
       '<span class="mlp-icon">'+icon+'</span><span class="mlp-label">'+label+'</span>'+(extra || '')+'</button>';
   }
-  var subs = ML_TYPES.map(function (x) { return '<button type="button" class="mlp-subrow" aria-pressed="'+(st.distOn && !st.hidden.has(x.t))+'" onclick="mlToggleType(event,\''+x.t+'\')">'+
+  /* Types with nothing live today are not listed ("Conflict 0" was noise). */
+  var subs = ML_TYPES.filter(function (x) { return (counts[x.t] || 0) > 0; }).map(function (x) { return '<button type="button" class="mlp-subrow" aria-pressed="'+(st.distOn && !st.hidden.has(x.t))+'" onclick="mlToggleType(event,\''+x.t+'\')">'+
     chk(st.distOn && !st.hidden.has(x.t),true)+'<span class="mlp-dot" style="background:'+x.c+'"></span><span class="mlp-label">'+x.l+'</span><span class="mlp-count">'+(counts[x.t] || 0)+'</span></button>'; }).join('');
   el.innerHTML = '<details class="mlp-instrument"'+((st.panelOpen == null ? !window.matchMedia('(max-width:600px)').matches : st.panelOpen) ? ' open' : '')+' ontoggle="window._mlState.panelOpen=this.open">'+
     '<summary class="mlp-head">Map layers <span>Live · Sea · Trade</span></summary><div class="mlp-body">'+
@@ -35912,7 +35930,7 @@ function renderMapLayers(){
     '<select class="mlp-select" id="map-commodity-flows" aria-label="Trade commodity" onfocus="populateCommodityFlowSelect()" onchange="toggleCommodityFlowOverlay(this.value)" style="'+(st.flowsOn ? '' : 'display:none')+'"><option value="">Choose a commodity…</option></select></div></details>';
   if (st.flowsOn && typeof populateCommodityFlowSelect === 'function') populateCommodityFlowSelect();
 }
-function mlToggleDist(ev){ ev.stopPropagation(); var st = window._mlState; st.distOn = !st.distOn; if (st.distOn) st.expanded = true; applyMapLayers(); renderMapLayers(); }
+function mlToggleDist(ev){ ev.stopPropagation(); var st = window._mlState; st.distOn = !st.distOn; st.expanded = st.distOn; /* the sub-list folds away with the layer */ applyMapLayers(); renderMapLayers(); }
 function mlToggleExpand(ev){ ev.stopPropagation(); window._mlState.expanded = !window._mlState.expanded; renderMapLayers(); }
 function mlToggleType(ev, t){ ev.stopPropagation(); var st = window._mlState; if (st.hidden.has(t)) st.hidden.delete(t); else st.hidden.add(t); if (!st.distOn) st.distOn = true; applyMapLayers(); renderMapLayers(); }
 function mlToggleSST(ev){
