@@ -328,6 +328,11 @@ def _summarize_country(rows):
     for ptype, lst in by_type.items():
         if not lst:
             continue
+        # Latest analysis period only: the worst phase across the whole national history picked 2023
+        # periods for 22 of 28 countries while FEWS had already published 2026 classifications.
+        latest = max((str(x["end"] or "") for x in lst), default="")
+        if latest:
+            lst = [x for x in lst if str(x["end"] or "") == latest] or lst
         worst = max(lst, key=lambda x: x["phase"])
         out[ptype] = {
             "phase": worst["phase"],

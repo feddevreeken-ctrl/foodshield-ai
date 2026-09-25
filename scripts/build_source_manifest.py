@@ -437,6 +437,28 @@ SOURCES = [
         "cadence": "6h fetch / continuous upstream",
         "mode": "live",
     },
+    # 2026-09 — official market-price and crisis-list feeds (keyless).
+    {
+        "key": "fpma_prices",
+        "file": "fpma_prices.json",
+        "label": "FAO GIEWS FPMA — staple food prices, year-on-year (domestic markets)",
+        "cadence": "6h fetch / monthly upstream",
+        "mode": "market",
+    },
+    {
+        "key": "giews_crea",
+        "file": "giews_crea.json",
+        "label": "FAO GIEWS — countries requiring external assistance for food",
+        "cadence": "6h fetch / 3x-yearly upstream",
+        "mode": "forecast",
+    },
+    {
+        "key": "imf_food_cpi",
+        "file": "imf_food_cpi.json",
+        "label": "IMF CPI — food and non-alcoholic beverages, year-on-year",
+        "cadence": "6h fetch / monthly upstream",
+        "mode": "reference",
+    },
     {
         # Registered so a dead feed cannot hide by simply being absent from the
         # manifest: the collector has written 0 rows with status auth_failed
@@ -480,6 +502,10 @@ DATA_DATE = {
     "commodity_news": ("published_at", "daily"),
     "enso_news": ("published_at", "daily"),
     # nasa_firms rows are undated 7-day counts, so only file age applies to it.
+    # FPMA / IMF: newest month across countries (per-country months vary; each row
+    # carries its own). giews_crea is a 3x-yearly list, so not date-gated here.
+    "fpma_prices": ("latest_month", "monthly"),
+    "imf_food_cpi": ("month", "monthly"),
 }
 
 

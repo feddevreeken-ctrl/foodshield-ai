@@ -73,6 +73,9 @@ import refresh_cckp
 import refresh_fews
 import refresh_hapi_idps   # v43 — HDX HAPI internal displacement (new nowcast signal)
 import refresh_trade_restrictions
+import refresh_fpma_prices      # FAO GIEWS FPMA: staple-food price YoY, ~125 countries, monthly
+import refresh_giews_crea       # FAO GIEWS countries requiring external assistance (3x/yr list)
+import refresh_imf_food_cpi     # IMF CPI food (CP01) YoY, monthly, fresher than FAOSTAT's CPI
 import refresh_commodity_news   # v46 — GDELT + EC RSS commodity headlines (claims, not data)
 import refresh_enso_news        # El Niño wire: headlines that name the event (claims, not data)
 import refresh_cpc_strengths    # CPC RONI strength odds by season (how strong, how long)
@@ -147,6 +150,11 @@ STEPS = [
     ("HDX HAPI displacement",  refresh_hapi_idps.main,          "hapi_idps.json"),
     ("WB WDI bulk",            refresh_worldbank_bulk.main,     "worldbank_bulk.json"),
     ("WB WFSO",                refresh_wb_wfso.main,            "wb_wfso.json"),
+    # Official market-price and crisis-list feeds (2026-09). Keyless, fail-safe,
+    # run before "Countries dataset" so a future consumer there sees this cycle's rows.
+    ("FAO GIEWS FPMA prices",  refresh_fpma_prices.main,        "fpma_prices.json"),
+    ("FAO GIEWS CREA list",    refresh_giews_crea.main,         "giews_crea.json"),
+    ("IMF food CPI",           refresh_imf_food_cpi.main,       "imf_food_cpi.json"),
     ("FX rates (v23)",         refresh_fx.main,                 "fx_rates.json"),
     # v40 — trade-restriction monitor. Preserve-safe stub: ships empty and never
     # clobbers owner-curated cited entries. restrictionExposure() in the app computes

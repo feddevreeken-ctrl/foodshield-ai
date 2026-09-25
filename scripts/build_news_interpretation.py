@@ -296,10 +296,12 @@ def _price_facts(pink_payload, series_key):
     series = (pink_payload.get("series") or {}).get(series_key)
     if not isinstance(series, dict):
         return out
-    out["price_usd_per_unit"] = _r(series.get("latest_value"), 1)
+    # The Pink Sheet's own precision (sugar 0.38 $/kg, beef 7.28): rounding to one decimal made
+    # 0.34 -> 0.38 read as "0.3 to 0.4, +11.8%" and disagreed with the Commodities tab.
+    out["price_usd_per_unit"] = _r(series.get("latest_value"), 2)
     out["price_unit"] = series.get("unit")
     out["price_month"] = series.get("latest_month")
-    out["price_prev_month_value"] = _r(series.get("previous_value"), 1)
+    out["price_prev_month_value"] = _r(series.get("previous_value"), 2)
     out["price_change_mom_pct"] = _r(series.get("change_mom_pct"), 1)
     return out
 
