@@ -30152,7 +30152,9 @@ function fsPrivacyClose(){
 
 /* Conversation state. history holds plain question/answer text for follow-ups; the data packet is
    rebuilt for every question from the page as it is at that moment. */
-const _fsAsk = { history: [], busy: false, ctrl: null, ai: null, gen: 0 };
+/* ai: null (not probed yet) | 'claude' (api/ask.js has a key) | 'free' (api/ask.js relays a free,
+   keyless model) | false (no endpoint: the deterministic explainer answers). */
+const _fsAsk = { history: [], busy: false, ctrl: null, ai: null, gen: 0, model: null };
 
 function fsAskOpen(){
   const o = document.getElementById('fs-ask-overlay'); if (!o) return;
@@ -30164,7 +30166,7 @@ function fsAskOpen(){
   if (_fsAsk.ai === null) {
     fetch('/api/ask', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : null)
-      .then(j => { _fsAsk.ai = !!(j && j.configured); fsAskMode(); })
+      .then(j => { _fsAsk.ai = (j && (j.provider || (j.configured ? 'claude' : null))) || false; fsAskMode(); })
       .catch(() => { _fsAsk.ai = false; fsAskMode(); });
   }
   fsAskMode();
@@ -30182,6 +30184,8 @@ function fsAskMode(){
   const m = document.getElementById('fs-ask-mode'); if (!m) return;
   m.textContent = _fsAsk.ai === false
     ? 'Offline mode: answers are assembled from this page\'s figures without a language model.'
+    : _fsAsk.ai === 'free'
+    ? 'A free open model (GPT-OSS 20B via Pollinations) answers from the data on this page. Every figure is checked against it.'
     : 'Claude answers from the data on this page. Every figure in an answer is checked against it.';
 }
 function fsAskReset(){
@@ -30491,7 +30495,7 @@ function fsAskTrace(ver, ctx, ms){
     : `${ver.missing} of ${ver.checked} figure${ver.checked === 1 ? '' : 's'} not found in the page data (dotted underline). Treat ${ver.missing === 1 ? 'it' : 'them'} with caution.`;
   const names = (ctx.countries || []).map(c => c.name).concat(ctx.commodity ? [ctx.commodity.name] : []);
   const opens = (ctx.countries || []).map(c => `<button type="button" class="fs-ask-open" onclick="fsAskClose();openPanel(byISO('${c.iso}'))">Open ${_fsAskEsc(c.name)} →</button>`).join('');
-  return `<div class="fs-ask-trace${ver.missing ? ' is-warn' : ''}">${line}</div>${opens ? `<div class="fs-ask-opens">${opens}</div>` : ''}`
+  return `<div class="fs-ask-trace${ver.missing ? ' is-warn' : ''}">${line}${_fsAsk.model ? ' Answered by ' + _fsAskEsc(_fsAsk.model) + '.' : ''}</div>${opens ? `<div class="fs-ask-opens">${opens}</div>` : ''}`
     + `<details class="fs-ask-data"><summary>Data sent with this question${names.length ? ': ' + _fsAskEsc(names.join(', ')) : ''} · ${kb} KB${ms ? ` · ${(ms / 1000).toFixed(1)} s` : ''}</summary><pre>${_fsAskEsc(JSON.stringify(ctx, null, 1).slice(0, 40000))}</pre></details>`;
 }
 function _fsAskBusy(on){
@@ -30519,14 +30523,17 @@ async function fsAskAsk(q){
     ctx = await fsAskContext(q);
     aEl.innerHTML = '<span class="fs-ask-wait">Reading the data…</span>';
     _fsAsk.ctrl = new AbortController();
+    let raf = 0;
+    const paint = () => { raf = 0; if (gen !== _fsAsk.gen) return; aEl.innerHTML = fsAskRender(text) + '<span class="fs-ask-caret" aria-hidden="true"></span>'; _fsAskScroll(); };
+    const onText = t => { text += t; if (!raf) raf = requestAnimationFrame(paint); };
+    _fsAsk.model = null;
     const res = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: _fsAsk.ctrl.signal,
       body: JSON.stringify({ question: q, history: _fsAsk.history.slice(-6), context: ctx }) });
     if (res.status === 503 || res.status === 404 || res.status === 405){ _fsAsk.ai = false; fsAskMode(); failed = 'offline'; }
     else if (!res.ok || !res.body){ const j = await res.json().catch(() => ({})); failed = j.error || 'The question could not be sent.'; }
     else {
       const reader = res.body.getReader(), dec = new TextDecoder();
-      let buf = '', raf = 0, done = false;
-      const paint = () => { raf = 0; if (gen !== _fsAsk.gen) return; aEl.innerHTML = fsAskRender(text) + '<span class="fs-ask-caret" aria-hidden="true"></span>'; _fsAskScroll(); };
+      let buf = '', done = false;
       while (!done){
         const r = await reader.read(); if (r.done) break;
         buf += dec.decode(r.value, { stream: true });
@@ -30535,10 +30542,10 @@ async function fsAskAsk(q){
           const line = buf.slice(0, i); buf = buf.slice(i + 2);
           if (!line.startsWith('data: ')) continue;
           let ev; try { ev = JSON.parse(line.slice(6)); } catch (e) { continue; }
-          if (ev.t){ text += ev.t; if (!raf) raf = requestAnimationFrame(paint); }
+          if (ev.t) onText(ev.t);
           else if (ev.refused) failed = 'The model declined to answer this question.';
           else if (ev.error) failed = ev.error;
-          else if (ev.done){ done = true; if (ev.stop === 'max_tokens') text += '\n\n(Answer cut off at the length limit.)'; }
+          else if (ev.done){ done = true; _fsAsk.model = ev.model || null; if (ev.stop === 'max_tokens') text += '\n\n(Answer cut off at the length limit.)'; }
         }
       }
       if (raf) cancelAnimationFrame(raf);
@@ -43693,7 +43700,7 @@ function showCommodityDetail(key) {
       <p>The updates form is the only place this site asks for personal data, and it is optional. A submitted address is sent to <b>Formspree</b> (formspree.io), a third-party form processor, and is also kept in <code>localStorage</code> as described above. It is used to send occasional updates about this project and nothing else: it is not sold, rented or passed to advertisers. To have an address removed, email the address in the footer.</p>
 
       <h4>If you use Ask FoodShield</h4>
-      <p>A question you type into Ask FoodShield is sent, with the page's figures for the countries and crops it names, to this site's own server and from there to Anthropic's API, which writes the answer. The question and answer are not stored by this site and are not linked to you; Anthropic processes them under its commercial terms and does not train its models on API traffic. Do not type personal information into the box. The data packet sent with each question can be read under "Data sent with this question" beneath the answer.</p>
+      <p>A question you type into Ask FoodShield is sent, with the page's figures for the countries and crops it names, to this site's own server and from there to Anthropic's API, which writes the answer. Where that is not configured, the site's server sends the same question and figures to Pollinations (pollinations.ai), a free open-model service, instead. The question and answer are not stored by this site and are not linked to you; Anthropic processes them under its commercial terms and does not train its models on API traffic. Do not type personal information into the box. The data packet sent with each question can be read under "Data sent with this question" beneath the answer.</p>
       <h4>Third parties your browser contacts</h4>
       <p>Loading the dashboard fetches assets and map tiles from other hosts. Those hosts necessarily see your IP address and browser, in the ordinary way any website request does:</p>
       <ul>

@@ -7,8 +7,12 @@
    the answer against the packet and marks any it cannot trace.
 
    Environment:
-     ANTHROPIC_API_KEY  required; without it the endpoint returns 503 and the page
-                        falls back to its deterministic explainer.
+     ANTHROPIC_API_KEY  optional. Without it the question goes to a free, keyless model
+                        (Pollinations' anonymous tier, GPT-OSS 20B) under the same system
+                        prompt. Pollinations refuses browser calls without a captcha
+                        token, so the call is made here, server-side.
+     POLLINATIONS_TOKEN optional free Pollinations token for a higher rate limit.
+     ASK_FREE=off       disables the free fallback (POST then returns 503).
      ASK_MODEL          optional, default claude-opus-5.
      ASK_EFFORT         optional, low | medium | high (default medium).
 */
@@ -31,6 +35,7 @@ Rules for figures:
 - Give the date or period that goes with a figure (the "as_of", "year" or "month" field next to it) and name its source in brackets, e.g. [FAOSTAT trade matrix, 2024].
 - If <site_data> does not contain what the question needs, say so plainly and say where on the dashboard the reader could look. Do not fill the gap from memory. Do not estimate a number the data does not hold.
 - A field that is null or missing means the dashboard has no value for it. Say "no data", never zero.
+- Component values are scores from 0 to 100, not percentages and never negative: write "import dependence 59 (of 100)", not "59 %". A field named *_pct is a percentage.
 - You may explain general concepts (what an export ban is, what a Herfindahl index measures) in plain words without figures. Do not state facts about current events, prices, harvests or policies that are not in <site_data>.
 
 Rules for interpretation:
@@ -119,15 +124,61 @@ function buildMessages(body) {
 
 function send(res, obj) { res.write(`data: ${JSON.stringify(obj)}\n\n`); }
 
+function providerName() {
+  if (process.env.ANTHROPIC_API_KEY) return 'claude';
+  return process.env.ASK_FREE === 'off' ? null : 'free';
+}
+
+/* The free path: an OpenAI-compatible stream from Pollinations, re-emitted in this endpoint's
+   own event format. Reasoning deltas are dropped; only the answer text is forwarded. */
+const FREE_URL = 'https://text.pollinations.ai/openai';
+const FREE_MODEL_LABEL = 'GPT-OSS 20B via Pollinations';
+async function answerFree(body, res, signal) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (process.env.POLLINATIONS_TOKEN) headers.Authorization = `Bearer ${process.env.POLLINATIONS_TOKEN}`;
+  let up;
+  try {
+    up = await fetch(FREE_URL, { method: 'POST', headers, signal,
+      body: JSON.stringify({ model: 'openai', stream: true, messages: [{ role: 'system', content: SYSTEM }].concat(buildMessages(body)) }) });
+  } catch (err) {
+    if (!signal.aborted) send(res, { error: 'The free model could not be reached.' });
+    return;
+  }
+  if (up.status === 429) { send(res, { error: 'The free model is busy (about one question every 15 seconds). Try again shortly.' }); return; }
+  if (!up.ok || !up.body) { send(res, { error: `The free model did not answer (HTTP ${up.status}).` }); return; }
+  const reader = up.body.getReader(), dec = new TextDecoder();
+  let buf = '', stop = 'end_turn';
+  try {
+    for (;;) {
+      const r = await reader.read(); if (r.done) break;
+      buf += dec.decode(r.value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (data === '[DONE]') { send(res, { done: true, stop, model: FREE_MODEL_LABEL }); return; }
+        let ev; try { ev = JSON.parse(data); } catch { continue; }
+        const ch = ev.choices && ev.choices[0];
+        if (ch && ch.delta && typeof ch.delta.content === 'string' && ch.delta.content) send(res, { t: ch.delta.content });
+        if (ch && ch.finish_reason === 'length') stop = 'max_tokens';
+      }
+    }
+    send(res, { done: true, stop, model: FREE_MODEL_LABEL });
+  } catch (err) {
+    if (!signal.aborted) send(res, { error: 'The free model stopped mid-answer.' });
+  }
+}
+
 async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method === 'GET') {
-    res.status(200).json({ ok: true, configured: !!process.env.ANTHROPIC_API_KEY });
+    res.status(200).json({ ok: true, configured: !!process.env.ANTHROPIC_API_KEY, provider: providerName() });
     return;
   }
   if (req.method !== 'POST') { res.setHeader('Allow', 'GET, POST'); res.status(405).json({ error: 'Use POST.' }); return; }
   if (!allowedOrigin(req.headers.origin, req.headers.host)) { res.status(403).json({ error: 'Cross-site requests are not accepted.' }); return; }
-  if (!process.env.ANTHROPIC_API_KEY) { res.status(503).json({ error: 'not_configured' }); return; }
+  if (!providerName()) { res.status(503).json({ error: 'not_configured' }); return; }
 
   const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim() || 'unknown';
   if (rateLimited(ip)) { res.status(429).json({ error: 'Too many questions in ten minutes. Try again shortly.' }); return; }
@@ -139,9 +190,10 @@ async function handler(req, res) {
 
   res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
 
-  const client = new Anthropic();
   const controller = new AbortController();
   res.on('close', () => { if (!res.writableFinished) controller.abort(); });
+  if (!process.env.ANTHROPIC_API_KEY) { await answerFree(body, res, controller.signal); res.end(); return; }
+  const client = new Anthropic();
   try {
     const stream = client.beta.messages.stream({
       model: MODEL,
@@ -159,7 +211,7 @@ async function handler(req, res) {
     }
     const final = await stream.finalMessage();
     if (final.stop_reason === 'refusal') send(res, { refused: true });
-    send(res, { done: true, stop: final.stop_reason });
+    send(res, { done: true, stop: final.stop_reason, model: 'Claude' });
   } catch (err) {
     if (!controller.signal.aborted) {
       const status = err instanceof Anthropic.APIError ? err.status : null;
