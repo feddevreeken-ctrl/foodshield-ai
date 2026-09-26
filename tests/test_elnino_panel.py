@@ -732,15 +732,15 @@ def main() -> int:
         # 2026-09-24: the Ocean lens leads with a dated calendar joined from the other lenses' data.
         page.evaluate("showTab('elnino')")
         page.wait_for_selector('#subview-elnino.active .enso-next12-bar')
-        check("Ocean opens with the map, then the next twelve months, each line typed and linked to its lens", page.evaluate("""async () => {
+        check("Ocean opens with the map and the ONI record; the next twelve months has each line typed and linked to its lens", page.evaluate("""async () => {
             const O = (await (await fetch('data/enso_outlook.json')).json()).data;
             const items = [...document.querySelectorAll('.enso-next12 li')];
             const first = document.querySelector('#subview-elnino > *:not([hidden])');
             const harv = O.rows_all.filter(r => r.status === 'shown' && !r.in_season && Math.abs(r.change_kt_record || 0) >= 150);
             const text = document.querySelector('.enso-next12').textContent;
-            // 2026-09-24: the sea-surface map opens Ocean (the landing view); the calendar follows it.
+            // 2026-09-27: the map opens Ocean, then the ONI record and the CPC odds; the dated calendar follows.
             const second = first && first.nextElementSibling;
-            return first && first.classList.contains('enso-mapgrid') && second && second.id === 'enso-next12'
+            return first && first.classList.contains('enso-mapgrid') && second && second.classList.contains('enso-oni-plate') && !!document.querySelector('#subview-elnino > #enso-next12')
                 && items.length >= 6 && items.every(li => /^is-(forecast|published|modelled|precedent)$/.test(li.className) && li.querySelector('[data-goto-lens]'))
                 && harv.every(r => text.includes(r.harvest))
                 && (text.match(/more maize from abroad/g) || []).length <= 1;

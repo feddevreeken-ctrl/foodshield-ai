@@ -119,10 +119,10 @@ test('calendar retains eligible crop rows, month names, and stage groups',()=>{
  assert.equal((out.match(/data-st=/g)||[]).length,Math.min(30,expected));assert.equal((out.match(/class="cal-group"/g)||[]).length,4);
  for(const m of ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'])assert(out.includes('>'+m+'</i>'));
 });
-test('shipping opens on Panama and closes with the nine-lane board, with paired published limits and dated AIS',()=>{
+test('shipping opens with the nine-lane board, then Panama with paired published limits and dated AIS',()=>{
  api.renderWater();const out=nodes['enso-water'].innerHTML;assert(out.indexOf('id="enso-c-panama"')<out.indexOf('id="enso-c-panama-daily"'));
- /* 2026-09-26: the map leads; Panama first, the lane board closes the lens as its index. */
- assert(out.indexOf('enso-panama-pair')<out.indexOf('enso-lane-board'));
+ /* 2026-09-27 (Codex order review): the map leads, then the lane board as the answer, then Panama. */
+ assert(out.indexOf('enso-lane-board')<out.indexOf('enso-panama-pair'));
  assert.equal((out.match(/data-board-lane=/g)||[]).length,9);
  const pan=S.lanes.lanes.find(l=>l.id==='panama');assert(out.includes(pan.live_2026.steps.at(-1).total+' slots/day for transits from'));
  for (const id of ['amazon','rhine','mississippi']) { const row=out.match(new RegExp('data-board-lane="'+id+'"[\\s\\S]*?</tr>'))[0]; assert(row.includes('2026'),id+' has a dated September observation'); }
