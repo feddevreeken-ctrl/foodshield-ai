@@ -13512,7 +13512,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
       <div class="editorial-header">
         <div class="editorial-dateline">
           <span class="dot"></span>
-          <span>Companies · 11 majors · 222 cited claims · 44 countries · filings FY2024–25</span>
+          <span id="co-dateline">Companies · researched majors · cited claims from their own filings</span>
         </div>
         <div class="editorial-headline">Where eleven major food and fertilizer companies say they source, <em>in their own filings</em>.</div>
         <div class="editorial-standfirst">
@@ -20796,6 +20796,26 @@ async function loadLiveData() {
   try {
     const coEnv = await _deferred.companies;
     LIVE.companies = (coEnv && (coEnv.data || coEnv)) || {};
+    /* Olam Agri (rice, wheat milling, cotton) has been 80.01% owned by SALIC since April 2026: its claims
+       are split out of Olam Group into their own record. */
+    try {
+      const og = LIVE.companies['Olam Group'];
+      if (og && Array.isArray(og.country_claims)) {
+        const agri = og.country_claims.filter(cl => cl.entity === 'Olam Agri');
+        if (agri.length) {
+          LIVE.companies['Olam Agri'] = Object.assign({}, og, {
+            display_name: 'Olam Agri', legal_name: 'Olam Agri Holdings',
+            ownership: 'SALIC (Saudi Agricultural and Livestock Investment Co.) 80.01%, Olam Group 19.99%, since April 2026',
+            country_claims: agri, commodities: [...new Set(agri.map(cl => cl.commodity))],
+            n_countries: new Set(agri.map(cl => cl.iso3)).size, n_claims: agri.length,
+          });
+          og.country_claims = og.country_claims.filter(cl => cl.entity !== 'Olam Agri');
+          og.commodities = [...new Set(og.country_claims.map(cl => cl.commodity))];
+          og.n_countries = new Set(og.country_claims.map(cl => cl.iso3)).size;
+          og.n_claims = og.country_claims.length;
+        }
+      }
+    } catch (e) {}
   } catch (e) { LIVE.companies = {}; }
 
   // v23 — modeled origin overlay (build_company_overlay.py): USDA-PSD top-exporter
@@ -41148,6 +41168,33 @@ function companyEvidenceSummary(claims){
 
 // Build a reverse index: company → [{country, iso, commodity, fdrs}]
 let _companyIndex = null;
+/* One name per firm. The atlas and legacy lists carry many spellings and business units (Olam under 8
+   names, ADM under 5, Viterra under 4); they are merged under the name the researched file uses.
+   Viterra and Glencore Agriculture resolve to Bunge, which has owned Viterra since July 2025. */
+const COMPANY_CANON = [
+  [/^olam agri/i, 'Olam Agri'],
+  [/^(olam|ofi\b|olam food ingredients)/i, 'Olam Group'],
+  [/^(adm\b|archer.?daniels)/i, 'ADM'],
+  [/^(viterra|glencore)/i, 'Bunge'],
+  [/^bunge/i, 'Bunge'],
+  [/^(louis dreyfus|ldc\b)/i, 'Louis Dreyfus'],
+  [/^cargill/i, 'Cargill'],
+  [/^wilmar/i, 'Wilmar'],
+  [/^cofco/i, 'COFCO'],
+  [/^jbs\b/i, 'JBS'],
+  [/^tyson/i, 'Tyson Foods'],
+  [/^nutrien/i, 'Nutrien'],
+  [/^yara/i, 'Yara International'],
+  [/^minerva/i, 'Minerva Foods'],
+  [/^marfrig/i, 'Marfrig'],
+  [/^ioi\b/i, 'IOI Corporation'],
+  [/^(golden agri|gar\b)/i, 'Golden Agri-Resources'],
+];
+function companyCanon(name) {
+  const n = String(name || '').trim();
+  for (const [re, canon] of COMPANY_CANON) if (re.test(n)) return canon;
+  return n;
+}
 
 /* A company with its own researched file is scored on the countries it discloses (country_claims), not on
    commodity overlap; everyone else falls back to the overlap index, labelled modeled. */
@@ -41156,6 +41203,8 @@ function _companyEntries(name, idx) {
   if (rec && Array.isArray(rec.country_claims) && rec.country_claims.length) {
     const out = [], seen = new Set();
     rec.country_claims.forEach(cl => {
+      /* Sold, exited or shut assets stay on record in the detail but are not scored. */
+      if (cl.status && cl.status !== 'active') return;
       const c = byISO(cl.iso3); if (!c || typeof c.fdrs !== 'number') return;
       const k = cl.iso3 + '|' + cl.commodity; if (seen.has(k)) return; seen.add(k);
       out.push({ country: c.name, iso: c.iso, commodity: cl.commodity, fdrs: c.fdrs, region: c.region, riskLabel: riskLabel(c.fdrs), disclosed: true });
@@ -41228,9 +41277,49 @@ function buildCompanyIndex() {
     }
   } catch (e) { /* curated company index is additive; ignore failures */ }
 
+  /* Merge spellings and business units under one canonical name. */
+  Object.keys(_companyIndex).forEach(k => {
+    const canon = companyCanon(k);
+    if (canon === k) return;
+    const into = _companyIndex[canon] || (_companyIndex[canon] = []);
+    _companyIndex[k].forEach(e => { if (!into.find(x => x.iso === e.iso && x.commodity === e.commodity)) into.push(e); });
+    delete _companyIndex[k];
+  });
   return _companyIndex;
 }
 
+/* BUYER-SIDE DEPENDENCE (2026-09-26). The old score averaged the FDRS of the countries a company
+   sources from; those are exporters (Brazil 29, US 16), so every major landed at 28-38 and the number
+   said nothing about who relies on the company's flows. Now, for each disclosed origin o and commodity c:
+     buyer score(o, c) = sum over buyers j of t(o->j) x share of j's imports from o x FDRS_j / sum t(o->j)
+   (FAOSTAT 2024 trade matrix, largest corridors), and the company figure weights each (o, c) by o's
+   share of world exports of c. High = the company originates where food-insecure importers depend on
+   that origin. Commodities the matrix does not cover (fertilizer, fish) are left out and said so. */
+function companyBuyerDependence(name) {
+  const rec = (typeof LIVE !== 'undefined' && LIVE.companies) ? LIVE.companies[name] : null;
+  const tm = (typeof LIVE !== 'undefined') ? LIVE.trade_matrix : null;
+  if (!rec || !Array.isArray(rec.country_claims) || !tm) return null;
+  let wSum = 0, sSum = 0; const buyers = new Map(); const skipped = new Set(); const used = new Set();
+  rec.country_claims.forEach(cl => {
+    if (cl.status && cl.status !== 'active') return;
+    const key = (typeof _curatedKey === 'function') ? _curatedKey(cl.commodity) : null;
+    const mx = key && tm[key];
+    if (!mx) { skipped.add(cl.commodity); return; }
+    const flows = mx.flows.filter(f => f.from === cl.iso3 && f.share_of_importer_pct != null);
+    if (!flows.length) return;
+    let tt = 0, acc = 0;
+    flows.forEach(f => { const j = byISO(f.to); if (!j || typeof j.fdrs !== 'number') return;
+      const dep = f.share_of_importer_pct / 100; tt += f.t; acc += f.t * dep * j.fdrs;
+      const b = buyers.get(f.to) || { iso: f.to, name: j.name, fdrs: j.fdrs, dep: 0, via: new Set() };
+      b.dep = Math.max(b.dep, dep); b.via.add(key); buyers.set(f.to, b); });
+    if (!tt) return;
+    const w = ((mx.top_exporters.find(e => e.iso === cl.iso3) || {}).share_pct || 0.5) / 100;
+    wSum += w; sSum += w * (acc / tt); used.add(key);
+  });
+  if (!wSum) return { score: null, skipped: [...skipped] };
+  const top = [...buyers.values()].sort((a, b) => b.dep * b.fdrs - a.dep * a.fdrs).slice(0, 3);
+  return { score: Math.round(sSum / wSum), top, commodities: [...used], skipped: [...skipped] };
+}
 // Compute company exposure score (weighted avg FDRS of countries they operate in)
 function companyExposureScore(entries) {
   if (!entries || entries.length === 0) return 0;
@@ -41239,7 +41328,22 @@ function companyExposureScore(entries) {
   return Math.round(avg);
 }
 
+let _coShown = 24;
+function _coDateline() {
+  const el = document.getElementById('co-dateline'); const co = (typeof LIVE !== 'undefined' && LIVE.companies) || {};
+  if (!el) return;
+  const live = Object.keys(co).filter(n => !/historical|pre_merger|defunct|acquired/i.test(String(co[n].research_status || '')));
+  const claims = live.reduce((a, n) => a + (co[n].country_claims || []).filter(cl => !cl.status || cl.status === 'active').length, 0);
+  const isos = new Set(); live.forEach(n => (co[n].country_claims || []).forEach(cl => isos.add(cl.iso3)));
+  const yrs = live.map(n => co[n].latest_disclosure).filter(Boolean).sort();
+  el.textContent = `Companies · ${live.length} researched · ${claims} active cited claims · ${isos.size} countries · filings ${yrs[0]}${yrs[yrs.length - 1] !== yrs[0] ? '–' + yrs[yrs.length - 1] : ''}`;
+}
 function initCompaniesTab() {
+  _coDateline();
+  if (typeof LIVE !== 'undefined' && LIVE.trade_matrix === undefined && typeof loadTradeMatrix === 'function') {
+    loadTradeMatrix().then(() => initCompaniesTab());
+  }
+  try { const q = new URLSearchParams(location.search).get('company'); if (q && !window._coDeepDone) { window._coDeepDone = true; setTimeout(() => showCompanyDetail(companyCanon(q)), 300); } } catch (e) {}
   // v20.28 — force-rebuild the index since the canonical company-name set
   // changed (Olam Intl → Olam Group, etc). The old _companyIndex would have
   // entries keyed on stale names that no longer appear in the canonical map.
@@ -41253,7 +41357,7 @@ function initCompaniesTab() {
   // dataset visible (the June-12 audit's ask) while making the header/content agree
   // (the June-13 audit's ask): majors lead, everything else follows. The exposure
   // callout highlights the most-exposed majors.
-  const MAJORS = ['Cargill','ADM','Bunge','Louis Dreyfus','COFCO','Wilmar','Olam Group','JBS','Tyson Foods','Viterra','Nutrien','Yara International'];
+  const MAJORS = ['Cargill','ADM','Bunge','Louis Dreyfus','COFCO','Wilmar','Olam Group','Olam Agri','JBS','Tyson Foods','Nutrien','Yara International'];
   // v83 — a company whose research_status says it no longer exists as an
   // independent entity must not be presented as a live trader. Viterra became a
   // wholly-owned Bunge subsidiary on 2 July 2025; the dataset knew
@@ -41281,12 +41385,12 @@ function initCompaniesTab() {
     // v90 — the tail was NOT gated, so a firm suppressed from MAJORS reappeared
     // a few rows lower as a live modeled trader.
     .filter(c => c && !c.startsWith('(non-food') && !majorsPresent.includes(c) && !_isDefunct(c))
-    .map(c => ({ c, score: companyExposureScore(_companyIndex[c] || []) }))
-    .sort((a,b) => b.score - a.score)
-    .map(x => x.c);
-  const ordered = [...majorsPresent, ...rest];
+    .sort((a,b) => a.localeCompare(b));   // modeled firms carry no score, so no score order
+  const majorsRanked = majorsPresent.slice().sort((a, b) => ((companyBuyerDependence(b) || {}).score ?? -1) - ((companyBuyerDependence(a) || {}).score ?? -1));
+  const ordered = [...majorsRanked, ...rest.slice(0, _coShown)];
   renderCompanyList(ordered, el);
-  renderCompanyExposureCallout(majorsPresent.length ? majorsPresent : ordered);
+  if (rest.length > _coShown) el.insertAdjacentHTML('beforeend', `<div style="grid-column:1/-1;text-align:center;padding:14px 0;"><button type="button" class="ctr-link" onclick="_coShown+=24;initCompaniesTab()">Show 24 more of ${rest.length - _coShown} other firms (modeled, not scored)</button></div>`);
+  renderCompanyExposureCallout(majorsRanked);
 }
 
 function renderCompanyExposureCallout(companyNames) {
@@ -41295,18 +41399,15 @@ function renderCompanyExposureCallout(companyNames) {
   const idx = buildCompanyIndex();
   // Score each: weighted avg FDRS × number of vulnerable countries
   const scored = companyNames.map(name => {
-    const entries = _companyEntries(name, idx);
-    if (!entries.length) return null;
-    const expScore = companyExposureScore(entries);
-    const vuln = entries.filter(e => e.fdrs >= 76).map(e => e.country);
-    const uniqueVuln = [...new Set(vuln)];
-    return { name, expScore, vulnCount: uniqueVuln.length, vulnNames: uniqueVuln.slice(0,3) };
+    const bd = companyBuyerDependence(name);
+    if (!bd || bd.score == null) return null;
+    return { name, expScore: bd.score, top: bd.top || [] };
   }).filter(Boolean).sort((a,b) => b.expScore - a.expScore).slice(0,3);
 
   if (!scored.length) { host.innerHTML = ''; return; }
   host.innerHTML = `
-    <div class="co-callout-eyebrow">⚠ Highest disclosed-origin exposure</div>
-    <div class="co-callout-title">The three majors whose <em>own</em> listed origins carry the most risk</div>
+    <div class="co-callout-eyebrow">Buyer-side dependence</div>
+    <div class="co-callout-title">The three majors whose origins food-insecure importers rely on most</div>
     <div class="co-callout-grid">
       ${scored.map(function (s) {
         var tied = scored.filter(function (other) { return Math.round(other.expScore) === Math.round(s.expScore); }).length > 1;
@@ -41315,12 +41416,9 @@ function renderCompanyExposureCallout(companyNames) {
           <div class="co-callout-name">${s.name} ${companyProvBadge(s.name)}</div>
           <div class="co-callout-score-row">
             <div class="co-callout-score" style="color:${riskColor(s.expScore)}">${Math.round(s.expScore)}</div>
-            <div class="co-callout-score-lab">Disclosed-origin exposure / 100${tied ? '<span class="co-callout-tie">Tied at this score</span>' : ''}</div>
+            <div class="co-callout-score-lab">Buyer dependence / 100${tied ? '<span class="co-callout-tie">Tied at this score</span>' : ''}</div>
           </div>
-          <div class="co-callout-meta">
-            <b style="color:#c44b3c">${s.vulnCount}</b> vulnerable-band origins
-            ${s.vulnNames.length ? ` · ${s.vulnNames.join(' · ')}` : ''}
-          </div>
+          <div class="co-callout-meta">Most reliant buyers: ${s.top.map(b => `${_escFeed(b.name)} (${Math.round(b.dep * 100)}%, FDRS ${b.fdrs})`).join(' · ') || '—'}</div>
         </div>
       `; }).join('')}
     </div>`;
@@ -41345,8 +41443,11 @@ function onCompanySearch(query) {
   }
 
   const q = query.toLowerCase();
+  const canonQ = companyCanon(query);
+  const defunct = n => { const rec = (LIVE.companies || {})[n]; return !!rec && /historical|pre_merger|defunct|acquired/i.test(String(rec.research_status || '')); };
   const matches = Object.keys(_companyIndex)
-    .filter(c => c.toLowerCase().includes(q))
+    .filter(c => !defunct(c) && (c.toLowerCase().includes(q) || c === canonQ))
+    .sort((a, b) => (b.toLowerCase().startsWith(q) - a.toLowerCase().startsWith(q)) || (!!(LIVE.companies || {})[b] - !!(LIVE.companies || {})[a]) || a.localeCompare(b))
     .slice(0, 40);
 
   if (!matches.length) {
@@ -41377,10 +41478,11 @@ function renderCompanyList(companies, el) {
     const entries = _companyEntries(company, idx).slice()
       .sort((a,b) => b.fdrs - a.fdrs);
     const uniqueCountries = [...new Map(entries.map(e=>[e.iso, e])).values()];
-    const expScore = companyExposureScore(entries);
-    const expCol = riskColor(expScore);
+    const _bd = companyBuyerDependence(company);
+    const expScore = _bd && _bd.score != null ? _bd.score : null;
+    const expCol = expScore != null ? riskColor(expScore) : 'var(--t3)';
     const uniqueCommodities = [...new Set(entries.map(e=>e.commodity))].slice(0,5);
-    const topHigh = uniqueCountries.filter(e=>e.fdrs>=76).length;
+    const topHigh = 0;
 
     return `
       <div class="company-result-card" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="showCompanyDetail('${company.replace(/'/g,"\\'")}')">
@@ -41404,11 +41506,9 @@ function renderCompanyList(companies, el) {
             })()} · ${uniqueCommodities.join(', ')}</div>
           </div>
           <div style="text-align:right;flex-shrink:0;">
-            <div style="font-size:10px;color:var(--t3);margin-bottom:4px;" title="${entries.length && entries[0].disclosed ? 'Mean Food Disruption Risk across the countries this company lists in its own filings.' : 'Mean Food Disruption Risk across countries that trade the commodities this company trades (trade atlas), not its own disclosures.'}">${entries.length && entries[0].disclosed ? 'Disclosed-origin exposure' : 'Modeled exposure'}</div>
-            <div class="company-risk-score" style="background:${expCol}18;color:${expCol};border:1px solid ${expCol}44">
-              ${expScore}/100
-            </div>
-            ${topHigh > 0 ? `<div style="font-size:10px;color:#c44b3c;margin-top:4px;">${topHigh} vulnerable-band</div>` : ''}
+            <div style="font-size:10px;color:var(--t3);margin-bottom:4px;" title="${expScore != null ? 'How much food-insecure importers rely on the origins this company discloses: FAOSTAT 2024 trade shares x the buyers\' FDRS, weighted by each origin\'s share of world exports.' : 'Not scored: no researched disclosure file, or none of its commodities is in the FAOSTAT trade matrix.'}">${expScore != null ? 'Buyer dependence' : 'Not scored'}</div>
+            ${expScore != null ? `<div class="company-risk-score" style="background:${expCol}18;color:${expCol};border:1px solid ${expCol}44">${expScore}/100</div>` : `<div style="font-size:10.5px;color:var(--t3)">${entries.length && entries[0].disclosed ? 'no matrix commodity' : 'modeled'}</div>`}
+            ${_bd && _bd.top && _bd.top.length ? `<div style="font-size:10px;color:var(--t3);margin-top:4px;max-width:150px;">relied on by ${_escFeed(_bd.top[0].name)}</div>` : ''}
             ${companyOpacityChip(company)}
           </div>
         </div>
@@ -41433,10 +41533,10 @@ function renderCompanyList(companies, el) {
 // recommendation. Surface these in the Company tab. Read from the embedded beef
 // data so it works offline (file://) too.
 function _curatedCompanyMatch(coName, name) {
-  const cn = String(coName||'').toLowerCase(); const n = String(name||'').toLowerCase();
-  if (!cn || !n) return false;
-  const base = cn.split(/[\s.-]/)[0]; // first token, e.g. "jbs","cargill","adm"
-  return cn === n || cn.startsWith(n) || n.startsWith(base) || cn.includes(n) || n.includes(base);
+  /* Same firm only: exact name or the same canonical name. The old first-token test turned "E. & J.
+     Gallo" into "e" and gave 61 companies (Nestle, Sucden...) Gallo's wine profile. */
+  if (!coName || !name) return false;
+  return String(coName).toLowerCase() === String(name).toLowerCase() || companyCanon(coName) === companyCanon(name);
 }
 // Find a curated company profile (across ALL commodities) by display name.
 // Returns {co, commodity} for the first/strongest match, or null.
@@ -41455,6 +41555,7 @@ function _beefCompanyFor(name) {
 // Renders a sourced beef-sector card (revenue, HQ, sourcing footprint, note,
 // improvement guidance) for a trader that appears in the Beefmap dataset.
 function beefCompanyCard(name) {
+  if (typeof LIVE !== 'undefined' && LIVE.companies && LIVE.companies[name]) return '';
   const co = _beefCompanyFor(name);
   if (!co) return '';
   const flag = (co.flag === 'sourced')
@@ -41484,6 +41585,7 @@ function beefCompanyCard(name) {
 }
 
 function showCompanyDetail(company) {
+  try { updateURL({ tab: 'companies', company }); } catch (e) {}
   const el = document.getElementById('company-results');
   _companyDetailMode(el);   // v23 — full-width detail (was squeezed into a grid cell)
   // v22.14 — removed update of #company-filter-active. That DOM node was never
@@ -41510,9 +41612,10 @@ function showCompanyDetail(company) {
   const expCol = riskColor(expScore);
 
   const uniqueCommodities = [...new Set(entries.map(e=>e.commodity))];
-  const highRisk = uniqueCountries.filter(e=>e.fdrs>=70);
-  const medRisk  = uniqueCountries.filter(e=>e.fdrs>=40&&e.fdrs<70);
-  const lowRisk  = uniqueCountries.filter(e=>e.fdrs<40);
+  /* Same bands as the map: Vulnerable or worse 76+, Dependent 51-75, 50 and under. */
+  const highRisk = uniqueCountries.filter(e=>e.fdrs>=76);
+  const medRisk  = uniqueCountries.filter(e=>e.fdrs>=51&&e.fdrs<76);
+  const lowRisk  = uniqueCountries.filter(e=>e.fdrs<=50);
 
   el.innerHTML = `
     <div style="margin-bottom:10px;"><a href="#" onclick="event.preventDefault();onCompanySearch('');document.getElementById('company-search-input').value='';" style="font-size:12px;color:var(--accent);text-decoration:none;">← All traders</a></div>
@@ -41532,24 +41635,23 @@ function showCompanyDetail(company) {
           </div>
         </div>
         <div style="text-align:center;flex-shrink:0;">
-          <div style="font-size:10px;color:var(--t3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em;" title="Modeled exposure: avg Food Disruption Risk of countries the company's commodity-mix touches. Not weighted by actual sourcing volume.">Modeled Exposure</div>
-          <div style="font-size:36px;font-weight:700;font-family:'Geist Mono',monospace;color:${expCol}">${expScore}</div>
-          <div style="font-size:11px;color:${expCol}">${riskLabel(expScore)}</div>
+          <div style="font-size:10px;color:var(--t3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em;">Not scored</div>
+          <div style="font-size:11px;color:var(--t3);max-width:160px;line-height:1.5;">No researched disclosure file: the countries below trade its commodities, which is not evidence it sources there.</div>
         </div>
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;">
         <div style="background:var(--bg0);border:1px solid #c44b3c33;border-radius:3px;padding:12px;text-align:center;">
           <div style="font-size:22px;font-weight:700;color:#c44b3c;font-family:'Geist Mono',monospace">${highRisk.length}</div>
-          <div style="font-size:10px;color:var(--t3)">High Risk (≥70)</div>
+          <div style="font-size:10px;color:var(--t3)">Vulnerable or worse (76+)</div>
         </div>
         <div style="background:var(--bg0);border:1px solid #c9a95733;border-radius:3px;padding:12px;text-align:center;">
           <div style="font-size:22px;font-weight:700;color:#c9a957;font-family:'Geist Mono',monospace">${medRisk.length}</div>
-          <div style="font-size:10px;color:var(--t3)">Medium Risk (40-69)</div>
+          <div style="font-size:10px;color:var(--t3)">Dependent (51–75)</div>
         </div>
         <div style="background:var(--bg0);border:1px solid #6ba36b33;border-radius:3px;padding:12px;text-align:center;">
           <div style="font-size:22px;font-weight:700;color:#6ba36b;font-family:'Geist Mono',monospace">${lowRisk.length}</div>
-          <div style="font-size:10px;color:var(--t3)">Low Risk (&lt;40)</div>
+          <div style="font-size:10px;color:var(--t3)">50 and under</div>
         </div>
       </div>
 
@@ -41617,11 +41719,11 @@ function scnPerCountryBasis(scenario, c) {
   try {
     // Staple spikes: PSD-sourced dependence keeps the chip; legacy embedded
     // percentage or no balance must not wear green.
-    const staple = { wheat20: 'w', rice20: 'r', maize20: 'm' }[scenario.id];
-    if (staple && typeof _psdImportDependence === 'function') {
-      const d = _psdImportDependence(c, staple);
-      if (!d || d.dep == null) return down('NO DATA', 'No USDA PSD supply balance and no legacy figure for this country \u2014 the shock returned no impact estimate at all.');
-      if (d.basis === 'legacy') return down('LEGACY \u00d70.6', 'This country has no PSD balance; the magnitude used the legacy embedded import-dependency percentage, dampened \u00d70.6.');
+    const staple = { wheat20: 'wheat', rice20: 'rice', maize20: 'maize' }[scenario.id];
+    if (staple && typeof scnStaple === 'function') {
+      const st = scnStaple(c.iso, staple);
+      if (!st) return down('NO DATA', 'No USDA use figure for this country and staple: the shock returned no impact estimate.');
+      if (st.basis === 'eu_bloc') return { color: '#6b8db8', mark: '\u25d0', label: 'EU-27 BLOC', tip: 'EU members are scored on the bloc\'s extra-EU trade (USDA EU-27 balance), the score\'s own rule.' };
       return null;
     }
     // Fertilizer: only ~21 curated importer ISOs (plus listed exporters) have
@@ -41638,6 +41740,12 @@ function scnPerCountryBasis(scenario, c) {
       return null;
     }
     // Chokepoint: route-mapped exposure vs geography-blind fallback.
+    if (scenario.id === 'chokeclose' && typeof scnRoutedShare === 'function') {
+      const r = scnRoutedShare(c, _scnChokepoint);
+      if (r == null) return down('NO DATA', 'No staple use figure for this country.');
+      if (r === 0) return { color: '#6a685e', mark: '\u25cb', label: 'NOT ROUTED', tip: 'None of this country\'s staple imports crosses the selected chokepoint on the usual sea lanes: only a small freight-repricing residual applies.' };
+      return null;
+    }
     if (scenario.id === 'chokeclose') {
       const cpMap = (typeof LIVE !== 'undefined' && LIVE.chokepoint_flows && LIVE.chokepoint_flows.chokepoints)
         ? LIVE.chokepoint_flows.chokepoints[_scnChokepoint] : null;
@@ -41700,7 +41808,10 @@ function _claimProvenanceClass(cl) {
 
 function renderSourcedCompanyDetail(el, company, src) {
   _companyDetailMode(el);   // v23 — full-width detail card
-  const claims = src.country_claims || [];
+  const allClaims = src.country_claims || [];
+  const claims = allClaims.filter(cl => !cl.status || cl.status === 'active');
+  const pastClaims = allClaims.filter(cl => cl.status && cl.status !== 'active');
+  const _bd = companyBuyerDependence(company);
   // Merger and ownership caveats the researcher recorded and nothing ever
   // rendered: the Viterra acquisition, the Olam/SALIC restructure, and JBS's
   // explicit "Smithfield is owned by WH Group, not JBS — claim EXCLUDED".
@@ -41764,10 +41875,9 @@ function renderSourcedCompanyDetail(el, company, src) {
   // backwards: the opaque private traders (Cargill, LDC, Mars) disclose least
   // and are often the most systemically important. Absence of evidence is now
   // its own state, never a score. Same fix as the FDRS component vector.
-  const expBounded = rows.length > 0;
-  const expScore = expBounded
-    ? Math.round(rows.reduce((s,r) => s + r.fdrs, 0) / rows.length)
-    : null;
+  const originMean = rows.length ? Math.round(rows.reduce((s,r) => s + r.fdrs, 0) / rows.length) : null;
+  const expBounded = !!(_bd && _bd.score != null);
+  const expScore = expBounded ? _bd.score : null;
   const expCol = expBounded ? riskColor(expScore) : 'var(--t3)';
   const highRisk = rows.filter(r => r.fdrs >= 76);
   const medRisk  = rows.filter(r => r.fdrs > 50 && r.fdrs < 76);
@@ -41775,7 +41885,8 @@ function renderSourcedCompanyDetail(el, company, src) {
 
   el.innerHTML = `
     <div style="margin-bottom:10px;"><a href="#" onclick="event.preventDefault();onCompanySearch('');document.getElementById('company-search-input').value='';" style="font-size:12px;color:var(--accent);text-decoration:none;">← All traders</a></div>
-    ${beefCompanyCard(company)}
+    ${pastClaims.length ? `<div class="card" style="margin-bottom:14px;border-left:2px solid var(--b2);"><div class="eyebrow" style="margin-bottom:6px;">On record, not scored</div>
+      <div style="font-size:var(--fs-prose);color:var(--t2);line-height:1.6;">${pastClaims.map(cl => `${_escFeed(cl.country || cl.iso3)} · ${_escFeed(cl.commodity)}: ${_escFeed(cl.status)}${cl.end_date ? ' ' + _escFeed(cl.end_date) : ''}`).join('<br>')}</div></div>` : ''}
     ${_metaNote ? `<div class="card" style="margin-bottom:14px;border-left:2px solid var(--accent);">
       <div class="eyebrow" style="margin-bottom:6px;">Ownership &amp; research note</div>
       <div style="font-size:var(--fs-prose);line-height:1.65;color:var(--t2);">${_escFeed(_metaNote)}</div>
@@ -41791,18 +41902,19 @@ function renderSourcedCompanyDetail(el, company, src) {
           ${companyMetaStrip(company)}
           ${companyClarityLine(company)}
           <div class="cmpd-commodity-chips">
-            ${(src.commodities || []).slice(0,9).map(c=>`<span class="cmpd-chip">${c}</span>`).join('')}${(src.commodities||[]).length>9?`<span class="cmpd-chip cmpd-chip--more">+${(src.commodities||[]).length-9}</span>`:''}
+            ${(src.commodities || []).slice(0,9).map(c=>{ const m = (typeof COMMODITY_META !== 'undefined') ? COMMODITY_META.find(x => x.dataKey === (typeof _curatedKey === 'function' ? _curatedKey(c) : null)) : null;
+              return m ? `<button type="button" class="cmpd-chip" style="cursor:pointer" onclick="showTab('commodities');setTimeout(()=>showCommodityDetail('${m.key.replace(/'/g, "\\'")}'),250)">${c}</button>` : `<span class="cmpd-chip">${c}</span>`; }).join('')}${(src.commodities||[]).length>9?`<span class="cmpd-chip cmpd-chip--more">+${(src.commodities||[]).length-9}</span>`:''}
           </div>
         </div>
         <div class="cmpd-score" style="border-color:${expCol}55;">
           ${expBounded ? `
-          <div class="cmpd-score-label" title="Average Food Disruption Risk of all countries the company itself discloses as a sourcing origin. Equally weighted because tonnage shares are not publicly disclosed: it is a lower bound on exposure, not a measure of it.">${companyProvFor(company).label === 'SOURCED' ? 'Sourced Exposure' : 'Cited · provisional'}</div>
+          <div class="cmpd-score-label" title="How much food-insecure importers rely on the origins this company discloses: for each origin and commodity, the buyers' FDRS weighted by the share of their imports that come from that origin (FAOSTAT 2024), weighted by the origin's share of world exports.">Buyer dependence</div>
           <div class="cmpd-score-num" style="color:${expCol}">${expScore}</div>
-          <div class="cmpd-score-risk" style="color:${expCol}">${riskLabel(expScore)}</div>`
+          <div class="cmpd-score-risk" style="color:var(--t3);font-size:10.5px;line-height:1.4;">most reliant: ${(_bd.top || []).map(b => _escFeed(b.name) + ' ' + Math.round(b.dep * 100) + '%').join(', ') || '—'}${originMean != null ? `<br>origin countries' mean FDRS ${originMean}` : ''}</div>`
           : `
-          <div class="cmpd-score-label" title="This company discloses no sourcing origin we can join to a country risk score. That is a gap in the public record, not a low-risk finding.">Exposure not bounded</div>
-          <div class="cmpd-score-num" style="color:var(--t3);font-size:0.62em;letter-spacing:.06em;">NO DATA</div>
-          <div class="cmpd-score-risk" style="color:var(--t3);">absence of disclosure</div>`}
+          <div class="cmpd-score-label" title="None of the disclosed commodities is in the FAOSTAT trade matrix (fertilizer, fish), so buyer dependence cannot be computed.">Not scored</div>
+          <div class="cmpd-score-num" style="color:var(--t3);font-size:0.62em;letter-spacing:.06em;">—</div>
+          <div class="cmpd-score-risk" style="color:var(--t3);">${originMean != null ? `origin countries' mean FDRS ${originMean}` : 'no joinable origin'}</div>`}
         </div>
       </div>
 

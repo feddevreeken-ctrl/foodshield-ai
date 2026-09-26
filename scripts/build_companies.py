@@ -168,6 +168,9 @@ def _normalize_one(company_json):
                 "citation_url":      sc.get("citation_url"),
                 "as_of":             sc.get("as_of"),
                 "entity":            sc.get("entity"),   # for Olam-style split
+                # active | exited | divested | closed: a sold or shut asset stays on record but is not scored
+                "status":            sc.get("status", "active"),
+                "end_date":          sc.get("end_date"),
             })
 
     # Pick the most-cited domain as the primary citation
