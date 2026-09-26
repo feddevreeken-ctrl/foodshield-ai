@@ -10039,6 +10039,7 @@ body::before {
 #enso-pricewatch th[scope=row] { white-space:normal; }
 .enso-pw-more summary { cursor:pointer; color:var(--t3); font:11px 'Geist Mono',monospace; }
 .enso-pw-more p { margin:6px 0 0; color:var(--t2); }
+.enso-cal-fold > summary { cursor:pointer; margin:8px 0 24px; color:var(--t2); font-size:13px; }
 .enso-lane-evidence-fold > summary { cursor:pointer; margin:8px 0 24px; color:var(--t2); font-size:13px; }
 .enso-tier-sw { display:inline-block; width:18px; height:0; margin-right:8px; vertical-align:middle; }
 .enso-wp-more > summary { cursor:pointer; margin:12px 0; color:var(--t2); font-size:13px; }
@@ -45182,12 +45183,32 @@ function showCommodityDetail(key) {
         '<svg x="4" y="' + (y + 5) + '" width="16" height="11" viewBox="0 0 18 12">' + hatchSwatch(sg).replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '') + '</svg>' +
         '<text x="26" y="' + (y + 14) + '" class="enso-hw-l">' + esc(q.r.label || q.r.id) + '</text>' + bar + '</g>';
     }).join('');
+    /* This site's fitted harvests, drawn as a solid tick on the row of the region they fall in: timing from the
+       crop calendar, size from the model at the outlook's ONI. */
+    var CROPW = { corn: /maize|corn/i, wheat: /wheat/i, rice: /rice/i, soybeans: /soy/i, sorghum: /sorghum|cereal|maize/i, millet: /millet|kharif|monsoon/i, barley: /barley|wheat/i };
+    var byRow = {};
+    /* The same harvests the outlook table and the Ocean agenda name (150 kt or more). */
+    ((S.outlook && S.outlook.rows_all) || []).filter(function (r) { return r.status === 'shown' && !r.in_season && Math.abs(r.change_kt_record || 0) >= 150; }).forEach(function (r) {
+      var cand = rows.map(function (q, i) { return { q: q, i: i }; }).filter(function (o) { return (o.q.r.iso3 || []).indexOf(r.iso) >= 0; });
+      var hit = cand.filter(function (o) { return (CROPW[r.crop] || /./).test(o.q.r.label || ''); })[0] || cand[0];
+      var w = parseWindow(r.harvest); if (!hit || !w) return;
+      (byRow[hit.i] = byRow[hit.i] || []).push({ r: r, s: new Date(w.start).getUTCFullYear() * 12 + new Date(w.start).getUTCMonth(), e: new Date(w.end).getUTCFullYear() * 12 + new Date(w.end).getUTCMonth() });
+    });
+    var short = function (r) { return ({ USA: 'US', ZAF: 'S. Africa', ZWE: 'Zimbabwe', BRA: 'Brazil', AGO: 'Angola', IND: 'India' }[r.iso] || nameFor(r.iso)) + ' ' + ({ corn: 'maize' }[r.crop] || r.crop) + ' ' + num(r.change_pct_record, 0) + '%'; };
+    var marks = Object.keys(byRow).map(function (i) {
+      var list = byRow[i].sort(function (a, b) { return a.r.change_pct_record - b.r.change_pct_record; }), y0 = top + (+i) * RH + 9;
+      var ticks = list.map(function (m, k) { var col = m.r.change_pct_record < 0 ? '#c47a3c' : '#6ba36b';
+        return '<rect x="' + X(m.s).toFixed(1) + '" y="' + (y0 + k * 3 - 1.5) + '" width="' + Math.max(4, X(m.e + 1) - X(m.s)).toFixed(1) + '" height="2.5" fill="' + col + '"><title>' + esc(nameFor(m.r.iso) + ' ' + ({ corn: 'maize' }[m.r.crop] || m.r.crop) + ' harvest ' + m.r.harvest + ': ' + num(m.r.change_pct_record, 0) + '% in this site’s model') + '</title></rect>'; }).join('');
+      var endX = X(Math.max.apply(null, list.map(function (m) { return m.e; })) + 1) + 6, lab = list.slice(0, 2).map(function (m) { return short(m.r); }).join(' · ') + (list.length > 2 ? ' +' + (list.length - 2) : '');
+      return '<g>' + ticks + '<text x="' + endX.toFixed(1) + '" y="' + (y0 + 4) + '" class="enso-hw-t" fill="' + (list[0].r.change_pct_record < 0 ? '#c47a3c' : '#6ba36b') + '">' + esc(lab) + '</text></g>';
+    }).join('');
+    body += marks;
     var tx = X(today + (now.getUTCDate() - 1) / 30).toFixed(1), px = X(pk + .5).toFixed(1);
-    return '<div class="enso-hw-wrap"><div class="enso-sec-h"><span>Regional impact windows around ' + monTxt(pk) + '</span> published lag of each region after the peak reference</div>' +
+    return '<div class="enso-hw-wrap"><div class="enso-sec-h"><span>When the exposed harvests come in</span> published regional windows, with this site’s fitted harvests marked</div>' +
       '<svg class="enso-hw" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Regional impact windows, ' + rows.length + ' regions">' + ticks +
       '<line x1="' + px + '" x2="' + px + '" y1="' + (top - 4) + '" y2="' + (H - 8) + '" stroke="#e0673c" stroke-width="1" stroke-dasharray="3 3"/><text x="' + px + '" y="' + (H - 1) + '" text-anchor="middle" class="enso-hw-t" fill="#e0673c">' + MON3[pk % 12] + ' ' + Math.floor(pk / 12) + ' reference</text>' +
       body + '<line x1="' + tx + '" x2="' + tx + '" y1="' + (top - 4) + '" y2="' + (H - 8) + '" stroke="#ebe9e2" stroke-width="1.2"/><text x="' + tx + '" y="' + (H - 1) + '" text-anchor="middle" class="enso-hw-t" fill="#ebe9e2">today</text></svg>' +
-      '<p class="enso-hw-cap">Each region’s published lag after a ' + monTxt(pk) + ' reference. Dashed: ahead; filled: under way; grey: over. Chip: output usually falls (ochre) or rises (blue). Seasonal windows, not a forecast of losses.</p></div>';
+      '<p class="enso-hw-cap">Bars: each region’s published lag after a ' + monTxt(pk) + ' reference (dashed ahead, filled under way, grey over). Thin coloured ticks: this site’s fitted harvests on their region’s row, with the model’s change at ONI ' + num(((S.outlook || {}).cases || { record: { oni: 2.5 } }).record.oni, 1) + '. Chip: output usually falls (ochre) or rises (blue). Not a forecast of losses.</p></div>';
   }
   function renderPubfx() {
     var el = document.getElementById('enso-pubfx'); if (!el) return;
@@ -45240,11 +45261,13 @@ function showCommodityDetail(key) {
           '<span class="cal-mobile-stage">' + esc(key) + '</span>' + (r.season.djf ? '<small class="cal-djf-marker">grows through DJF</small>' : '') + '</span>' + cells + '<span class="cal-s">' + esc(key) + '</span></div>';
       }).join('') + (k < list.length ? '</div></details>' : '');
     }).join('');
-    el.innerHTML = '<figure class="enso-plate enso-cal-plate is-published">' +
+    /* Reference, folded: the outlook gives each fitted harvest's months and the region timeline places them;
+       this adds planting months and the pairs without a slope of their own. */
+    el.innerHTML = '<details class="enso-cal-fold"><summary>Planting and harvest months for all ' + rows.length + ' fitted crop pairs (reference)</summary><figure class="enso-plate enso-cal-plate is-published">' +
       plateHead('Planting and harvest seasons for the fitted crops · ' + MON[m0 - 1] + ' ' + now.getUTCFullYear(), 'USDA IPAD (FAO/GIEWS, FAS) · ' + rows.length + ' fitted pairs · slopes: FAOSTAT fit, read ' + stamp(metaDate('model')), stamp(metaDate('calendars')), 'published') +
       '<div class="cal-key"><span><b class="k p"></b>Hatched: planting</span><span><b class="k h fall"></b>Solid: harvest</span><span><b class="k h fall"></b>Ochre: El Niño slope falls</span><span><b class="k h rise"></b>Green: El Niño slope rises</span><span><b class="k djf"></b>Tinted band: DJF</span><span><b class="k now"></b>Vertical rule: this month</span><span>“grows through DJF”: in the ground December–February</span></div>' +
       '<div class="enso-cal" aria-label="Planting and harvest calendar, Jan to Dec">' + head + body + '</div>' +
-      '<figcaption class="enso-log">Published planting and harvest months. Pairs whose El Niño slope passes on its own come first, by size of slope. Hover notes give regional and second-season uncertainty.</figcaption></figure>';
+      '<figcaption class="enso-log">Published planting and harvest months. Pairs whose El Niño slope passes on its own come first, by size of slope. Hover notes give regional and second-season uncertainty.</figcaption></figure></details>';
   }
 
   /* ── v84 · A YEAR OF TRANSITS ───────────────────────────────────────────
@@ -45537,13 +45560,15 @@ function showCommodityDetail(key) {
     var tot = {}; ((O && O.who_pays_totals) || []).forEach(function (x) { tot[x.crop] = x; });
     var hv = ((O && O.rows_all) || []).filter(function (r) { return r.status === 'shown' && !r.in_season && Math.abs(r.change_kt_record || 0) >= 150; });
     var bigMaize = hv.filter(function (r) { return r.crop === 'corn' && r.change_kt_record < 0; }).sort(function (a, b) { return a.change_kt_record - b.change_kt_record; })[0];
-    var byWin = {}; hv.forEach(function (r) { (byWin[r.harvest] = byWin[r.harvest] || []).push(r); });
-    Object.keys(byWin).forEach(function (w) {
-      var rs = byWin[w].sort(function (a, b) { return Math.abs(b.change_kt_record) - Math.abs(a.change_kt_record); });
-      add(parseWindow(w), w, rs.map(function (r) { var h = hindcastOf(r.iso, r.crop); return '<b>' + esc(nameFor(r.iso)) + '</b> ' + esc({ corn: 'maize' }[r.crop] || r.crop) + ' harvest ' + num(r.change_pct_record, 0) + '% (' + fmtKt(r.change_kt_record) + (h ? '; direction right in ' + h.sign_right + ' of ' + h.events + ' past El Niños' + (h.beats_no_change ? '' : ', size rough') : '') + ')'; }).join('; ') +
-        (bigMaize && rs.indexOf(bigMaize) >= 0 && tot.corn ? '; new maize import demand then comes to about ' + fmtKt(tot.corn.total_kt).replace('+', '') + ' (' + fmtKt(tot.corn.extra_import_kt).replace('+', '') + ' extra imports by the producers that lose, ' + fmtKt(tot.corn.replaced_kt).replace('+', '') + ' by South Africa’s buyers replacing its exports)' : '') +
-        (rec ? ', if this winter reaches ONI ' + num(rec.oni, 1) : '') + '.', 'modelled', 'ensoharvest', rs.map(function (r) { return ({ USA: 'US', ZAF: 'S. Africa', ZWE: 'Zimbabwe' }[r.iso] || nameFor(r.iso)) + ' ' + ({ corn: 'maize' }[r.crop] || r.crop) + ' ' + num(r.change_pct_record, 0) + '%'; }).join(', '));
-    });
+    /* One pointer row: the fitted harvests' span and names. Their sizes live in the Harvests outlook and
+       its region timeline, so this agenda does not repeat them. */
+    if (hv.length) {
+      var wins = hv.map(function (r) { return parseWindow(r.harvest); }).filter(Boolean);
+      var span = { start: Math.min.apply(null, wins.map(function (w) { return w.start; })), end: Math.max.apply(null, wins.map(function (w) { return w.end; })) };
+      var names = hv.slice().sort(function (x, y) { return parseWindow(x.harvest).start - parseWindow(y.harvest).start; }).map(function (r) { return esc(nameFor(r.iso)) + ' ' + esc({ corn: 'maize' }[r.crop] || r.crop); });
+      var sd = new Date(span.start), ed = new Date(span.end);
+      add(span, MON3[sd.getUTCMonth()] + '–' + MON3[ed.getUTCMonth()] + ' ' + ed.getUTCFullYear(), '<b>' + hv.length + ' harvests the model says El Niño moves</b>: ' + names.join(', ') + (rec ? ', if this winter reaches ONI ' + num(rec.oni, 1) : '') + '. Sizes and timing by region on Harvests.', 'modelled', 'ensoharvest', hv.length + ' fitted harvests');
+    }
     /* World prices: published estimates peak about 16 months after onset (ECB Economic Bulletin 6/2023). Onset is the first
        season of the current run at or above +0.5 °C on ONI; the implied month is a precedent, not a forecast. */
     var tr = ((S.enso || {}).trajectory) || [], k = tr.length - 1, SEAS = ['DJF','JFM','FMA','MAM','AMJ','MJJ','JJA','JAS','ASO','SON','OND','NDJ'];

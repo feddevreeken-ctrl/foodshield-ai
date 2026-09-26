@@ -239,7 +239,7 @@ def main() -> int:
               page.input_value('#enso-mode') == 'sst' and page.is_checked('#enso-tog-sst')
               and page.locator('.enso-tag-interpolation').count() == 0)
         page.evaluate("showTab('ensoharvest')")
-        page.wait_for_selector('#subview-ensoharvest.active .enso-cal')
+        page.wait_for_selector('#subview-ensoharvest.active .enso-cal', state='attached')  # 2026-09-27: the calendar is a folded reference
         check("Harvests defaults to impact without the ocean backdrop",
               page.input_value('#enso-mode') == 'impact' and not page.is_checked('#enso-tog-sst'))
         print("\nscenario disclosure")
@@ -742,7 +742,9 @@ def main() -> int:
             const second = first && first.nextElementSibling;
             return first && first.classList.contains('enso-mapgrid') && second && second.classList.contains('enso-oni-plate') && !!document.querySelector('#subview-elnino > #enso-next12')
                 && items.length >= 6 && items.every(li => /^is-(forecast|published|modelled|precedent)$/.test(li.className) && li.querySelector('[data-goto-lens]'))
-                && harv.every(r => text.includes(r.harvest))
+                // 2026-09-27: the fitted harvests are one pointer row naming each (sizes live on Harvests).
+                && harv.every(r => text.includes(r.iso === 'USA' ? 'United States' : r.iso === 'ZAF' ? 'South Africa' : ''))
+                && (text.match(/harvests the model says El Niño moves/g) || []).length === 1
                 && (text.match(/more maize from abroad/g) || []).length <= 1;
         }"""))
         # The month-axis timeline: one bar per line, each bar inside its own row (the tab's 44px
