@@ -16,7 +16,7 @@ Formula (extended May 2026, expanded May 2026 v20.27):
                                    level where IPC is absent, plus a deterioration nudge
                                    when the near-term projection is worse than current
     + displacement_kick  (0-4)   — HDX HAPI internal-displacement magnitude band (new v43)
-    + conflict_kick      (0-5)   — ACLED 30-day intensity
+    + conflict_kick      (0-5)   — ACLED events via HDX HAPI, 90-day window, per capita
     + global_food_kick   (0-2)   — FAO FFPI MoM > +1% / +3%, x staple import dependence c[0]/100
     + fx_shock           (0-3)   — local currency fell >10% in 90d vs USD
     + inflation_shock    (0)     — DISABLED v79: the YoY level now feeds
@@ -29,8 +29,8 @@ Formula (extended May 2026, expanded May 2026 v20.27):
     + us_water_kick      (0-2)   — only for US-XX state codes
     + us_fi_kick          (0)     — ZEROED v85: the page blends Feeding America
                                   prevalence directly for US states
-    + inform_amp         (0-3)   — INFORM risk >7.0 → composite humanitarian crisis amplifier
-    + governance_drag    (0-2)   — WGI rule_of_law < -1.0 → governance brittleness amplifier
+    + inform_amp         (0)     — kept at zero: INFORM already sits in Conflict / Logistics
+    + governance_drag    (0)     — kept at zero: WGI already sits in Conflict / Logistics
     + psd_shortfall      (0-3)   — USDA PSD production-vs-consumption gap proxy for the latest
                                    marketing year (a true 5-yr-baseline shortfall needs a history
                                    table not yet wired in; this is a cross-sectional gap signal)

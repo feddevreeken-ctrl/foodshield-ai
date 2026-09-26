@@ -200,6 +200,24 @@ SOURCES = [
         "mode": "live",
     },
     {
+        # Feeds the nowcast's displacement term (up to +4 points); it had no entry,
+        # so a live input was invisible on Data Status and missing from the count.
+        "key": "hapi_idps",
+        "file": "hapi_idps.json",
+        "label": "Internally displaced people (IOM DTM via HDX HAPI)",
+        "cadence": "daily fetch / per reporting round upstream",
+        "mode": "live",
+    },
+    {
+        # Staple caloric shares from the FAOSTAT Food Balance Sheets (run_all step
+        # "Country caloric shares"): the weights behind the staple mix.
+        "key": "country_caloric_shares",
+        "file": "country_caloric_shares.json",
+        "label": "FAOSTAT Food Balance Sheets: staple caloric shares",
+        "cadence": "daily fetch / annual upstream",
+        "mode": "reference",
+    },
+    {
         "key": "rtfp",
         "file": "rtfp.json",
         "label": "World Bank Real-Time Food Prices",
@@ -668,6 +686,9 @@ def infer_status(spec, envelope, count, period):
         if spec["mode"] == "manual":
             return "degraded", "manual source has no rows"
         return "degraded", "empty payload"
+    # One rule for every hand-built file: it is a curated snapshot, not a healthy feed.
+    if spec["mode"] == "manual":
+        return "manual", f"curated snapshot; {spec['cadence']}"
 
     if spec["key"] == "fao_ffpi":
         period_date = parse_month_token(period)
@@ -751,8 +772,12 @@ def main():
             _latest = latest_data_date(payload, _field, _every)
             _limit = DATA_STALE_DAYS[_every]
             _data_age = (TODAY - _latest).days if _latest else None
+            # The age test uses the END of the latest period (a monthly figure is not late
+            # until its month is over); the published date is the period's START, so a
+            # month still in progress is never shown as a date in the future.
+            _shown = _latest.replace(day=1) if (_latest and _every == "monthly") else _latest
             rows[spec["key"]].update({
-                "latest_data_date": _latest.isoformat() if _latest else None,
+                "latest_data_date": _shown.isoformat() if _shown else None,
                 "data_age_days": _data_age,
                 "data_granularity": _every,
                 "data_stale_after_days": _limit,
