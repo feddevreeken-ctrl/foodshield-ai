@@ -249,6 +249,35 @@ def build():
                     "partners": [{"iso": p, "t": round(v), "share_pct": round(100 * v / tot, 1), "basis": b}
                                  for p, v, b in lst[:8]],
                 }
+    # Where the partner mix cannot be trusted: the importer filed nothing (every partner row is an
+    # exporter's mirror declaration) while a major exporter of that commodity files nothing either
+    # (Russia since 2022), so that exporter's sales to this importer are invisible. Flag it.
+    for key in ITEMS:
+        if key not in out:
+            continue
+        silent = set(out[key].get("exporters_not_reporting") or [])
+        big_silent = silent & {e["iso"] for e in out[key]["top_exporters"][:10]}
+        for iso, rec in by_country.items():
+            row = rec["imp"].get(key)
+            if not row:
+                continue
+            all_mirror = all(p["basis"] == "mirror" for p in row["partners"])
+            if all_mirror and big_silent:
+                row["mix_incomplete"] = sorted(big_silent)
+    # Staples for the scenario engine and the supplier views, preloaded in one small file so a
+    # run never depends on which country pages happen to be open.
+    staples = ["wheat", "maize", "rice", "soybeans", "barley", "sorghum", "vegoils", "palmoil", "sugar", "pulses"]
+    compact = {iso: {k: {"t": r["imp"][k]["t"], "y": r["imp"][k]["year"],
+                         "p": [[q["iso"], q["t"], 1 if q["basis"] == "mirror" else 0] for q in r["imp"][k]["partners"]],
+                         **({"x": r["imp"][k]["mix_incomplete"]} if r["imp"][k].get("mix_incomplete") else {})}
+                     for k in staples if k in r["imp"]}
+               for iso, r in by_country.items()}
+    compact_exp = {iso: {k: r["exp"][k]["t"] for k in staples if k in r["exp"]} for iso, r in by_country.items()}
+    (Path(__file__).resolve().parent.parent / "data" / "tm_staples.json").write_text(json.dumps({
+        "_meta": {"generated_at": datetime.now(timezone.utc).isoformat(), "source": "FAOSTAT Detailed Trade Matrix (TM)", "version": "v1",
+                  "notes": "imp[iso][commodity] = {t: imports in tonnes, y: year, p: [[partner, t, mirror 0/1] x8], "
+                           "x: silent major exporters when the importer did not report}; exp[iso][commodity] = export tonnes."},
+        "data": {"imp": compact, "exp": compact_exp}}, separators=(",", ":")))
     # One compact file per country (data/tm/EGY.json, a few kB), fetched only when that country
     # is opened: the whole set is ~5 MB and no page needs it at once.
     tm_dir = Path(__file__).resolve().parent.parent / "data" / "tm"
