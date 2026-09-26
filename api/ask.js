@@ -133,7 +133,10 @@ function providerName() {
    own event format. Reasoning deltas are dropped; only the answer text is forwarded. */
 const FREE_URL = 'https://text.pollinations.ai/openai';
 const FREE_MODEL_LABEL = 'GPT-OSS 20B via Pollinations';
-async function answerFree(body, res, signal) {
+async function answerFree(body, res, outerSignal) {
+  const t0 = Date.now();
+  /* A hung upstream must end in an error the reader sees, well inside the function's time limit. */
+  const signal = AbortSignal.any ? AbortSignal.any([outerSignal, AbortSignal.timeout(40000)]) : outerSignal;
   const headers = { 'Content-Type': 'application/json' };
   if (process.env.POLLINATIONS_TOKEN) headers.Authorization = `Bearer ${process.env.POLLINATIONS_TOKEN}`;
   let up;
@@ -142,9 +145,10 @@ async function answerFree(body, res, signal) {
       body: JSON.stringify({ model: 'openai', stream: true, messages: [{ role: 'system', content: SYSTEM }].concat(buildMessages(body)) }) });
   } catch (err) {
     console.error('[ask] free model fetch failed', signal.aborted ? '(aborted)' : '', err && err.message);
-    if (!signal.aborted) send(res, { error: 'The free model could not be reached.' });
+    if (!outerSignal.aborted) send(res, { error: signal.aborted ? 'The free model did not answer in time. Try again.' : 'The free model could not be reached.' });
     return;
   }
+  console.log('[ask] free model status', up.status, 'after', Date.now() - t0, 'ms');
   if (up.status === 429) { send(res, { error: 'The free model is busy (about one question every 15 seconds). Try again shortly.' }); return; }
   if (!up.ok || !up.body) { send(res, { error: `The free model did not answer (HTTP ${up.status}).` }); return; }
   const reader = up.body.getReader(), dec = new TextDecoder();
@@ -167,7 +171,8 @@ async function answerFree(body, res, signal) {
     }
     send(res, { done: true, stop, model: FREE_MODEL_LABEL });
   } catch (err) {
-    if (!signal.aborted) send(res, { error: 'The free model stopped mid-answer.' });
+    console.error('[ask] free model stream failed after', Date.now() - t0, 'ms', err && err.message);
+    if (!outerSignal.aborted) send(res, { error: 'The free model stopped mid-answer.' });
   }
 }
 
@@ -190,6 +195,7 @@ async function handler(req, res) {
   if (problem) { res.status(400).json({ error: problem }); return; }
 
   res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
+  res.write(': open\n\n');   // first byte now, so proxies start the stream
 
   const controller = new AbortController();
   /* Abort the upstream call only when the visitor has really gone: on Vercel the response can emit
