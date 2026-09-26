@@ -10059,6 +10059,28 @@ body::before {
 .pf-mod b { font-weight:500; } .pf-mod b.is-fall { color:#d58a4e; } .pf-mod b.is-rise { color:#7fb57f; }
 .pf-other { display:grid; gap:10px; } .pf-orow { font-size:12px; color:var(--t2); } .pf-orow i { font-style:normal; color:var(--t3); } .pf-orow .pf-study { margin-top:2px; }
 @media (max-width:900px) { .pf-row { grid-template-columns:minmax(0,1fr); gap:6px; } .pf-head .pf-name, .pf-head .pf-ev { display:none; } }
+
+/* On this page (El Niño): right rail on wide screens, pill + popover otherwise */
+.enso-onpage { position:fixed; z-index:1200; right:18px; top:190px; width:196px; font:12px/1.35 'Geist',sans-serif; }
+.enso-onpage .op-h { display:flex; justify-content:space-between; align-items:baseline; font:10.5px 'Geist Mono',monospace; letter-spacing:.06em; text-transform:uppercase; color:var(--t3); }
+.enso-onpage .op-h b { font-weight:500; color:var(--t2); }
+.enso-onpage .op-prog { height:2px; background:var(--b1); margin:8px 0 6px; } .enso-onpage .op-prog i { display:block; height:2px; width:0; background:var(--warm); }
+.enso-onpage ol { list-style:none; margin:0; padding:0; border-left:1px solid var(--b1); }
+.enso-onpage li button { display:block; width:100%; text-align:left; background:none; border:0; border-left:2px solid transparent; margin-left:-1px; padding:5px 0 5px 10px; color:var(--t3); font:inherit; cursor:pointer; }
+.enso-onpage li button:hover, .enso-onpage li button:focus-visible { color:var(--t1); outline:none; }
+.enso-onpage li button.is-on { color:var(--t1); border-left-color:var(--warm); }
+.enso-onpage .op-foot { display:flex; flex-direction:column; gap:4px; margin-top:12px; }
+.enso-onpage .op-foot button { background:none; border:1px solid var(--b2); color:var(--t2); font:11px 'Geist Mono',monospace; padding:5px 8px; text-align:left; cursor:pointer; }
+.enso-onpage .op-foot button:hover { color:var(--t1); border-color:var(--t2); }
+.enso-onpage-btn { display:none; }
+#tab-elnino:not(.active) :is(.enso-onpage,.enso-onpage-btn) { display:none !important; }
+@media (max-width:1559px) {
+  .enso-onpage { display:none; top:auto; bottom:104px; right:16px; width:min(300px, calc(100vw - 32px)); max-height:60vh; overflow:auto; background:var(--bg1, #10141b); border:1px solid var(--b2); padding:12px 14px; box-shadow:0 16px 40px rgba(0,0,0,.5); }
+  .enso-onpage.is-open { display:block; }
+  .enso-onpage-btn { display:inline-flex; align-items:center; gap:8px; position:fixed; z-index:1201; right:16px; bottom:58px; background:var(--bg1, #10141b); border:1px solid var(--b2); color:var(--t1); font:12px 'Geist',sans-serif; padding:8px 12px; cursor:pointer; box-shadow:0 8px 24px rgba(0,0,0,.4); }
+  .enso-onpage-btn i { width:8px; height:8px; border-right:1.5px solid currentColor; border-bottom:1.5px solid currentColor; transform:rotate(-135deg) translate(-2px,-2px); }
+  .enso-onpage-btn[aria-expanded="true"] i { transform:rotate(45deg); }
+}
 .enso-hw { width:100%; height:auto; display:block; }
 .enso-hw .enso-hw-t { font:10px 'Geist Mono',monospace; fill:#8b8980; }
 .enso-hw .enso-hw-l { font:12px 'Geist',sans-serif; fill:#c9c6bd; }
@@ -50212,6 +50234,56 @@ function showCommodityDetail(key) {
     if (mapFrame) { mapFrame.setAttribute('tabindex','0'); mapFrame.setAttribute('aria-label','Map plate and instruments'); }
     instrumentNumbers(document.getElementById('tab-elnino'));
     alignAnalogLeaders();
+    try { buildPageIndex(); } catch (e) {}
+  }
+  /* "On this page": the active lens's sections in reading order, the one in view highlighted, a progress
+     line, and a first link to "What is El Niño?". A right rail on wide screens, a pill + popover otherwise. */
+  function buildPageIndex() {
+    var tab = document.getElementById('tab-elnino'), panel = document.getElementById('subview-' + S.sub);
+    if (!tab || !panel || !tab.appendChild) return;
+    var nav = document.getElementById('enso-onpage');
+    if (!nav) {
+      nav = document.createElement('nav'); nav.id = 'enso-onpage'; nav.className = 'enso-onpage'; nav.setAttribute('aria-label', 'On this page');
+      var btn = document.createElement('button'); btn.type = 'button'; btn.id = 'enso-onpage-btn'; btn.className = 'enso-onpage-btn'; btn.setAttribute('aria-controls', 'enso-onpage'); btn.setAttribute('aria-expanded', 'false');
+      btn.innerHTML = '<span>On this page</span><i></i>';
+      btn.onclick = function () { var o = !nav.classList.contains('is-open'); nav.classList.toggle('is-open', o); btn.setAttribute('aria-expanded', String(o)); };
+      tab.appendChild(nav); tab.appendChild(btn);
+      var sc = tab.querySelector('.content-page');
+      if (sc) sc.addEventListener('scroll', function () { if (!S._opRaf) S._opRaf = requestAnimationFrame(function () { S._opRaf = 0; spyPageIndex(); }); }, { passive: true });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && nav.classList.contains('is-open')) { nav.classList.remove('is-open'); btn.setAttribute('aria-expanded', 'false'); btn.focus(); } });
+    }
+    var lensName = { elnino: 'Ocean', ensoharvest: 'Harvests', ensowater: 'Shipping', ensomoney: 'Prices', ensolive: 'Reported' }[S.sub] || '';
+    /* Every visible plate title in the lens, in order; nested plates (the Panama pair) are listed once. */
+    var seen = [], items = [], mw = document.getElementById('enso-mapwrap');
+    if (mw && panel.contains(mw)) { seen.push(mw); items.push({ el: mw, label: 'Map · ' + (function () { try { return mapState().title; } catch (e) { return 'map'; } })() }); }
+    [].slice.call(panel.querySelectorAll('.enso-plate-t')).forEach(function (t) {
+      if (!t.offsetParent || t.closest('details:not([open])')) return;
+      var plate = t.closest('#enso-mapwrap') || t.closest('.enso-plate') || t;
+      if (seen.indexOf(plate) >= 0 || seen.some(function (p) { return p.contains(plate) && p !== plate && p.id !== 'enso-mapwrap'; })) return;
+      seen.push(plate);
+      var label = String(t.textContent || '').replace(/\s+/g, ' ').trim(); if (!label) return;
+      if (plate.id === 'enso-mapwrap') label = 'Map · ' + label;
+      items.push({ el: plate, label: label.length > 72 ? label.slice(0, 70).trim() + '…' : label });
+    });
+    S._opItems = items;
+    nav.innerHTML = '<div class="op-h"><b>On this page</b><span>' + esc(lensName) + '</span></div><div class="op-prog"><i></i></div><ol>' +
+      items.map(function (it, i) { return '<li><button type="button" data-op="' + i + '">' + esc(it.label) + '</button></li>'; }).join('') + '</ol>' +
+      '<div class="op-foot"><button type="button" data-op-what>What is El Niño?</button>' + (S.sub !== 'elnino' ? '<button type="button" data-op-ocean>Forecast on Ocean</button>' : '') + '</div>';
+    nav.querySelectorAll('[data-op]').forEach(function (b) {
+      b.onclick = function () { var it = S._opItems[+b.getAttribute('data-op')]; if (!it) return; it.el.scrollIntoView({ behavior: 'smooth', block: 'start' }); nav.classList.remove('is-open');
+        var bt = document.getElementById('enso-onpage-btn'); if (bt) bt.setAttribute('aria-expanded', 'false'); };
+    });
+    var what = nav.querySelector('[data-op-what]'); if (what) what.onclick = function () { nav.classList.remove('is-open'); showTab('ensomech'); };
+    var oc = nav.querySelector('[data-op-ocean]'); if (oc) oc.onclick = function () { nav.classList.remove('is-open'); showTab('elnino'); };
+    spyPageIndex();
+  }
+  function spyPageIndex() {
+    var nav = document.getElementById('enso-onpage'), sc = document.querySelector('#tab-elnino .content-page'); if (!nav || !sc || !S._opItems) return;
+    var top = sc.getBoundingClientRect().top + 170, cur = 0;
+    S._opItems.forEach(function (it, i) { if (it.el.getBoundingClientRect().top <= top) cur = i; });
+    nav.querySelectorAll('[data-op]').forEach(function (b, i) { b.classList.toggle('is-on', i === cur); if (i === cur) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current'); });
+    var pr = nav.querySelector('.op-prog i'), max = sc.scrollHeight - sc.clientHeight;
+    if (pr) pr.style.width = (max > 0 ? Math.min(100, sc.scrollTop / max * 100) : 0).toFixed(1) + '%';
   }
   function syncPlateKind(plate) {
     var head = plate.querySelector('.enso-plate-h'), kind = head && head.getAttribute('data-kind');
