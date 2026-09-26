@@ -31140,18 +31140,22 @@ function renderCountryTab() {
             return { label, kt:s.totalKt, topName: top?top.name:'', topShare: top?top.share:0 };
           }).filter(Boolean).sort((a,b)=> b.kt - a.kt);
           if (!rows.length) return '<div class="ctr-note">No bilateral export flows on record for this country.</div>';
-          const grand = rows.filter(r => _labelToKey(r.label) !== 'fertilizer').reduce((a,r)=>a+r.kt,0) || 1;
+          /* Same rule as imports: fertilizer is listed apart and is not part of the food total. */
+          const fertX = rows.find(r => _labelToKey(r.label) === 'fertilizer');
+          const foodX = rows.filter(r => r !== fertX);
+          const grand = foodX.reduce((a,r)=>a+r.kt,0) || 1;
           return `<div class="ctr-tbl-wrap"><table class="ctr-tbl">
             <thead><tr><th>Commodity</th><th style="width:110px">Share</th><th class="num">Volume</th><th class="num">Top destination</th></tr></thead>
-            <tbody>${rows.slice(0,10).map(r => `<tr class="rowlink" tabindex="0" role="button"
+            <tbody>${foodX.slice(0,10).map(r => `<tr class="rowlink" tabindex="0" role="button"
                 aria-label="Open the destination mix and volumes for ${_ctrQ(r.label)}"
                 onclick="openCommodityDrilldown('${_ctrQ(r.label)}','${c.iso}',{stay:true})" onkeydown="_kbdClick(event)">
               <td class="nm">${r.label}</td>
-              <td><span class="ctr-share-n">${Math.round(r.kt/grand*100)}%</span>${_ctrMeter(Math.min(100, Math.round(r.kt/grand*100)), '#6ba36b')}</td>
+              <td><span class="ctr-share-n">${Math.round(r.kt/grand*100)}%</span>${_ctrMeter(Math.round(r.kt/grand*100), '#6ba36b')}</td>
               <td class="num">${_ctrKt(r.kt)}</td>
               <td class="num" style="font-size:11px;">${r.topName ? _ctrPct(r.topShare) + ' ' + _escFeed(r.topName) : '—'}</td>
             </tr>`).join('')}</tbody>
           </table></div>
+          ${fertX ? `<div class="ctr-note" style="margin-top:9px;">Fertilizer (farm input, not food): ${_ctrKt(fertX.kt)}${fertX.topName ? ', ' + _ctrPct(fertX.topShare) + ' to ' + _escFeed(fertX.topName) : ''}.</div>` : ''}
           <div class="ctr-note" style="margin-top:9px;">Gross food exports ${exportsTotal} USD (FAOSTAT).</div>`;
         })()}
       </div>
