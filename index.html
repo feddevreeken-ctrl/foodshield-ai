@@ -30152,7 +30152,7 @@ function fsPrivacyClose(){
 
 /* Conversation state. history holds plain question/answer text for follow-ups; the data packet is
    rebuilt for every question from the page as it is at that moment. */
-const _fsAsk = { history: [], busy: false, ctrl: null, ai: null };
+const _fsAsk = { history: [], busy: false, ctrl: null, ai: null, gen: 0 };
 
 function fsAskOpen(){
   const o = document.getElementById('fs-ask-overlay'); if (!o) return;
@@ -30185,6 +30185,7 @@ function fsAskMode(){
     : 'Claude answers from the data on this page. Every figure in an answer is checked against it.';
 }
 function fsAskReset(){
+  _fsAsk.gen++;                       // an answer still streaming belongs to the old conversation
   if (_fsAsk.ctrl) _fsAsk.ctrl.abort();
   _fsAsk.history = [];
   const t = document.getElementById('fs-ask-thread'); if (t) t.innerHTML = fsAskHint();
@@ -30202,7 +30203,7 @@ function fsAskSubmit(e){
   return false;
 }
 function fsAskKey(e){
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); fsAskSubmit(); }
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); if (!_fsAsk.busy) fsAskSubmit(); }
 }
 function fsAskGrow(el){ if (!el) return; el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; }
 
@@ -30362,7 +30363,7 @@ function fsAskRankingPacket(q){
   pool.sort((a, b) => low ? a.fdrs - b.fdrs : b.fdrs - a.fdrs);
   const bands = {}; pool.forEach(c => { const b = riskLabel(c.fdrs); bands[b] = (bands[b] || 0) + 1; });
   return { order: low ? 'lowest risk first' : 'highest risk first', region: region || 'all UN member countries', countries_in_pool: pool.length, by_band: bands,
-    list: pool.slice(0, 15).map(c => ({ name: c.name, score: c.fdrs, band: riskLabel(c.fdrs), region: regionOf(c) })) };
+    list: pool.slice(0, 15).map((c, i) => ({ position: i + 1, name: c.name, score: c.fdrs, band: riskLabel(c.fdrs), region: regionOf(c) })) };
 }
 async function fsAskContext(qRaw){
   const q = qRaw.toLowerCase();
@@ -30430,6 +30431,8 @@ function fsAskVerify(text, ctx, q){
     const before = text[start - 1] || '', after = text.slice(end, end + 3);
     if (/[A-Za-z_]/.test(before)) continue;                                   // c0, Q3, MY2024
     if (/^[A-Za-z]/.test(after) && !/^(kt|Mt|pp|bn|t\b|m\b|x\b)/.test(after)) continue;
+    const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+    if (/^\s*$/.test(text.slice(lineStart, start)) && /^[.)]\s/.test(text.slice(end, end + 2))) continue;   // list ordinal
     const abs = raw.replace(/^[−-]/, '');
     if (/^\d{4}$/.test(abs) && +abs >= 1990 && +abs <= 2035) continue;       // years
     if (/\d{4}-\d{2}/.test(text.slice(Math.max(0, start - 8), end + 3))) continue;   // ISO dates
@@ -30509,6 +30512,7 @@ async function fsAskAsk(q){
   if (_fsAsk.ai === false){ offline(''); return; }
 
   _fsAskBusy(true);
+  const gen = _fsAsk.gen;
   const t0 = performance.now();
   let ctx = {}, text = '', failed = null;
   try {
@@ -30522,7 +30526,7 @@ async function fsAskAsk(q){
     else {
       const reader = res.body.getReader(), dec = new TextDecoder();
       let buf = '', raf = 0, done = false;
-      const paint = () => { raf = 0; aEl.innerHTML = fsAskRender(text) + '<span class="fs-ask-caret" aria-hidden="true"></span>'; _fsAskScroll(); };
+      const paint = () => { raf = 0; if (gen !== _fsAsk.gen) return; aEl.innerHTML = fsAskRender(text) + '<span class="fs-ask-caret" aria-hidden="true"></span>'; _fsAskScroll(); };
       while (!done){
         const r = await reader.read(); if (r.done) break;
         buf += dec.decode(r.value, { stream: true });
@@ -30544,6 +30548,7 @@ async function fsAskAsk(q){
   } finally {
     _fsAsk.ctrl = null; _fsAskBusy(false);
   }
+  if (gen !== _fsAsk.gen || !turn.isConnected) return;   // the chat was reset while this answer streamed
   if (!text.trim()){ offline(failed === 'offline' ? '' : (failed || 'No answer came back.') + ' Showing the page data instead.'); return; }
   const ver = fsAskVerify(text, ctx, q);
   aEl.innerHTML = fsAskRender(text, ver) + (failed ? `<div class="fs-ask-note">${_fsAskEsc(failed)}</div>` : '') + fsAskTrace(ver, ctx, performance.now() - t0);
