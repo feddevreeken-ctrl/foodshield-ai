@@ -12554,7 +12554,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-choke.t2 .enso-choke-label text { font:500 11px 'Geist',sans-serif; fill:#c9c6bd; }
 #tab-elnino .enso-choke.t3 .enso-choke-label text, #tab-elnino .enso-choke.t3 .enso-choke-label .enso-transit-change { font:400 10px 'Geist',sans-serif; fill:#8b8980; }
 #tab-elnino .enso-choke-label .enso-gauge-line { font:400 10.5px 'Geist Mono',monospace; fill:#c9c6bd; }
-#tab-elnino .enso-gauge { position:absolute; overflow:visible; pointer-events:none; }
+#tab-elnino .enso-staff { position:absolute; overflow:visible; pointer-events:none; }
 #tab-elnino .enso-leader { position:absolute; left:0; top:0; width:1px; height:1px; overflow:visible; pointer-events:none; }
 #tab-elnino .enso-ctx-label { color:#8b8980; font:400 10px 'Geist',sans-serif; text-shadow:0 0 2px #0b1017, 0 0 4px #0b1017; }
 #tab-elnino .enso-port i { box-shadow:0 0 0 1px #0b1017; }
@@ -45005,7 +45005,17 @@ function showCommodityDetail(key) {
     P.forEach(function (p) { sr += p.sign_right; ev += p.events; });
     var miss = P.filter(function (p) { return !p.beats_no_change; }).map(function (p) { return nameFor(p.iso) + ' ' + ({ corn: 'maize' }[p.crop] || p.crop); });
     return 'Tested on past El Niño winters it was not fitted on (each winter of ONI +1.0 or more held out in turn, detrended on earlier harvests only): the harvest landed on the side the El Niño term pointed to for ' + sr + ' of ' + ev + ' held-out harvests, and the El Niño term brought the forecast closer for ' + beat.length + ' of ' + P.length + ' pairs, against the same fit without it' +
-      (miss.length ? '; it did not for ' + miss.join(', ') : '') + '. Nine winters at most per pair, none above ONI +2.5.';
+      (miss.length ? '; it did not for ' + miss.join(', ') : '') + '. Nine winters at most per pair, none above ONI +2.5.' +
+      (function () {
+        /* The stricter test: each winter scored with a fit on earlier harvests only. Pairs were chosen on the full
+           record and the winter's observed ONI is used, so this is a conditional hindcast, not a forecast record. */
+        var F = P.map(function (p) { return p.forward; }).filter(function (f) { return f && f.events; });
+        if (!F.length) return '';
+        var fs = 0, fe = 0, fb = 0, ab = 0; F.forEach(function (f) { fs += f.sign_right; fe += f.events; if (f.beats_no_change) fb++; });
+        P.forEach(function (p) { ab += ((p.forward || {}).abstained_years || []).length; });
+        return ' Stricter, fitted only on harvests before each winter: sign right for ' + fs + ' of ' + fe + ', and the El Niño term helped in ' + fb + ' of ' + F.length + ' pairs' +
+          (ab ? ' (' + ab + ' early winters had too little history to score)' : '') + '. The pairs were chosen on the full record, so even this flatters the fit.';
+      })();
   }
   function hindcastLine(f) {
     var h = hindcastOf(f.iso, f.crop); if (!h) return '';
@@ -47454,7 +47464,7 @@ function showCommodityDetail(key) {
     var lo = Math.min(band[0], proj == null ? band[0] : proj), hi = Math.max(band[1], proj == null ? band[1] : proj), pad = (hi - lo) * .1; lo -= pad; hi += pad;
     var H = 32, y = function (v) { return Math.max(-3, Math.min(H + 3, H - (v - lo) / (hi - lo) * H)); };
     var under = cur < lo;
-    return '<svg class="enso-gauge" data-gauge="' + ln.id + '" width="12" height="' + (H + 6) + '" viewBox="-3 -3 12 ' + (H + 6) + '" style="left:-14px;top:' + (12 - H / 2 - 3) + 'px">' +
+    return '<svg class="enso-staff" data-gauge="' + ln.id + '" width="12" height="' + (H + 6) + '" viewBox="-3 -3 12 ' + (H + 6) + '" style="left:-14px;top:' + (12 - H / 2 - 3) + 'px">' +
       '<rect x="0" y="0" width="6" height="' + H + '" fill="#1c232c" stroke="#2a323c" stroke-width="1"/>' +
       '<rect x="0" y="' + y(band[1]).toFixed(1) + '" width="6" height="' + (y(band[0]) - y(band[1])).toFixed(1) + '" fill="#3a4350"/>' +
       (tick != null ? '<line x1="-2" x2="8" y1="' + y(tick).toFixed(1) + '" y2="' + y(tick).toFixed(1) + '" stroke="#e6e3da" stroke-width="1"/>' : '') +
@@ -47564,7 +47574,7 @@ function showCommodityDetail(key) {
     if (typeof S.map.getContainer !== 'function' || typeof S.map.latLngToContainerPoint !== 'function') return;
     var host = S.map.getContainer(), box = host.getBoundingClientRect(), W = box.width, H = box.height;
     if (!W || !H) return;
-    var obstacles = [], els = host.querySelectorAll('.enso-choke > i, .enso-transit-ring, .enso-gauge, .enso-ctx-ring, .enso-corridor-edge > span, .enso-anno, .enso-grat-lab');
+    var obstacles = [], els = host.querySelectorAll('.enso-choke > i, .enso-transit-ring, .enso-staff, .enso-ctx-ring, .enso-corridor-edge > span, .enso-anno, .enso-grat-lab');
     for (var i = 0; i < els.length; i++) {
       var r = els[i].getBoundingClientRect();
       if (r.width) obstacles.push({ left: r.left - box.left, top: r.top - box.top, right: r.right - box.left, bottom: r.bottom - box.top });

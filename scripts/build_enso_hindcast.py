@@ -44,6 +44,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TRAIL = 8          # earlier harvests in the trailing mean
 MIN_PRIOR = 5      # fewer than this and a year gets no anomaly
 EVENT_ONI = 1.0    # winters held out: DJF ONI at or above this
+MIN_TRAIN = 15     # forward walk: earlier harvests needed before a winter is scored
 
 
 def trailing(years, vals):
@@ -66,6 +67,26 @@ def ols(x, y):
     return b, np.linalg.inv(X.T @ X) * s2, math.sqrt(s2)
 
 
+def score(train, act, o):
+    """One held-out harvest against a fit on `train`; the yardstick is the same years without the El Nino term."""
+    b, cov, s = ols([d[2] for d in train], [d[1] for d in train])
+    base = float(np.mean([d[1] for d in train]))
+    pred = float(b[0] + b[1] * o)
+    enso = pred - base
+    sd = math.sqrt(cov[0, 0] + o * o * cov[1, 1] + 2 * o * cov[0, 1] + s * s)
+    return pred, base, enso, sd
+
+
+def summary(held):
+    n = len(held)
+    mae = sum(h["abs_err"] for h in held) / n
+    mae0 = sum(h["abs_err_zero"] for h in held) / n
+    for h in held:
+        h.pop("abs_err"); h.pop("abs_err_zero")
+    return {"events": n, "sign_right": sum(h["sign_right"] for h in held), "in_band": sum(h["in_band"] for h in held),
+            "mae_log_pts": round(mae * 100, 1), "mae_no_change_log_pts": round(mae0 * 100, 1), "beats_no_change": bool(mae < mae0)}
+
+
 def main() -> int:
     oni, cal, panel = M.load_oni(), M.load_calendars(), M.load_faostat()
     with open(os.path.join(ROOT, "data", "enso_outlook.json"), encoding="utf-8") as fh:
@@ -80,8 +101,20 @@ def main() -> int:
             continue
         ty, ta = trailing(yrs, [series[y]["yield"] for y in yrs])
         data = [(y, a, oni.get(y + shift)) for y, a in zip(ty, ta) if oni.get(y + shift) is not None]
-        held = []
+        held, fwd, abstain = [], [], []
         for hy, act, o in [d for d in data if d[2] >= EVENT_ONI]:
+            # Forward walk: fit only on harvests before the held-out one, as a forecaster would have had.
+            past = [d for d in data if d[0] < hy]
+            if len(past) < MIN_TRAIN:
+                abstain.append(int(hy))
+            else:
+                fp, fb, fe, fsd = score(past, act, o)
+                fwd.append({"harvest_year": int(hy), "djf_oni": round(float(o), 2), "train_years": len(past),
+                            "actual_pct": round((math.exp(act) - 1) * 100, 1), "predicted_pct": round((math.exp(fp) - 1) * 100, 1),
+                            "baseline_pct": round((math.exp(fb) - 1) * 100, 1),
+                            "sign_right": bool(((act - fb) < 0) == (fe < 0)),
+                            "in_band": bool(fp - 1.645 * fsd <= act <= fp + 1.645 * fsd),
+                            "abs_err": abs(act - fp), "abs_err_zero": abs(act - fb)})
             train = [d for d in data if d[0] != hy]
             b, cov, s = ols([d[2] for d in train], [d[1] for d in train])
             # The yardstick is the model without the El Nino term, refit on the same
@@ -111,6 +144,8 @@ def main() -> int:
         for h in held:
             h.pop("abs_err"); h.pop("abs_err_zero")
         key = f"{iso}/{crop}"
+        forward = dict(summary(fwd), held_out=fwd) if fwd else {"events": 0, "held_out": []}
+        forward["abstained_years"] = abstain
         out[key] = {
             "iso": iso, "crop": crop, "events": n,
             "sign_right": sum(h["sign_right"] for h in held),
@@ -118,9 +153,11 @@ def main() -> int:
             "mae_log_pts": round(mae * 100, 1), "mae_no_change_log_pts": round(mae0 * 100, 1),
             "beats_no_change": bool(mae < mae0),
             "held_out": held,
+            "forward": forward,
         }
         print(f"  {key}: sign {out[key]['sign_right']}/{n}, band {out[key]['in_band']}/{n}, "
-              f"error {mae * 100:.1f} vs baseline {mae0 * 100:.1f}")
+              f"error {mae * 100:.1f} vs baseline {mae0 * 100:.1f}; forward sign {forward.get('sign_right', 0)}/{forward['events']}"
+              f"{', beats' if forward.get('beats_no_change') else ''}, abstained {len(abstain)}")
     payload = {"_meta": {
         "generated_at": datetime.now(timezone.utc).isoformat(), "version": "v2", "method_version": "v2",
         "method": (f"Each El Niño winter (DJF ONI of +{EVENT_ONI} or more) is left out in turn and the fit is "
@@ -133,6 +170,10 @@ def main() -> int:
         "source": "FAOSTAT QCL yields; NOAA CPC ONI (oni.ascii.txt); pairs as shown in enso_outlook.json",
         "caveat": ("Nine winters per pair at most, and none above ONI +2.5, so this tests direction and rough size "
                    "in past events, not the size of a stronger winter."),
+        "method_forward": (f"Forward walk: each El Niño winter is scored with a fit on earlier harvests only (at least {MIN_TRAIN}); "
+                           "winters with fewer earlier harvests are abstentions, listed per pair. The pairs themselves were chosen "
+                           "on the full record and that selection is not re-run, and the winter's observed ONI is used, so this is "
+                           "a conditional hindcast, not a vintage forecast."),
     }, "data": {"pairs": out}}
     with open(os.path.join(ROOT, "data", "enso_hindcast.json"), "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=1, ensure_ascii=False); fh.write("\n")
