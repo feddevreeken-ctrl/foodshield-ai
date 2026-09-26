@@ -206,14 +206,19 @@ Style and substance rules:
 - Never use a written-out quantity either: no "doubled", "halved", "twice",
   "a third", "tenfold", "ten percent". Those are numbers too.
 - 2 to 3 sentences. No more.
-- Describe what moved (using only FACTS figures), then what could PLAUSIBLY follow.
+- Describe what moved (using only FACTS figures) and what it means for who is
+  exposed. Stop there.
 - Write for someone who trades or buys this commodity, not for a general reader.
   Assume they know what the commodity is; do not define it or set the scene.
-- Forward-looking statements must be explicitly hedged pathways, never predictions
-  or forecasts. This project maps structural exposure; it does not claim predictive
-  accuracy. Never imply it does.
-- You may name a news source (e.g. "Reuters reporting") but must not assert a
-  headline's claim as established fact — attribute it.
+- No predictions, no "if this persists" conditionals, no advice. Never write
+  "could face", "may need to", "should consider", "diversify sourcing" or "secure
+  contracts": the reader decides what to do. This project maps structural
+  exposure; it does not claim predictive accuracy.
+- Never link a price move to a product launch, a company or an event unless FACTS
+  itself connects them.
+- You may name a publisher that appears in FACTS, and only such a publisher; never
+  write "Reuters-style" or name an outlet that FACTS does not list. Attribute a
+  headline's claim to its publisher; never assert it as established fact.
 - If the inputs are thin or missing, say so plainly instead of inventing narrative.
 
 Formatting rules (these change how a figure is WRITTEN, never its value):
@@ -795,6 +800,22 @@ def find_field_names(text, facts):
     return sorted(hits)
 
 
+_ADVICE = re.compile(r"\b(could face|may need to|might need to|should consider|diversif\w+|secure contracts?|"
+                     r"lock in|hedge (?:their|its)|if (?:the|this|these|such) [\w\s,-]{0,40}persist\w*|if [\w\s,-]{0,40}continue\w*)", re.I)
+_OUTLETS = re.compile(r"\b(Reuters|Bloomberg|Associated Press|AFP|Financial Times|Wall Street Journal|WSJ|CNBC|BBC)\b")
+
+
+def find_advice(text):
+    """Conditional-advice phrasing the prompt forbids ("could face higher costs if the trend persists")."""
+    return [m.group(0) for m in _ADVICE.finditer(text or "")]
+
+
+def find_unlisted_outlets(text, facts):
+    """Wire services named in the prose that FACTS does not list as a source."""
+    listed = json.dumps(facts, ensure_ascii=False).lower()
+    return [m.group(0) for m in _OUTLETS.finditer(text or "") if m.group(0).lower() not in listed]
+
+
 def validate_text(text, facts):
     """Every honesty check that applies to publishable prose.
 
@@ -806,6 +827,8 @@ def validate_text(text, facts):
         "sign_inversions": find_sign_inversions(text, facts),
         "word_quantities": find_word_quantities(text),
         "field_names": find_field_names(text, facts),
+        "advice": find_advice(text),
+        "unlisted_outlets": find_unlisted_outlets(text, facts),
     }
     return (not any(detail.values())), detail
 
@@ -877,9 +900,9 @@ def build_prompt(facts):
         + json.dumps(facts, indent=2, ensure_ascii=False)
         + "\n\nWrite the 2-3 sentence interpretation for "
         + facts["commodity"]
-        + ". Reference only figures that appear verbatim above. Frame anything "
-          "forward-looking as a hedged, plausible pathway conditional on those "
-          "figures — not a forecast."
+        + ". Reference only figures that appear verbatim above. Say what the "
+          "figures mean for exposed buyers; do not speculate about what happens "
+          "next and give no advice."
     )
 
 
@@ -1448,6 +1471,19 @@ def main():
     print(f"[OK] {model_used}/{len(COMMODITIES)} AI interpretations accepted, "
           f"{rejected} rejected by validation ({forced} caught at the output gate).")
 
+    return 0
+
+
+def main_articles():
+    """Per-article notes, run as their own pipeline step (own timeout) after main().
+
+    They were written at the end of main(), after the nine commodity calls; when that
+    step hit its timeout the notes were the part never written, and the file went ten
+    days stale. The commodity notes are read back from the file main() wrote."""
+    provider, api_key = resolve_provider()
+    news = _payload(_load("commodity_news.json")) or {}
+    out = _payload(_load(OUTPUT)) or {}
+    generated_at = datetime.now(timezone.utc).isoformat()
     # v50 — per-article notes, written to their own file so the commodity
     # envelope keeps its exact shape and validate_data's honesty checks over it
     # are unaffected.

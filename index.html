@@ -25652,7 +25652,7 @@ function _simulateScenario(c, selected, severityById, paramsById) {
       } else singles.push({ pos, list: [ev] });
     });
     const units = singles.concat([...groups.values()]);
-    units.forEach(u => u.list.sort((a, b) => (SEV_RANK[a.severity] ?? 3) - (SEV_RANK[b.severity] ?? 3) || String(b.date || '').localeCompare(String(a.date || ''))));
+    units.forEach(u => u.list.sort((a, b) => (a.claim ? 1 : 0) - (b.claim ? 1 : 0) || (SEV_RANK[a.severity] ?? 3) - (SEV_RANK[b.severity] ?? 3) || String(b.date || '').localeCompare(String(a.date || ''))));
 
     units.forEach(u => {
       const top = u.list[0], n = u.list.length;
@@ -25669,7 +25669,7 @@ function _simulateScenario(c, selected, severityById, paramsById) {
       const html = `
         <div class="dist-marker${isChoke ? ' is-choke' : ''}" data-sev="${sev}" style="--dm:${color};--dm-px:${px}px">
           ${sev === 'critical' ? '<div class="dist-marker-ring"></div>' : ''}
-          <div class="dist-marker-core${top.live || top.type === 'chokepoint' ? '' : ' is-context'}">${distIconSVG(top.type)}</div>
+          <div class="dist-marker-core${top.claim ? ' is-context is-claim' : (top.live || top.type === 'chokepoint' ? '' : ' is-context')}">${distIconSVG(top.type)}</div>
           ${n > 1 ? `<div class="dist-marker-count">${n}</div>` : ''}
           <div class="dist-marker-label" style="border-left:2px solid ${color};">
             <div class="dist-marker-title">${title}</div>
@@ -29256,7 +29256,7 @@ function renderNewsTab() {
            <span>Country</span>
            <select class="fs-select news-country-sel" onchange="setNewsCountry(this.value)" aria-label="Filter by country">
              <option value="all"${_newsCountry === 'all' ? ' selected' : ''}>All countries</option>
-             ${isos.map(iso => `<option value="${_escFeed(iso)}"${_newsCountry === iso ? ' selected' : ''}>${_escFeed(iso)} (${isoCounts[iso]})</option>`).join('')}
+             ${isos.map(iso => [iso, (typeof _nameFromISO === 'function' && _nameFromISO(iso)) || iso]).sort((a, b) => a[1].localeCompare(b[1])).map(([iso, nm]) => `<option value="${_escFeed(iso)}"${_newsCountry === iso ? ' selected' : ''}>${_escFeed(nm)} (${isoCounts[iso]})</option>`).join('')}
            </select>
          </label>
        </div>
@@ -29411,14 +29411,15 @@ function renderNewsTab() {
             // One corridor is one unit — wrapping between "via" and the ISO
             // ("THA 3.4 Mt via / BRA") splits a single fact across two lines
             // and reads as two separate claims.
+            /* Origin → destination, by name, for every corridor: "United States → China 22.1 Mt".
+               The destination is marked when the headline names it. */
+            const nm = iso => (typeof _nameFromISO === 'function' && _nameFromISO(iso)) || iso;
             return `<span class="news-exp-entry">`
+              + (e.via ? `<span class="news-exp-via">${_escFeed(nm(e.via))} → </span>` : '')
               + `<span class="news-exp-iso${direct ? ' direct' : ''}"${
-                     direct ? ' title="Directly involved in this corridor"' : ''
-                   }>${_escFeed(e.iso)}</span> `
+                     direct ? ' title="Named in the headline"' : ''
+                   }>${_escFeed(nm(e.iso))}</span> `
               + `<span class="news-exp-kt">${_newsFmtKt(e.kt)}</span>`
-              + (!direct && e.via
-                  ? ` <span class="news-exp-via">via ${_escFeed(e.via)}</span>`
-                  : '')
               + `</span>`;
           // Real whitespace around the separator, not just margin: a margin
           // gives no line-break opportunity, so nowrap entries ran past the
@@ -36165,6 +36166,9 @@ function closeUpdates(){
 
 // v21 — First-visit floating hint, dismissed by user or after 8s.
 function showFirstHint() {
+  /* The hint is about the map: on a deep link to another tab it would sit over that tab's content. */
+  const onMap = document.getElementById('tab-global')?.classList.contains('active');
+  if (!onMap) return;
   let el = document.getElementById('first-hint');
   if (!el) {
     el = document.createElement('div');
@@ -36863,9 +36867,12 @@ window.addEventListener('load',()=>{
     }
   }, 600);
 
-  // Show welcome modal — always on fresh load unless user ticked "don't show"
+  // Show welcome modal — on a fresh load of the map, unless the user ticked "don't show".
+  // A deep link to another tab (?tab=methodology, ?country=…) goes straight to what was linked.
   setTimeout(() => {
     try {
+      const _qs = new URLSearchParams(location.search);
+      if ((_qs.get('tab') && _qs.get('tab') !== 'global') || _qs.get('country') || _qs.get('commodity') || _qs.get('company')) return;
       const skipped = localStorage.getItem('foodshield_skip_intro') === '1';
       if (!skipped) openInstructions();
     } catch(e) {
@@ -37170,7 +37177,7 @@ const ML_TYPES = [
   { t:'weather',     c:'#5f7f96', l:'Weather anomaly (capital)' },
   // Documents and headlines: shown so nothing the feeds carry is hidden, each on its own switch.
   { t:'report',      c:'#8a8a94', l:'Situation reports' },
-  { t:'claim',       c:'#d8b86a', l:'News headlines' },
+  { t:'claim',       c:'#8fa3bf', l:'News headlines' },
 ];
 window._mlState = window._mlState || { distOn:false, sstOn:false, flowsOn:false, expanded:false, hidden:new Set() };
 
@@ -39408,7 +39415,7 @@ const EV_TYPE = {
   weather:     { label:'Weather anomaly', color:'#5f7f96', bgColor:'rgba(95,127,150,0.12)' },
   report:      { label:'Situation report', color:'#8a8a94', bgColor:'rgba(138,138,148,0.12)' },
   other:       { label:'Other hazard', color:'#7a7a86', bgColor:'rgba(122,122,134,0.12)' },
-  claim:       { label:'Headline claim', color:'#c9a957', bgColor:'rgba(201,169,87,0.12)' },
+  claim:       { label:'Headline claim', color:'#8fa3bf', bgColor:'rgba(143,163,191,0.12)' },
 };
 Object.keys(EV_TYPE).forEach(k => { EV_TYPE[k].icon = '<span style="color:' + EV_TYPE[k].color + ';display:inline-flex;vertical-align:-2px">' + distIconSVG(k, 16) + '</span>'; });
 
@@ -39450,7 +39457,8 @@ function renderDailySummaryBanner() {
   // Visual: dark amber accent bar — slightly attention-getting but not alarm-red,
   // since this is a summary not a single emergency.
   const bulletHtml = bullets.length ? `
-    <div style="margin-top:10px;display:grid;grid-template-columns:1fr;gap:6px;">
+    <details style="margin-top:8px;"><summary style="cursor:pointer;font-size:11px;color:var(--t3);font-family:'Geist Mono',monospace;">${bullets.length} figures behind this</summary>
+    <div style="margin-top:8px;display:grid;grid-template-columns:1fr;gap:6px;">
       ${bullets.map(b => {
         const txt = typeof b === 'string' ? b : (b && b.text);
         const src = (b && b.source) ? `<span style="color:var(--t3);font-size:9.5px;margin-left:6px;">· ${b.source}</span>` : '';
@@ -39459,13 +39467,13 @@ function renderDailySummaryBanner() {
           <span style="color:var(--accent);font-weight:600;margin-right:6px;">→</span>${txt}${src}
         </div>`;
       }).filter(Boolean).join('')}
-    </div>` : '';
+    </div></details>` : '';
   return `
     <div style="background:linear-gradient(135deg,var(--bg2),var(--bg1));border:1px solid var(--accent)33;border-left:3px solid var(--accent);border-radius:3px;padding:14px 18px;margin-bottom:16px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;">
         <div style="flex:1;">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-            <span style="font-size:9.5px;color:var(--accent);font-weight:700;letter-spacing:.1em;text-transform:uppercase;">What changed today</span>
+            <span style="font-size:9.5px;color:var(--accent);font-weight:700;letter-spacing:.1em;text-transform:uppercase;">Today's picture</span>
             ${asOf ? `<span style="font-size:10px;color:var(--t3);font-family:'Geist Mono',monospace;">${asOf}</span>` : ''}
             <span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">deterministic · no LLM</span>
           </div>
@@ -39503,7 +39511,7 @@ async function renderDisturbancesTab() {
                ${t==='all' ? 'All Events' : (EV_TYPE[t]?.label || t)}
              </button>`).join('')}
         </div>
-        <div id="dist-event-list" style="display:flex;flex-direction:column;gap:10px;overflow-y:auto;max-height:calc(100vh - 240px);padding-right:4px;">
+        <div id="dist-event-list" style="display:flex;flex-direction:column;gap:10px;">
           ${[1,2,3,4].map(()=>`
             <div style="background:var(--bg2);border:1px solid var(--b1);border-radius:3px;padding:16px;animation: none;">
               <div style="width:120px;height:10px;background:var(--bg3);border-radius:4px;margin-bottom:10px;"></div>
@@ -39532,8 +39540,24 @@ async function renderDisturbancesTab() {
     </div>`;
 
   await loadDisturbanceData();
+  renderDisturbanceFilters();
   renderDisturbanceList();
   renderDisturbanceSidebar();
+}
+/* Filter chips for the types actually present, each with its count; an empty category is not offered. */
+function renderDisturbanceFilters() {
+  const box = document.getElementById('dist-filters'); if (!box) return;
+  const counts = {};
+  disturbanceEvents.forEach(e => { counts[e.type] = (counts[e.type] || 0) + 1; });
+  const types = Object.keys(counts).sort((a, b) => (a === 'claim') - (b === 'claim') || counts[b] - counts[a]);
+  if (disturbanceFilter !== 'all' && !counts[disturbanceFilter]) disturbanceFilter = 'all';
+  const chip = (t, label, n) => {
+    const on = t === disturbanceFilter;
+    return `<button type="button" onclick="filterDisturbances('${t}')" id="df-${t}" aria-pressed="${on}"
+      style="padding:5px 12px;border-radius:3px;border:1px solid ${on ? 'var(--accent)' : 'var(--b2)'};background:${on ? 'var(--accent)' : 'var(--bg2)'};color:${on ? '#000' : 'var(--t2)'};font-size:11px;font-weight:500;cursor:pointer;">
+      ${label} <span style="font-family:'Geist Mono',monospace;opacity:.7;">${n}</span></button>`;
+  };
+  box.innerHTML = chip('all', 'All', disturbanceEvents.length) + types.map(t => chip(t, (EV_TYPE[t] && EV_TYPE[t].label) || t, counts[t])).join('');
 }
 
 async function loadDisturbanceData() {
@@ -39607,7 +39631,8 @@ async function loadDisturbanceData() {
             properties: {
               eventid: id, eventtype: r.event_type, alertlevel: r.alert_level,
               iso3: r.iso3, countryname: r.country, eventname: r.title,
-              fromdate: r.from_date, url: r.url,
+              fromdate: r.from_date, todate: r.to_date, url: r.url,
+              affectedcountries: (r.affected_iso3 || []).map(i => (typeof _nameFromISO === 'function' && _nameFromISO(i)) || i),
             },
             geometry: { coordinates: [r.lng, r.lat] },
           })),
@@ -39649,9 +39674,12 @@ async function loadDisturbanceData() {
           iso: isoUpper,
           lat: coords[1] || 0,
           lng: coords[0] || 0,
-          detail: `Alert level: ${p.alertlevel}. ${p.episodealertlevel ? 'Episode: ' + p.episodealertlevel + '. ' : ''}Affected: ${(function(ac){ if(!ac) return resolvedName; if(typeof ac==='string') return ac; if(Array.isArray(ac)){ const names=ac.map(x=> (x && typeof x==='object') ? (x.countryname||x.name||x.iso3||x.iso||'') : x).filter(Boolean); return names.length ? names.join(', ') : resolvedName; } if(typeof ac==='object') return ac.countryname||ac.name||resolvedName; return resolvedName; })(p.affectedcountries)}.`,
+          detail: `${p.todate && p.fromdate && p.todate.slice(0, 10) !== p.fromdate.slice(0, 10) ? 'Ongoing since ' + p.fromdate.slice(0, 10) + ', last updated ' + p.todate.slice(0, 10) + '. ' : ''}Alert level: ${p.alertlevel}. ${p.episodealertlevel ? 'Episode: ' + p.episodealertlevel + '. ' : ''}Affected: ${(function(ac){ if(!ac) return resolvedName; if(typeof ac==='string') return ac; if(Array.isArray(ac)){ const names=ac.map(x=> (x && typeof x==='object') ? (x.countryname||x.name||x.iso3||x.iso||'') : x).filter(Boolean); return names.length ? names.join(', ') : resolvedName; } if(typeof ac==='object') return ac.countryname||ac.name||resolvedName; return resolvedName; })(p.affectedcountries)}.`,
           source: 'GDACS',
-          date: (p.fromdate || '').slice(0, 10) || new Date().toISOString().slice(0,10),
+          /* A drought runs for months: the event is dated by its latest GDACS episode, and the
+             detail says how long it has been going on. */
+          date: (p.todate || p.fromdate || '').slice(0, 10) || new Date().toISOString().slice(0,10),
+          since: (p.todate && p.fromdate && p.todate.slice(0, 10) !== p.fromdate.slice(0, 10)) ? p.fromdate.slice(0, 10) : null,
           live: true,
           url: p.url || null,
         });
@@ -39742,22 +39770,29 @@ async function loadDisturbanceData() {
         /* A ReliefWeb item that names no hazard is a document (situation report, country brief,
            assessment, press release): it stays in the Disturbances list as a report, off the map. */
         let evType = 'report';
-        if (/drought|sequ[ií]a|s[ée]cheresse|d[eé]ficit de humedad|rainfall deficit|dry spell/.test(titleLow)) evType = 'drought';
-        else if (/flood|inundaci|inondation/.test(titleLow)) evType = 'flood';
-        else if (/cyclone|typhoon|hurricane|hurac[aá]n|tropical storm/.test(titleLow)) evType = 'cyclone';
-        else if (/earthquake|seismic|tremor|terremoto|s[eé]isme/.test(titleLow)) evType = 'earthquake';
-        else if (/ebola|cholera|c[oó]lera|mpox|measles|outbreak|epidemic|virus|dengue|malaria|polio|brote/.test(titleLow)) evType = 'disease';
-        else if (/conflict|war\b|displacement|violence|armed|clashes/.test(titleLow)) evType = 'conflict';
-        else if (/famine|ipc\s*5|starvation|malnutrition|hunger|food insecur/.test(titleLow)) evType = 'famine';
-        else if (/locust|pest|armyworm/.test(titleLow)) evType = 'famine';
+        /* A hazard type only when the hazard is the report's subject: an operational update
+           (sitrep, flash update, appeal, DREF) or a title that opens on the hazard. "…campaign amid
+           conflict" or a feature that mentions floods stays a report. */
+        const hazardSubject = /situation report|sitrep|flash update|flash appeal|emergency appeal|\bdref\b|operation update|response plan|\balert\b|bulletin|informe de situaci|rapport de situation/.test(titleLow);
+        const lead = titleLow.replace(/^[^:]{0,40}:\s*/, '').slice(0, 48);
+        const onHazard = re => re.test(lead) || (hazardSubject && re.test(titleLow));
+        if (onHazard(/drought|sequ[ií]a|s[ée]cheresse|d[eé]ficit de humedad|rainfall deficit|dry spell/)) evType = 'drought';
+        else if (onHazard(/flood|inundaci|inondation/)) evType = 'flood';
+        else if (onHazard(/cyclone|typhoon|hurricane|hurac[aá]n|tropical storm/)) evType = 'cyclone';
+        else if (onHazard(/earthquake|seismic|tremor|terremoto|s[eé]isme/)) evType = 'earthquake';
+        else if (onHazard(/ebola|cholera|c[oó]lera|mpox|measles|outbreak|epidemic|dengue|malaria|polio|brote/)) evType = 'disease';
+        else if (onHazard(/conflict|\bwar\b|displacement|violence|armed|clashes/)) evType = 'conflict';
+        else if (onHazard(/famine|ipc\s*5|starvation|malnutrition|food insecur/)) evType = 'famine';
+        else if (onHazard(/locust|armyworm/)) evType = 'famine';
         const sourceName = (f.source && f.source[0] && f.source[0].name) || 'ReliefWeb';
         // v35 — infer severity from the title instead of hard-coding 'high'.
         // Mirrors scripts/refresh_reliefweb.py's keyword tiers, mapped onto the
         // frontend's critical/high/medium vocabulary. Routine country briefs and
         // monitoring snapshots now rank below true emergency reports.
+        /* Capped at high: a headline that says "risk of famine" is not an IPC Phase 5 classification.
+           Critical is reserved for the IPC and FEWS NET feeds. */
         let evSev = 'medium';
-        if (/famine|ipc 5|ipc phase 5|catastroph|starvation/.test(titleLow)) evSev = 'critical';
-        else if (/crisis|emergency|ipc 4|ipc phase 4|acute|alert|outbreak|disaster/.test(titleLow)) evSev = 'high';
+        if (/famine|ipc 5|ipc phase 5|catastroph|starvation|crisis|emergency|ipc 4|ipc phase 4|acute|alert|outbreak|disaster/.test(titleLow)) evSev = 'high';
         const dateStr = (f.date && f.date.original ? f.date.original : '').slice(0, 10)
           || new Date().toISOString().slice(0, 10);
         const url = f.url_alias || `https://reliefweb.int/report/${isoUpper.toLowerCase()}/${item.id}`;
@@ -39809,9 +39844,9 @@ async function loadDisturbanceData() {
       const co = byISO(iso); if (!co) continue;
       const ll = (typeof COUNTRY_LL !== 'undefined') ? (COUNTRY_LL[iso] || [0,0]) : [0,0];
 
-      // Drought signal — kept for resilient countries too because drought is
-      // a strong predictor even for big exporters (think 2022 US Plains).
-      if (row.drought_flag) {
+      // Dry week: structurally exposed countries only (FDRS >= 40). One rainless week at
+      // London's or Nicosia's weather station is not a food-system disturbance.
+      if (row.drought_flag && _omRisky(co)) {
         events.push({
           id: 'om_drought_' + iso, type: 'weather', severity: 'low', weatherKind: 'dry',
           title: `Dry week at the capital: ${co.name}`, country: co.name, iso,
@@ -39820,7 +39855,7 @@ async function loadDisturbanceData() {
           source: 'Open-Meteo', date: _snapDate('openmeteo'), live: true,
           url: 'https://open-meteo.com/',
         });
-      } else if (row.wet_flag) {
+      } else if (row.wet_flag && !row.drought_flag) {
         // v21 — only surface wet anomaly if (a) the country is structurally
         // at-risk (FDRS >= 40) OR (b) the anomaly is extreme (>200%).
         const extreme = (row.precip_anomaly_pct || 0) > 200;
@@ -39939,6 +39974,9 @@ async function loadDisturbanceData() {
       const projWorse = (typeof cur === 'number' && typeof proj === 'number' && (proj - cur) >= 1);
       const inCrisis = (typeof cur === 'number' && cur >= 3);
       if (!inCrisis && !projWorse) continue;
+      /* An analysis whose period began more than six months ago has been superseded or has lapsed. */
+      const _fm = String(row.current_period || '').match(/([A-Z][a-z]{2})\s+(\d{4})\s*$/);
+      if (_fm) { const _fd = Date.parse(_fm[1] + ' 1, ' + _fm[2] + ' UTC'); if (isFinite(_fd) && Date.now() - _fd > 183 * 864e5) continue; }
       const sev = cur >= 5 ? 'critical' : cur >= 4 ? 'critical' : cur >= 3 ? 'high' : 'medium';
       const arrow = projWorse ? ` projected to deteriorate to Phase ${proj} (${row.projected_period || 'next quarter'})` : '';
       events.push({
@@ -40048,8 +40086,8 @@ async function loadDisturbanceData() {
         date: _cpDate,
         live: false,
         infraSources: cp.sources || [],
-        foodImpact: cp.food_role || '',
-        duration: altTxt,
+        /* No foodImpact/duration: the chokepoint analysis block already carries the food role and
+           the re-routing sentence, and "Expected Duration" is not what that sentence is. */
         // The curated object (commodities, dependents, risk vectors) feeds
         // chokepointAnalysis(); the measured PortWatch figure travels in its
         // own field. Replacing the object with a number left every chokepoint
@@ -40127,13 +40165,26 @@ async function loadDisturbanceData() {
     if (!String(e.id || '').startsWith('rw_')) return true;
     const norm = String(e.title || '').toLowerCase()
       .replace(/[\d\/\[\]|#:,.()-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
-    /* A report published the same day in EN/ES/FR is one report: key reports on country and date. */
-    const k = e.type === 'report' ? e.iso + '|report|' + e.date : e.iso + '|' + norm;
-    if (_rwSeen.has(k)) return false;
-    _rwSeen.add(k);
+    /* One crisis, one card: an edition of a numbered series (Sitrep No. 90, No. 91) or a
+       translation of the same update is a duplicate. Three keys, any one of which repeats drops it:
+       the de-numbered title, the report number on the same day, and (for documents) the day. */
+    const t = String(e.title || '').toLowerCase();
+    const num = (t.match(/(?:\bno\.?|\bn[º°o]\.?|#|\bupdate|\bactualizaci[oó]n|\bmise à jour)\s*(\d{1,4})\b/) || [])[1];
+    const keys = [e.iso + '|' + norm];
+    if (num) keys.push(e.iso + '|' + e.date + '|#' + num);
+    if (e.type === 'report') keys.push(e.iso + '|report|' + e.date);
+    if (keys.some(k => _rwSeen.has(k))) return false;
+    keys.forEach(k => _rwSeen.add(k));
     /* No per-country cap any more: the map groups a country's reports into one marker. */
     _rwPerIso[e.iso] = (_rwPerIso[e.iso] || 0) + 1;
     return true;
+  });
+
+  /* Curated baseline events are background: a live IPC, FEWS NET or conflict reading for the same
+     country and type supersedes one, and one past 90 days no longer ranks as critical. */
+  events = events.filter(e => !(/^b\d+$/.test(String(e.id)) && events.some(x => x.live && x.iso === e.iso && x.type === e.type)));
+  events.forEach(e => {
+    if (/^b\d+$/.test(String(e.id)) && e.date && Date.now() - Date.parse(e.date) > 90 * 864e5 && e.severity === 'critical') e.severity = 'high';
   });
 
   const seen = new Set();
@@ -40158,28 +40209,35 @@ async function loadDisturbanceData() {
     if (e.source  != null) e.source  = _escFeed(e.source);
   });
 
-  // ── v46.2 — promote high-signal NEWS onto the Disturbances board ──────
-  // Deliberately conservative. Disturbances is an EVENTS surface; news items
-  // are third-party CLAIMS, and merging the two carelessly turns an evidence
-  // board into a headline ticker. An item is promoted only when it clears
-  // three bars at once:
-  //   1. it names a concrete disruptive ACTION (export ban, port closure,
-  //      tariff, cull — see DISRUPTION_TERMS), not market commentary;
-  //   2. it resolves to a country ON A CORRIDOR we actually map;
-  //   3. it is recent.
-  // Promoted rows carry source 'News' and severity 'claim' so they are
-  // visually and semantically distinct from a GDACS alert. They are never
-  // counted as verified events.
+  // ── News headlines on the Disturbances board ──────────────────────────
+  // Headlines are third-party claims, not events. They carry type 'claim', are drawn
+  // hollow on the map, and are left out of the country and severity counts.
   try {
     const newsEnv = LIVE.commodity_news;
     const newsItems = (newsEnv && newsEnv.data && newsEnv.data.items) || [];
-    // Every headline from the last seven days that names a country, or touches a mapped
-    // corridor, is placed on that country as a claim. The country named in the story wins
-    // over our corridor attribution.
+    // A headline from the last seven days is placed on the map when it reports a disruption (a ban,
+    // duty, closure, drought, outbreak, harvest failure…) or names a chokepoint. Market colour
+    // ("chicken production edges up") stays on the News tab. The country is the one the headline
+    // opens on, so "Bangladesh resumes Indian wheat purchases" sits on Bangladesh, not on Russia.
     const cutoff = Date.now() - 7 * 24 * 3600 * 1000;
+    const DISRUPT = /\b(ban|bans|banned|restrict\w*|halt\w*|suspend\w*|tariffs?|dut(y|ies)|quotas?|shortages?|outbreaks?|floods?|flooding|droughts?|strikes?|clos(e|es|ed|ure)|attacks?|war\b|embargo\w*|curbs?|spikes?|soar\w*|plunge\w*|crisis|disease|bird flu|avian|swine fever|locusts?|heat ?wave|frost|cyclone|typhoon|hurricane|sanctions?|disrupt\w*|shortfall|failure|cull\w*|falls?|declin\w*|threat\w*|el ni[nñ]o)\b/i;
+    const PLACE_CHOKE = /strait|canal|sea\b|bab|hormuz|bosporus|panama|suez|malacca/i;
+    const ALIAS = { USA: ['u.s.', 'us ', 'american'], GBR: ['uk ', 'britain', 'british'], ARE: ['uae'], RUS: ['russian'], IND: ['indian'], CHN: ['chinese'],
+      BRA: ['brazilian'], FRA: ['french'], ESP: ['spanish'], ITA: ['italian'], CAN: ['canadian'], PHL: ['philippine', 'filipino'], AFG: ['afghan'], UKR: ['ukrainian'] };
+    const openingCountry = (title, isos) => {
+      const t = ' ' + String(title || '').toLowerCase() + ' ';
+      let best = null, pos = 1e9;
+      (isos || []).forEach(iso => {
+        const c = byISO(iso); const names = [c && c.name && c.name.toLowerCase()].concat(ALIAS[iso] || []).filter(Boolean);
+        names.forEach(n => { const i = t.indexOf(n); if (i >= 0 && i < pos) { pos = i; best = iso; } });
+      });
+      return best;
+    };
     let promoted = 0;
     for (const it of newsItems) {
-      const named = (it.countries_mentioned || [])[0];
+      const chokes = (it.chokepoints || []).filter(cp => PLACE_CHOKE.test(cp));
+      if (!DISRUPT.test(it.title || '') && !chokes.length && !(it.disruption || []).length) continue;
+      const named = openingCountry(it.title, it.countries_mentioned) || (it.countries_mentioned || [])[0];
       const exposed = named ? { iso: named } : (it.exposed || [])[0];
       if (!exposed) continue;
       const ts = it.published_at ? Date.parse(it.published_at) : NaN;
@@ -40411,6 +40469,11 @@ function jumpFromDisturbanceToCountry(iso) {
 }
 window.jumpFromDisturbanceToCountry = jumpFromDisturbanceToCountry;
 
+function closeDisturbanceDetail() {
+  const m = document.getElementById('disturbance-modal'); if (!m) return;
+  const back = m._returnFocus; m.remove();
+  if (back && typeof back.focus === 'function' && document.contains(back)) back.focus();
+}
 function openDisturbanceDetail(id) {
   const ev = disturbanceEvents.find(e => e.id === id);
   if (!ev) {
@@ -40451,7 +40514,7 @@ function openDisturbanceDetail(id) {
     <div class="disturbance-dialog" role="dialog" aria-modal="true" style="background:var(--bg1);border:1px solid var(--b2);border-radius:3px;width:100%;max-width:640px;max-height:88vh;overflow-y:auto;position:relative;">
 
       <div style="padding:22px 24px 16px;border-bottom:1px solid var(--b1);position:sticky;top:0;background:var(--bg1);z-index:1;border-radius:3px;">
-        <button onclick="document.getElementById('disturbance-modal').remove()" style="position:absolute;top:14px;right:14px;background:var(--bg3);border:1px solid var(--b2);color:var(--t2);width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;">✕</button>
+        <button type="button" class="dist-modal-close" aria-label="Close event details" onclick="closeDisturbanceDetail()" style="position:absolute;top:14px;right:14px;background:var(--bg3);border:1px solid var(--b2);color:var(--t2);width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;">✕</button>
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
           <div style="width:38px;height:38px;border-radius:3px;background:${tc.bgColor};display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">${tc.icon}</div>
           <div>
@@ -40552,8 +40615,19 @@ function openDisturbanceDetail(id) {
       </div>
     </div>`;
 
-  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  modal.addEventListener('click', e => { if (e.target === modal) closeDisturbanceDetail(); });
+  /* Keyboard: Escape closes, Tab stays inside the dialog, focus returns to the card on close. */
+  modal._returnFocus = document.activeElement;
+  modal.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.stopPropagation(); closeDisturbanceDetail(); return; }
+    if (e.key !== 'Tab') return;
+    const f = [...modal.querySelectorAll('button, a[href], [tabindex="0"], summary')].filter(el => el.offsetParent !== null);
+    if (!f.length) return;
+    if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+    else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+  });
   document.body.appendChild(modal);
+  const _cb = modal.querySelector('.dist-modal-close'); if (_cb) setTimeout(() => _cb.focus(), 20);
 }
 // v20.17 — onclick="" attributes (in disturbance lists, risk-radar event buttons,
 // affected-country rows) resolve handler names against the global scope. A
@@ -40600,7 +40674,8 @@ function _relatedNewsBlock(ev) {
       `No ReliefWeb product or wire headline mentioning ${name} in the last ${days} days. That is the absence of a matching item in two feeds, not evidence that nothing happened.`);
   }
   return _cnHeadlinesBlock(pick,
-    `Items mention ${name} within ${days} days of this event, ReliefWeb products first. They are claims by their publishers, placed here for time and place only; nothing here states a cause.`);
+    `They are claims by their publishers, placed here for time and place only; nothing here states a cause.`,
+    `Items that mention ${name} within ${days} days of this event, ReliefWeb products first.`);
 }
 
 function chokepointAnalysis(ev) {
@@ -40675,16 +40750,24 @@ function renderDisturbanceSidebar() {
   // Summary panel
   const sumEl = document.getElementById('dist-summary');
   if (sumEl) {
-    const critical = disturbanceEvents.filter(e=>e.severity==='critical').length;
-    const high = disturbanceEvents.filter(e=>e.severity==='high').length;
-    const affected = new Set(disturbanceEvents.filter(e=>e.iso && e.type!=='chokepoint').map(e=>e.iso)).size;
+    /* Counted by country, from events only: Sudan's IPC, FEWS NET and conflict markers are one
+       country in crisis, and a headline (a claim) does not make a country affected. */
+    const evs = disturbanceEvents.filter(e => !e.claim && e.type !== 'chokepoint');
+    const byWorst = {};
+    const rank = { critical: 0, high: 1, medium: 2, low: 3 };
+    evs.forEach(e => { if (!e.iso) return; const r = rank[e.severity] ?? 3; if (byWorst[e.iso] == null || r < byWorst[e.iso]) byWorst[e.iso] = r; });
+    const critical = Object.values(byWorst).filter(r => r === 0).length;
+    const high = Object.values(byWorst).filter(r => r === 1).length;
+    const affected = Object.keys(byWorst).length;
     const liveCount = disturbanceEvents.filter(e=>e.live && !e.claim).length;
+    const claims = disturbanceEvents.filter(e => e.claim).length;
 
     sumEl.innerHTML = [
-      {label:'Critical events', val:critical, col:'#c44b3c'},
-      {label:'High severity', val:high, col:'#d27a3e'},
-      {label:'Countries affected', val:affected, col:'var(--t1)'},
+      {label:'Countries at critical', val:critical, col:'#c44b3c'},
+      {label:'Countries at high', val:high, col:'#d27a3e'},
+      {label:'Countries with an event', val:affected, col:'var(--t1)'},
       {label:'Live feed events', val:liveCount, col:'#6ba36b'},
+      {label:'News headlines placed', val:claims, col:'var(--t3)'},
     ].map(r=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--b1);">
         <span style="font-size:11.5px;color:var(--t2);">${r.label}</span>
@@ -43526,7 +43609,7 @@ function _cnFactsBlock(facts, skipPrice) {
 
 // TIER 2 — third-party headline claims. Title, publisher, relative time, link.
 // Nothing else exists in the payload and nothing else is fabricated.
-function _cnHeadlinesBlock(items, statusNote) {
+function _cnHeadlinesBlock(items, statusNote, provenance) {
   const rows = items.map(it => {
     const url = String(it.url || '');
     const safeHref = /^https?:\/\//i.test(url) ? _escFeed(url) : '';
@@ -43544,7 +43627,7 @@ function _cnHeadlinesBlock(items, statusNote) {
   }).join('');
   return `<div style="margin-bottom:14px;padding:12px 16px;background:var(--bg1);border:1px solid var(--b1);border-radius:3px;">
     ${_cnEyebrow('Third-party headlines', '#c9a957', 'claim · not our measurement')}
-    <div style="font-size:var(--fs-prose);color:var(--t3);line-height:1.55;margin-bottom:4px;">Matched to this commodity by a keyword in the headline.</div>
+    <div style="font-size:var(--fs-prose);color:var(--t3);line-height:1.55;margin-bottom:4px;">${provenance || 'Matched to this commodity by a keyword in the headline.'}</div>
     ${rows}
     ${statusNote ? `<div style="font-size:var(--fs-prose);color:#c9a957;line-height:1.55;padding-top:9px;">${statusNote}</div>` : ''}
   </div>`;

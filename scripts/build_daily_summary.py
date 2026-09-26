@@ -28,6 +28,19 @@ from pathlib import Path
 
 from _common import DATA_DIR
 
+_MONTHS = {m: i for i, m in enumerate(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 1)}
+
+
+def _ipc_period_ended(period, today=None):
+    """True when an IPC period string's last month ('... Jun 2026 (Projection)') is over."""
+    import re
+    m = re.search(r"([A-Z][a-z]{2}) (\d{4})\s*\(", str(period or ""))
+    if not m or m.group(1) not in _MONTHS:
+        return False
+    y, mo = int(m.group(2)), _MONTHS[m.group(1)]
+    end = date(y + (mo == 12), 1 if mo == 12 else mo + 1, 1)
+    return end <= (today or date.today())
+
 
 def load(name):
     p = DATA_DIR / name
@@ -64,6 +77,12 @@ def main():
     om      = (load("openmeteo.json") or {}).get("data") or {}
     flood   = (load("openmeteo_flood.json") or {}).get("data") or {}
     inform  = (load("inform_risk.json") or {}).get("data") or {}
+    _ctry   = ((load("countries.json") or {}).get("data") or {}).get("countries") or {}
+
+    def fdrs_of(iso):
+        v = (_ctry.get(iso) or {}).get("fdrs_displayed")
+        v = v.get("value") if isinstance(v, dict) else v
+        return v if isinstance(v, (int, float)) else None
 
     # v79i — ONE country-name resolver for every bullet in this file.
     # Each bullet used to resolve names on its own, against whichever feed it
@@ -126,6 +145,10 @@ def main():
         if iso in ("PSG", "PSW"):
             continue
         pct = (row or {}).get("phase3plus_pct") or 0
+        # Same rule as the Disturbances list: an analysis whose validity period has ended
+        # ("Apr 2026 - Jun 2026 (Projection)") is no longer a current crisis count.
+        if _ipc_period_ended((row or {}).get("period")):
+            continue
         if pct >= 25:
             high_ipc.append((iso, pct, name_of(iso)))
     high_ipc.sort(key=lambda x: -x[1])
@@ -150,13 +173,19 @@ def main():
             })
 
     # Active drought / heat / flood / fire / fx shocks (count countries flagged)
-    drought_count = sum(1 for r in om.values() if isinstance(r, dict) and r.get("drought_flag"))
+    # Dry weeks count only where the page shows them: structurally exposed countries
+    # (FDRS >= 40). A dry week in Copenhagen is not a signal.
+    def _om_shown(iso, r):
+        if not (isinstance(r, dict) and r.get("drought_flag")):
+            return False
+        return (fdrs_of(iso) or 0) >= 40
+    drought_count = sum(1 for iso, r in om.items() if _om_shown(iso, r))
     flood_count = sum(1 for r in flood.values() if isinstance(r, dict) and r.get("flood_flag"))
     fx_count = sum(1 for r in wfp_c.values() if isinstance(r, dict) and r.get("fx_currency_shock"))
 
     env_parts = []
-    if drought_count >= 1: env_parts.append(f"{drought_count} drought-flagged")
-    if flood_count >= 1: env_parts.append(f"{flood_count} flood-flagged")
+    if drought_count >= 1: env_parts.append(f"{drought_count} countries with a dry week at the capital")
+    if flood_count >= 1: env_parts.append(f"{flood_count} with a river-flood flag")
     if env_parts:
         # v79i — this bullet said "...countries today" unconditionally, while the
         # weather feed behind it can be weeks old (Open-Meteo Weather has not
@@ -164,15 +193,15 @@ def main():
         # Asserting "today" over a stale snapshot is the one thing this summary is
         # not allowed to do, so date the claim when the underlying feed is stale.
         _om_age = _feed_age_days("openmeteo.json")
-        _suffix = (
-            " countries today."
+        _when = (
+            "today"
             if _om_age is not None and _om_age <= 2
-            else f" countries as of the last weather refresh ({_om_age}d ago)."
+            else f"as of the last weather refresh ({_om_age}d ago)"
             if _om_age is not None
-            else " countries (weather refresh date unknown)."
+            else "(weather refresh date unknown)"
         )
         bullets.append({
-            "text": "Active environmental signals: " + ", ".join(env_parts) + _suffix,
+            "text": f"Weather flags {_when}: " + " and ".join(env_parts) + ".",
             "source": "Open-Meteo + Open-Meteo Flood",
         })
 

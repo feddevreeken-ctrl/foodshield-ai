@@ -140,7 +140,21 @@ def detect_countries(title):
     return out
 
 
-def corridors_for(commodities, countries):
+_EXPORT_FRAME = re.compile(r"\b(export(?:s|ed|ing|ers)?|shipments?|ships|sells?|sales abroad|outbound)\b")
+_IMPORT_FRAME = re.compile(r"\b(import(?:s|ed|ing|ers)?|buys?|bought|purchas(?:e|es|ed|ing)|procure\w*|tenders?)\b")
+
+
+def headline_frame(title):
+    """'export' when the headline is about a country selling, 'import' when buying, else None.
+
+    "India's pulses exports see a five-fold growth" is about India as a SELLER: India must
+    not be recorded as an importer exposed on some corridor into India."""
+    low = (title or "").lower()
+    ex, im = bool(_EXPORT_FRAME.search(low)), bool(_IMPORT_FRAME.search(low))
+    return "export" if ex and not im else "import" if im and not ex else None
+
+
+def corridors_for(commodities, countries, frame=None):
     """Map (commodities, mentioned countries) onto exposed trade partners.
 
     Returns a list of dicts, largest corridor first:
@@ -175,7 +189,12 @@ def corridors_for(commodities, countries):
             # Russian wheat"): that corridor IS the story and must beat a larger
             # corridor the headline never mentions.
             named_pair = src in countries and dst in countries
-            if dst in countries:
+            if frame == "export" and not named_pair:
+                # A country named as the seller is an origin only.
+                if src not in countries:
+                    continue
+                role, iso, via = "downstream", dst, src
+            elif dst in countries:
                 role, iso, via = "direct", dst, src
             elif src in countries:
                 role, iso, via = "downstream", dst, src
@@ -192,6 +211,10 @@ def corridors_for(commodities, countries):
                               "_pair": named_pair}
 
     ranked = sorted(tally.values(), key=lambda r: (not r["_pair"], -r["kt"]))
+    if frame == "import" and any(r["role"] == "direct" for r in ranked):
+        # A story about a named buyer is about that buyer, not about everyone else who
+        # also buys from its suppliers.
+        ranked = [r for r in ranked if r["role"] == "direct"]
     for r in ranked:
         del r["_pair"]
     return ranked[:MAX_EXPOSED_PER_ITEM]
@@ -210,7 +233,8 @@ def annotate(items):
     annotated = 0
     for item in items:
         mentioned = detect_countries(item.get("title") or "")
-        exposed = corridors_for(item.get("matched") or [], mentioned) if flows_available else []
+        exposed = (corridors_for(item.get("matched") or [], mentioned, headline_frame(item.get("title")))
+                   if flows_available else [])
         item["countries_mentioned"] = mentioned
         item["exposed"] = exposed
         item["exposure_kt"] = exposed[0]["kt"] if exposed else 0

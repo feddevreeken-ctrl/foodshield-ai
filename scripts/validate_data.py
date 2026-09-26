@@ -1096,7 +1096,8 @@ def validate_commodity_interpretation():
         # so every numeric check passes and the leak reaches readers unflagged.
         # Omitting it here would leave the new validator unenforced in CI.
         problems = [k for k in ('unsupported_numbers', 'sign_inversions',
-                                'word_quantities', 'field_names') if v.get(k)]
+                                'word_quantities', 'field_names', 'advice',
+                                'unlisted_outlets') if v.get(k)]
         if problems and is_ai:
             failures.append(
                 f"{key}: published as AI prose while validation recorded "

@@ -893,7 +893,9 @@ def main():
         seen_urls.add(url)
 
         published_at = rawitem.get("published_at")
-        if published_at is not None and published_at < oldest:
+        # An undated item cannot be placed in the window or ranked by recency, and it
+        # used to rank near the top and feed the commodity notes. Dropped.
+        if published_at is None or published_at < oldest:
             continue
 
         matched, relevance = classify(rawitem["title"], hint=hint)
@@ -1107,8 +1109,9 @@ def main():
             "UI must not blur them: a modeled country match pointing at a sourced "
             "tonnage is still a modeled claim about relevance. Exposure means a "
             "headline TOUCHES a corridor — no causal claim is made about prices. "
-            "Headlines are stored verbatim with a link; no article body, summary, "
-            "snippet or image is stored. Relevance, publisher-trust and recency "
+            "Headlines are stored verbatim with a link, plus the feed's own thumbnail "
+            "URL where it publishes one (hot-linked, not copied); no article body, "
+            "summary or snippet is stored. Relevance, publisher-trust and recency "
             "scores are internal ranking inputs and are deliberately not published. "
             "Sources are the publishers' own syndication feeds — no search-engine "
             "aggregator. No Google News: its feed terms forbid this use. No WTO: "

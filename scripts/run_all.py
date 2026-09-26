@@ -206,6 +206,9 @@ STEPS = [
     # Python and the model's prose is regex-validated against it, so a cheap free-tier
     # model cannot introduce a figure.
     ("Commodity interpretation", build_news_interpretation.main, "commodity_interpretation.json"),
+    # Per-article notes: their own step and timeout, so a slow model queue in the step
+    # above can no longer stop them being written.
+    ("Article notes", build_news_interpretation.main_articles, "commodity_article_notes.json"),
     ("Scenario profiles",      build_scenario_profiles.main,    "scenario_profiles.json"),
 ]
 
@@ -237,7 +240,7 @@ EMPTY_OK = {"openaq.json", "ndgain.json",
 # status=deterministic_only. Keys are resolved GROQ_API_KEY -> GEMINI_API_KEY
 # -> ANTHROPIC_API_KEY (build_news_interpretation.PROVIDER_PRIORITY), so a
 # missing key changes the prose, never the file's presence.
-OPTIONAL_OUTPUTS = {"commodity_interpretation.json"}
+OPTIONAL_OUTPUTS = {"commodity_interpretation.json", "commodity_article_notes.json"}
 
 # v73 — per-step wall-clock overrides. The Comtrade retry-queue (v45) makes
 # ~290 sequential calls at 1.5s throttle plus 30s backoffs on every 429, so the
@@ -245,7 +248,7 @@ OPTIONAL_OUTPUTS = {"commodity_interpretation.json"}
 # dedup fix landed hit [TIMEOUT] and kept serving the pre-dedup (over-counted)
 # file. 2700s covers the observed worst case (~55 rate-limited calls × up to
 # 3 × 30s backoff) with headroom; all other steps keep the 900s default.
-STEP_TIMEOUTS = {"Comtrade": 2700, "Commodity interpretation": 900}  # ~55 model calls at 6 s spacing
+STEP_TIMEOUTS = {"Comtrade": 2700, "Commodity interpretation": 900, "Article notes": 900}  # ~55 model calls at 6 s spacing
 
 
 # v79 — GLOBAL WALL-CLOCK BUDGET.
