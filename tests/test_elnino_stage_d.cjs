@@ -193,7 +193,7 @@ test('Reported draws every hazard in El Niño countries, rings the verdict, and 
  assert(fit.tooltip.includes('Fits the usual pattern'));assert(fit.tooltip.includes('do not attribute causes'));
  assert(S.alertPins.find(m=>m.options.ensoVerdict==='against').tooltip.includes('Runs against the usual pattern'));
  assert.equal(c.headlines,2,'both El Niño-country headlines are counted; only the one naming one to three countries gets a map tab');
- const oldShow=S.showAlerts;S.showAlerts=true;const leg=api.alertLegend();S.showAlerts=oldShow;assert(leg.includes('1 run against it'));assert(leg.includes('Fitting the pattern is not attribution'));
+ const oldShow=S.showAlerts;S.showAlerts=true;const leg=api.alertLegend();S.showAlerts=oldShow;assert(leg.includes('<b>1</b> against'));assert(leg.includes('Fitting is not attribution'));
  S.alertPins=oldPins;ctx.window.disturbanceEvents=oldEv;S.news=oldNews;S._hl=oldHl;S.gdacs=oldG;
 });
 test('Shipping keeps one unboxed SVG label per chokepoint, with no corridor chips',()=>{
@@ -310,12 +310,12 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    assert.equal(key.includes('diamond and ring: observed, measured at the chokepoint'),view==='ensowater');
    assert.equal(key.includes('dashed: published schematic corridor through named ports'),view==='ensowater');
    if(view==='ensowater'){assert.equal(S.corridorLines.filter(l=>S.map.hasLayer(l)).length,9);assert.equal(S.corridorLabels.length,0);for(const c of S.corridors.corridors){assert(legend.querySelector('details').textContent.includes(c.basis.replace(/'/g,'&#39;')));}}
-   assert.equal(key.includes('Does it fit El Niño’s usual pattern here?'),view==='ensolive');
-   if(view==='ensolive')for(const label of ['usually drier in El Niño years','usually wetter','fits the usual pattern','runs against it','no rainfall expectation','Fitting the pattern is not attribution'])assert(key.includes(label),label+' | '+key.slice(0,600));
+   assert.equal(key.includes('Does it fit the usual pattern?'),view==='ensolive');
+   if(view==='ensolive')for(const label of ['usually drier in El Niño years','usually wetter','a possible early sign','runs against it','no rainfall expectation','Fitting is not attribution'])assert(key.includes(label),label+' | '+key.slice(0,600));
    if(view==='ensowater')for(const l of S.lanes.lanes)assert(legend.querySelector('details').textContent.includes(l.name));
    /* 2026-09-26: prices are circles (area = size of the change, solid RTFP, hollow CPI) over El Niño countries only. */
    /* 2026-09-26: staple prices (FAO GIEWS FPMA) over El Niño's published harvest effect, with the tab's verdict rings. */
-   if(view==='ensomoney')for(const label of ['5 · 15 · 30%','falling','rising fast','output usually falls','output usually rises','dashed outer ring','runs against the usual pattern','no staple price series'])assert(key.includes(label),label);
+   if(view==='ensomoney')for(const label of ['Area grows with the change','Blue falling','red 30%+','Output usually falls','Output usually rises','Window ahead','Runs against','no staple series'])assert(key.includes(label),label);
    if(cycle||view!=='elnino')assert.equal(node('scroller').scrollTop,0);
   });
  }

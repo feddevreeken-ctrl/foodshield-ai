@@ -162,6 +162,11 @@ def rss_named() -> tuple[list[dict], int, int]:
                     it = _item(a.get("title"), label, a.get("url"), a.get("published_at"),
                                "rss:" + tier, "news")
                     if it:
+                        # Publisher-declared feed image only (media:thumbnail/content,
+                        # enclosure), via cn._feed_image. GDELT's scraped socialimage stays banned.
+                        img = cn.sanitize_url(a.get("image") or "")
+                        if img:
+                            it["image"] = img
                         items.append(it)
     return items, ok, failed
 

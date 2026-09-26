@@ -708,7 +708,9 @@ def main() -> int:
                     return [has.length, tele.length, tele.filter(i => !has.includes(i)).sort().join(', ')];
                 }""")
                 check("staple legend states sizes, the harvest encoding and the countries without a series",
-                      all(t in legend for t in ('5 · 15 · 30%', 'output usually falls', 'output usually rises', 'no staple price series (' + counts[2] + ')')), str(counts))
+                      all(t in legend for t in ('Area grows with the change', 'Output usually falls', 'Output usually rises', '+30%'))
+                      and ('no staple series: ' in legend) == bool(counts[2])
+                      and (not counts[2] or legend.split('no staple series: ')[1].split('Harvest effect')[0].count(',') == counts[2].count(',')), str(counts))
                 check("staple map tag counts the countries with a series from the data", tag.startswith(f"{counts[0]} of {counts[1]} El Niño countries have staple prices"), tag)
             headings.append(page.locator('#tab-elnino h2:visible').count())
             # 2026-09-24: a no-wrap table once pushed the Reported ledger 557px past its plate.
@@ -1134,7 +1136,7 @@ def main() -> int:
             const key = document.getElementById('enso-legend').textContent;
             const tag = document.getElementById('enso-maptag').textContent;
             const m = tag.match(/^(\d+) of (\d+) hazard reports/);
-            return n > 0 && key.includes('Fitting the pattern is not attribution') && !!m && key.includes(m[2] + ' reports in ');
+            return n > 0 && key.includes('Fitting is not attribution') && !!m && key.includes(m[2] + ' reports');
         }"""))
         page.set_viewport_size({'width':390,'height':844})
         stacked = []
