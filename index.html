@@ -8518,8 +8518,34 @@ button.scn-bar-row:focus-visible { outline: 2px solid var(--accent); outline-off
   color: #f3d5d0;
 }
 
-/* Disturbance markers on map */
+/* Disturbance markers on map. One disc per marker, the type's line icon in dark ink on the
+   type colour; size carries severity; a single static ring marks critical. */
 .dist-marker-wrap { pointer-events: auto !important; }
+.dist-marker .dist-marker-core {
+  width: var(--dm-px, 17px); height: var(--dm-px, 17px);
+  background: var(--dm); color: #111317; border: 1.5px solid rgba(8,9,11,.85);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.14), 0 1px 4px rgba(0,0,0,.55);
+}
+.dist-marker .dist-marker-core svg { width: 64%; height: 64%; }
+.dist-marker.is-choke .dist-marker-core { border-radius: 4px; }
+.dist-marker .dist-marker-ring { inset: auto; width: calc(var(--dm-px) + 10px); height: calc(var(--dm-px) + 10px); border: 1.5px solid var(--dm); opacity: .7; }
+.dist-marker-count {
+  position: absolute; top: -3px; right: -4px; min-width: 14px; height: 14px; padding: 0 3px;
+  border-radius: 7px; background: #f2efe6; color: #111317; font: 700 9px/14px 'Geist Mono', monospace;
+  text-align: center; box-shadow: 0 0 0 1.5px rgba(8,9,11,.85); pointer-events: none;
+}
+.dist-marker-line { display: flex; gap: 6px; align-items: center; font-size: 10.5px; color: var(--t2); margin-top: 3px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+.dist-marker-line svg { flex: none; }
+.dist-marker-line.dist-more { color: var(--t3); font-family: 'Geist Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: .08em; }
+.leaflet-marker-icon.dist-marker-wrap:focus-visible { outline: 2px solid #f2efe6; outline-offset: 2px; border-radius: 50%; }
+.dist-pop .leaflet-popup-content-wrapper { background: rgba(15,15,18,.97); color: var(--t1); border: 1px solid var(--b2); border-radius: 4px; }
+.dist-pop .leaflet-popup-tip { background: rgba(15,15,18,.97); }
+.dist-pop .leaflet-popup-content { margin: 10px 12px; }
+.dist-pop-h { font: 600 11px/1.3 'Geist Mono', monospace; text-transform: uppercase; letter-spacing: .08em; color: var(--t3); margin-bottom: 6px; }
+.dist-pop-row { display: flex; gap: 8px; align-items: flex-start; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--b1); padding: 7px 0; color: var(--t1); cursor: pointer; font-size: 11.5px; line-height: 1.35; }
+.dist-pop-row:hover .dist-pop-t, .dist-pop-row:focus-visible .dist-pop-t { color: #fff; text-decoration: underline; }
+.dist-pop-t small { display: block; color: var(--t3); font-size: 10px; margin-top: 2px; }
+.mlp-dot svg { display: block; }
 .dist-marker {
   position: relative;
   width: 100%; height: 100%;
@@ -10983,7 +11009,7 @@ table.enso-tbl thead th:first-child { z-index:3; }
 .mlp-subrow{display:flex;align-items:center;gap:8px;padding:3.5px 2px;cursor:pointer;border-radius:3px;transition:background .12s;}
 .mlp-subrow:hover{background:rgba(255,255,255,0.03);}
 .mlp-subrow .mlp-label{font-size:12px;color:var(--t2);}
-.mlp-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+.mlp-dot{width:13px;height:13px;flex:none;display:inline-flex;align-items:center;justify-content:center;}
 .mlp-select{width:100%;margin:4px 0 2px;background:var(--bg2);border:1px solid var(--b2);color:var(--t2);
   font:500 11px 'Geist',sans-serif;border-radius:6px;padding:5px 8px;appearance:auto;-webkit-appearance:menulist;}
 .mlp-foot {margin-top:9px;padding-top:8px;border-top:1px solid var(--b1);font-size: var(--fs-prose);color:var(--t3);line-height:1.5;}
@@ -25219,96 +25245,94 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     if (!events || !events.length) return;
     G.disturbancesActive = true;
 
-    const TYPE_GLYPH = {
-      famine:'☠', drought:'☀', flood:'≈',
-      conflict:'⚠', price_spike:'$', earthquake:'⊕', cyclone:'❀', chokepoint:'⚓', restriction:'⛔', claim:'❝',
-    };
-    const TYPE_COLOR = {
-      famine:'#c44b3c', drought:'#c47a3c', flood:'#4a7ab3',
-      conflict:'#9b4a9b', price_spike:'#c9a957',
-      earthquake:'#6b5a8a', cyclone:'#4a8a9b', chokepoint:'#3a8f8f', restriction:'#c9683c', claim:'#c9a957',
-    };
-    const SEV_RING = { critical:3, high:2.5, medium:2, low:1.5 };
+    const TYPE_COLOR = {};
+    (typeof ML_TYPES !== 'undefined' ? ML_TYPES : []).forEach(x => { TYPE_COLOR[x.t] = x.c; });
+    const SEV_RANK = { critical:0, high:1, medium:2, low:3 };
+    const CORE_PX = { critical:24, high:20, medium:17, low:14 };
+    const _age = (d) => { const t = Date.parse(d); if (!isFinite(t)) return ''; const a = Math.floor((Date.now() - t) / 864e5); return a > 30 ? ' · ' + a + 'd old' : ''; };
 
-    let _rendered = 0;   // v30.13 — track what actually draws so the count can match
-    events.forEach((ev, i) => {
-      // Resolve coordinates: explicit lat/lng → geojson centroid → COUNTRY_LL table.
-      // v30.13 (ECC fix): ReliefWeb events arrive at 0,0; the old code only fell
-      // back to G.centroids, so when that map wasn't ready (or lacked the ISO) the
-      // event silently dropped — the "131" pill then over-counted vs the dots. Add
-      // the COUNTRY_LL fallback (same chain getCoord uses) so they reliably place.
+    // Resolve a position. Explicit coordinates win; otherwise the country centroid, then the
+    // COUNTRY_LL capital table. `approx` marks a country-level report pinned to a point.
+    const place = (ev) => {
       let lat = ev.lat, lng = ev.lng;
       if ((!lat && !lng) && ev.iso) {
         if (G.centroids && G.centroids.has(ev.iso)) { const c = G.centroids.get(ev.iso); lat = c[0]; lng = c[1]; }
         else if (typeof COUNTRY_LL !== 'undefined' && COUNTRY_LL[ev.iso]) { lat = COUNTRY_LL[ev.iso][0]; lng = COUNTRY_LL[ev.iso][1]; }
       }
-      if (!lat && !lng) return;
-      if (Math.abs(lat) < 0.5 && Math.abs(lng) < 0.5) return;
-      _rendered++;
-      // v87 — is this dot WHERE THE EVENT IS, or just where the country is?
-      // Only GDACS and the chokepoints carry real event coordinates: 50 of 218.
-      // Everything else resolves through COUNTRY_LL, which is a table of CAPITAL
-      // CITIES — so "IPC famine conditions — Sudan" pins on Khartoum and "FEWS
-      // Phase 4 — Somalia" on Mogadishu, both rendering as though someone
-      // measured a point. Mark the approximate ones so the map stops implying a
-      // precision it does not have.
-      const _cap = (typeof COUNTRY_LL !== 'undefined' && ev.iso) ? COUNTRY_LL[ev.iso] : null;
-      const _approx = ev.type !== 'chokepoint' && (!(ev.lat && ev.lng)
-        || (!!_cap && Math.abs(lat - _cap[0]) < 0.02 && Math.abs(lng - _cap[1]) < 0.02));
+      if ((!lat && !lng) || (Math.abs(lat) < 0.5 && Math.abs(lng) < 0.5)) return null;
+      const cap = (typeof COUNTRY_LL !== 'undefined' && ev.iso) ? COUNTRY_LL[ev.iso] : null;
+      const approx = ev.type !== 'chokepoint' && (!(ev.lat && ev.lng)
+        || (!!cap && Math.abs(lat - cap[0]) < 0.02 && Math.abs(lng - cap[1]) < 0.02));
+      return { lat, lng, approx };
+    };
 
-      const color = TYPE_COLOR[ev.type] || '#c9a957';
-      const glyph = TYPE_GLYPH[ev.type] || '!';
-      const ring = SEV_RING[ev.severity] || 2;
-      // v34 — curated baselines render muted (no pulse, hollow core, BASELINE tag)
-      // so they can't be mistaken for live feed events on the map.
-      const isLive = !!ev.live;
-      // v38 — chokepoints are curated (live:false) but are standing INFRASTRUCTURE,
-      // not stale events. Render them prominently (solid teal, anchor glyph, steady
-      // ring, square core) so they're clearly visible in the Live disturbances overlay
-      // and read as infrastructure rather than a muted baseline.
-      const isChoke = ev.type === 'chokepoint';
-      let html;
-      if (isChoke) {
-        html = `
-        <div class="dist-marker" data-sev="${ev.severity || 'medium'}">
-          <div class="dist-marker-ring" style="background:${color}26;border:1px solid ${color};border-radius:6px;animation-delay:${(i % 6) * 0.3}s;"></div>
-          <div class="dist-marker-core" style="background:${color};box-shadow:0 0 9px ${color};border-radius:5px;color:#06201f;">${glyph}</div>
+    // Country-level reports (IPC, FEWS, FX, ReliefWeb, capital weather) all resolve to the same
+    // capital, so Sudan used to carry six markers on one pixel. They are grouped per country into
+    // one marker that lists them; events with their own coordinates (GDACS footprints, USGS
+    // gauges, chokepoints) keep their own marker.
+    const groups = new Map(), singles = [];
+    let _rendered = 0;
+    events.forEach(ev => {
+      const pos = place(ev);
+      if (!pos) return;
+      _rendered++;
+      if (pos.approx && ev.iso) {
+        const g = groups.get(ev.iso) || { pos, list: [] };
+        g.list.push(ev); groups.set(ev.iso, g);
+      } else singles.push({ pos, list: [ev] });
+    });
+    const units = singles.concat([...groups.values()]);
+    units.forEach(u => u.list.sort((a, b) => (SEV_RANK[a.severity] ?? 3) - (SEV_RANK[b.severity] ?? 3) || String(b.date || '').localeCompare(String(a.date || ''))));
+
+    units.forEach(u => {
+      const top = u.list[0], n = u.list.length;
+      const color = TYPE_COLOR[top.type] || '#7a7a86';
+      const sev = top.severity || 'medium';
+      const px = CORE_PX[sev] || 17;
+      const isChoke = top.type === 'chokepoint';
+      const where = n > 1 ? top.country : null;
+      const title = n > 1 ? `${_escFeed(where)}: ${n} reports` : _escFeed(top.title || top.country);
+      const meta = n > 1
+        ? u.list.slice(0, 4).map(e => `<div class="dist-marker-line"><span style="color:${TYPE_COLOR[e.type] || '#7a7a86'}">${distIconSVG(e.type, 11)}</span>${_escFeed(e.title)}</div>`).join('')
+          + (n > 4 ? `<div class="dist-marker-line dist-more">+${n - 4} more · click to list</div>` : '')
+        : `<div class="dist-marker-meta">${isChoke ? 'Chokepoint' + (top.noAlt ? ' · no alternative route' : '') : _escFeed(sev.toUpperCase()) + ' · ' + _escFeed(String(top.source || '').split('(')[0].trim()) + ' · ' + _escFeed(top.date || 'no date') + _age(top.date) + (u.pos.approx ? ' · country-level' : '')}</div>`;
+      const html = `
+        <div class="dist-marker${isChoke ? ' is-choke' : ''}" data-sev="${sev}" style="--dm:${color};--dm-px:${px}px">
+          ${sev === 'critical' ? '<div class="dist-marker-ring"></div>' : ''}
+          <div class="dist-marker-core">${distIconSVG(top.type)}</div>
+          ${n > 1 ? `<div class="dist-marker-count">${n}</div>` : ''}
           <div class="dist-marker-label" style="border-left:2px solid ${color};">
-            <div class="dist-marker-title">${_escFeed(ev.title || ev.country)}</div>
-            <div class="dist-marker-meta">CHOKEPOINT${ev.severity==='high'?' · NO ALT ROUTE':''} · ${_escFeed((ev.source||'').split('(')[0].trim())}</div>
+            <div class="dist-marker-title">${title}</div>
+            ${meta}
           </div>
         </div>`;
-      } else {
-        html = `
-        <div class="dist-marker" data-sev="${ev.severity || 'medium'}"${isLive ? '' : ' style="opacity:.62"'}>
-          ${isLive ? `<div class="dist-marker-ring" style="background:${color}1f;border:1px solid ${color};animation-delay:${(i % 6) * 0.3}s;"></div>` : ''}
-          <div class="dist-marker-core" style="${isLive ? `background:${color};box-shadow:0 0 8px ${color};` : `background:transparent;border:1.5px dashed ${color};color:${color};`}">${glyph}</div>
-          <div class="dist-marker-label" style="border-left:2px solid ${color};">
-            <div class="dist-marker-title">${_escFeed(ev.title || ev.country)}</div>
-            <div class="dist-marker-meta">${_escFeed((ev.severity||'medium').toUpperCase())} · ${_escFeed(isLive ? (ev.source||'') : 'BASELINE')} · ${_escFeed(ev.date||'no date')}${(function(){const t=Date.parse(ev.date);if(!isFinite(t))return '';const a=Math.floor((Date.now()-t)/864e5);return a>30?' · '+a+'d old':'';})()}${_approx?' · COUNTRY-LEVEL':''}</div>
-          </div>
-        </div>`;
-      }
-      const icon = L.divIcon({
-        className: 'dist-marker-wrap',
-        html,
-        iconSize: [14 * ring, 14 * ring],
-        iconAnchor: [7 * ring, 7 * ring],
+      const box = px + 10;
+      const icon = L.divIcon({ className: 'dist-marker-wrap', html, iconSize: [box, box], iconAnchor: [box / 2, box / 2] });
+      const m = L.marker([u.pos.lat, u.pos.lng], {
+        pane: 'disturbances', icon, riseOnHover: true, keyboard: true,
+        alt: n > 1 ? `${where}: ${n} reports` : (top.title || top.country),
+        zIndexOffset: (3 - (SEV_RANK[sev] ?? 3)) * 100,
       });
-      const m = L.marker([lat, lng], { pane: 'disturbances', icon, riseOnHover: true })
-        .on('click', () => {
-          // v38 — chokepoints (and any event without an ISO) can't use
-          // showDisturbanceImpact (it returns early when !ev.iso, so the click did
-          // nothing). Route them straight to the detail/analysis modal.
-          if (ev.type === 'chokepoint' || ev.type === 'restriction' || !ev.iso) {
-            if (typeof openDisturbanceDetail === 'function' && ev.id) openDisturbanceDetail(ev.id);
-          } else if (typeof showDisturbanceImpact === 'function') {
-            showDisturbanceImpact(ev);
-          } else if (typeof openDisturbanceDetail === 'function' && ev.id) {
-            openDisturbanceDetail(ev.id);
-          }
-        })
-        .addTo(G.map);
+      m.on('click', () => {
+        if (n > 1) {
+          const rows = u.list.map(e => `<button type="button" class="dist-pop-row" onclick="openDisturbanceDetail('${String(e.id).replace(/[^\w-]/g, '')}')">`
+            + `<span style="color:${TYPE_COLOR[e.type] || '#7a7a86'}">${distIconSVG(e.type, 14)}</span>`
+            + `<span class="dist-pop-t">${_escFeed(e.title)}<small>${_escFeed(String(e.source || '').split('(')[0].trim())} · ${_escFeed(e.date || '')}</small></span></button>`).join('');
+          L.popup({ className: 'dist-pop', maxWidth: 340, autoPanPadding: [40, 40] })
+            .setLatLng([u.pos.lat, u.pos.lng])
+            .setContent(`<div class="dist-pop-h">${_escFeed(where)} · ${n} reports</div>${rows}`)
+            .openOn(G.map);
+          return;
+        }
+        // v38 — chokepoints and events without an ISO go straight to the detail modal.
+        if (top.type === 'chokepoint' || !top.iso) {
+          if (typeof openDisturbanceDetail === 'function' && top.id) openDisturbanceDetail(top.id);
+        } else if (typeof showDisturbanceImpact === 'function') {
+          showDisturbanceImpact(top);
+        } else if (typeof openDisturbanceDetail === 'function' && top.id) {
+          openDisturbanceDetail(top.id);
+        }
+      }).addTo(G.map);
       G.disturbanceMarkers.push(m);
     });
 
@@ -36192,25 +36216,58 @@ const ML_TYPES = [
   { t:'famine',      c:'#c44b3c', l:'Hunger alerts' },
   { t:'drought',     c:'#c47a3c', l:'Drought' },
   { t:'flood',       c:'#4a7ab3', l:'Flood' },
-  { t:'conflict',    c:'#9b4a9b', l:'Conflict' },
-  { t:'price_spike', c:'#c9a957', l:'Price spike' },
-  { t:'earthquake',  c:'#6b5a8a', l:'Earthquake' },
   { t:'cyclone',     c:'#4a8a9b', l:'Cyclone' },
+  { t:'conflict',    c:'#9b4a9b', l:'Conflict' },
+  { t:'price_spike', c:'#c9a957', l:'Currency and prices' },
+  { t:'disease',     c:'#b0607a', l:'Disease outbreak' },
+  { t:'earthquake',  c:'#6b5a8a', l:'Earthquake' },
   { t:'chokepoint',  c:'#3a8f8f', l:'Chokepoint' },
   // v87 — a real category for hazards the title-inference ladder cannot name.
-  // They used to default to 'famine' and render as red skulls; a grey "other"
-  // is both honest and visible, where an unregistered type would silently
-  // vanish from the legend and the filter chips.
   { t:'other',       c:'#7a7a86', l:'Other hazard' },
+  // Capital-city rain / dry / heat anomalies from Open-Meteo: a statistical flag at one
+  // point, not an event. Listed so it can be switched on, off by default.
+  { t:'weather',     c:'#5f7f96', l:'Weather anomaly (capital)' },
 ];
-window._mlState = window._mlState || { distOn:false, sstOn:false, flowsOn:false, expanded:false, hidden:new Set() };
+window._mlState = window._mlState || { distOn:false, sstOn:false, flowsOn:false, expanded:false, hidden:new Set(['weather']) };
+
+/* One icon set for the map markers, the event list and the detail modal: 24-unit line
+   drawings in currentColor, so a type reads the same wherever it appears. */
+const DIST_ICON_PATHS = {
+  famine:      '<path d="M4 11h16a8 8 0 0 1-16 0z"/><path d="M8.5 7.5c0-1.4 1-1.8 1-3.2M12 7.5c0-1.4 1-1.8 1-3.2M15.5 7.5c0-1.4 1-1.8 1-3.2"/>',
+  drought:     '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M2.5 12H5M19 12h2.5M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8"/>',
+  flood:       '<path d="M2 9c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 15.5c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/>',
+  cyclone:     '<circle cx="12" cy="12" r="2.2"/><path d="M12 4a8 8 0 0 1 8 8M12 20a8 8 0 0 1-8-8M17 5.5a8 8 0 0 0-11 1.5M7 18.5a8 8 0 0 0 11-1.5"/>',
+  conflict:    '<path d="M12 3c.8 3.6 5 5 5 10a5 5 0 0 1-10 0c0-2.8 1.8-3.9 2-6 1 1 1.6 2 3 2.2C12 7 12.3 5 12 3z"/>',
+  price_spike: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+  disease:     '<path d="M12 4.5v15M4.5 12h15"/><circle cx="12" cy="12" r="9"/>',
+  earthquake:  '<path d="M2 12h4l2.2-6 3.8 12 3-9 2 3H22"/>',
+  chokepoint:  '<circle cx="12" cy="5" r="2"/><path d="M12 7v13.5M5 13a7 7 0 0 0 14 0M8 10.5h8"/>',
+  weather:     '<path d="M12 3.5s6 6.8 6 10.8a6 6 0 0 1-12 0c0-4 6-10.8 6-10.8z"/>',
+  restriction: '<circle cx="12" cy="12" r="9"/><path d="M7 12h10"/>',
+  claim:       '<path d="M7.5 17C5.5 17 4 15.6 4 13.6S5.6 9 8.5 7M17.5 17c-2 0-3.5-1.4-3.5-3.4S15.6 9 18.5 7"/>',
+  report:      '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>',
+  other:       '<circle cx="12" cy="12" r="3.2"/>',
+};
+function distIconSVG(type, size) {
+  const d = DIST_ICON_PATHS[type] || DIST_ICON_PATHS.other;
+  const px = size ? ' width="' + size + '" height="' + size + '"' : '';
+  return '<svg viewBox="0 0 24 24"' + px + ' fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+}
+/* What the "Live disturbances" layer draws: feed events of a listed type. Curated baseline
+   events, restrictions and headline claims live on the Disturbances tab and the Trade tab;
+   chokepoints are standing infrastructure with measured transits. */
+function distOnLiveLayer(e) {
+  if (!e || e.source === 'News' || e.type === 'report') return false;
+  if (!ML_TYPES.some(x => x.t === e.type)) return false;
+  return !!e.live || e.type === 'chokepoint';
+}
 
 function _mlCounts(){
   const c = {};
   if (typeof disturbanceEvents !== 'undefined' && Array.isArray(disturbanceEvents))
     /* Counts on the "Live disturbances" layer: feed events only. Curated baselines and news claims are
        drawn (muted or tagged) but not counted as live; chokepoints are standing infrastructure. */
-    disturbanceEvents.forEach(e => { if ((e.live && e.source !== 'News') || e.type === 'chokepoint') c[e.type] = (c[e.type] || 0) + 1; });
+    disturbanceEvents.forEach(e => { if (distOnLiveLayer(e)) c[e.type] = (c[e.type] || 0) + 1; });
   return c;
 }
 function applyMapLayers(){
@@ -36219,7 +36276,7 @@ function applyMapLayers(){
   const visible = new Set();
   if (st.distOn) ML_TYPES.forEach(x => { if (!st.hidden.has(x.t)) visible.add(x.t); });
   if (visible.size === 0) { if (Globe.clearDisturbances) Globe.clearDisturbances(); return; }
-  const draw = () => Globe.showDisturbances(disturbanceEvents.filter(e => visible.has(e.type)));
+  const draw = () => Globe.showDisturbances(disturbanceEvents.filter(e => visible.has(e.type) && distOnLiveLayer(e)));
   if (typeof disturbanceEvents === 'undefined' || !disturbanceEvents.length) {
     if (typeof loadDisturbanceData === 'function') {
       loadDisturbanceData().then(() => { draw(); renderMapLayers(); });
@@ -36252,7 +36309,8 @@ function renderMapLayers(){
   var el = document.getElementById('map-layers');
   if (!el) return;
   var st = window._mlState, counts = _mlCounts();
-  var distTotal = ML_TYPES.reduce(function (sum,x) { return sum + (counts[x.t] || 0); }, 0);
+  /* The headline count is what the layer draws with the current type switches. */
+  var distTotal = ML_TYPES.reduce(function (sum,x) { return sum + (st.hidden.has(x.t) ? 0 : (counts[x.t] || 0)); }, 0);
   function chk(on, sm) { return '<span class="mlp-check' + (on ? ' on' : '') + (sm ? ' sm' : '') + '">' + (on ? '✓' : '') + '</span>'; }
   function row(handler,on,icon,label,extra) {
     return '<button type="button" class="mlp-row" aria-pressed="'+on+'" onclick="'+handler+'(event)">'+chk(on)+
@@ -36260,7 +36318,7 @@ function renderMapLayers(){
   }
   /* Types with nothing live today are not listed ("Conflict 0" was noise). */
   var subs = ML_TYPES.filter(function (x) { return (counts[x.t] || 0) > 0; }).map(function (x) { return '<button type="button" class="mlp-subrow" aria-pressed="'+(st.distOn && !st.hidden.has(x.t))+'" onclick="mlToggleType(event,\''+x.t+'\')">'+
-    chk(st.distOn && !st.hidden.has(x.t),true)+'<span class="mlp-dot" style="background:'+x.c+'"></span><span class="mlp-label">'+x.l+'</span><span class="mlp-count">'+(counts[x.t] || 0)+'</span></button>'; }).join('');
+    chk(st.distOn && !st.hidden.has(x.t),true)+'<span class="mlp-dot" style="color:'+x.c+'">'+distIconSVG(x.t,13)+'</span><span class="mlp-label">'+x.l+'</span><span class="mlp-count">'+(counts[x.t] || 0)+'</span></button>'; }).join('');
   el.innerHTML = '<details class="mlp-instrument"'+((st.panelOpen == null ? !window.matchMedia('(max-width:600px)').matches : st.panelOpen) ? ' open' : '')+' ontoggle="window._mlState.panelOpen=this.open">'+
     '<summary class="mlp-head">Map layers <span>Live · Sea · Trade</span></summary><div class="mlp-body">'+
     '<div class="mlp-dist-row">'+row('mlToggleDist',st.distOn,'◉','Live disturbances','<span class="mlp-count">'+distTotal+'</span>')+
@@ -38396,18 +38454,22 @@ const BASELINE_EVENTS = [
 
 // Event type config
 const EV_TYPE = {
-  famine:      { label:'Hunger alerts', color:'#c44b3c', icon:'💀', bgColor:'rgba(196,75,60,0.12)' },
-  drought:     { label:'Drought', color:'#c47a3c', icon:'☀', bgColor:'rgba(196,122,60,0.12)' },
-  flood:       { label:'Flood', color:'#4a7ab3', icon:'🌊', bgColor:'rgba(74,122,179,0.12)' },
-  conflict:    { label:'Conflict', color:'#9b4a9b', icon:'⚔', bgColor:'rgba(155,74,155,0.12)' },
-  price_spike: { label:'Price Spike', color:'#c9a957', icon:'📈', bgColor:'rgba(201,169,87,0.12)' },
-  chokepoint:  { label:'Chokepoint', color:'#3a8f8f', icon:'⚓', bgColor:'rgba(58,143,143,0.12)' },
-  restriction: { label:'Export restriction', color:'#c9683c', icon:'⛔', bgColor:'rgba(201,104,60,0.12)' },
-  earthquake:  { label:'Earthquake', color:'#6b5a8a', icon:'🌍', bgColor:'rgba(107,90,138,0.12)' },
-  cyclone:     { label:'Cyclone', color:'#4a8a9b', icon:'🌀', bgColor:'rgba(74,138,155,0.12)' },
-  other:       { label:'Other hazard', color:'#7a7a86', icon:'•', bgColor:'rgba(122,122,134,0.12)' },
-  claim:       { label:'Headline claim', color:'#c9a957', icon:'❝', bgColor:'rgba(201,169,87,0.12)' },
+  famine:      { label:'Hunger alerts', color:'#c44b3c', bgColor:'rgba(196,75,60,0.12)' },
+  drought:     { label:'Drought', color:'#c47a3c', bgColor:'rgba(196,122,60,0.12)' },
+  flood:       { label:'Flood', color:'#4a7ab3', bgColor:'rgba(74,122,179,0.12)' },
+  conflict:    { label:'Conflict', color:'#9b4a9b', bgColor:'rgba(155,74,155,0.12)' },
+  price_spike: { label:'Currency and prices', color:'#c9a957', bgColor:'rgba(201,169,87,0.12)' },
+  chokepoint:  { label:'Chokepoint', color:'#3a8f8f', bgColor:'rgba(58,143,143,0.12)' },
+  restriction: { label:'Export restriction', color:'#c9683c', bgColor:'rgba(201,104,60,0.12)' },
+  earthquake:  { label:'Earthquake', color:'#6b5a8a', bgColor:'rgba(107,90,138,0.12)' },
+  cyclone:     { label:'Cyclone', color:'#4a8a9b', bgColor:'rgba(74,138,155,0.12)' },
+  disease:     { label:'Disease outbreak', color:'#b0607a', bgColor:'rgba(176,96,122,0.12)' },
+  weather:     { label:'Weather anomaly', color:'#5f7f96', bgColor:'rgba(95,127,150,0.12)' },
+  report:      { label:'Situation report', color:'#8a8a94', bgColor:'rgba(138,138,148,0.12)' },
+  other:       { label:'Other hazard', color:'#7a7a86', bgColor:'rgba(122,122,134,0.12)' },
+  claim:       { label:'Headline claim', color:'#c9a957', bgColor:'rgba(201,169,87,0.12)' },
 };
+Object.keys(EV_TYPE).forEach(k => { EV_TYPE[k].icon = '<span style="color:' + EV_TYPE[k].color + ';display:inline-flex;vertical-align:-2px">' + distIconSVG(k, 16) + '</span>'; });
 
 const SEV_COLOR = { critical:'#c44b3c', high:'#d27a3e', medium:'#c9a957', low:'#6ba36b' };
 const SEV_LABEL = { critical:'CRITICAL', high:'HIGH', medium:'MEDIUM', low:'LOW' };
@@ -38493,7 +38555,7 @@ async function renderDisturbancesTab() {
     <div class="dist-grid">
       <div>
         <div id="dist-filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
-          ${['all','famine','drought','flood','conflict','price_spike','earthquake','cyclone','chokepoint','other','restriction','claim'].map(t=>
+          ${['all','famine','drought','flood','cyclone','conflict','price_spike','disease','earthquake','chokepoint','weather','report','other','restriction','claim'].map(t=>
             `<button onclick="filterDisturbances('${t}')" id="df-${t}"
                style="padding:5px 12px;border-radius:3px;border:1px solid var(--b2);background:${t===disturbanceFilter?'var(--accent)':'var(--bg2)'};
                       color:${t===disturbanceFilter?'#000':'var(--t2)'};font-size:11px;font-weight:500;cursor:pointer;transition:all .15s;">
@@ -38736,12 +38798,15 @@ async function loadDisturbanceData() {
         // famine skull. 67 of 79 ReliefWeb dots were falling through to that
         // default. A hazard the ladder cannot identify is now 'other', not the
         // most severe category available.
-        let evType = 'other';
-        if (/drought/.test(titleLow)) evType = 'drought';
-        else if (/flood/.test(titleLow)) evType = 'flood';
-        else if (/cyclone|typhoon|hurricane/.test(titleLow)) evType = 'cyclone';
-        else if (/earthquake|seismic|tremor/.test(titleLow)) evType = 'earthquake';
-        else if (/conflict|war|displacement|violence/.test(titleLow)) evType = 'conflict';
+        /* A ReliefWeb item that names no hazard is a document (situation report, country brief,
+           assessment, press release): it stays in the Disturbances list as a report, off the map. */
+        let evType = 'report';
+        if (/drought|sequ[ií]a|s[ée]cheresse|d[eé]ficit de humedad|rainfall deficit|dry spell/.test(titleLow)) evType = 'drought';
+        else if (/flood|inundaci|inondation/.test(titleLow)) evType = 'flood';
+        else if (/cyclone|typhoon|hurricane|hurac[aá]n|tropical storm/.test(titleLow)) evType = 'cyclone';
+        else if (/earthquake|seismic|tremor|terremoto|s[eé]isme/.test(titleLow)) evType = 'earthquake';
+        else if (/ebola|cholera|c[oó]lera|mpox|measles|outbreak|epidemic|virus|dengue|malaria|polio|brote/.test(titleLow)) evType = 'disease';
+        else if (/conflict|war\b|displacement|violence|armed|clashes/.test(titleLow)) evType = 'conflict';
         else if (/famine|ipc\s*5|starvation|malnutrition|hunger|food insecur/.test(titleLow)) evType = 'famine';
         else if (/locust|pest|armyworm/.test(titleLow)) evType = 'famine';
         const sourceName = (f.source && f.source[0] && f.source[0].name) || 'ReliefWeb';
@@ -38807,8 +38872,8 @@ async function loadDisturbanceData() {
       // a strong predictor even for big exporters (think 2022 US Plains).
       if (row.drought_flag) {
         events.push({
-          id: 'om_drought_' + iso, type: 'drought', severity: 'medium',
-          title: `Drought signal: ${co.name}`, country: co.name, iso,
+          id: 'om_drought_' + iso, type: 'weather', severity: 'low', weatherKind: 'dry',
+          title: `Dry week at the capital: ${co.name}`, country: co.name, iso,
           lat: ll[0], lng: ll[1],
           detail: `7-day precipitation ${row.precip_anomaly_pct}% vs 30-day baseline at capital; ${row.soil_moisture_7d != null ? 'surface soil moisture ' + row.soil_moisture_7d + '. ' : 'no soil-moisture reading. '}Crop stress likely if persistent. Note: capital-city signal, not country-wide.`,
           source: 'Open-Meteo', date: _snapDate('openmeteo'), live: true,
@@ -38820,8 +38885,8 @@ async function loadDisturbanceData() {
         const extreme = (row.precip_anomaly_pct || 0) > 200;
         if (_omRisky(co) || extreme) {
           events.push({
-            id: 'om_wet_' + iso, type: 'flood', severity: extreme ? 'high' : 'medium',
-            title: `Wet anomaly: ${co.name}`, country: co.name, iso,
+            id: 'om_wet_' + iso, type: 'weather', severity: extreme ? 'medium' : 'low', weatherKind: 'wet',
+            title: `Wet week at the capital: ${co.name}`, country: co.name, iso,
             lat: ll[0], lng: ll[1],
             detail: `Statistical anomaly only: 7-day precipitation +${row.precip_anomaly_pct}% vs 30-day baseline at the capital. This does NOT confirm flooding: it flags a country worth checking. River-discharge floods come via Open-Meteo Flood; declared disasters via GDACS.`,
             source: 'Open-Meteo', date: _snapDate('openmeteo'), live: true,
@@ -38835,8 +38900,8 @@ async function loadDisturbanceData() {
         const extremeHeat = (row.temp_anomaly_c || 0) > 5;
         if (_omRisky(co) || extremeHeat) {
           events.push({
-            id: 'om_heat_' + iso, type: 'drought', severity: extremeHeat ? 'high' : 'medium',
-            title: `Heat anomaly: ${co.name}`, country: co.name, iso,
+            id: 'om_heat_' + iso, type: 'weather', severity: extremeHeat ? 'medium' : 'low', weatherKind: 'heat',
+            title: `Hot week at the capital: ${co.name}`, country: co.name, iso,
             lat: ll[0], lng: ll[1],
             detail: `Capital-city temperature +${row.temp_anomaly_c}°C vs 30-day baseline. Heat stress on crops and livestock if widespread.`,
             source: 'Open-Meteo', date: _snapDate('openmeteo'), live: true,
@@ -38943,7 +39008,13 @@ async function loadDisturbanceData() {
         country: co.name, iso, lat: ll[0], lng: ll[1],
         detail: `FEWS NET classifies ${co.name} at IPC-style Phase ${cur || '—'} (${row.current_phase_label || 'current'})${arrow}. Country-level summary = worst phase observed across admin units.`,
         source: 'FEWS NET FDW (IPC-style outlook)',
-        date: row.as_of || new Date().toISOString().slice(0,10),
+        /* as_of is the collection day; the event's date is the analysis month it describes. */
+        date: (function (per) {
+          const m = String(per || '').match(/([A-Z][a-z]{2})\s+(\d{4})\s*$/);
+          if (!m) return String(row.as_of || '').slice(0, 10);
+          const d = new Date(m[1] + ' 1, ' + m[2] + ' UTC');
+          return isNaN(d) ? String(row.as_of || '').slice(0, 10) : d.toISOString().slice(0, 10);
+        })(row.current_period),
         live: true,
         url: row.report_url || 'https://fews.net/',
       });
@@ -39115,7 +39186,8 @@ async function loadDisturbanceData() {
     if (!String(e.id || '').startsWith('rw_')) return true;
     const norm = String(e.title || '').toLowerCase()
       .replace(/[\d\/\[\]|#:,.()-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
-    const k = e.iso + '|' + norm;
+    /* A report published the same day in EN/ES/FR is one report: key reports on country and date. */
+    const k = e.type === 'report' ? e.iso + '|report|' + e.date : e.iso + '|' + norm;
     if (_rwSeen.has(k)) return false;
     _rwSeen.add(k);
     _rwPerIso[e.iso] = (_rwPerIso[e.iso] || 0) + 1;
@@ -39219,9 +39291,9 @@ async function loadDisturbanceData() {
   DISTURBANCE_CACHE.ts = _liveOk ? Date.now() : 0;
   // v34 — if the map overlay is already on, refresh its markers with the new data
   try {
-    const tg = document.getElementById('map-dist-toggle');
-    if (tg && tg.getAttribute('aria-pressed') === 'true' && window.Globe && Globe.showDisturbances) {
-      Globe.showDisturbances(disturbanceEvents);
+    /* The old #map-dist-toggle is gone; the layer panel's state says whether the overlay is on. */
+    if (window._mlState && window._mlState.distOn && typeof applyMapLayers === 'function') {
+      applyMapLayers();
       if (typeof updateMapDistCount === 'function') updateMapDistCount();
     }
   } catch(e) {}

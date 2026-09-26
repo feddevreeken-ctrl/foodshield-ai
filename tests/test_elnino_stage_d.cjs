@@ -199,7 +199,7 @@ test('lens defaults fit the lane belt and tropical price countries without anima
 test('Explore instrument preserves controls and dates modelled paint from displayed metadata',()=>{
  const elements={};const get=id=>elements[id]||(elements[id]=new Element());
  const live={countries_overlay:JSON.parse(fs.readFileSync('data/countries.json')).data.countries};
- const main=vm.createContext({document:{getElementById:get},LIVE:live,window:{_mlState:{distOn:false,sstOn:false,flowsOn:false,expanded:false,hidden:new Set()},matchMedia(){return {matches:true};}},ML_TYPES:[{t:'drought',l:'Drought',c:'#c47a3c'}],_mlCounts(){return {drought:3};}});
+ const main=vm.createContext({document:{getElementById:get},LIVE:live,window:{_mlState:{distOn:false,sstOn:false,flowsOn:false,expanded:false,hidden:new Set()},matchMedia(){return {matches:true};}},ML_TYPES:[{t:'drought',l:'Drought',c:'#c47a3c'}],_mlCounts(){return {drought:3};},distIconSVG:t=>'<svg data-t="'+t+'"></svg>'});
  const begin=html.indexOf('function exploreScoreDate()'),finish=html.indexOf('// Backward-compatible wrapper',begin);
  vm.runInContext(html.slice(begin,finish),main);vm.runInContext('renderMapLayers()',main);
  // 2026-09-25: the map-state strip carries the one-line lede and the computed date; the legend date line is gone.
