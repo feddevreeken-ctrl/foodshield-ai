@@ -16,13 +16,9 @@ from _common import DATA_DIR, write_json
 TODAY = date.today()
 
 SOURCES = [
-    {
-        "key": "wfp_hungermap",
-        "file": "wfp_hungermap.json",
-        "label": "WFP HungerMap LIVE",
-        "cadence": "daily",
-        "mode": "live",
-    },
+    # v90 — "wfp_hungermap" retired: WFP put its food-consumption (FCS) and alert
+    # layers behind a login (HTTP 401) and the public remainder was the IPC table
+    # that "ipc" below already serves, so registering it counted one upstream twice.
     {
         "key": "wfp_country",
         "file": "wfp_country.json",
@@ -83,13 +79,9 @@ SOURCES = [
         "cadence": "daily",
         "mode": "live",
     },
-    {
-        "key": "acled",
-        "file": "acled.json",
-        "label": "ACLED",
-        "cadence": "daily",
-        "mode": "live",
-    },
+    # v90 — "acled" (direct myACLED tier) retired: the licence only serves data
+    # >=12 months old, its is_live gate kept it out of every score, and the site
+    # reads ACLED through HDX HAPI instead (hapi_conflict below).
     {
         "key": "comtrade_staples",
         "file": "comtrade_staples.json",
@@ -459,16 +451,8 @@ SOURCES = [
         "cadence": "6h fetch / monthly upstream",
         "mode": "reference",
     },
-    {
-        # Registered so a dead feed cannot hide by simply being absent from the
-        # manifest: the collector has written 0 rows with status auth_failed
-        # (MAP_KEY rejected by FIRMS) since 2026-08-03.
-        "key": "nasa_firms",
-        "file": "nasa_firms.json",
-        "label": "NASA FIRMS active fires (VIIRS NRT)",
-        "cadence": "daily fetch / daily upstream",
-        "mode": "live",
-    },
+    # v90 — "nasa_firms" retired: MAP_KEY rejected since 2026-08-03 (0 rows) and
+    # nothing on the site reads it. Wildfire is a declared coverage gap, not a feed.
 ]
 
 # Data-vintage freshness. A file regenerated today can still carry months-old
@@ -486,9 +470,6 @@ DATA_DATE = {
     "fao_ffpi": ("month", "monthly"),
     "eurostat_food": ("month", "monthly"),
     "reliefweb_alerts": ("date", "daily"),
-    # myACLED tier: rolling window that ends >=12 months ago by licence. Listed so
-    # the manifest stops calling a year-old window "ok"; is_live=false upstream too.
-    "acled": ("window_end", "daily"),
     "gdacs": ("to_date", "daily"),
     "asap": ("assessment_date", "monthly"),
     # Calendar-monthly buckets (see the collector's notes), so monthly granularity.
@@ -501,7 +482,6 @@ DATA_DATE = {
     "enso_bulletins": ("published", "weekly"),
     "commodity_news": ("published_at", "daily"),
     "enso_news": ("published_at", "daily"),
-    # nasa_firms rows are undated 7-day counts, so only file age applies to it.
     # FPMA / IMF: newest month across countries (per-country months vary; each row
     # carries its own). giews_crea is a 3x-yearly list, so not date-gated here.
     "fpma_prices": ("latest_month", "monthly"),

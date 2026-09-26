@@ -19,7 +19,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-CORE = ["wfp_hungermap", "ipc", "fews", "reliefweb_alerts"]
+CORE = ["ipc", "fews", "reliefweb_alerts"]  # v90: wfp_hungermap retired
 # Same SLA thresholds qa_checks.py WARNs at (fetch-cadence keyword -> max age hours).
 SLA_HOURS = {"6h": 72, "daily": 96, "weekly": 24 * 21, "monthly": 24 * 75}
 DEFAULT_HOURS = 24 * 7

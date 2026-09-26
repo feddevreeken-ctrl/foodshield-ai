@@ -33,7 +33,10 @@ export function calculate({htmlPath=path.join(root,'index.html'), countriesPath=
     for(const [key,meta] of Object.entries(row)) {
       if(key.startsWith('fdrs_displayed')||key==='fdrs_nowcast_delta')continue;
       const value=meta&&typeof meta==='object'&&!Array.isArray(meta)&&'value' in meta?meta.value:meta;
-      c[key]=structuredClone(value);canonical[c.iso][key]=value;
+      c[key]=structuredClone(value);
+      /* f2030 is re-based FROM this snapshot by publish_displayed, so it is an output, not an input:
+         hashing it made every single-pass publish (the cron) record a hash that its own write then broke. */
+      if(key!=='f2030')canonical[c.iso][key]=value;
     }
   }
   inputs.countries={sha256:hash(JSON.stringify(canonical)),basis:'canonical fields excluding additive displayed snapshot'};

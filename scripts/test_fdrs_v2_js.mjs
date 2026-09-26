@@ -83,9 +83,12 @@ function main() {
   const c={iso:'US-XX',c:[50,50,50,50,50,50,50,50,50]};
   const live={feeding_america:{'US-XX':{food_insecurity_pct:14}},nowcast:{'US-XX':{adjustment:.4}}};
   const r=scorer.displayed(c,live,{imports:[],exports:[]});
-  assert.equal(r.structural,52);assert(Math.abs(r.base-54.1)<1e-10);
-  assert.equal(r.displayed,55);assert.equal(r.delta,r.displayed-r.base);
+  /* US blend is rounded (0.7×55 + 0.3×52 = 54.1 → 54); the nowcast adjustment is clamped to −10..+35. */
+  assert.equal(r.structural,52);assert.equal(r.base,54);
+  assert.equal(r.displayed,54);assert.equal(r.delta,r.displayed-r.base);
   live.nowcast['US-XX'].adjustment=100;
+  assert.equal(scorer.displayed(c,live,{imports:[],exports:[]}).displayed,89);
+  c.c=[100,100,100,100,100,100,100,100,100];
   assert.equal(scorer.displayed(c,live,{imports:[],exports:[]}).displayed,100);
   assert.equal(scorer.decomposition([null,null,null]).observedWeight,0);
   console.log('  [ok  ] decomposition sum/missingness, US blend rounding and clipping');

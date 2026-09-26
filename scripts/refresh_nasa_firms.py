@@ -1,4 +1,6 @@
 """
+RETIRED v90 — not in the source manifest: MAP_KEY rejected since 2026-08-03 and nothing on the site reads it.
+
 NASA FIRMS — active fire detection (VIIRS / MODIS) per country, last 7 days.
 
 Requires a free MAP_KEY. Register at https://firms.modaps.eosdis.nasa.gov/api/

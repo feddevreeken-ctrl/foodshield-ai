@@ -11,6 +11,14 @@ May 19 2026 against Egypt 2024 wheat (HS 1001) → 16 supplier rows returned.
 
 Endpoint: https://comtradeapi.un.org/public/v1/preview/C/A/HS
 
+v90 (Sep 2026) — when COMTRADE_API_KEY is set (it is, as a CI secret) and a probe
+call is accepted, the authenticated /data/v1/get/C/A/HS endpoint is used instead,
+with header Ocp-Apim-Subscription-Key. It takes a comma-separated cmdCode, so the
+run is one call per importer (~29) instead of one per importer x commodity (~290),
+which is what kept the step past its 2700 s budget once 429 backoffs piled up. A
+rejected key (401/403) falls back to the public preview path above, and _meta says
+which endpoint produced the file.
+
 Rate limits on the public endpoint appear less strict than the v1/get path, but
 we still throttle conservatively (~1 req/sec).
 
@@ -46,6 +54,7 @@ import requests
 from _common import env, write_json, UA
 
 URL = "https://comtradeapi.un.org/public/v1/preview/C/A/HS"
+URL_AUTH = "https://comtradeapi.un.org/data/v1/get/C/A/HS"
 
 # M49 numeric → ISO3 — needed because the public preview endpoint returns
 # partnerCode (numeric) but partnerISO is null.
@@ -246,13 +255,27 @@ def _clean_rows(rows):
     ]
 
 
+def _auth_ok(session, key, year):
+    """One probe call: does the authenticated endpoint accept this key?"""
+    try:
+        r = session.get(URL_AUTH, headers={"Ocp-Apim-Subscription-Key": key},
+                        params={"cmdCode": "1001", "flowCode": "M",
+                                "reporterCode": 818, "period": year}, timeout=45)
+    except Exception as e:
+        print(f"  [warn] authenticated Comtrade probe failed ({e}); using public preview")
+        return False
+    # 429 means the key was accepted and merely throttled.
+    if r.status_code in (200, 429):
+        return True
+    print(f"  [warn] authenticated Comtrade probe returned HTTP {r.status_code}; "
+          f"using public preview")
+    return False
+
+
 def main():
-    # v20.8: public preview endpoint requires no auth. We still read COMTRADE_API_KEY
-    # for backward compat — if you later upgrade to a paid subscription, the key can
-    # be used to bump rate limits on the protected endpoint.
+    # v90: the authenticated endpoint when COMTRADE_API_KEY is set and accepted,
+    # batching all commodities per importer; otherwise the keyless public preview.
     key = env("COMTRADE_API_KEY", required=False)
-    if key:
-        print("  [info] COMTRADE_API_KEY present but public endpoint used (no auth needed)")
 
     out = defaultdict(lambda: defaultdict(lambda: {"total_kt": 0, "total_value_usd": 0, "by_supplier": defaultdict(lambda: {"kt": 0, "value_usd": 0})}))
     year = 2024  # most recent full year for free tier as of May 2026
@@ -262,6 +285,10 @@ def main():
 
     session = requests.Session()
     session.headers.update({"User-Agent": UA, "Accept": "application/json"})
+    use_auth = bool(key) and _auth_ok(session, key, year)
+    url = URL_AUTH if use_auth else URL
+    auth_headers = {"Ocp-Apim-Subscription-Key": key} if use_auth else None
+    print(f"  [info] Comtrade endpoint: {'authenticated data/v1/get' if use_auth else 'public preview'}")
 
     # v20.8: public preview endpoint, no auth needed.
     # Note: omit partnerCode parameter entirely — leaving it blank returns 0 rows on the
@@ -273,34 +300,43 @@ def main():
     # from the run. Because which calls get throttled is effectively arbitrary,
     # consecutive runs lost and gained different pairs (a verified rerun churned
     # 24 pairs each way), so the published coverage wandered at random.
+    # Authenticated: one call per importer carrying every commodity code.
+    # Public preview: one call per importer x commodity (500-row cap per call).
+    cmd_groups = ([tuple(COMMODITIES.items())] if use_auth
+                  else [((c, n),) for c, n in COMMODITIES.items()])
+    pairs_per_call = len(cmd_groups[0])
     queue = deque(
-        (reporter_code, importer_iso, cmd_code, cmd_name, 0)
+        (reporter_code, importer_iso, cmds, 0)
         for reporter_code, importer_iso in PRIORITY_IMPORTERS.items()
-        for cmd_code, cmd_name in COMMODITIES.items()
+        for cmds in cmd_groups
     )
     total_calls = len(queue)
     requeued = 0
     exhausted = []
 
     while queue:
-        reporter_code, importer_iso, cmd_code, cmd_name, attempt = queue.popleft()
+        reporter_code, importer_iso, cmds, attempt = queue.popleft()
+        cmd_names = dict(cmds)
+        cmd_name = "+".join(cmd_names.values())
         # Throttle to stay polite to the public endpoint (~1 req/sec).
         time.sleep(THROTTLE_SECONDS)
         params = {
-            "cmdCode": cmd_code,
+            "cmdCode": ",".join(cmd_names),
             "flowCode": "M",
             "reporterCode": reporter_code,
             "period": year,
-            "max": 500,
         }
+        if use_auth:
+            params["maxRecords"] = 100000
+        else:
+            params["max"] = 500
 
         def _retry(reason):
             """Send this call to the back of the queue, or give up on it."""
             nonlocal requeued, skipped
             if attempt + 1 < MAX_RETRIES_PER_CALL:
                 requeued += 1
-                queue.append((reporter_code, importer_iso, cmd_code, cmd_name,
-                              attempt + 1))
+                queue.append((reporter_code, importer_iso, cmds, attempt + 1))
                 print(f"    {importer_iso}/{cmd_name}: {reason} — re-queued "
                       f"(attempt {attempt + 2}/{MAX_RETRIES_PER_CALL})")
             else:
@@ -310,7 +346,7 @@ def main():
                       f"{MAX_RETRIES_PER_CALL} attempts")
 
         try:
-            r = session.get(URL, params=params, timeout=45)
+            r = session.get(url, params=params, headers=auth_headers, timeout=90)
         except Exception as e:
             _retry(f"network: {e}")
             continue
@@ -356,9 +392,12 @@ def main():
             value_usd = row.get("primaryValue") or 0
             if value_usd <= 0:
                 continue
+            row_cmd = cmd_names.get(str(row.get("cmdCode")))
+            if not row_cmd:
+                continue
             # Public preview values in current saved files are stored as raw USD.
             # Example: Egypt 2024 wheat total is ~4.44e9 in data/comtrade_staples.json.
-            entry = out[importer_iso][cmd_name]
+            entry = out[importer_iso][row_cmd]
             entry["total_value_usd"] += value_usd
             # netWgt is null on public preview — we cannot compute kt. Set to 0
             # so downstream code knows volumes aren't available; UI must label as
@@ -421,10 +460,11 @@ def main():
     lost_pairs = max(0, old_pairs - new_pairs)
     age_days = _existing_age_days()
 
-    # Each failed call can account for AT MOST one importer-commodity pair. If we
-    # lost more pairs than we lost calls, our own rate-limiting cannot explain the
+    # Each failed call can account for AT MOST pairs_per_call importer-commodity
+    # pairs (1 on the public path, every commodity on the batched authenticated
+    # path). If we lost more than that, our own rate-limiting cannot explain the
     # shrink and it is real news about the source.
-    explained_by_our_failures = lost_pairs <= skipped
+    explained_by_our_failures = lost_pairs <= skipped * pairs_per_call
 
     # Backstop against permanent freeze. The previous guard only published a
     # shrink when skipped == 0, but 429s are routine here (65-69 skipped calls is
@@ -458,8 +498,10 @@ def main():
     write_json(
         "comtrade_staples.json",
         final,
-        source=f"UN Comtrade Plus (comtradeapi.un.org) — HS6, year {year}",
+        source=(f"UN Comtrade Plus (comtradeapi.un.org, "
+                f"{'authenticated data/v1/get' if use_auth else 'public preview'}) — HS6, year {year}"),
         notes=(f"Top 5 suppliers per importer-commodity. ~25 priority importers (free-tier quota). "
+               f"Endpoint: {'authenticated data/v1/get (COMTRADE_API_KEY), one call per importer' if use_auth else 'public preview (no key accepted), one call per importer-commodity'}. "
                f"Succeeded: {succeeded}/{total_calls}, re-queued: {requeued}, skipped: {skipped}. "
                f"Coverage this run: {new_importers} importers / {new_pairs} importer-commodity "
                f"pairs (previous file: {old_importers} / {old_pairs}). "

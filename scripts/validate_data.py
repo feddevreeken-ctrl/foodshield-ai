@@ -48,11 +48,9 @@ from trade_schema import summarize_trade_surface, validate_trade_surface
 #     'flexible'        — any non-null data is acceptable
 EXPECTED_FILES = {
     # Live feeds — empty payload acceptable on quiet days
-    'wfp_hungermap.json':         ('critical', 'dict_nonempty'),
     'wfp_country.json':           ('critical', 'dict_nonempty'),
     'ipc.json':                   ('critical', 'dict_nonempty'),
     'reliefweb_alerts.json':      ('soft',     'object'),
-    'acled.json':                 ('soft',     'dict_or_empty'),  # API key gated
     'openaq.json':                ('soft',     'dict_or_empty'),  # API key gated
     'comtrade_staples.json':      ('soft',     'dict_or_empty'),
     # Reference / structural — must be populated
@@ -168,7 +166,7 @@ HONESTY_BLOCKING = True
 # NOT hard-exit on these alone (that would block the daily commit of every OTHER
 # healthy feed), but the report makes the gap impossible to miss in CI logs and
 # the nowcast itself now flags affected countries as low/no-confidence.
-MUST_HAVE_CRISIS_FEEDS = ["wfp_hungermap.json", "ipc.json", "wfp_country.json"]
+MUST_HAVE_CRISIS_FEEDS = ["ipc.json", "wfp_country.json"]  # v90: wfp_hungermap retired
 
 
 # v79 — {filename: (scored_field, minimum_non_null_share)}. Only list fields a
@@ -177,7 +175,6 @@ MUST_HAVE_CRISIS_FEEDS = ["wfp_hungermap.json", "ipc.json", "wfp_country.json"]
 # is allowed to fall below its floor; an undeclared collapse fails.
 # The field may be a dotted path into a nested object ("shock.depr_90d_pct").
 SCORED_FIELD_COVERAGE = {
-    'wfp_hungermap.json': ('fcs_pct', 0.50),                # -> nowcast wfp_pressure
     'ipc.json':           ('phase3plus_pct', 0.50),         # -> nowcast ipc_pressure
     'fx_rates.json':      ('shock.depr_90d_pct', 0.50),     # -> nowcast fx_shock (v79)
     'inform_risk.json':   ('inform_risk', 0.50),            # -> nowcast inform_amp

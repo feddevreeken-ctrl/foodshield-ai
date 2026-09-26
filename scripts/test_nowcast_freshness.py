@@ -33,7 +33,6 @@ class FreshnessTest(unittest.TestCase):
                            "VALID":{"phase3plus_pct":50,"analysis_date":"2026-01-01","period":"Jun-Sep 2026"},
                            "OUTER":{"phase3plus_pct":50,"analysis_date":"2023-01-01","period":"Jun-Sep 2026"}},
                "fews.json":{"OLD":{"current_phase":4,"current_period":"Jun-Sep 2026"},"STALE":{"current_phase":4,"current_period":"Apr-Apr 2023"}},
-               "wfp_hungermap.json":{"UNDATED":{"fcs_pct":80,"as_of":"2026-09-17"},"DATED":{"fcs_pct":80,"observation_date":"2026-07-19"}},
                "openmeteo.json":{"UNDATED":{"heat_flag":True,"as_of":"2026-09-17"}},
                "hapi_conflict.json":{"STALE":{"is_live":True,"intensity_score":100,"window_end":"2026-06-19"}}}
         isos={iso for f in feeds.values() for iso in f}
@@ -47,8 +46,8 @@ class FreshnessTest(unittest.TestCase):
         for iso in ("OUTER","STALE","UNDATED"):
             self.assertEqual(rows[iso]["adjustment"],0)
             self.assertEqual(rows[iso]["confidence"],"none")
-        self.assertEqual(rows["DATED"]["components"]["wfp_pressure"],3)
-        self.assertEqual(rows["DATED"]["confidence"],"high")
+        # v90: wfp_hungermap.json is retired; nothing may still score it.
+        self.assertNotIn("wfp_pressure",rows["OLD"]["components"])
         # Open-Meteo is a live fetch: every row is read when the file is written,
         # so the file's generated_at is the observation time and no per-row date
         # exists. This fixture's file carries no generated_at, so the term must

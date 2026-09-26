@@ -1,4 +1,7 @@
 """
+RETIRED v90 — not in run_all.py or the source manifest: this myACLED tier only
+serves data >=12 months old and fed no score; ACLED comes via refresh_hapi_conflict.py.
+
 ACLED (Armed Conflict Location & Event Data) — conflict events.
 
 v23 — REWRITTEN for ACLED's new OAuth API (the old key+email query-param auth on

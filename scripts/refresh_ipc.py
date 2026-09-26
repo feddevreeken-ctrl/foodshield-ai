@@ -58,7 +58,7 @@ def _fetch_ewtool():
             # v79i — the ew-tool IPC payload carries no country name, and this
             # used to hardcode None, leaving all 56 rows nameless. Take the name
             # off the row when the feed does supply one; consumers resolve the
-            # rest from wfp_hungermap.json and fall back to the ISO code.
+            # rest from inform_risk.json and fall back to the ISO code.
             "country": row.get("adm0_name") or row.get("countryName") or row.get("country") or None,
             "source_via": "hungermap (ew-tool-api)",
             "data_source": row.get("dataSource"),

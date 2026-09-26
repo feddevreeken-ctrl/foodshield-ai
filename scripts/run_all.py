@@ -22,14 +22,12 @@ from pathlib import Path
 from _common import DATA_DIR, DEFAULT_STEP_TIMEOUT, _has_existing_data, safe_run
 
 # Import each refresh module
-import refresh_wfp
 import refresh_wfp_country
 import refresh_worldbank
 import refresh_worldbank_pink_sheet
 import refresh_fao_ffpi
 import refresh_reliefweb
 import refresh_ipc
-import refresh_acled
 import refresh_comtrade
 import refresh_feeding_america
 import refresh_openmeteo
@@ -102,14 +100,12 @@ import build_scenario_profiles
 # v20.32 — (label, fn, expected_output_file). The third field is what the
 # frontend fetches; safe_run writes an empty envelope there on failure.
 STEPS = [
-    ("WFP HungerMap",          refresh_wfp.main,                "wfp_hungermap.json"),
     ("WFP per-country",        refresh_wfp_country.main,        "wfp_country.json"),
     ("World Bank WDI",         refresh_worldbank.main,          "worldbank_wdi.json"),
     ("World Bank Pink Sheet",  refresh_worldbank_pink_sheet.main, "worldbank_pink_sheet.json"),
     ("FAO FFPI",               refresh_fao_ffpi.main,           "fao_ffpi.json"),
     ("ReliefWeb",              refresh_reliefweb.main,          "reliefweb_alerts.json"),
     ("IPC",                    refresh_ipc.main,                "ipc.json"),
-    ("ACLED",                  refresh_acled.main,              "acled.json"),
     ("Comtrade",               refresh_comtrade.main,           "comtrade_staples.json"),
     ("Feeding America",        refresh_feeding_america.main,    "feeding_america_states.json"),
     ("Open-Meteo Weather",     refresh_openmeteo.main,          "openmeteo.json"),
@@ -224,15 +220,15 @@ FAIL_THRESHOLD = 4
 # Feeds that legitimately ship an empty payload — key-gated or upstream-blocked —
 # so the post-flight audit must not count their empty envelope as "missing":
 #   openaq.json             OPENAQ_API_KEY-gated
-#   nasa_firms.json         NASA_FIRMS_MAP_KEY-gated
-#   acled.json              ACLED_EMAIL/ACLED_PASSWORD-gated
 #   ndgain.json             upstream bulk download sits behind a browser-session
 #                           redirect (see the feed's own _meta.notes)
 #   trade_restrictions.json ships-empty-by-design preserve-safe stub (v40 note
 #                           on the step above); entries are owner-curated
 #   commodity_news.json     GDELT throttles per-IP under CI egress; a fully
 #                           throttled run legitimately yields zero items (v46)
-EMPTY_OK = {"openaq.json", "acled.json", "ndgain.json",
+# (v90: nasa_firms.json, acled.json and wfp_hungermap.json are retired, not refreshed — see
+#  build_source_manifest.py.)
+EMPTY_OK = {"openaq.json", "ndgain.json",
             "trade_restrictions.json", "commodity_news.json", "enso_news.json"}
 
 # Outputs that legitimately do not exist at all on a first run. v46: the

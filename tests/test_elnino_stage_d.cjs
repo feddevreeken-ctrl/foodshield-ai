@@ -216,15 +216,17 @@ test('Explore instrument preserves controls and dates modelled paint from displa
 });
 test('Explore land blocks SST below unchanged bands and has a distinct opaque unscored fill',()=>{
  const pane={style:{}},drawn=[];
- const main=vm.createContext({map:{getPane(){return null;},createPane(name){assert.equal(name,'exploreLand');return pane;}},L:{geoJSON(data,options){drawn.push(options);return {addTo(){}};}},data:{},LAND_TONE:'#0c0c0e',BORDER_LINE:'#aaa',lookupCountry:f=>f.country,mapRiskColor:()=> '#band',_scnPaintOn:false});
+ const relief={style:{},classList:{add(){}}},tiles=[];
+ const main=vm.createContext({map:{getPane(){return null;},createPane(name){assert(['exploreLand','exploreRelief'].includes(name));return name==='exploreLand'?pane:relief;}},L:{geoJSON(data,options){drawn.push(options);return {addTo(){}};},tileLayer(url,options){tiles.push(options);return {addTo(){}};}},data:{},LAND_TONE:'#0c0c0e',BORDER_LINE:'#aaa',lookupCountry:f=>f.country,mapRiskColor:()=> '#band',_scnPaintOn:false});
  const begin=html.indexOf("        var landPane = map.getPane('exploreLand')"),finish=html.indexOf('        G.countryLayer =',begin);
  vm.runInContext(html.slice(begin,finish),main);
  assert.equal(pane.style.zIndex,390);assert.equal(drawn[0].style.fillOpacity,1);assert.equal(drawn[0].pane,'exploreLand');
+ assert.equal(relief.style.zIndex,405);assert.equal(tiles[0].pane,'exploreRelief');
  const styleBegin=html.indexOf('  function styleFeature(f)'),styleEnd=html.indexOf('  function onEachFeature',styleBegin);
  vm.runInContext(html.slice(styleBegin,styleEnd),main);
- const unscored=vm.runInContext('styleFeature({})',main);assert.equal(unscored.fillOpacity,1);assert.equal(unscored.fillColor,'#343b46');
+ const unscored=vm.runInContext('styleFeature({})',main);assert.equal(unscored.fillOpacity,1);assert.equal(unscored.fillColor,'url(#fs-unscored-hatch) #343b46');
  assert.equal(vm.runInContext('styleFeature({country:{fdrs:null}}).fillColor',main),unscored.fillColor);
- for(const score of [12,38,63,82,95]){const paint=vm.runInContext('styleFeature({country:{fdrs:'+score+'}})',main);assert.equal(paint.fillColor,'#band');assert.equal(paint.fillOpacity,.82);} // 2026-09-25: one opacity for every band, matching the legend
+ for(const score of [12,38,63,82,95]){const paint=vm.runInContext('styleFeature({country:{fdrs:'+score+'}})',main);assert.equal(paint.fillColor,'#band');assert(Math.abs(paint.fillOpacity-(0.18+Math.pow(score/100,0.85)*0.78))<1e-12);} // 2026-09-26: owner restored the score-graded opacity (the map's texture)
  const legend=html.slice(html.indexOf('<div id="map-legend"'),html.indexOf('</div><!-- /#map-canvas -->'));
  for(const label of ['0–25','26–50','51–75','76–88','89–100','Unscored','map-legend-date'])assert(legend.includes(label));
 });

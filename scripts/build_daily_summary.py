@@ -58,7 +58,6 @@ def main():
     today = date.today().isoformat()
     nc      = (load("nowcast.json") or {}).get("data") or {}
     ipc     = (load("ipc.json") or {}).get("data") or {}
-    acled   = (load("acled.json") or {}).get("data") or {}
     ffpi    = (load("fao_ffpi.json") or {}).get("data") or {}
     wfp_c   = (load("wfp_country.json") or {}).get("data") or {}
     estat   = (load("eurostat_food.json") or {}).get("data") or {}
@@ -70,13 +69,12 @@ def main():
     # Each bullet used to resolve names on its own, against whichever feed it
     # happened to have in hand, so the same summary could read "Top mover: SSD"
     # in one line and "Top of list: South Sudan" in the next. inform_risk.json is
-    # the only feed that names ~all 191 countries; ipc.json and wfp_hungermap.json
-    # ship `country: null` on every row. Chain them, then fall back to the ISO
+    # the only feed that names ~all 191 countries; ipc.json ships
+    # `country: null` on every row. Chain them, then fall back to the ISO
     # code — never to None.
-    _hm = (load("wfp_hungermap.json") or {}).get("data") or {}
 
     def name_of(iso):
-        for src in (inform, _hm, ipc, nc):
+        for src in (inform, ipc, nc):
             nm = (src.get(iso) or {}).get("country") if isinstance(src, dict) else None
             if nm:
                 return nm

@@ -123,7 +123,7 @@ PROVENANCE_SLACK = 0.02
 US_STATE_MIN = 50
 
 # Crisis feeds whose emptiness must be reflected honestly in the nowcast.
-CRISIS_FEED_IDS = ["wfp_hungermap", "ipc", "wfp_country"]
+CRISIS_FEED_IDS = ["ipc", "wfp_country"]  # v90: wfp_hungermap retired
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -503,7 +503,6 @@ def check_crisis_honesty(rep):
     flags_down = (
         coverage.get("crisis_feeds_live") is False
         or coverage.get("ipc_feed_live") is False
-        or coverage.get("wfp_hungermap_feed_live") is False
     )
     if flags_down:
         rep.pass_("crisis-honesty",
@@ -517,7 +516,7 @@ def check_crisis_honesty(rep):
     # (b) Stronger bar: with the international crisis feeds empty, no country
     #     SCORED OFF THOSE FEEDS may be high-confidence. The nowcast schema (v25)
     #     sets confidence='high' for an international (ISO3) country only when
-    #     IPC or WFP HungerMap backs the adjustment, so a 'high' ISO3 row with
+    #     IPC, FEWS NET or large displacement backs the adjustment, so a 'high' ISO3 row with
     #     all core_signals absent would be a false-confidence bug.
     #
     #     EXCEPTION: rows backed by an independent sourced signal are legitimately

@@ -1,4 +1,7 @@
 """
+RETIRED v90 — not in run_all.py or the source manifest: FCS/alerts are login-walled
+(HTTP 401) and the public IPC remainder duplicates refresh_ipc.py.
+
 WFP HungerMap LIVE — adm0 (country-level) food security snapshot.
 
 Public endpoint, no key required.

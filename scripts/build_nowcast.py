@@ -2,7 +2,7 @@
 Build the nowcast layer — combines structural FDRS with live signals to produce
 an adjusted current-conditions score.
 
-Reads: data/wfp_hungermap.json, data/ipc.json, data/acled.json,
+Reads: data/ipc.json, data/hapi_conflict.json,
        data/reliefweb_alerts.json, data/fao_ffpi.json,
        data/wfp_country.json, data/openmeteo.json, data/openmeteo_flood.json,
        data/openaq.json, data/usgs_water.json,
@@ -15,7 +15,6 @@ Formula (extended May 2026, expanded May 2026 v20.27):
     + fews_kick          (0-6)   — FEWS NET forward projection, weighted by the age of its assessment period (v86): gap-fills the crisis
                                    level where IPC is absent, plus a deterioration nudge
                                    when the near-term projection is worse than current
-    + wfp_pressure       (0-6)   — FCS prevalence above 30%
     + displacement_kick  (0-4)   — HDX HAPI internal-displacement magnitude band (new v43)
     + conflict_kick      (0-5)   — ACLED 30-day intensity
     + global_food_kick   (0-2)   — FAO FFPI MoM > +3%
@@ -127,18 +126,16 @@ def load(name):
 
 
 def main():
-    wfp     = load("wfp_hungermap.json")["data"]
+    # v90 — wfp_hungermap.json retired: WFP put FCS/alerts behind a login and the
+    # public remainder was a copy of ipc.json, so the wfp_pressure term is gone.
     wfp_c   = load("wfp_country.json")["data"]
     ipc     = load("ipc.json")["data"]
     fews    = load("fews.json")["data"]   # v42 — FEWS NET forward projection (crisis gap-fill + deterioration)
     idps    = load("hapi_idps.json")["data"]   # v43 — HDX HAPI internal displacement (new source)
-    acled   = load("acled.json")["data"]
     # v83 — ACLED via HDX HAPI, which unlike the direct API is not embargoed:
     # a rolling 90-day window that reaches the in-progress month, for 242
-    # countries. The `acled.json` feed above is a 12-month-lagged access tier
-    # and is explicitly NOT live (its own _meta says so), which is why
-    # acled_conflict_live_countries has been 0 for every build and a war
-    # starting today could not move the score.
+    # countries. The direct myACLED tier (acled.json) is 12-month-lagged and was
+    # never live, so it could not move the score; v90 retired it.
     hapi_cf = load("hapi_conflict.json")["data"]
     ffpi    = load("fao_ffpi.json")["data"]
     rw      = load("reliefweb_alerts.json")["data"]
@@ -216,7 +213,7 @@ def main():
         print(f"  [warn] countries.json profile set unavailable ({e}) — falling back to feed union only")
         canonical_iso = set()
 
-    feed_iso = (set(wfp) | set(ipc) | set(fews) | set(idps) | set(acled) | set(hapi_cf) | set(om) | set(wfp_c)
+    feed_iso = (set(ipc) | set(fews) | set(idps) | set(hapi_cf) | set(om) | set(wfp_c)
                 | set(estat) | set(faostat) | set(inform) | set(wgi) | set(psd)
                 | set(usgs) | set(feeding))   # v25 — include US-state feeds so US- rows exist
     # Compute over feeds ∪ profiles so profiles with no feed still get a (zero) row;
@@ -273,15 +270,12 @@ def main():
         # owner's to soften (for example 90/180) if lapsed IPC should linger.
         ipc_valid_until = _period_end(_ipc_row.get("period")) or _ipc_row.get("analysis_date")
         ipc_weight = min(ipc_weight, _freshness_weight(ipc_valid_until))
-        wfp_fcs  = (wfp.get(iso) or {}).get("fcs_pct") or 0
         # v23 — ACLED only counts as a LIVE nowcast signal when the feed is actually
         # live (is_live=true). On a 12-month-lagged access tier it's a STRUCTURAL
         # baseline (already in the FDRS conflict component), so it must NOT add to the
         # live nowcast delta — that would present year-old conflict as a live disturbance.
-        # Prefer the live HAPI window; fall back to the lagged ACLED tier only
-        # if it ever reports itself live. Same is_live contract either way.
+        # Only the live HAPI window counts (v90: the lagged direct tier is retired).
         _hapi_row = hapi_cf.get(iso) or {}
-        _acled_row = acled.get(iso) or {}
         if _hapi_row.get("is_live") and (
                 _hapi_row.get("intensity_score_pc") is not None
                 or _hapi_row.get("intensity_score") is not None):
@@ -291,8 +285,8 @@ def main():
                         if _hapi_row.get("intensity_score_pc") is not None
                         else _hapi_row.get("intensity_score")) or 0
         else:
-            conflict_row = _acled_row
-            conflict = (_acled_row.get("intensity_score") or 0) if _acled_row.get("is_live") else 0
+            conflict_row = {}
+            conflict = 0
         relief_n = len(rw_by_iso.get(iso, []))
         wc       = wfp_c.get(iso) or {}
         om_row   = om.get(iso) or {}
@@ -311,12 +305,6 @@ def main():
         term_weight("ipc_pressure", ipc_valid_until, basis="full weight through the assessment's validity end (or analysis_date), then 30/90-day decay; analysis_date must also be within 365 days (zero at 730)")
         freshness["ipc_pressure"]["weight"] = ipc_weight
         freshness["caseload_kick"] = dict(freshness["ipc_pressure"])
-        # HungerMap rows carry the analysis month as analysis_date (monthly at
-        # best, often older); there is no observation_date field, and reading one
-        # zeroed the term for every country.
-        _wfp_row = wfp.get(iso) or {}
-        wfp_weight = term_weight("wfp_pressure", _wfp_row.get("observation_date") or _wfp_row.get("analysis_date"),
-                                 basis="HungerMap analysis_date (analysis month); 30/90-day schedule")
         conflict_weight = term_weight("conflict_kick", conflict_row.get("window_end")) if conflict_row.get("is_live") else term_weight("conflict_kick", None, basis="not live; excluded")
         term_weight("global_food_kick", ffpi_date, basis="FFPI reporting month end")
 
@@ -342,7 +330,6 @@ def main():
         _ipc_count = (_ipc_row.get("phase3plus_count")
                       if isinstance(_ipc_row.get("phase3plus_count"), (int, float)) else 0)
         caseload_kick = round(min(5.0, 2.5 * math.log10(1 + _ipc_count / 1_000_000.0)) * ipc_weight, 2) if _ipc_count > 0 else 0
-        wfp_pressure  = min(6, max(0, (wfp_fcs - 30) * 0.15)) * wfp_weight
         conflict_kick = min(5, conflict * 0.05) * conflict_weight
         # v85 -- ZEROED, field kept (as inflation_shock is). relief_n is the number
         # of ReliefWeb documents about a country inside a globally capped 50-item
@@ -598,11 +585,11 @@ def main():
         # rows reach it; the largest cluster is Sudan at 14.2), so this changes
         # no published number today — it closes the path before it opens.
         crisis_cluster  = (ipc_pressure + caseload_kick + fews_kick + displacement_kick
-                           + inform_amp + conflict_kick + wfp_pressure)
+                           + inform_amp + conflict_kick)
         cluster_overage = max(0, crisis_cluster - 18)
 
         adj = round(
-            ipc_pressure + caseload_kick + fews_kick + wfp_pressure + displacement_kick + conflict_kick + global_food_kick
+            ipc_pressure + caseload_kick + fews_kick + displacement_kick + conflict_kick + global_food_kick
             + fx_shock + inflation_shock + weather_kick + flood_kick
             + aq_kick + us_water_kick + us_fi_kick
             + inform_amp + governance_drag + psd_shortfall
@@ -621,7 +608,6 @@ def main():
         # Previously a missing signal silently became 0 ("no pressure"), which
         # made sparse-data countries look calmer and more certain than they are.
         has_ipc = iso in ipc and (ipc.get(iso) or {}).get("phase3plus_pct") is not None and ipc_weight > 0
-        has_wfp = iso in wfp and (wfp.get(iso) or {}).get("fcs_pct") is not None and wfp_weight > 0
         has_fews = isinstance(fews_cur, (int, float)) and fews_w > 0   # v42 — FEWS is an authoritative crisis feed
         # v43 — significant displacement is an authoritative crisis signal, but
         # v79 requires it to be CURRENT: a 2018 snapshot says nothing about 2026,
@@ -636,7 +622,7 @@ def main():
         # monitoring — so a present reading counts toward confidence rather than
         # leaving these countries mislabelled "no live signal".
         has_food_price = isinstance(food_infl, (int, float))
-        core_signals = sum([has_ipc, has_wfp, has_us_core, has_fews, has_idp])
+        core_signals = sum([has_ipc, has_us_core, has_fews, has_idp])
         if core_signals >= 1:
             confidence = "high"
         elif has_food_price:
@@ -652,11 +638,9 @@ def main():
         out[iso] = {
             "adjustment": adj,
             "confidence": confidence,
-            "core_signals_present": {"ipc": has_ipc, "wfp_hungermap": has_wfp,
-                                     "fews": has_fews, "idp": has_idp},
+            "core_signals_present": {"ipc": has_ipc, "fews": has_fews, "idp": has_idp},
             "components": {
                 "ipc_pressure":    round(ipc_pressure, 1),
-                "wfp_pressure":    round(wfp_pressure, 1),
                 "conflict_kick":   round(conflict_kick, 1),
                 "caseload_kick":   round(caseload_kick, 1),
                 "fews_kick":       round(fews_kick, 1),
@@ -678,7 +662,6 @@ def main():
             "freshness": freshness,
             "signals": {
                 "ipc_phase3plus_pct":   ipc_p3,
-                "wfp_fcs_pct":          wfp_fcs,
                 "acled_intensity":      conflict,
                 "fews_current_phase":   fews_cur,
                 "fews_projected_phase": fews_proj,
@@ -731,20 +714,16 @@ def main():
     n_ipc_scored = sum(1 for iso, row in out.items()
                        if (ipc.get(iso) or {}).get("phase3plus_pct") is not None
                        and row["freshness"]["ipc_pressure"]["weight"] > 0)
-    n_wfp_scored = sum(1 for iso, row in out.items()
-                       if (wfp.get(iso) or {}).get("fcs_pct") is not None
-                       and row["freshness"]["wfp_pressure"]["weight"] > 0)
     ipc_live = n_ipc_scored > 0
-    wfp_live = n_wfp_scored > 0
-    crisis_feeds_live = ipc_live or wfp_live
+    crisis_feeds_live = ipc_live
 
     envelope = {
         "_meta": {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "source": (
-                "Composite: WFP HungerMap + IPC + ACLED + FAO FFPI + ReliefWeb + "
+                "Composite: IPC + ACLED (HDX HAPI) + FAO FFPI + ReliefWeb + "
                 "Open-Meteo (weather/flood) + OpenAQ + USGS Water + "
-                "WFP per-country (FX/inflation) + Eurostat food HICP + FAOSTAT food CPI "
+                "per-country FX (derived) + Eurostat food HICP + FAOSTAT food CPI "
                 "+ FEWS NET forward projection + HDX HAPI internal displacement "
                 "+ INFORM risk + WB WGI rule of law "
                 "+ USDA PSD staples shortfall"
@@ -753,20 +732,18 @@ def main():
                 "Adjustment range -10 to +35 added to structural FDRS to produce "
                 "nowcast score. See methodology page for component formula. v25: each "
                 "country carries a 'confidence' flag (high/monitored/low/none). 'high' = a "
-                "core crisis feed (IPC, WFP HungerMap, FEWS NET, or >=100k internally "
+                "core crisis feed (IPC, FEWS NET, or >=100k internally "
                 "displaced) backs the adjustment; 'low' = only "
                 "secondary signals present; 'none' = no live signal, so the ~0 adjustment "
                 "reflects absence of data, NOT confirmed calm."
             ),
             "coverage": {
                 "ipc_feed_live": ipc_live,
-                "wfp_hungermap_feed_live": wfp_live,
                 "crisis_feeds_live": crisis_feeds_live,
                 # v79 — publish the counts the flags are derived from, so a
                 # consumer can tell "feed absent" from "feed present but
                 # carrying no scored values" without re-reading the raw file.
                 "ipc_scored_countries": n_ipc_scored,
-                "wfp_fcs_scored_countries": n_wfp_scored,
                 "countries_high_confidence": n_high,
                 "countries_monitored": n_mon,
                 "countries_low_confidence": n_low,
@@ -795,7 +772,7 @@ def main():
     (DATA / "nowcast.json").write_text(json.dumps(envelope, indent=2))
     print(f"[OK] wrote nowcast.json with {len(out)} entries "
           f"(confidence: {n_high} high, {n_mon} monitored, {n_low} low, {n_none} none | "
-          f"IPC live: {ipc_live}, WFP live: {wfp_live})")
+          f"IPC live: {ipc_live})")
 
 
 if __name__ == "__main__":
