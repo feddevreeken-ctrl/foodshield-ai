@@ -687,7 +687,7 @@ def main() -> int:
         lens_results, headings, frames, lens_texts, spill = [], [], [], [], []
         heights = {}
         page.evaluate("window._stageAMap = document.getElementById('enso-map'); window._stageAMapId = window._stageAMap._leaflet_id")
-        for tab, mode in (("elnino", "sst"), ("ensoharvest", "impact"), ("ensowater", "none"), ("ensomoney", "rtfp"), ("ensolive", "rain")):
+        for tab, mode in (("elnino", "sst"), ("ensoharvest", "impact"), ("ensowater", "none"), ("ensomoney", "staple"), ("ensolive", "rain")):
             page.evaluate("tab => showTab(tab)", tab)
             page.wait_for_selector(f'#subview-{tab}.active .enso-subview-meta')
             lens_results.append(page.input_value('#enso-mode') == mode
@@ -696,12 +696,20 @@ def main() -> int:
                 and page.is_checked('#enso-tog-alerts') == (tab == 'ensolive'))
             lens_texts.append(page.locator('#tab-elnino').inner_text())
             if tab == "ensomoney":
-                dates = page.evaluate("async () => Object.values((await (await fetch('data/rtfp.json')).json()).data).map(r => r.as_of).filter(Boolean).sort()")
                 legend = page.locator('#enso-legend').text_content()
-                # 2026-09-26: prices are proportional circles; the key states sizes, sources and the as_of range.
-                check("rtfp legend states circle sizes, both sources and country as_of range",
-                      all(t in legend for t in ('5 · 15 · 30%', 'solid: market median', 'hollow: official food CPI', 'as of', dates[0], dates[-1])))
-                check("rtfp legend states the shared country date once", legend.count("for every country") == 1)
+                tag = page.locator('#enso-maptag').text_content()
+                # 2026-09-26: staple prices (FAO GIEWS FPMA) over the published harvest effect. The key states sizes,
+                # the harvest encoding and the countries with no series; the map tag counts from the same data.
+                counts = page.evaluate("""async () => {
+                    const F = (await (await fetch('data/fpma_prices.json')).json()).data;
+                    const R = (await (await fetch('data/enso_regions.json')).json()).data.regions;
+                    const tele = [...new Set(R.flatMap(r => r.iso3 || []))];
+                    const has = tele.filter(i => F[i] && (typeof F[i].staple_price_real_yoy_pct === 'number' || typeof F[i].staple_price_yoy_pct === 'number'));
+                    return [has.length, tele.length, tele.filter(i => !has.includes(i)).sort().join(', ')];
+                }""")
+                check("staple legend states sizes, the harvest encoding and the countries without a series",
+                      all(t in legend for t in ('5 · 15 · 30%', 'output usually falls', 'output usually rises', 'no staple price series (' + counts[2] + ')')), str(counts))
+                check("staple map tag counts the countries with a series from the data", tag.startswith(f"{counts[0]} of {counts[1]} El Niño countries have staple prices"), tag)
             headings.append(page.locator('#tab-elnino h2:visible').count())
             # 2026-09-24: a no-wrap table once pushed the Reported ledger 557px past its plate.
             heights[tab] = page.evaluate("() => document.querySelector('#tab-elnino .content-page').scrollHeight")
@@ -1039,7 +1047,7 @@ def main() -> int:
               and not page.locator('#enso-scenario-toggle').is_visible()
               and page.input_value('#enso-level') == '-1.5')
         ranked = []
-        for tab, feed in (('ensomoney', 'rtfp'), ('ensolive', 'reported')):
+        for tab, feed in (('ensomoney', 'staple'), ('ensolive', 'reported')):
             page.evaluate("tab => showTab(tab)", tab)
             page.wait_for_selector('#enso-map-ranking button')
             # The price rail no longer ranks the twelve highest inflations in the
@@ -1048,6 +1056,17 @@ def main() -> int:
             # valued ones first in descending order, then those with no monitored
             # market, then the monitored countries outside the layer.
             valid = page.evaluate("""async feed => {
+                if (feed === 'staple') {
+                    // 2026-09-26: the Prices rail names every El Niño country once, grouped by where its exposed
+                    // harvest stands, largest move first within a group; the title counts them all.
+                    const R = (await (await fetch('data/enso_regions.json')).json()).data.regions;
+                    const tele = [...new Set(R.flatMap(r => r.iso3 || []))];
+                    const isos = [...document.querySelectorAll('#enso-map-ranking button')].map(b => b.dataset.mapCountry);
+                    const title = document.querySelector('#enso-map-ranking .enso-legend-t').textContent;
+                    const m = document.getElementById('enso-map').getBoundingClientRect();
+                    const a = document.getElementById('enso-map-ranking').getBoundingClientRect();
+                    return a.left >= m.right - 1 && isos.length === tele.length && tele.every(i => isos.includes(i)) && title.includes(tele.length + ' El Niño countries');
+                }
                 if (feed === 'reported') {
                     // 2026-09-26: the Reported rail lists El Niño countries with a report, a crisis in force or a
                     // headline, sorted by fits, then IPC phase, then report count; the title counts the rows.
@@ -1336,7 +1355,7 @@ def main() -> int:
             page.set_viewport_size({'width': width, 'height': height})
             for tab, labels in (
                 ('ensowater', ['No land layer', 'Shipping']),
-                ('ensomoney', ['Food inflation', 'Grain imports']),
+                ('ensomoney', ['Staple prices', 'Grain imports', 'After inflationLocal currency']),
                 ('elnino', ['Sea-surface']),
                 ('ensoharvest', ['Production shock', 'Strongest crop', 'Coverage', 'Teleconnections']),
                 ('ensolive', ['Rain pattern', 'Hotspots', 'IPC', 'Hazards', 'Headlines', 'Elsewhere'])):

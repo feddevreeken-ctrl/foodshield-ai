@@ -52,7 +52,7 @@ const api=ctx.api,S=api.S;
 // The chart now shares the rail's published-country filter; load its real index.
 S.isoIndex={};
 JSON.parse(fs.readFileSync('data/enso_regions.json','utf8')).data.regions.forEach(r=>r.iso3.forEach(iso=>(S.isoIndex[iso] ||= []).push(r)));
-for(const [key,file] of Object.entries({model:'enso_model',calendars:'crop_calendars',enso:'enso',lanes:'enso_lanes',corridors:'enso_corridors',econ:'enso_econ',exp:'enso_exposure',portwatch:'portwatch',pwhist:'portwatch_history',rtfp:'rtfp',ffpi:'fao_ffpi',asap:'asap',gdacs:'gdacs',relief:'reliefweb_alerts',sst:'sst_anomaly'})){
+for(const [key,file] of Object.entries({model:'enso_model',calendars:'crop_calendars',enso:'enso',lanes:'enso_lanes',corridors:'enso_corridors',econ:'enso_econ',exp:'enso_exposure',portwatch:'portwatch',pwhist:'portwatch_history',rtfp:'rtfp',fpma:'fpma_prices',pink:'worldbank_pink_sheet',ffpi:'fao_ffpi',asap:'asap',gdacs:'gdacs',relief:'reliefweb_alerts',sst:'sst_anomaly'})){
  const data=JSON.parse(fs.readFileSync('data/'+file+'.json','utf8'));S[key]=data.data;S.meta[key]=data._meta;
 }
 let passed=0;
@@ -283,7 +283,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
   minus.onclick();assert.equal(m.getZoom(),2);plus.onclick();reset.onclick();assert.equal(m.getZoom(),2);
   for(let i=0;i<4;i++)plus.onclick();assert(plus.disabled);reset.onclick();assert(!plus.disabled);
  });
- const expected={elnino:'sst',ensoharvest:'impact',ensowater:'none',ensomoney:'rtfp',ensolive:'rain'};
+ const expected={elnino:'sst',ensoharvest:'impact',ensowater:'none',ensomoney:'staple',ensolive:'rain'};
  for(let cycle=0;cycle<2;cycle++) for(const [view,mode] of Object.entries(expected)) {
   node('scroller').scrollTop=1400;
   await ctx.window.ensoInit(view);pending.splice(0).forEach(fn=>fn());
@@ -311,7 +311,8 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    if(view==='ensolive')for(const label of ['usually drier in El Niño years','usually wetter','fits the usual pattern','runs against it','no rainfall expectation','Fitting the pattern is not attribution'])assert(key.includes(label),label+' | '+key.slice(0,600));
    if(view==='ensowater')for(const l of S.lanes.lanes)assert(legend.querySelector('details').textContent.includes(l.name));
    /* 2026-09-26: prices are circles (area = size of the change, solid RTFP, hollow CPI) over El Niño countries only. */
-   if(view==='ensomoney')for(const label of ['5 · 15 · 30%','falling','rising fast','solid: market median, World Bank RTFP','hollow: official food CPI (FAOSTAT)','do not compare the two directly'])assert(key.includes(label));
+   /* 2026-09-26: staple prices (FAO GIEWS FPMA) over El Niño's published harvest effect, with the tab's verdict rings. */
+   if(view==='ensomoney')for(const label of ['5 · 15 · 30%','falling','rising fast','output usually falls','output usually rises','too early: the exposed harvest is still ahead','runs against the usual pattern','no staple price series'])assert(key.includes(label),label);
    if(cycle||view!=='elnino')assert.equal(node('scroller').scrollTop,0);
   });
  }
