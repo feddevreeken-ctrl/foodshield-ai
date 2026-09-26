@@ -45698,11 +45698,15 @@ function showCommodityDetail(key) {
     /* Where each step stands now, as a number where the feeds give one; each is dated in the step panel below. */
     var nowReading = function (id) {
       var c = chain.filter(function (x) { return x.id === id; })[0] || {};
-      if (id === 'soi' && typeof c.metric === 'number') return 'SOI ' + (c.metric < 0 ? '\u2212' : '+') + Math.abs(c.metric).toFixed(1) + ' (Jul)';
-      if (id === 'warm_water' && typeof c.metric === 'number') return '+' + c.metric.toFixed(0) + ' °C at depth';
-      if (id === 'upwelling') return typeof weekly.nino12_anom === 'number' ? 'Niño 1+2 +' + weekly.nino12_anom.toFixed(1) + ' °C' : (typeof c.metric === 'number' ? 'Niño 1+2 +' + c.metric.toFixed(1) + ' °C' : '');
-      if (id === 'trades') return 'westerly anomalies';
-      if (id === 'convection') return 'rain shifted east';
+      var sgn = function (v, d) { return (v < 0 ? '−' : v > 0 ? '+' : '') + Math.abs(v).toFixed(d); };
+      /* The month comes from the metric's own label ("Troup SOI, July 2026"), never typed here. */
+      var mon = (String(c.unit || '').match(/(January|February|March|April|May|June|July|August|September|October|November|December)/) || [])[1];
+      if (id === 'soi' && typeof c.metric === 'number') return 'SOI ' + sgn(c.metric, 1) + (mon ? ' (' + mon.slice(0, 3) + ')' : '');
+      if (id === 'warm_water' && typeof c.metric === 'number') return sgn(c.metric, 0) + ' °C at depth';
+      if (id === 'upwelling') { var v = typeof weekly.nino12_anom === 'number' ? weekly.nino12_anom : c.metric; return typeof v === 'number' ? 'Niño 1+2 ' + sgn(v, 1) + ' °C' : ''; }
+      /* No number in the feed for these two: show the state only when the dated "now" text says it. */
+      if (id === 'trades') return /westerly anomal/i.test(c.now || '') ? 'westerly anomalies' : '';
+      if (id === 'convection') return /enhanced[^.]*east/i.test(c.now || '') ? 'rain shifted east' : '';
       return '';
     };
     S.rulerStops = places.filter(function (p) { return chain.some(function (c) { return c.id === p[0]; }); });
