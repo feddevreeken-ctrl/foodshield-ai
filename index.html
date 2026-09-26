@@ -10050,7 +10050,7 @@ body::before {
 .pf-peak { position:absolute; top:-9px; bottom:-9px; width:0; border-left:1px dashed rgba(224,103,60,.7); }
 .pf-ev { font-size:12px; line-height:1.4; color:var(--t2); }
 #tab-elnino .pf-ev p, #tab-elnino .pf-orow p { margin:0 0 4px; font-size:12px; line-height:1.45; max-width:none; } #tab-elnino .pf-ev p:last-child { margin:0; }
-.pf-study a { color:var(--t1); } .pf-conf, .pf-mod span, .pf-none { color:var(--t3); font-size:11px; }
+.pf-study a { color:var(--t1); } .pf-who { font-weight:500; color:var(--t1); } .pf-conf, .pf-mod span, .pf-none { color:var(--t3); font-size:11px; }
 .pf-mod b { font-weight:500; } .pf-mod b.is-fall { color:#d58a4e; } .pf-mod b.is-rise { color:#7fb57f; }
 .pf-other { display:grid; gap:10px; } .pf-orow { font-size:12px; color:var(--t2); } .pf-orow i { font-style:normal; color:var(--t3); } .pf-orow .pf-study { margin-top:2px; }
 @media (max-width:900px) { .pf-row { grid-template-columns:minmax(0,1fr); gap:6px; } .pf-head .pf-name, .pf-head .pf-ev { display:none; } }
@@ -45209,14 +45209,19 @@ function showCommodityDetail(key) {
     var rows = pk == null ? [] : regs.map(function (r) { var l = parseLag(r.lag_months); return { r: r, lo: pk + l.lo, hi: pk + l.hi, studies: [], model: [] }; }).sort(function (a, b) { return a.lo - b.lo || a.hi - b.hi; });
     /* Studies join the region that names their country; the rest are listed after. */
     var other = [];
+    /* A study joins a region only when its country is in the region and its crop matches the region's crop;
+       anything else (a fishery study, a country outside the regions) is listed apart, never filed by guess. */
+    var CROPSTUDY = function (st) { var c = String(st.crop || '').toLowerCase(); return /cereal|meher/.test(c) ? /kiremt|highland|cereal|maize|sorghum/i : /rice/.test(c) ? /rice|monsoon|kharif/i : /palm/.test(c) ? /palm/i : /wheat/.test(c) ? /wheat/i : /maize|bean/.test(c) ? /maize|bean|corridor/i : null; };
     R.forEach(function (st) {
       var cand = rows.filter(function (q) { return (q.r.iso3 || []).indexOf(st.iso) >= 0; });
-      var hit = cand.filter(function (q) { return new RegExp((st.crop || '').split(/[\s(,]/)[0], 'i').test(q.r.label || ''); })[0] || cand[0];
+      var rx = CROPSTUDY(st), byCrop = rx ? cand.filter(function (q) { return rx.test(q.r.label || ''); }) : [];
+      var hit = byCrop.length === 1 ? byCrop[0] : null;
       (hit ? hit.studies : other).push(st);
     });
     ((S.outlook && S.outlook.rows_all) || []).filter(function (r) { return r.status === 'shown' && !r.in_season && Math.abs(r.change_kt_record || 0) >= 150; }).forEach(function (r) {
       var cand = rows.filter(function (q) { return (q.r.iso3 || []).indexOf(r.iso) >= 0; });
-      var hit = cand.filter(function (q) { return (CROPW[r.crop] || /./).test(q.r.label || ''); })[0] || cand[0];
+      var byC = cand.filter(function (q) { return (CROPW[r.crop] || /$^/).test(q.r.label || ''); });
+      var hit = byC.length === 1 ? byC[0] : (!byC.length && cand.length === 1 ? cand[0] : null);
       var w = parseWindow(r.harvest); if (!hit || !w) return;
       hit.model.push({ r: r, s: new Date(w.start).getUTCFullYear() * 12 + new Date(w.start).getUTCMonth(), e: new Date(w.end).getUTCFullYear() * 12 + new Date(w.end).getUTCMonth() });
     });
@@ -45225,7 +45230,7 @@ function showCommodityDetail(key) {
     var axis = ''; for (var m = Math.ceil(x0); m <= x1; m++) if (m % 6 === 0) axis += '<span style="left:' + P(m) + '">' + (m % 12 === 0 ? String(Math.floor(m / 12)) : MON3[m % 12]) + '</span>';
     var guides = '<i class="pf-today" style="left:' + P(today) + '"></i>' + (pk != null ? '<i class="pf-peak" style="left:' + P(pk + .5) + '"></i>' : '');
     var study = function (st) {
-      return '<p class="pf-study"><span class="pf-eff">' + esc(st.effect_text) + '</span> <a href="' + esc(safeUrl(st.source_url)) + '" target="_blank" rel="noopener" title="' + esc('“' + (st.quote || '') + '”') + '">' +
+      return '<p class="pf-study"><b class="pf-who">' + esc(st.country) + ' · ' + esc(st.crop) + ':</b> <span class="pf-eff">' + esc(st.effect_text) + '</span> <a href="' + esc(safeUrl(st.source_url)) + '" target="_blank" rel="noopener" title="' + esc('“' + (st.quote || '') + '”') + '">' +
         esc(String(st.source_name || '').split(',')[0].replace(/\s*\(.*$/, '')) + (st.source_year ? ' ' + st.source_year : '') + '</a> <span class="pf-conf" title="' + esc(st.confidence_reason || '') + '">' + esc(st.kind) + ' · ' + esc(st.confidence) + '</span></p>';
     };
     var rowHTML = function (q) {
@@ -45247,7 +45252,7 @@ function showCommodityDetail(key) {
         '<div class="pf-grid"><div class="pf-row pf-head"><div class="pf-name">Region · ' + rows.length + '</div><div class="pf-track pf-axis">' + axis + '</div><div class="pf-ev">Evidence · ' + withEv + ' regions with a study or a fitted harvest</div></div>' +
         rows.map(rowHTML).join('') + '</div>' : '') +
       (other.length ? '<div class="enso-sec-h"><span>Other published studies</span> outside the regions above</div><div class="pf-other">' + other.map(function (st) {
-          return '<div class="pf-orow"><b><button type="button" data-map-country="' + esc(st.iso) + '">' + esc(st.country) + '</button></b> <i>' + esc(st.crop) + '</i>' + study(st) + '</div>'; }).join('') + '</div>' : '') +
+          return '<div class="pf-orow">' + study(st) + '</div>'; }).join('') + '</div>' : '') +
       '</div><figcaption class="enso-log">Windows: each region’s published lag after a ' + (pk != null ? monTxt(pk) : 'December') + ' reference; seasonal, not a forecast of losses. Studies are past events and published sensitivities, not this site’s model; hover a source for its quote.</figcaption></figure>';
     el.querySelectorAll('[data-map-country]').forEach(function (b) { b.onclick = function () { ensoFocus(b.getAttribute('data-map-country')); }; });
   }
