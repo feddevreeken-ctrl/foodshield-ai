@@ -12530,6 +12530,21 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-choke-label text { fill:#e6e3da; stroke:#0b1017; stroke-width:2px; stroke-linejoin:round; paint-order:stroke; font:11px 'Geist',sans-serif; }
 #tab-elnino .enso-choke-label .enso-transit-change { font:10.5px 'Geist Mono',monospace; }
 #tab-elnino .enso-transit-ring { border:0; overflow:visible; }
+/* Shipping tiers: does published evidence tie this lane to ENSO? 1 = moderate or strong link, 2 = weak, 3 = none. */
+#tab-elnino .enso-choke.t1 i { width:12px; height:12px; left:6px; top:6px; background:#ece9e0; box-shadow:0 0 0 1.5px var(--ink-phase, #e0673c); }
+#tab-elnino .enso-choke.t2 i { width:10px; height:10px; left:7px; top:7px; background:#b9b6ad; }
+#tab-elnino .enso-choke.t3 i { width:8px; height:8px; left:8px; top:8px; background:#6d7580; }
+#tab-elnino .enso-choke.no-transit i { background:none; border:1px solid var(--ink-phase, #8b8980); box-shadow:none; }
+#tab-elnino .enso-choke.t1 .enso-choke-label text { font:600 12px 'Geist',sans-serif; fill:#ece9e0; }
+#tab-elnino .enso-choke.t1 .enso-choke-label .enso-transit-change { font:500 11px 'Geist Mono',monospace; }
+#tab-elnino .enso-choke.t2 .enso-choke-label text { font:500 11px 'Geist',sans-serif; fill:#c9c6bd; }
+#tab-elnino .enso-choke.t3 .enso-choke-label text, #tab-elnino .enso-choke.t3 .enso-choke-label .enso-transit-change { font:400 10px 'Geist',sans-serif; fill:#8b8980; }
+#tab-elnino .enso-choke-label .enso-gauge-line { font:400 10.5px 'Geist Mono',monospace; fill:#c9c6bd; }
+#tab-elnino .enso-gauge { position:absolute; overflow:visible; pointer-events:none; }
+#tab-elnino .enso-leader { position:absolute; left:0; top:0; width:1px; height:1px; overflow:visible; pointer-events:none; }
+#tab-elnino .enso-ctx-label { color:#8b8980; font:400 10px 'Geist',sans-serif; text-shadow:0 0 2px #0b1017, 0 0 4px #0b1017; }
+#tab-elnino .enso-port i { box-shadow:0 0 0 1px #0b1017; }
+@media (max-width:560px) { #tab-elnino .enso-choke.t3 .enso-choke-label .enso-transit-change, #tab-elnino .enso-ctx-label { display:none; } }
 #tab-elnino .enso-price-missing { background:rgba(230,227,218,.06); border:1px solid rgba(230,227,218,.6); }
 #tab-elnino .enso-price-ramp { height:10px; }
 #tab-elnino .enso-grat-lab { opacity:.45; }
@@ -44966,7 +44981,7 @@ function showCommodityDetail(key) {
         if (slot && lb) { slot.innerHTML = ''; slot.appendChild(lb); }
       }
       /* Ocean is the landing view: the sea-surface map opens it, the strength odds follow. */
-      if (S.sub === 'elnino' || S.sub === 'ensolive' || S.sub === 'ensomoney') { if (sv.firstElementChild !== grid) { sv.insertBefore(grid, sv.firstElementChild); resizeEnsoMap(); } return; }
+      if (S.sub === 'elnino' || S.sub === 'ensolive' || S.sub === 'ensomoney' || S.sub === 'ensowater') { if (sv.firstElementChild !== grid) { sv.insertBefore(grid, sv.firstElementChild); resizeEnsoMap(); } return; }
       var lead = document.getElementById({ ensoharvest: 'enso-outlook', ensowater: 'enso-water-lead', ensomoney: 'enso-whopays', ensolive: 'enso-live-lead' }[S.sub]);
       if (lead && lead.parentNode === sv && lead.nextSibling !== grid) { sv.insertBefore(grid, lead.nextSibling); resizeEnsoMap(); }
     } catch (e) {}
@@ -46206,12 +46221,22 @@ function showCommodityDetail(key) {
 
   function laneLegend() {
     var corridors = (S.corridors && S.corridors.corridors) || [];
-    return '<div class="enso-legend-block"><div class="enso-legend-t">Shipping chokepoints and corridors</div>' +
+    var tierRow = function (col, w, txt) { return '<div class="enso-legend-row"><span class="enso-sw" style="height:0;border-top:' + w + 'px dashed ' + col + ';background:none"></span>' + txt + '</div>'; };
+    var gk = (S.gauges && S.gauges.gauges) || {};
+    var gaugeKey = (gk.gatun || gk.kaub) ? '<div class="enso-legend-block"><div class="enso-legend-t">Water level (observed; dashed tick = projection)</div>' +
+      '<div class="enso-legend-row"><svg aria-hidden="true" width="14" height="30" viewBox="-3 -3 14 30"><rect x="0" y="0" width="6" height="24" fill="#1c232c" stroke="#2a323c"/><rect x="0" y="5" width="6" height="12" fill="#3a4350"/><line x1="-2" x2="8" y1="9" y2="9" stroke="#e6e3da"/><rect x="-2" y="17" width="10" height="2.5" fill="#e0673c"/></svg><span>Staff gauge: today’s level (bar) against the gauge’s own range (band) and reference (tick). Gatún: 10th–90th percentile for the date over ' + ((gk.gatun && gk.gatun.climatology_today && gk.gatun.climatology_today.n_years) || '') + ' years, tick the median. Kaub: lowest daily to mean, ' + ((gk.kaub && gk.kaub.reference && gk.kaub.reference.NW) ? gk.kaub.reference.NW.from.slice(0, 4) + '–' + gk.kaub.reference.NW.to.slice(0, 4) : '') + ', tick the equivalent level. A notch under the gauge: below the band.</span></div></div>' : '';
+    return '<div class="enso-legend-block"><div class="enso-legend-t">Does ENSO touch this lane? (published)</div>' +
+      tierRow('#e0673c', 2, 'Orange: a lane with a published ENSO link on the El Niño side, moderate or strong') +
+      tierRow('#5b9bd0', 2, 'blue: the same on the La Niña side') +
+      tierRow('#e0673c', 1, 'thinner: a weak published link') +
+      tierRow('#7b8491', 1, 'grey: no published ENSO link; the lane feed’s stated driver is in the tooltip') + '</div>' +
+      gaugeKey +
+      '<div class="enso-legend-block"><div class="enso-legend-t">Shipping chokepoints and corridors</div>' +
       '<div class="enso-legend-row"><svg class="enso-sw-round" aria-hidden="true" width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="9" fill="none" stroke="#dd5a3a" stroke-width="1.5"/><path d="M11 6L16 11L11 16L6 11Z" fill="#e6e3da"/></svg>diamond and ring: observed, measured at the chokepoint</div>' +
-      (corridors.length ? '<div class="enso-legend-row"><span class="enso-sw" style="height:0;border-top:1px dashed #8fb1cf"></span>dashed: published schematic corridor through named ports</div>' : '') +
+      (corridors.length ? '<div class="enso-legend-row"><span class="enso-sw" style="height:0;border-top:1px dashed #7b8491"></span>dashed: published schematic corridor through named ports</div>' : '') +
       transitKey() +
-      '<div class="enso-legend-row"><svg class="enso-sw-round" aria-hidden="true" width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="8" fill="none" stroke="#8fb1cf" stroke-opacity=".7" stroke-width="1.2" stroke-dasharray="3 2"/></svg><span>dashed ring, no diamond: another PortWatch chokepoint on grain routes, no published ENSO link</span></div>' +
-      ((S.ports && S.ports.ports || []).length ? '<div class="enso-legend-row"><span class="enso-port-sw" style="background:#e6c07a"></span><span class="enso-port-sw" style="background:#9a978d"></span><span class="enso-port-sw" style="background:#4d4a44"></span><span>squares: gateway ports of the FEWS NET concern regions; area = dry-bulk imports (grain, fertiliser, coal and ore), last 28 days, with a minimum square size; light = 10% or more above the ' + esc(((S.ports.ports[0] || {}).prior_years) || '2019–2025') + ' mean, mid = within 10%, dark = 10% or more below · IMF PortWatch</span></div>' : '') +
+      '<div class="enso-legend-row"><svg class="enso-sw-round" aria-hidden="true" width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="8" fill="none" stroke="#7b8491" stroke-opacity=".6" stroke-width="1"/></svg><span>grey ring, no diamond: another PortWatch chokepoint on grain routes, no published ENSO link</span></div>' +
+      ((S.ports && S.ports.ports || []).length ? '<div class="enso-legend-row"><span class="enso-port-sw" style="background:#c9c6bd"></span><span class="enso-port-sw" style="background:#7b7a74"></span><span class="enso-port-sw" style="background:#3f3e3a"></span><span>squares: gateway ports of the FEWS NET concern regions; area = dry-bulk imports (grain, fertiliser, coal and ore), last 28 days, with a minimum square size; light = 10% or more above the ' + esc(((S.ports.ports[0] || {}).prior_years) || '2019–2025') + ' mean, mid = within 10%, dark = 10% or more below · IMF PortWatch</span></div>' : '') +
       '<div class="ctr-note">Diamonds: chokepoint locations; IMF PortWatch transits where available, collected ' + esc(stamp(metaDate('portwatch'))) + '. Inland waterways have no PortWatch transit count. Published lane phases reviewed ' + esc(stamp(metaDate('lanes'))) + ': ' +
       esc(((S.lanes && S.lanes.lanes) || []).map(function (ln) { return ln.name; }).join('; ')) + '.</div>' +
       '<div class="ctr-note">Published schematic corridors reviewed ' + esc(stamp(metaDate('corridors'))) + '. ' + esc((S.meta.corridors || {}).source || 'Corridor feed unavailable.') + ' Hover a route for its evidence; all corridors are listed here.</div>' +
@@ -46654,6 +46679,18 @@ function showCommodityDetail(key) {
     if (S.mode === 'sst' && !S.sst) date = 'source unavailable';
     return { kind: kind, title: title, source: source, date: date };
   }
+  /* Shipping in one line: the phase now and the two readings on the lane it touches. Readings side by side,
+     never joined by "so" or "because". Each clause is dropped when its field is missing. */
+  function shipStatus() {
+    var L0 = S.enso && S.enso.latest, parts = [];
+    var dm = function (x) { var d = new Date(x); return isNaN(d) ? '' : d.getUTCDate() + ' ' + MON3[d.getUTCMonth()]; };
+    if (L0 && typeof L0.anom === 'number') parts.push((L0.anom >= 0.5 ? 'El Niño' : L0.anom <= -0.5 ? 'La Niña' : 'ENSO-neutral') + ' now: ONI ' + (L0.anom > 0 ? '+' : L0.anom < 0 ? '\u2212' : '') + Math.abs(L0.anom).toFixed(1) + ', ' + (L0.season || '') + ' ' + (L0.year || '') + ' (NOAA CPC)');
+    var pn = ((S.lanes && S.lanes.lanes) || []).filter(function (l) { return l.id === 'panama'; })[0], m = pn && laneMeasurement(pn);
+    if (m) parts.push('Panama ' + m.metric + ' ' + signedYoY(m.pct).replace(/^[▼▲] /, '') + (m.record.latest_date ? ' to ' + dm(m.record.latest_date) : '') + ' (IMF PortWatch)');
+    var g = S.gauges && S.gauges.gauges && S.gauges.gauges.gatun;
+    if (g && typeof g.vs_median_ft === 'number' && g.latest) parts.push('Gatún Lake ' + Math.abs(g.vs_median_ft).toFixed(1) + ' ft ' + (g.vs_median_ft < 0 ? 'below' : 'above') + ' its median for the date, ' + dm(g.latest.date) + ' (ACP)');
+    return parts.length ? parts[0] + (parts.length > 1 ? '. ' + parts.slice(1).join('; ') : '') + '.' : 'Shipping lanes and transits · IMF PortWatch.';
+  }
   function renderMapTag() {
     var el = document.getElementById('enso-maptag'); if (!el) return;
     var m = mapState();
@@ -46664,7 +46701,7 @@ function showCommodityDetail(key) {
       gdacs:'Land colour: reported drought and flood severity', ipc:'Land colour: population in IPC phase 3+',
       sst:'Sea colour: temperature anomaly, °C'};
     el.textContent = (marks[S.mode] || 'Reference geography') + ' · ' + m.date + '.';
-    if (S.mode === 'none' && S.showLanes) el.textContent = 'Rings: transit change, % y/y · IMF PortWatch' + (S.portwatch && S.portwatch.panama && S.portwatch.panama.latest_date ? ', to ' + stamp(new Date(S.portwatch.panama.latest_date)) : '') + ', collected ' + stamp(metaDate('portwatch')) + '. Squares: gateway ports. Dashed lines: published corridors.';
+    if (S.mode === 'none' && S.showLanes) el.textContent = shipStatus();
     if (S.mode === 'rtfp') el.textContent = priceMapSentence();
     if (S.sub === 'ensolive') el.textContent = reportVerdict();
     if (S.mode === 'staple') el.textContent = priceVerdict();
@@ -47278,7 +47315,53 @@ function showCommodityDetail(key) {
   }
   /* Orange where the lane has a published ENSO link; blue-grey where the
      change has other causes (war, security), so a big ring is not read as El Niño. */
-  function ringStroke(ln) { return (ln.phase === 'el_nino' || ln.phase === 'la_nina') && ln.attribution !== 'weak' ? '#dd5a3a' : '#8fb1cf'; }
+  var PHASE_INK = { el_nino: '#e0673c', la_nina: '#5b9bd0', none: '#7b8491' };
+  /* 1 = a published ENSO link of moderate or strong attribution, 2 = a weak one, 3 = none. Every Shipping
+     mark takes its weight from the tier, never from the size of the change, so a war-driven collapse at
+     Hormuz can stay large without reading as El Niño. */
+  function laneTier(ln) { return !ln || !ln.phase || ln.phase === 'none' ? 3 : ln.attribution === 'weak' ? 2 : 1; }
+  function phaseInk(ln) { return PHASE_INK[(ln && ln.phase) || 'none'] || '#7b8491'; }
+  function ringStroke(ln) { return laneTier(ln) === 3 ? '#7b8491' : phaseInk(ln); }
+  function signedYoY(v) { return (v < 0 ? '▼ \u2212' : v > 0 ? '▲ +' : '') + Math.abs(v).toFixed(1) + '% y/y'; }
+  /* A transit ring: no fill (the sign is in the label), a dotted circle at the size of zero change inside. */
+  function transitRingSVG(m, stroke, w, op, cls) {
+    var d = m.radius * 2, z = transitRadius(0);
+    return '<svg class="' + cls + '" aria-hidden="true" data-yoy="' + m.pct + '" style="width:' + d + 'px;height:' + d + 'px" viewBox="0 0 ' + d + ' ' + d + '">' +
+      '<circle cx="' + m.radius + '" cy="' + m.radius + '" r="' + (z - .5) + '" fill="none" stroke="#56606b" stroke-width=".8" stroke-dasharray="1.2 2"/>' +
+      '<circle cx="' + m.radius + '" cy="' + m.radius + '" r="' + (m.radius - w / 2) + '" fill="none" stroke="' + stroke + '" stroke-opacity="' + op + '" stroke-width="' + w + '"/></svg>';
+  }
+  /* Staff gauge beside a lane whose water has a published reference (Gatún, Kaub only): the level (bar)
+     against the gauge's own band and reference tick; a dashed tick is the operator's projection. */
+  function gaugeGlyph(ln) {
+    var G = (S.gauges && S.gauges.gauges) || {}, band, tick, cur, proj, ink = ln.id === 'rhine' ? '#7b8491' : phaseInk(ln);
+    if (ln.id === 'panama' && G.gatun && G.gatun.climatology_today && G.gatun.latest) {
+      var c = G.gatun.climatology_today, pr = G.gatun.projection || [];
+      band = [c.p10, c.p90]; tick = c.p50; cur = G.gatun.latest.value; proj = pr.length ? pr[pr.length - 1].ft : null;
+    } else if (ln.id === 'rhine' && G.kaub && G.kaub.reference && G.kaub.reference.NW && G.kaub.reference.MW && G.kaub.latest) {
+      band = [G.kaub.reference.NW.value, G.kaub.reference.MW.value]; tick = G.kaub.reference.GlW ? G.kaub.reference.GlW.value : null; cur = G.kaub.latest.value; proj = null;
+    } else return '';
+    if (typeof cur !== 'number') return '';
+    var lo = Math.min(band[0], proj == null ? band[0] : proj), hi = Math.max(band[1], proj == null ? band[1] : proj), pad = (hi - lo) * .1; lo -= pad; hi += pad;
+    var H = 32, y = function (v) { return Math.max(-3, Math.min(H + 3, H - (v - lo) / (hi - lo) * H)); };
+    var under = cur < lo;
+    return '<svg class="enso-gauge" data-gauge="' + ln.id + '" width="12" height="' + (H + 6) + '" viewBox="-3 -3 12 ' + (H + 6) + '" style="left:-14px;top:' + (12 - H / 2 - 3) + 'px">' +
+      '<rect x="0" y="0" width="6" height="' + H + '" fill="#1c232c" stroke="#2a323c" stroke-width="1"/>' +
+      '<rect x="0" y="' + y(band[1]).toFixed(1) + '" width="6" height="' + (y(band[0]) - y(band[1])).toFixed(1) + '" fill="#3a4350"/>' +
+      (tick != null ? '<line x1="-2" x2="8" y1="' + y(tick).toFixed(1) + '" y2="' + y(tick).toFixed(1) + '" stroke="#e6e3da" stroke-width="1"/>' : '') +
+      (proj != null ? '<rect x="-2" y="' + (y(proj) - 1).toFixed(1) + '" width="10" height="2" fill="none" stroke="#e6e3da" stroke-width=".8" stroke-dasharray="1.5 1.5"/>' : '') +
+      '<rect x="-2" y="' + (y(cur) - 1.25).toFixed(1) + '" width="10" height="2.5" fill="' + ink + '"/>' +
+      (under ? '<path d="M-2 ' + (H + 4) + 'L3 ' + (H + 1) + 'L8 ' + (H + 4) + '" fill="none" stroke="' + ink + '" stroke-width="1"/>' : '') + '</svg>';
+  }
+  function gaugeLine(ln) {
+    var G = (S.gauges && S.gauges.gauges) || {};
+    if (ln.id === 'panama' && G.gatun && G.gatun.latest && typeof G.gatun.vs_median_ft === 'number')
+      return 'Gatún ' + G.gatun.latest.value.toFixed(1) + ' ft · ' + Math.abs(G.gatun.vs_median_ft).toFixed(1) + ' ft ' + (G.gatun.vs_median_ft < 0 ? 'below' : 'above') + ' median';
+    if (ln.id === 'rhine' && G.kaub && G.kaub.latest) {
+      var nw = G.kaub.reference && G.kaub.reference.NW, v = Math.round(G.kaub.latest.value);
+      return 'Kaub ' + (v < 0 ? '\u2212' : '') + Math.abs(v) + ' cm' + (nw && v < nw.value ? ' · below ' + nw.from.slice(0, 4) + '–' + nw.to.slice(2, 4) + ' low' : '');
+    }
+    return '';
+  }
   /* ISO dates in reader text: "2026-08-20" -> "20 Aug 2026", "2026-08" -> "Aug 2026"; anything else passes through. */
   function isoText(v) {
     var t = String(v == null ? '' : v), mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -47310,9 +47393,9 @@ function showCommodityDetail(key) {
       '<div class="enso-transit-key" aria-label="Ring size guide, absolute year-on-year change">' + [0,25,50].map(function (pct) {
         var size = transitRadius(pct) * 2;
         return '<span><svg aria-hidden="true" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' +
-          '<circle cx="' + (size/2) + '" cy="' + (size/2) + '" r="' + (size/2 - 0.75) + '" fill="none" stroke="#dd5a3a" stroke-width="1.5"/></svg>' +
+          '<circle cx="' + (size/2) + '" cy="' + (size/2) + '" r="' + (size/2 - 0.75) + '" fill="none" stroke="#7b8491" stroke-width="1.5"/></svg>' +
           (pct ? '±' : '') + pct + '%</span>';
-      }).join('') + '</div><div class="enso-legend-note">Ring radius grows with absolute change, capped at 100%. Hollow ring: fewer transits than a year ago; filled: more. Orange: a lane with a published ENSO link of moderate or strong attribution; blue-grey: a weak link, or a change with other causes such as war or security. Year on year: Red Sea routes were already diverted in 2025, so their baseline is low.</div>' +
+      }).join('') + '</div><div class="enso-legend-note">Ring radius grows with absolute change, capped at 100%. Dotted inner circle = no change; ▼ fewer transits than a year ago, ▲ more. Year on year: Red Sea routes were already diverted in 2025, so their baseline is low.</div>' +
       (missing.length ? '<div class="enso-legend-note enso-transit-missing"><svg class="enso-sw-round" aria-hidden="true" width="14" height="14" viewBox="0 0 14 14"><path d="M7 1L13 7L7 13L1 7Z" fill="none" stroke="#8b8980"/></svg> Hollow diamond, no ring: no PortWatch transit change available for ' + esc(missing.join(', ')) + '.</div>' : '') +
       '';
   }
@@ -47371,7 +47454,7 @@ function showCommodityDetail(key) {
     if (typeof S.map.getContainer !== 'function' || typeof S.map.latLngToContainerPoint !== 'function') return;
     var host = S.map.getContainer(), box = host.getBoundingClientRect(), W = box.width, H = box.height;
     if (!W || !H) return;
-    var obstacles = [], els = host.querySelectorAll('.enso-choke > i, .enso-transit-ring, .enso-corridor-edge > span, .enso-anno, .enso-grat-lab');
+    var obstacles = [], els = host.querySelectorAll('.enso-choke > i, .enso-transit-ring, .enso-gauge, .enso-ctx-ring, .enso-corridor-edge > span, .enso-anno, .enso-grat-lab');
     for (var i = 0; i < els.length; i++) {
       var r = els[i].getBoundingClientRect();
       if (r.width) obstacles.push({ left: r.left - box.left, top: r.top - box.top, right: r.right - box.left, bottom: r.bottom - box.top });
@@ -47407,6 +47490,13 @@ function showCommodityDetail(key) {
         label.style.right = bestLabel.side === 'right' ? offset + 'px' : 'auto';
         label.style.transform = 'translate(' + bestLabel.dx + 'px,' + bestLabel.dy + 'px)';
         obstacles.push(bestLabel.rect);
+        /* A label moved more than 14px from its pin gets a hairline back to it. */
+        var icon = label.parentNode, old = icon && icon.querySelector ? icon.querySelector('.enso-leader') : null; if (old) old.remove();
+        if (icon && icon.getBoundingClientRect && icon.insertAdjacentHTML && Math.sqrt(bestLabel.dx * bestLabel.dx + bestLabel.dy * bestLabel.dy) > 14) {
+          var ib = icon.getBoundingClientRect(), px = ib.left - box.left + 12, py = ib.top - box.top + 12, R = bestLabel.rect;
+          var tx = Math.max(R.left, Math.min(px, R.right)), ty = Math.max(R.top, Math.min(py, R.bottom));
+          icon.insertAdjacentHTML('beforeend', '<svg class="enso-leader" aria-hidden="true"><line x1="12" y1="12" x2="' + (tx - (ib.left - box.left)).toFixed(1) + '" y2="' + (ty - (ib.top - box.top)).toFixed(1) + '" stroke="#8b8980" stroke-width=".75"/></svg>');
+        }
       }
     }
 
@@ -47416,11 +47506,12 @@ function showCommodityDetail(key) {
     var shortNames = {panama:'US Gulf to East Asia',amazon:'Amazon northern arc',parana:'Paraná to Atlantic',
       mississippi:'Mississippi grain',malacca:'Malacca to China',rhine:'Rhine grain',bosporus:'Black Sea to Egypt',
       suez:'Suez grain',bab_el_mandeb:'Red Sea to East Africa'};
-    ((S.corridors && S.corridors.corridors) || []).forEach(function (c) {
-      var lane = lanes.filter(function (ln) { return ln.id === c.lane; })[0];
+    var laneOf = function (c) { return lanes.filter(function (ln) { return ln.id === c.lane; })[0]; };
+    ((S.corridors && S.corridors.corridors) || []).slice().sort(function (a, b) { return laneTier(laneOf(b)) - laneTier(laneOf(a)); }).forEach(function (c) {
+      var lane = laneOf(c);
       var geometry = corridorGeometry(c.waypoints);
       if (!lane || lane.phase !== c.phase || !geometry.length) return;
-      var stroke = lane.phase === 'el_nino' ? '#d2693a' : lane.phase === 'la_nina' ? '#4a86b3' : '#6a685e';
+      var tier = laneTier(lane), stroke = phaseInk(lane);
       var phase = lane.phase === 'el_nino' ? 'degraded on the El Niño side' : lane.phase === 'la_nina' ? 'degraded on the La Niña side' : 'no credible ENSO link';
       var tip = '<b>' + esc(c.name) + '</b><br>Published: ' + phase + '<br>' + esc((c.commodities || []).join(', ')) +
         '<br>' + esc(c.basis) + '<br>schematic corridor through named waypoints, not vessel tracks' +
@@ -47431,8 +47522,8 @@ function showCommodityDetail(key) {
         layer.on('blur', function () { layer.closeTooltip(); });
         return layer;
       }
-      var line = explain(L.polyline(geometry, {color:'#8fb1cf',weight:1,opacity:.55,
-        dashArray:'6 4',className:'enso-corridor',ensoCorridorId:c.id,ensoPhase:c.phase}));
+      var line = explain(L.polyline(geometry, {color: tier === 3 ? '#7b8491' : stroke, weight: tier === 1 ? 2 : tier === 2 ? 1.25 : 1, opacity: tier === 1 ? .85 : tier === 2 ? .55 : .35,
+        dashArray:'6 4',className:'enso-corridor',ensoCorridorId:c.id,ensoPhase:c.phase,ensoTier:tier}));
       S.corridorLines.push(line);
       line.on('add', function () {
         var el = line.getElement(); if (!el) return;
@@ -47461,7 +47552,7 @@ function showCommodityDetail(key) {
     drawCorridors(lanes);
     lanes.forEach(function (ln) {
       var phaseCls = ln.phase === 'el_nino' ? 'p-el' : ln.phase === 'la_nina' ? 'p-la' : 'p-no';
-      var stroke = ln.phase === 'el_nino' ? '#d2693a' : ln.phase === 'la_nina' ? '#4a86b3' : '#6a685e';
+      var tier = laneTier(ln), stroke = phaseInk(ln);
       laneGeometry(ln).forEach(function (corr) {
         S.laneLines.push(L.polyline(corr, {
           color: stroke, weight: 3, opacity: 0.9, className: 'enso-lane'
@@ -47472,20 +47563,24 @@ function showCommodityDetail(key) {
         transitPeriod(pw) + '; IMF PortWatch, collected ' + stamp(metaDate('portwatch')) : 'No PortWatch transit change available';
       var live = '<br>' + esc(observation);
       var diameter = measured ? measured.radius * 2 : 0;
-      var ring = measured ? '<svg class="enso-transit-ring" aria-hidden="true" data-yoy="' + measured.pct + '" style="width:' + diameter + 'px;height:' + diameter + 'px" viewBox="0 0 ' + diameter + ' ' + diameter + '"><circle cx="' + measured.radius + '" cy="' + measured.radius + '" r="' + (measured.radius - .75) + '" fill="' + (measured.pct > 0 ? ringStroke(ln) : 'none') + '" fill-opacity="' + (measured.pct > 0 ? '.28' : '0') + '" stroke="' + ringStroke(ln) + '" stroke-width="1.5"/></svg>' : '';
+      var ring = measured ? transitRingSVG(measured, ringStroke(ln), tier === 1 ? 2 : tier === 2 ? 1.25 : 1, tier === 1 ? 1 : tier === 2 ? .7 : .6, 'enso-transit-ring') : '';
       /* River lanes have no AIS count but do have a gauge: print its reading so a
          hollow diamond is not read as "nothing to see". */
       var gauge = measured ? null : laneGauge(ln);
       var gaugeShort = gauge ? (gauge.short || gauge.text.split(',')[0]) : '';
-      var name = laneName(ln), change = measured ? num(measured.pct, 1) + '% y/y' + (measured.dry != null ? ' dry bulk' : '') : gaugeShort;
-      var labelWidth = Math.ceil(Math.max(name.length * 6.2, change.length * 6.4)) + 4;
-      var labelText = '<svg width="' + labelWidth + '" height="' + (change ? 29 : 16) + '"><text x="2" y="12">' + esc(name) + '</text>' +
-        (change ? '<text x="2" y="26" class="enso-transit-change">' + esc(change) + '</text>' : '') + '</svg>';
+      var name = laneName(ln), change = measured ? signedYoY(measured.pct) + (measured.dry != null ? ' dry bulk' : '') : gaugeShort.replace(/(^|\s)-(\d)/g, '$1\u2212$2');
+      /* A lane with both a transit ring and a gauge (Panama) carries the gauge reading as a third line. */
+      var third = measured ? gaugeLine(ln) : '';
+      var cw = tier === 1 ? 7.2 : tier === 2 ? 6.6 : 6;
+      var labelWidth = Math.ceil(Math.max(name.length * cw, change.length * 6.6, third.length * 6.4)) + 4;
+      var labelText = '<svg width="' + labelWidth + '" height="' + (third ? 43 : change ? 29 : 16) + '"><text x="2" y="12">' + esc(name) + '</text>' +
+        (change ? '<text x="2" y="26" class="enso-transit-change">' + esc(change) + '</text>' : '') +
+        (third ? '<text x="2" y="40" class="enso-gauge-line">' + esc(third) + '</text>' : '') + '</svg>';
       var labelOffset = Math.max(25, measured ? measured.radius + 16 : 25);
       var mk = L.marker([ln.lat, ln.lng], {
         icon: L.divIcon({
-          className: 'enso-choke ' + phaseCls + ' a-' + esc(ln.attribution) + (measured ? '' : ' no-transit'),
-          html: '<i></i>' + ring + '<span data-lane="' + esc(ln.id) + '" class="enso-choke-label" data-offset="' + labelOffset + '" style="left:' + labelOffset + 'px">' + labelText + '</span>',  iconSize: [24, 24], iconAnchor: [12, 12]
+          className: 'enso-choke t' + tier + ' ' + phaseCls + ' a-' + esc(ln.attribution) + (measured ? '' : ' no-transit'),
+          html: '<i style="--ink-phase:' + stroke + '"></i>' + ring + gaugeGlyph(ln) + '<span data-lane="' + esc(ln.id) + '" class="enso-choke-label" data-offset="' + labelOffset + '" style="left:' + labelOffset + 'px">' + labelText + '</span>',  iconSize: [24, 24], iconAnchor: [12, 12]
         }),
         keyboard: true, alt: ln.name + '; ' + observation, zIndexOffset: 500
       });
@@ -47516,8 +47611,9 @@ function showCommodityDetail(key) {
     CONTEXT_CHOKES.forEach(function (c) {
       var m = laneMeasurement({ portwatch_key: c[0] }); if (!m) return;
       var d = m.radius * 2, pw = m.record;
-      var ring = '<svg class="enso-ctx-ring" aria-hidden="true" style="width:' + d + 'px;height:' + d + 'px" viewBox="0 0 ' + d + ' ' + d + '"><circle cx="' + m.radius + '" cy="' + m.radius + '" r="' + (m.radius - 0.75) + '" stroke="#8fb1cf" stroke-opacity=".7" stroke-width="1.2" stroke-dasharray="3 2"' + (m.pct > 0 ? ' fill="#8fb1cf" fill-opacity=".2"' : ' fill="none"') + '/></svg>';
-      var txt = c[1] + ' · ' + num(m.pct, 1) + '% y/y' + (m.dry != null ? ' dry bulk' : '');
+      /* Observed, so solid; no published ENSO link, so tier-3 grey whatever its size. */
+      var ring = transitRingSVG(m, '#7b8491', 1, .6, 'enso-ctx-ring');
+      var txt = c[1] + ' ' + signedYoY(m.pct) + (m.dry != null ? ' dry bulk' : '');
       var mk = L.marker([c[2], c[3]], { icon: L.divIcon({ className: 'enso-ctxchoke', html: ring + '<span class="enso-ctx-label" style="left:' + (m.radius + 6) + 'px">' + esc(txt) + '</span>', iconSize: [8, 8], iconAnchor: [4, 4] }), keyboard: true, alt: txt, zIndexOffset: 300 });
       mk.bindTooltip('<b>' + esc(pw.name || c[1]) + '</b><br>No published ENSO link; context for grain routing<br>' + (m.dry != null ? m.dry.toFixed(1) + ' dry-bulk of ' : '') + m.total.toFixed(1) + ' transits/day, ' + m.metric + ' ' + num(m.pct, 1) + '% y/y, ' + esc(transitPeriod(pw)) + '; IMF PortWatch', { direction: 'top', opacity: .96 });
       S.shipPins.push(mk);
@@ -47528,12 +47624,15 @@ function showCommodityDetail(key) {
      tonnes; fill = against the 2019–2025 mean for the same days. Coordinates are
      the port cities. */
   var PORT_LL = { Durban: [-29.87, 31.03], Maputo: [-25.97, 32.57], Beira: [-19.83, 34.84], Nacala: [-14.54, 40.67], 'Dar Es Salaam': [-6.83, 39.29], 'Walvis Bay': [-22.95, 14.5], Mombasa: [-4.06, 39.67], Djibouti: [11.6, 43.13], Berbera: [10.44, 45.01], 'Port Sudan': [19.61, 37.22] };
-  function portColor(v) { return typeof v !== 'number' ? '#6a685e' : v >= 10 ? '#e6c07a' : v <= -10 ? '#4d4a44' : '#9a978d'; }
+  function portColor(v) { return typeof v !== 'number' ? '#56545e' : v >= 10 ? '#c9c6bd' : v <= -10 ? '#3f3e3a' : '#7b7a74'; }
   function drawGatewayPorts() {
     ((S.ports && S.ports.ports) || []).forEach(function (p) {
       var ll = PORT_LL[p.name]; if (!ll || typeof p.dry_bulk_import_t !== 'number') return;
       var side = Math.max(6, Math.min(18, Math.sqrt(p.dry_bulk_import_t) / 42));
-      var mk = L.marker(ll, { icon: L.divIcon({ className: 'enso-port', html: '<i style="width:' + side + 'px;height:' + side + 'px;background:' + portColor(p.vs_mean_pct) + '"></i>', iconSize: [side, side], iconAnchor: [side / 2, side / 2] }), keyboard: true, alt: p.name + ' port', zIndexOffset: 400 });
+      /* Ports sit under the chokepoints; a square within 3° of a chokepoint is faded so its ring and label stay readable. */
+      var near = ((S.lanes && S.lanes.lanes) || []).map(function (l) { return [l.lat, l.lng]; }).concat(CONTEXT_CHOKES.map(function (c) { return [c[2], c[3]]; }))
+        .some(function (q) { return Math.abs(q[0] - ll[0]) < 3 && Math.abs(q[1] - ll[1]) < 3; });
+      var mk = L.marker(ll, { icon: L.divIcon({ className: 'enso-port', html: '<i style="width:' + side + 'px;height:' + side + 'px;background:' + portColor(p.vs_mean_pct) + (near ? ';opacity:.5' : '') + '"></i>', iconSize: [side, side], iconAnchor: [side / 2, side / 2] }), keyboard: true, alt: p.name + ' port', zIndexOffset: 100 });
       mk.bindTooltip('<b>' + esc(p.name) + '</b> · ' + esc(p.serves || '') + '<br>Dry-bulk imports, ' + (p.window_days || 28) + ' days to ' + esc(isoText(p.latest_date)) + ': ' + fmtKt(p.dry_bulk_import_t / 1000).replace('+', '') + ' in ' + p.dry_bulk_calls + ' calls' +
         '<br>' + (typeof p.vs_mean_pct === 'number' ? num(p.vs_mean_pct, 0) + '% against the ' + esc(p.prior_years || '') + ' mean' : '') + (typeof p.yoy_pct === 'number' ? ', ' + num(p.yoy_pct, 0) + '% against a year earlier' : '') +
         '<br><span style="color:#8b8980">IMF PortWatch, estimated from AIS draught; dry bulk includes grain, fertiliser, coal and ore</span>', { direction: 'top', opacity: .96 });

@@ -70,17 +70,19 @@ test('lane geometry is data-only, validated and phase coloured',()=>{
  S.lanePins.forEach(p=>assert(p.options.icon.html.includes('enso-choke-label')));
  const original=S.lanes;
  S.lanes={lanes:['el_nino','la_nina','none'].map((phase,i)=>({id:'test'+i,name:'test',phase,lat:0,lng:0,geometry:{type:'LineString',coordinates:[[10,20],[11,21]]}}))};
- api.drawLanes();assert.deepEqual(S.laneLines.map(l=>l.options.color),['#d2693a','#4a86b3','#6a685e']);
+ api.drawLanes();assert.deepEqual(S.laneLines.map(l=>l.options.color),['#e0673c','#5b9bd0','#7b8491']);
  assert(S.laneLines.every(l=>l.options.weight>=3&&!l.options.dashArray));assert.equal(S.laneLines[0].coords[0][0],20);
  assert.equal(api.laneGeometry({geometry:{type:'LineString',coordinates:[[999,20],[0,0]]}}).length,0);
  S.lanes=original;S.lanePins=[];S.laneLines=[];api.drawLanes();
 });
-test('Shipping draws nine blue-grey hairline corridors with names in tooltips',()=>{
+test('Shipping draws nine corridors weighted by published ENSO link, with names in tooltips',()=>{
  assert.equal(S.corridorLines.length,9);assert.equal(S.corridorLabels.length,0);assert.equal(S.corridorArrows.length,0);
  S.corridors.corridors.forEach((c,i)=>{
-  const lane=S.lanes.lanes.find(l=>l.id===c.lane),line=S.corridorLines[i];
-  assert.equal(c.phase,lane.phase);assert.equal(line.options.color,'#8fb1cf');
-  assert.equal(line.options.weight,1);assert.equal(line.options.opacity,.55);assert.equal(line.options.dashArray,'6 4');
+  const lane=S.lanes.lanes.find(l=>l.id===c.lane),line=S.corridorLines.find(l=>l.options.ensoCorridorId===c.id);
+  /* 2026-09-26: tier 1 = moderate/strong ENSO link (phase ink, 2px), tier 2 = weak (phase ink, 1.25px), tier 3 = none (grey hairline). */
+  const tier=lane.phase==='none'?3:lane.attribution==='weak'?2:1, ink={el_nino:'#e0673c',la_nina:'#5b9bd0',none:'#7b8491'}[lane.phase];
+  assert.equal(c.phase,lane.phase);assert.equal(line.options.color,tier===3?'#7b8491':ink);
+  assert.equal(line.options.weight,[0,2,1.25,1][tier]);assert.equal(line.options.opacity,[0,.85,.55,.35][tier]);assert.equal(line.options.dashArray,'6 4');
   for(const text of [c.name,c.basis,'schematic corridor through named waypoints, not vessel tracks',...c.commodities,...c.sources])assert(line.tooltip.includes(text.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')));
  });
  const old=S.corridorLines.concat(S.corridorEdges);old.forEach(l=>l.addTo(S.map));api.drawLanes();
@@ -90,7 +92,7 @@ test('Stage I transit rings join actual lane values and distinguish zero, missin
  S.lanes.lanes.forEach((ln,i)=>{
   const m=api.laneMeasurement(ln),html=S.lanePins[i].options.icon.html,pw=S.portwatch[ln.portwatch_key];
   if(!pw){assert.equal(m,null);assert(!html.includes('no transit data'));assert(S.lanePins[i].options.icon.className.includes('no-transit'));assert(!html.includes('enso-transit-ring'));}
-  else {const dry=Number.isFinite(pw.yoy.dry_bulk_pct)&&Number.isFinite(pw.transits_per_day.dry_bulk),pct=dry?pw.yoy.dry_bulk_pct:pw.yoy.total_pct;assert.equal(m.pct,pct);assert.equal(m.total,pw.transits_per_day.total);assert(html.includes('data-yoy="'+pct+'"'));assert(html.includes('<circle'));assert(html.includes('stroke="'+(['el_nino','la_nina'].includes(ln.phase)&&ln.attribution!=='weak'?'#dd5a3a':'#8fb1cf')+'"'));}
+  else {const dry=Number.isFinite(pw.yoy.dry_bulk_pct)&&Number.isFinite(pw.transits_per_day.dry_bulk),pct=dry?pw.yoy.dry_bulk_pct:pw.yoy.total_pct;assert.equal(m.pct,pct);assert.equal(m.total,pw.transits_per_day.total);assert(html.includes('data-yoy="'+pct+'"'));assert(html.includes('<circle'));assert(html.includes('stroke="'+(ln.phase==='none'?'#7b8491':{el_nino:'#e0673c',la_nina:'#5b9bd0'}[ln.phase])+'"'));}
  });
  const original=S.portwatch,ln={portwatch_key:'fixture'};
  try {
@@ -199,9 +201,10 @@ test('Shipping keeps one unboxed SVG label per chokepoint, with no corridor chip
  S.lanePins.forEach(pin=>{
   const label=new Element();label.innerHTML=pin.options.icon.html;
   assert.equal(label.querySelectorAll('.enso-choke-label').length,1);
-  assert.equal(label.querySelectorAll('text').length,pin.options.icon.className.includes('no-transit')?1:2);
+  /* Name, then the transit change; Panama adds its Gatún reading as a third line. */
+  assert.equal(label.querySelectorAll('text').length,pin.options.icon.className.includes('no-transit')?1:pin.options.icon.html.includes('enso-gauge-line')?3:2);
  });
- assert.equal(S.corridorLines[0].coords.length,2);assert(S.corridorLines[0].coords.every(arc=>arc.length>1));
+ const pac=S.corridorLines.find(l=>l.options.ensoCorridorId==='us_gulf_panama_east_asia')||S.corridorLines[0];assert.equal(pac.coords.length,2);assert(pac.coords.every(arc=>arc.length>1));
 });
 test('lens defaults fit the lane belt and tropical price countries without animation',()=>{
  const sub=S.sub;

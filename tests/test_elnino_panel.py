@@ -1164,7 +1164,9 @@ def main() -> int:
                 const style = getComputedStyle(label), text = label.querySelector('text'), ink = getComputedStyle(text);
                 return style.borderTopWidth === '0px' && style.backgroundColor === 'rgba(0, 0, 0, 0)'
                     && ink.paintOrder.startsWith('stroke') && ink.strokeWidth === '2px'
-                    && ink.fontSize === '11px' && ink.stroke === 'rgb(11, 16, 23)';
+                    // 2026-09-26: size follows the lane's ENSO tier: 12px linked, 11px weak link, 10px none.
+                    && ink.fontSize === ({t1: '12px', t2: '11px', t3: '10px'}[[...label.closest('.enso-choke').classList].find(c => /^t[123]$/.test(c))] || '11px')
+                    && ink.stroke === 'rgb(11, 16, 23)';
             });
         }"""))
 
@@ -1234,15 +1236,19 @@ def main() -> int:
                         && style.textShadow !== 'none' && box.width > 0 && box.height > 0;
                 });
         }"""))
-        check("Stage I nine routes are focusable hairlines with corridor names in tooltips", page.evaluate("""async () => {
+        # 2026-09-26: corridors are weighted by the lane's published ENSO link (tier 1 phase ink 2px, tier 2 1.25px, tier 3 grey 1px).
+        check("Stage I nine routes are focusable, weighted by ENSO link, with corridor names in tooltips", page.evaluate("""async () => {
             const feed = (await (await fetch('data/enso_corridors.json')).json()).data.corridors;
+            const lanes = (await (await fetch('data/enso_lanes.json')).json()).data.lanes;
             const lines = [...document.querySelectorAll('path.enso-corridor')];
             return lines.length === 9 && !document.querySelector('.enso-corridor-chip') && feed.every(c => {
-                const line = lines.find(e => e.dataset.corridor === c.id);
+                const line = lines.find(e => e.dataset.corridor === c.id), ln = lanes.find(l => l.id === c.lane);
+                const tier = ln.phase === 'none' ? 3 : ln.attribution === 'weak' ? 2 : 1;
+                const ink = tier === 3 ? '#7b8491' : {el_nino: '#e0673c', la_nina: '#5b9bd0'}[ln.phase];
                 return line && line.tabIndex === 0 && line.getAttribute('aria-label').includes(c.name)
-                    && line.getAttribute('stroke') === '#8fb1cf'
-                    && Number(line.getAttribute('stroke-width')) === 1
-                    && Number(line.getAttribute('stroke-opacity')) === .55
+                    && line.getAttribute('stroke') === ink
+                    && Number(line.getAttribute('stroke-width')) === [0, 2, 1.25, 1][tier]
+                    && Number(line.getAttribute('stroke-opacity')) === [0, .85, .55, .35][tier]
                     && document.querySelector('#enso-legend details').textContent.includes(c.name);
             });
         }"""))
@@ -1264,12 +1270,12 @@ def main() -> int:
         # the change has other causes (2026-09-23), so a war ring is not read as El Niño.
         check("Stage I corridors have no destination triangles and chokepoint rings are coloured by driver", page.evaluate("""async () => {
             const lanes = (await (await fetch('data/enso_lanes.json')).json()).data.lanes;
-            // 2026-09-24: a weak attribution draws blue-grey, like a change with other causes.
-            const phase = Object.fromEntries(lanes.map(l => [l.id, l.attribution === 'weak' ? 'none' : l.phase]));
+            // 2026-09-26: rings take the phase ink (weak links keep it, thinner); no ENSO link is neutral grey.
+            const phase = Object.fromEntries(lanes.map(l => [l.id, l.phase]));
             const rings = [...document.querySelectorAll('.enso-transit-ring')];
             return !document.querySelector('.enso-corridor-arrow') && rings.length > 0 && rings.every(ring => {
-                const circle = ring.querySelector('circle'), id = ring.closest('.enso-choke').querySelector('.enso-choke-label').dataset.lane;
-                const want = ['el_nino', 'la_nina'].includes(phase[id]) ? '#dd5a3a' : '#8fb1cf';
+                const circle = ring.querySelectorAll('circle')[1], id = ring.closest('.enso-choke').querySelector('.enso-choke-label').dataset.lane;
+                const want = {el_nino: '#e0673c', la_nina: '#5b9bd0'}[phase[id]] || '#7b8491';
                 return ring.tagName.toLowerCase() === 'svg' && circle && circle.getAttribute('stroke') === want
                     && Number(circle.getAttribute('r')) > 0 && getComputedStyle(ring).borderTopWidth === '0px';
             });
