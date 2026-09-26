@@ -305,7 +305,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    assert.equal(key.includes('Niño 3.4 box'),view==='elnino');
    assert.equal(key.includes('El Niño reduces output here'),view==='ensoharvest');
    assert.equal(key.includes('El Niño raises output here'),view==='ensoharvest');
-   assert.equal(key.includes('Orange: a lane with a published ENSO link'),view==='ensowater');
+   assert.equal(key.includes('a published link, moderate or strong'),view==='ensowater');
    /* The solid-line swatch keyed a mark the map never draws: no lane in enso_lanes.json carries a geometry, so S.laneLines is always empty. The observed mark is the diamond and its ring. */
    assert.equal(key.includes('diamond and ring: observed, measured at the chokepoint'),view==='ensowater');
    assert.equal(key.includes('dashed: published schematic corridor through named ports'),view==='ensowater');
@@ -315,7 +315,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    if(view==='ensowater')for(const l of S.lanes.lanes)assert(legend.querySelector('details').textContent.includes(l.name));
    /* 2026-09-26: prices are circles (area = size of the change, solid RTFP, hollow CPI) over El Niño countries only. */
    /* 2026-09-26: staple prices (FAO GIEWS FPMA) over El Niño's published harvest effect, with the tab's verdict rings. */
-   if(view==='ensomoney')for(const label of ['5 · 15 · 30%','falling','rising fast','output usually falls','output usually rises','too early: the exposed harvest is still ahead','runs against the usual pattern','no staple price series'])assert(key.includes(label),label);
+   if(view==='ensomoney')for(const label of ['5 · 15 · 30%','falling','rising fast','output usually falls','output usually rises','dashed outer ring','runs against the usual pattern','no staple price series'])assert(key.includes(label),label);
    if(cycle||view!=='elnino')assert.equal(node('scroller').scrollTop,0);
   });
  }
