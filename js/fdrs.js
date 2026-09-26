@@ -142,7 +142,8 @@ function commodityTradeDependency(c, commodity, live, menus) {
       var mmg=clip(Math.round((fa.food_insecurity_pct-5)/15*75+10));
       base=Math.round(mmg*0.7+structural*0.3);
     }
-    var adjustment=row('nowcast').adjustment || 0;
+    /* The nowcast's own bounds (build_nowcast.py), enforced here too so a bad file cannot exceed them. */
+    var adjustment=Math.max(-10, Math.min(35, Number(row('nowcast').adjustment) || 0));
     var displayed=clip(Math.round(base+adjustment));
     return {displayed:displayed, base:base, delta:displayed-base, structural:structural,
       adjustment:adjustment, components:cv, sce:sce, decomposition:d};

@@ -176,10 +176,6 @@ STEPS = [
     # Derived, no network: reads the feeds above and the fitted model, so it runs after them.
     ("El Niño outlook",        build_enso_outlook.main,         "enso_outlook.json"),
     ("Countries dataset",      build_countries_dataset.main,    "countries.json"),
-    # v40 — structural validation of FDRS against independent IPC/FEWS crisis ground
-    # truth (ROC-AUC / Spearman / hits+misses). Keeps data/fdrs_validation.json fresh so
-    # the methodology whitepaper and any in-app credibility surface stay current.
-    ("FDRS validation",        validate_fdrs.main,              "fdrs_validation.json"),
     # v23 — re-verify trade fields (suppliers/supPct/imports/exports) from the
     # Comtrade pulls, patching countries.json AFTER it's built. Must run after
     # "Countries dataset". build_fields.build() is the entrypoint.
@@ -192,6 +188,11 @@ STEPS = [
     ("Trade lineage honesty (v41)", _trade_honesty_remediation.build, "countries.json"),
     ("Nowcast build",          build_nowcast.main,              "nowcast.json"),
     ("Displayed FDRS",         build_countries_dataset.publish_displayed, "countries.json"),
+    # v40 — structural validation (runs after the nowcast so its structural+nowcast
+    # tier scores this run's nowcast, not the previous one) of FDRS against independent IPC/FEWS crisis ground
+    # truth (ROC-AUC / Spearman / hits+misses). Keeps data/fdrs_validation.json fresh so
+    # the methodology whitepaper and any in-app credibility surface stay current.
+    ("FDRS validation",        validate_fdrs.main,              "fdrs_validation.json"),
     # v40 — daily point-in-time snapshot of the structural FDRS (idempotent/preserve-safe);
     # builds the immutable history the hindcast/validation needs. Runs after "Displayed
     # FDRS" so each entry can also record structural (fdrs_displayed_base), displayed and
