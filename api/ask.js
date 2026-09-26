@@ -141,6 +141,7 @@ async function answerFree(body, res, signal) {
     up = await fetch(FREE_URL, { method: 'POST', headers, signal,
       body: JSON.stringify({ model: 'openai', stream: true, messages: [{ role: 'system', content: SYSTEM }].concat(buildMessages(body)) }) });
   } catch (err) {
+    console.error('[ask] free model fetch failed', signal.aborted ? '(aborted)' : '', err && err.message);
     if (!signal.aborted) send(res, { error: 'The free model could not be reached.' });
     return;
   }
@@ -191,7 +192,9 @@ async function handler(req, res) {
   res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
 
   const controller = new AbortController();
-  res.on('close', () => { if (!res.writableFinished) controller.abort(); });
+  /* Abort the upstream call only when the visitor has really gone: on Vercel the response can emit
+     'close' before the stream is written, which aborted every answer before it started. */
+  res.on('close', () => { if (!res.writableFinished && (res.destroyed || (req.socket && req.socket.destroyed))) controller.abort(); });
   if (!process.env.ANTHROPIC_API_KEY) { await answerFree(body, res, controller.signal); res.end(); return; }
   const client = new Anthropic();
   try {
