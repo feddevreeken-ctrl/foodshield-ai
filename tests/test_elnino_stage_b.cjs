@@ -140,7 +140,7 @@ test('Panama chart retains every slot advisory with plain dates',()=>{
 test('prices show past El Niños as one dot plot and no duplicate food-inflation chart',()=>{
  api.renderMoney();const out=nodes['enso-money'].innerHTML;assert.equal((out.match(/class="enso-event"/g)||[]).length,7);
  assert(!out.includes('id="enso-c-ffpi"'));assert(!out.includes('id="enso-c-rtfp"'));assert(!out.includes('enso-money-story'));assert(!out.includes('id="enso-c-ffpilive"'));
- assert(out.includes('Disagreements and published critiques'));assert(out.includes('Did world food prices rise'));
+ assert(out.includes('Disagreements and published critiques'));assert(out.includes('World agricultural prices before '+api.S.econ.record.peaks.length+' past El Niño peaks: up in both windows'));
 });
 test('all eight limits and the entire rejected-claims register remain',()=>{
  api.renderLimits();const out=nodes['enso-limits'].innerHTML;assert.equal((out.match(/class="enso-lim"/g)||[]).length,8);

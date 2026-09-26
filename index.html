@@ -10038,6 +10038,10 @@ body::before {
 .enso-pw-more summary { cursor:pointer; color:var(--t3); font:11px 'Geist Mono',monospace; }
 .enso-pw-more p { margin:6px 0 0; color:var(--t2); }
 .enso-wp-more > summary { cursor:pointer; margin:12px 0; color:var(--t2); font-size:13px; }
+.enso-share-b { background:none; border:1px solid var(--b2); color:var(--t2); font:11px 'Geist Mono',monospace; padding:5px 9px; cursor:pointer; }
+.enso-share-b:hover, .enso-share-b:focus-visible { color:var(--t1); border-color:var(--t2); }
+#tab-elnino #enso-share-map[hidden] { display:none; }
+.enso-share-row { padding:0 24px 8px; }
 .enso-rank-discs { display:inline-flex; gap:2px; vertical-align:-2px; margin-left:4px; }
 .enso-verdict-row { background:none; border:0; padding:0; color:inherit; font:inherit; text-align:left; cursor:pointer; display:flex; gap:8px; align-items:center; }
 .enso-verdict-row[aria-pressed="true"] span { color:var(--t1); text-decoration:underline; }
@@ -46699,6 +46703,98 @@ function showCommodityDetail(key) {
     if (g && typeof g.vs_median_ft === 'number' && g.latest) parts.push('Gatún Lake ' + Math.abs(g.vs_median_ft).toFixed(1) + ' ft ' + (g.vs_median_ft < 0 ? 'below' : 'above') + ' its median for the date, ' + dm(g.latest.date) + ' (ACP)');
     return parts.length ? parts[0] + (parts.length > 1 ? '. ' + parts.slice(1).join('; ') : '') + '.' : 'Shipping lanes and transits · IMF PortWatch.';
   }
+  /* Share cards for LinkedIn: drawn from the data as SVG (not a screenshot), captions permanently attached,
+     then rasterised to a 1200×627 PNG. Every number comes from the same counters as the page. */
+  function pastPriceTitle(peaks) {
+    var both = peaks.filter(function (q) { return (q.prev6m || 0) > 0 && (q.yoy || 0) > 0; });
+    return 'World agricultural prices before ' + peaks.length + ' past El Niño peaks: up in both windows ' + (both.length ? 'only for ' + both.map(function (q) { return q.episode.replace(/, ongoing at press$/, ''); }).join(', ') : 'for none');
+  }
+  function svgEsc(t) { return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function wrapText(t, max) { var out = [], line = ''; String(t).split(/\s+/).forEach(function (w) { if ((line + ' ' + w).trim().length > max) { out.push(line.trim()); line = w; } else line += ' ' + w; }); if (line.trim()) out.push(line.trim()); return out; }
+  var CARD_FONT = "Helvetica Neue, Helvetica, Arial, sans-serif";
+  function cardFrame(title, sub, body, caption) {
+    var W = 1200, H = 627, cap = wrapText(caption, 175), tl = wrapText(title, 70).slice(0, 2);
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">' +
+      '<defs><pattern id="cD" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#c47a3c" stroke-width="1.4" stroke-opacity=".75"/></pattern>' +
+      '<pattern id="cW" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#4a7ab3" stroke-width="1.4" stroke-opacity=".8"/></pattern>' +
+      '<pattern id="cM" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#c47a3c" stroke-width="1.4"/><line x1="0" y1="0" x2="6" y2="0" stroke="#4a7ab3" stroke-width="1.4"/></pattern></defs>' +
+      '<rect width="' + W + '" height="' + H + '" fill="#0b1017"/>' +
+      tl.map(function (l, i) { return '<text x="40" y="' + (50 + i * 34) + '" font-family="' + CARD_FONT + '" font-size="28" font-weight="600" fill="#ece9e0">' + svgEsc(l) + '</text>'; }).join('') +
+      wrapText(sub, 130).slice(0, 2).map(function (l, i) { return '<text x="40" y="' + (50 + tl.length * 34 + i * 21) + '" font-family="' + CARD_FONT + '" font-size="16" fill="#c9c6bd">' + svgEsc(l) + '</text>'; }).join('') +
+      body +
+      cap.slice(0, 4).map(function (l, i) { return '<text x="40" y="' + (H - 16 - (Math.min(cap.length, 4) - 1 - i) * 15) + '" font-family="' + CARD_FONT + '" font-size="11.5" fill="#8b8980">' + svgEsc(l) + '</text>'; }).join('') +
+      '<text x="' + (W - 40) + '" y="' + (H - 16) + '" text-anchor="end" font-family="' + CARD_FONT + '" font-size="12" fill="#c9c6bd">FoodShield AI</text></svg>';
+  }
+  function reportedCardBody() {
+    var X0 = 40, X1 = 1160, Y0 = 132, Y1 = 522, lon0 = -170, lon1 = 190, lat0 = 72, lat1 = -48;
+    var px = function (lng) { if (lng < lon0) lng += 360; return X0 + (lng - lon0) / (lon1 - lon0) * (X1 - X0); }, py = function (lat) { return Y0 + (lat0 - lat) / (lat0 - lat1) * (Y1 - Y0); };
+    var ring = function (rg) { var d = '', prev = null; rg.forEach(function (c, i) { var x = px(c[0]), y = py(c[1]); d += (i && prev != null && Math.abs(x - prev) < 500 ? 'L' : 'M') + x.toFixed(1) + ',' + y.toFixed(1); prev = x; }); return d + 'Z'; };
+    var land = '';
+    if (S.layerBase) S.layerBase.eachLayer(function (l) {
+      var g = l.feature && l.feature.geometry, iso = isoOf(l.feature); if (!g) return;
+      var polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+      var d = polys.map(function (pg) { return pg.map(ring).join(''); }).join('');
+      var rc = rainClass(iso), fill = rc === 'dry' ? 'url(#cD)' : rc === 'wet' ? 'url(#cW)' : rc === 'mixed' ? 'url(#cM)' : '#1a1f27';
+      var cr = S.crisis && S.crisis[iso], stroke = cr ? ({ 3: '#e67800', 4: '#c80000', 5: '#640000' }[Math.min(5, Math.max(3, cr.phase))]) : rc ? '#8b8980' : '#2a303a';
+      land += '<path d="' + d + '" fill="' + fill + '" fill-rule="evenodd" stroke="' + stroke + '" stroke-width="' + (cr ? 1.6 : .5) + '"' + (cr && !(S.isoIndex || {})[iso] ? ' stroke-opacity=".5"' : '') + '/>';
+    });
+    var dots = S.alertPins.map(function (m) {
+      var ll = m.getLatLng(), v = m.options.ensoVerdict, x = px(ll.lng), y = py(ll.lat);
+      var col = (m.options.icon.options.html.match(/fill="(#[0-9a-f]{6})" stroke="#0b1017"/) || [])[1] || '#9a978d';
+      return (v === 'fits' ? '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="10.5" fill="none" stroke="#f2efe6" stroke-width="2"/>' : v === 'against' ? '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="8.6" fill="none" stroke="#8b8980" stroke-width="1"/>' : '') +
+        '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="7" fill="' + col + '" stroke="#0b1017" stroke-width="1.5"/>';
+    }).join('');
+    var key = function (x, sw, t) { return '<g transform="translate(' + x + ',546)">' + sw + '<text x="24" y="5" font-family="' + CARD_FONT + '" font-size="12.5" fill="#c9c6bd">' + svgEsc(t) + '</text></g>'; };
+    var keys = key(40, '<rect x="0" y="-6" width="18" height="12" fill="url(#cD)" stroke="#8b8980" stroke-width=".6"/>', 'usually drier in El Niño years') +
+      key(250, '<rect x="0" y="-6" width="18" height="12" fill="url(#cW)" stroke="#8b8980" stroke-width=".6"/>', 'usually wetter') +
+      key(400, '<circle cx="9" cy="0" r="9" fill="none" stroke="#f2efe6" stroke-width="2"/><circle cx="9" cy="0" r="5.5" fill="#c47a3c"/>', 'report fits the usual pattern') +
+      key(620, '<circle cx="9" cy="0" r="7.5" fill="none" stroke="#8b8980"/><circle cx="9" cy="0" r="5.5" fill="#4a7ab3"/>', 'runs against it') +
+      key(770, '<circle cx="9" cy="0" r="5.5" fill="#4a8a9b"/>', 'not assessed') +
+      key(900, '<rect x="1" y="-6" width="16" height="12" fill="none" stroke="#c80000" stroke-width="2"/>', 'IPC Phase 3–5 in force');
+    return '<g>' + land + dots + '</g>' + keys;
+  }
+  function pricesCardBody() {
+    var peaks = ((S.econ || {}).record || {}).peaks || [];
+    var lim = Math.max(10, Math.ceil(Math.max.apply(null, peaks.map(function (q) { return Math.max(Math.abs(q.prev6m || 0), Math.abs(q.yoy || 0)); })) / 5) * 5);
+    var L0 = 300, R0 = 1060, X = function (v) { return L0 + (v + lim) / (2 * lim) * (R0 - L0); }, top = 200, rh = 44;
+    var rows = peaks.map(function (q, i) {
+      var y = top + i * rh, both = (q.prev6m || 0) > 0 && (q.yoy || 0) > 0;
+      return '<text x="40" y="' + (y + 5) + '" font-family="' + CARD_FONT + '" font-size="17" fill="' + (both ? '#ece9e0' : '#c9c6bd') + '" font-weight="' + (both ? 600 : 400) + '">' + svgEsc(q.episode.replace(/, ongoing at press$/, ' (ongoing)')) + '</text>' +
+        '<line x1="' + L0 + '" x2="' + R0 + '" y1="' + y + '" y2="' + y + '" stroke="#2a323c"/>' +
+        '<rect x="' + (X(q.prev6m) - 6).toFixed(1) + '" y="' + (y - 6) + '" width="12" height="12" fill="#e0673c"/>' +
+        '<rect x="' + (X(q.yoy) - 6).toFixed(1) + '" y="' + (y - 6) + '" width="12" height="12" fill="none" stroke="#ebe9e2" stroke-width="1.6"/>' +
+        '<text x="' + (R0 + 14) + '" y="' + (y + 5) + '" font-family="' + CARD_FONT + '" font-size="13" fill="#8b8980">' + (q.prev6m > 0 ? '+' : '−') + Math.abs(q.prev6m).toFixed(1) + '% / ' + (q.yoy > 0 ? '+' : '−') + Math.abs(q.yoy).toFixed(1) + '%</text>';
+    }).join('');
+    var yb = top + (peaks.length - 1) * rh + 18;
+    return '<line x1="' + X(0).toFixed(1) + '" x2="' + X(0).toFixed(1) + '" y1="' + (top - 18) + '" y2="' + yb + '" stroke="#8b8980" stroke-dasharray="3 3"/>' + rows +
+      [-lim, 0, lim].map(function (v) { return '<text x="' + X(v).toFixed(1) + '" y="' + (yb + 16) + '" text-anchor="middle" font-family="' + CARD_FONT + '" font-size="12" fill="#8b8980">' + (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + '%</text>'; }).join('') +
+      '<rect x="' + L0 + '" y="' + (top - 44) + '" width="12" height="12" fill="#e0673c"/><text x="' + (L0 + 18) + '" y="' + (top - 34) + '" font-family="' + CARD_FONT + '" font-size="13" fill="#c9c6bd">vs the previous six months</text>' +
+      '<rect x="' + (L0 + 230) + '" y="' + (top - 44) + '" width="12" height="12" fill="none" stroke="#ebe9e2" stroke-width="1.6"/><text x="' + (L0 + 248) + '" y="' + (top - 34) + '" font-family="' + CARD_FONT + '" font-size="13" fill="#c9c6bd">vs the same months a year earlier</text>';
+  }
+  function exportCard(kind, noDownload) {
+    var svg, name, snap = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+    if (kind === 'reported') {
+      var c = S.alertCounts || {};
+      svg = cardFrame('What is being reported in El Niño countries', reportVerdict(), reportedCardBody(),
+        (c.fits || 0) + '/' + (c.n || 0) + ' tracked hazard reports agree directionally with published El Niño rainfall patterns; ' + (c.against || 0) + ' oppose; ' + (c.none || 0) + ' not assessed. Snapshot: ' + snap + '. Includes reports within ' + ENSO_REPORT_DAYS + ' days, ongoing events and undated reports. Sources: GDACS, FEWS NET, IPC, Open-Meteo, ReliefWeb, retrieved ' + stamp(metaDate('gdacs')) + '; expectations: published teleconnection studies (enso_regions.json, reviewed ' + stamp(metaDate('regions')) + '). Country-level comparison; season not tested; agreement does not establish cause.');
+      name = 'foodshield-el-nino-reported.png';
+    } else {
+      var peaks = ((S.econ || {}).record || {}).peaks || [];
+      svg = cardFrame(pastPriceTitle(peaks), 'The ' + peaks.length + ' entries transcribed from the World Bank’s October 2015 figure: six-month average of the agricultural price index before each episode.', pricesCardBody(),
+        'World agricultural price-index changes across ' + peaks.length + ' annotated entries. Six-month average leading to each episode versus the preceding six months and the corresponding period one year earlier. Source: World Bank, Commodity Markets Outlook, October 2015, Figure F.8; observations through September 2015. 2015–16 ongoing at publication. Descriptive, not causal. Snapshot: ' + snap + '.');
+      name = 'foodshield-el-nino-past-prices.png';
+    }
+    if (noDownload) return svg;
+    var img = new Image();
+    img.onload = function () {
+      var cv = document.createElement('canvas'); cv.width = 2400; cv.height = 1254;
+      var cx = cv.getContext('2d'); cx.scale(2, 2); cx.drawImage(img, 0, 0);
+      cv.toBlob(function (b) { var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500); }, 'image/png');
+    };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    return svg;
+  }
+  window.ensoExportCard = exportCard;
   function renderMapTag() {
     var el = document.getElementById('enso-maptag'); if (!el) return;
     var m = mapState();
@@ -46712,6 +46808,12 @@ function showCommodityDetail(key) {
     if (S.mode === 'none' && S.showLanes) el.textContent = shipStatus();
     if (S.mode === 'rtfp') el.textContent = priceMapSentence();
     if (S.sub === 'ensolive') el.textContent = reportVerdict();
+    var sb = document.getElementById('enso-share-map');
+    /* The share button sits with the map's own tools (search, zoom), so the plate head stays one line. */
+    var tools = document.querySelector && document.querySelector('#enso-map .enso-map-tools');
+    if (!sb && tools && tools.appendChild) { sb = document.createElement('button'); sb.type = 'button'; sb.id = 'enso-share-map'; sb.className = 'enso-share-b'; sb.textContent = 'Save image';
+      sb.setAttribute('aria-label', 'Save this map as a 1200 by 627 image with its caption'); sb.onclick = function () { exportCard('reported'); }; tools.appendChild(sb); }
+    if (sb) sb.hidden = S.sub !== 'ensolive';
     if (S.mode === 'staple') el.textContent = priceVerdict();
     instrumentNumbers(el);
     mapChrome();
@@ -48231,6 +48333,25 @@ function showCommodityDetail(key) {
       S.headlinePins.push(m);
     });
   }
+  /* Discs that land on each other (Central America, the Horn) are nudged apart on a small spiral, in
+     pixels, so every report stays visible and clickable; the true position is the disc nearest it. */
+  function spreadMarks() {
+    if (!S.map || typeof S.map.latLngToLayerPoint !== 'function') return;
+    var placed = [];
+    S.alertPins.forEach(function (m) {
+      var el = m.getElement && m.getElement(); if (!el) return;
+      if (el._baseML == null) { el._baseML = parseFloat(el.style.marginLeft) || 0; el._baseMT = parseFloat(el.style.marginTop) || 0; }
+      var p = S.map.latLngToLayerPoint(m.getLatLng()), r = (parseFloat(el.style.width) || 27) / 2 - 2, dx = 0, dy = 0;
+      for (var k = 0; k < 24; k++) {
+        var hit = placed.some(function (q) { var ex = p.x + dx - q.x, ey = p.y + dy - q.y; return Math.sqrt(ex * ex + ey * ey) < r + q.r; });
+        if (!hit) break;
+        var a = k * 2.4, d = 8 + k * 2.2; dx = Math.round(Math.cos(a) * d); dy = Math.round(Math.sin(a) * d);
+      }
+      el.style.marginLeft = (el._baseML + dx) + 'px'; el.style.marginTop = (el._baseMT + dy) + 'px';
+      placed.push({ x: p.x + dx, y: p.y + dy, r: r });
+    });
+    if (!S._spreadHooked && S.map.on) { S._spreadHooked = true; S.map.on('zoomend', function () { if (S.sub === 'ensolive') spreadMarks(); }); }
+  }
   /* The largest recent stories, printed as published in the ocean gutters with a leader to their country. */
   /* Open ocean only: E Pacific, S Pacific, N and S Atlantic, Arabian Sea, S Indian (two), W Pacific. */
   var CALLOUT_SLOTS = [[-5, -120], [-38, -100], [32, -48], [-25, -20], [9, 60], [-30, 62], [-36, 100], [10, 160]];
@@ -48368,7 +48489,7 @@ function showCommodityDetail(key) {
       });
     }
     drawAlerts();
-    if (S.showAlerts) S.alertPins.forEach(function (m) { m.addTo(S.map); });
+    if (S.showAlerts) { S.alertPins.forEach(function (m) { m.addTo(S.map); }); spreadMarks(); }
     if (S.showElsewhere) S.contextPins.forEach(function (m) { m.addTo(S.map); });
     if (S.showHeadlines) { drawHeadlines(); S.headlinePins.forEach(function (m) { m.addTo(S.map); }); }
     drawCallouts();
@@ -49112,7 +49233,8 @@ function showCommodityDetail(key) {
       var P = function (v) { return ((v + lim) / (2 * lim) * 100).toFixed(2) + '%'; };
       var rises = peaks.filter(function (q) { return (q.prev6m || 0) > 0 && (q.yoy || 0) > 0; }).length;
       var ffNote = E.ffpi && E.ffpi.note ? String(E.ffpi.note).split(/(?<=\.)\s/).slice(0, 2).join(' ') : '';
-      out += '<figure class="enso-plate is-published enso-pastprice-plate">' + plateHead('Did world food prices rise before past El Niño peaks? Mostly not', rec.source || 'World Bank Commodity Markets Outlook', readOn, 'published') +
+      out += '<figure class="enso-plate is-published enso-pastprice-plate">' + plateHead(pastPriceTitle(peaks), rec.source || 'World Bank Commodity Markets Outlook', readOn, 'published') +
+        '<div class="enso-share-row"><button type="button" class="enso-share-b" data-share="prices">Save as image · 1200×627</button></div>' +
         '<div class="plate-body"><p class="enso-plate-lede">World farm prices rose on both measures before only ' + (rises === 1 ? 'one' : rises) + ' of ' + peaks.length + ' El Niño peaks' + (rises ? ' (' + peaks.filter(function (q) { return (q.prev6m || 0) > 0 && (q.yoy || 0) > 0; }).map(function (q) { return esc(q.episode); }).join(', ') + ')' : '') + '. ' + esc(ffNote) + '</p>' +
         '<div class="enso-pp-key"><span><i class="k-prev"></i>vs the previous six months</span><span><i class="k-yoy"></i>vs the same months a year earlier</span></div>' +
         '<div id="enso-c-record" class="enso-pp" role="group" aria-label="Agricultural price change around ' + peaks.length + ' El Niño episodes">' + peaks.map(function (q) {
@@ -49147,6 +49269,8 @@ function showCommodityDetail(key) {
       }).join('') + '<p>' + esc(con.corroboration || '') + '</p>' + (con.critiques || []).map(function (c) {
         return '<p><b>' + esc(c.who) + '.</b> ' + esc(c.what) + (c.url ? ' <a href="' + esc(safeUrl(c.url)) + '" target="_blank" rel="noopener">Source</a>' : '') + '</p>';
       }).join('') + '</details></div><figcaption class="enso-log">The estimates do not all agree on the sign.</figcaption></section>';
+    /* Share-card button on the past-price plate. */
+    setTimeout(function () { var b = document.querySelector && document.querySelector('#enso-money [data-share="prices"]'); if (b) b.onclick = function () { exportCard('prices'); }; }, 0);
     /* Food inflation by country lives on the map and its ranked list; the estimates stand as their own plate. */
     out += '<figure class="enso-plate enso-estimates-plate">' + estimates + '<div id="enso-people-evidence"></div></figure>';
     el.innerHTML = out;
