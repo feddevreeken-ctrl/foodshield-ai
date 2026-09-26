@@ -11018,6 +11018,25 @@ table.enso-tbl thead th:first-child { z-index:3; }
 #map-flow-legend{display:none;}
 .rank-terr{font-family:'Geist Mono',monospace;font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);border:1px solid var(--b2);border-radius:3px;padding:0 3px;margin-left:6px;vertical-align:1px;}
 .ctr-share-n{display:inline-block;min-width:32px;font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--t2);margin-right:6px;vertical-align:middle;}
+.cmd-market{margin-bottom:20px;padding:14px 16px;background:var(--bg1);border:1px solid var(--b2);border-radius:3px;}
+.cmd-mk-lede{font-size:12.5px;color:var(--t2);line-height:1.55;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;}
+.cmd-mk-map{margin-left:auto;background:none;border:1px solid var(--b2);color:var(--accent);border-radius:3px;padding:3px 9px;font-size:11px;cursor:pointer;}
+.cmd-mk-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+@media (max-width:700px){.cmd-mk-grid{grid-template-columns:1fr;}}
+.cmd-mk-h{font-size:8.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin:0 0 4px;}
+.cmd-mk-row{display:grid;grid-template-columns:minmax(0,1.3fr) 1fr 52px 64px;gap:10px;align-items:center;padding:4px 0;border-bottom:1px solid var(--b1);font-size:11.5px;}
+.cmd-mk-row[role=link]{cursor:pointer;}
+.cmd-mk-row .n{color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cmd-mk-row .v{font-family:'Geist Mono',monospace;color:var(--t1);text-align:right;}
+.cmd-mk-row .t{font-family:'Geist Mono',monospace;color:var(--t3);font-size:10px;text-align:right;}
+.cmd-mk-bar{height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;}
+.cmd-mk-bar i{display:block;height:100%;}
+.cmd-mk-flag{font-family:'Geist Mono',monospace;font-size:8px;text-transform:uppercase;color:#e0b94a;border:1px solid #e0b94a66;border-radius:3px;padding:0 3px;margin-left:4px;}
+.cmd-mk-fdrs{font-family:'Geist Mono',monospace;font-size:10px;margin-left:4px;}
+.cmd-mk-src{font-size:10px;color:var(--t3);line-height:1.5;margin-top:10px;font-family:'Geist Mono',monospace;}
+.cmd-detail-bar{position:sticky;top:0;z-index:5;background:var(--bg1);margin:-4px 0 12px;padding:4px 0;}
+.cmd-detail-back{background:none;border:1px solid var(--b2);color:var(--t2);border-radius:3px;padding:4px 10px;font-size:11.5px;cursor:pointer;}
+#commodity-detail:focus{outline:none;}
 .sp-bg-label{display:block;font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);margin-bottom:6px;}
 .sp-sup-note{font-size:10.5px;color:var(--t3);margin-bottom:8px;line-height:1.5;}
 .sp-sup-warn{font-size:10.5px;color:#e0b94a;line-height:1.5;margin:8px 0 4px;border-left:2px solid #e0b94a;padding-left:8px;}
@@ -25625,6 +25644,12 @@ function applyURLState() {
         }, 150);
       }
     }
+    // 3a. Commodities tab: ?tab=commodities&commodity=wheat opens that commodity's detail.
+    if (s.tab === 'commodities' && s.commodity && !s.country && typeof COMMODITY_META !== 'undefined') {
+      const q = s.commodity.replace(/[\s_-]+/g, '');
+      const cm = COMMODITY_META.find(m => m.dataKey === q || m.key.toLowerCase().replace(/[\s_-]+/g, '') === q);
+      if (cm && typeof showCommodityDetail === 'function') setTimeout(() => showCommodityDetail(cm.key), 400);
+    }
     // 3. Commodity — open drilldown if a country is also selected
     if (s.commodity && s.country && typeof openCommodityDrilldown === 'function') {
       setTimeout(() => openCommodityDrilldown(
@@ -26691,7 +26716,7 @@ function commodityRestrictionBadge(commodityKey) {
   const shown = active.length ? active : hits;
   const who = shown.slice(0, 2).map(r => r.country || _nameFromISO(r.iso)).filter(Boolean).join(', ');
   if (!active.length) {
-    return `<span class="cmd-card-restr cmd-card-restr-hist" title="Export restriction ON RECORD for ${commodityKey} (${who}): lifted or expired, not currently in force. See Trade Flows.">⚠ On record · ${who}</span>`;
+    return `<span class="cmd-card-restr cmd-card-restr-hist" title="Export restriction ON RECORD for ${commodityKey} (${who}): lifted or expired, not currently in force.">◦ Past restriction · ${who}</span>`;
   }
   const ends = active.map(r => r.ends_date).filter(Boolean).sort()[0];
   return `<span class="cmd-card-restr" title="Export restriction in force on ${commodityKey} (${who})${ends ? ', scheduled to end ' + ends : ', no end date announced'}. See the Country tab for who is exposed.">⚠ Restricted · ${who}${ends ? ' · to ' + ends : ''}</span>`;
@@ -42227,6 +42252,15 @@ const COMMODITY_PINK_KEY = {
   'Palm Oil':'palm_oil', Sugar:'sugar', Coffee:'coffee', Cocoa:'cocoa',
   Fertilizer:'urea', Beef:'beef'
 };
+/* Year-on-year change from the Pink Sheet history: latest month against the same month a year earlier. */
+function commodityYoY(cmKey) {
+  const s = LIVE.pink_sheet?.series?.[COMMODITY_PINK_KEY[cmKey]];
+  if (!s || !Array.isArray(s.history) || !s.latest_month) return null;
+  const [y, m] = s.latest_month.split('-');
+  const prev = s.history.find(h => h.month === (Number(y) - 1) + '-' + m);
+  const now = Number(s.latest_value);
+  return prev && prev.value > 0 && Number.isFinite(now) ? Math.round(1000 * (now / prev.value - 1)) / 10 : null;
+}
 function commodityLivePrice(cmKey) {
   const seriesKey = COMMODITY_PINK_KEY[cmKey];
   if (!seriesKey) return null;
@@ -42305,78 +42339,44 @@ function _psdExporterShares(dataKey) {
 }
 /* Six atlas keys whose hand-built route table sits under a different name. */
 const _ROUTE_ALIAS = { palmoil: 'palm_oil', vegoils: 'vegetable_oil', fish: 'fish_seafood', bananas: 'tropical_fruit', citrus: 'citrus_fruit', roots: 'cassava' };
+/* Market concentration as a Herfindahl-Hirschman index (sum of squared exporter shares in %,
+   0-10,000; US DOJ bands: under 1,500 unconcentrated, 1,500-2,500 moderate, over 2,500 high).
+   Grains read USDA PSD's current marketing year (a projection); other commodities FAOSTAT's 2024
+   trade matrix (top 12 exporters, so the index is a lower bound); the curated route table only
+   where neither covers the commodity. Replaces 0.7 x CR2 + 0.3 x CR3, which double-counted the top
+   two and put maize (HHI 2,437) below the alert line. */
+function _hhiBand(h) { return h >= 2500 ? 'highly concentrated' : h >= 1500 ? 'moderately concentrated' : 'unconcentrated'; }
 function commodityConcentration(cmKey) {
   const _cm = (typeof COMMODITY_META !== 'undefined') ? COMMODITY_META.find(mm => mm.key === cmKey) : null;
   const _dk = (_cm && _cm.dataKey) || null;
   const _nm = iso => iso === 'EU27' ? 'EU-27' : (_nameFromISO(iso) || iso);
-  // Grains first from the current USDA PSD balance; the hand-typed route shares disagreed with it (corn, sorghum, barley).
+  const build = (exp, basis, topIsoNote) => {
+    exp = exp.filter(e => e.share > 0).sort((a, b) => b.share - a.share);
+    if (!exp.length) return null;
+    const hhi = Math.round(exp.reduce((a, e) => a + e.share * e.share, 0));
+    const top2 = exp.slice(0, 2), top2Share = Math.round(top2.reduce((a, e) => a + e.share, 0));
+    const story = `${top2.map(e => `<b>${_nm(e.iso)} ${Math.round(e.share)}%</b>`).join(' + ')} of world exports`;
+    return { score: hhi, band: _hhiBand(hhi), story, topShare: top2Share, top2Names: top2.map(e => _nm(e.iso)), topIso: exp[0].iso, basis };
+  };
   const _ps = _dk ? _psdExporterShares(_dk) : null;
-  if (_ps) {
-    const exp = _ps.exporters;
-    const top2Share = Math.round(exp.slice(0,2).reduce((a,e)=>a+e.share,0));
-    const top3Share = Math.round(exp.slice(0,3).reduce((a,e)=>a+e.share,0));
-    const top2Names = exp.slice(0,2).map(e => _nm(e.iso));
-    const score = Math.min(100, Math.round(top2Share * 0.7 + top3Share * 0.3));
-    const story = top2Share >= 60
-      ? `<b>${top2Names.join(' + ')} = ${top2Share}%</b> of world exports`
-      : `Top 3 exporters hold <b>${top3Share}%</b> of world exports (${exp.slice(0,3).map(e => _nm(e.iso)).join(', ')})`;
-    return { score, story, topShare: top2Share, top2Names, topIso: exp[0].iso,
-      basis: '0.7 × CR2 + 0.3 × CR3, the top-2 and top-3 exporter shares in percent, over the ' + Math.round(_ps.total).toLocaleString() + ' kt all exporters shipped. Source: USDA PSD, marketing year ' + _ps.year + ' (EU-27 as one exporter).' };
-  }
+  if (_ps) return build(_ps.exporters.map(e => ({ iso: e.iso, share: e.share })),
+    `HHI over all ${_ps.exporters.length} exporters in USDA PSD, marketing year ${_ps.year}/${String(_ps.year + 1).slice(2)} (a USDA projection; EU-27 as one exporter), ${Math.round(_ps.total).toLocaleString()} kt projected to ship.`);
+  const mx = _dk ? _tmCommodity(_dk) : null;
+  if (mx && mx.top_exporters && mx.top_exporters.length) return build(mx.top_exporters.map(e => ({ iso: e.iso, share: e.share_pct })),
+    `HHI over the top ${mx.top_exporters.length} exporters in FAOSTAT's ${mx.year} trade matrix (a lower bound: smaller exporters are left out).`);
   const routeKey = (_dk && (COMMODITY_TRADE_ROUTES[_dk] ? _dk : _ROUTE_ALIAS[_dk])) || COMMODITY_PINK_KEY[cmKey];
-  // Then the route table — global supply concentration for commodities PSD does not cover
   const route = COMMODITY_TRADE_ROUTES[routeKey];
-  if (route && Array.isArray(route.exporters) && route.exporters.length) {
-    const exp = route.exporters.slice().sort((a,b)=>b.share-a.share);
-    const top2 = exp.slice(0,2);
-    const top2Share = top2.reduce((s,e)=>s+e.share,0);
-    const top3Share = exp.slice(0,3).reduce((s,e)=>s+e.share,0);
-    const top2Names = top2.map(e => _nameFromISO(e.iso) || e.iso);
-    // Score blends top-2 (weight 0.7) and top-3 (weight 0.3) shares,
-    // left on its original percentage-share denominator.
-    const score = Math.round(top2Share * 0.7 + top3Share * 0.3);
-    const story = top2Share >= 60
-      ? `<b>${top2Names.join(' + ')} = ${top2Share}%</b> of world exports`
-      : `Top 3 exporters hold <b>${top3Share}%</b> of world exports (${exp.slice(0,3).map(e=>_nameFromISO(e.iso)||e.iso).join(', ')})`;
-    return { score: Math.min(100, score), story, topShare: top2Share, top2Names, topIso: exp[0].iso,
-      basis: '0.7 × CR2 + 0.3 × CR3, the top-2 and top-3 exporter shares in percent. Denominator: global exports as stated in the curated route shares, not renormalised to the listed exporters. Source: this project’s curated trade routes; data year: ' + (route.year || 'not supplied') };
-  }
-  // v29 — fallback: compute concentration from the real curated commodity rankings
-  // (covers the 30+ Wave 5-8 commodities the legacy route table never had).
-  try {
-    const meta = (typeof COMMODITY_META !== 'undefined') ? COMMODITY_META.find(m => m.key === cmKey) : null;
-    const dk = meta && meta.dataKey;
-    const com = dk && (typeof _beefData === 'function') ? _beefData()[dk] : null;
-    const exps = com && com.rankings && Array.isArray(com.rankings.exporters) ? com.rankings.exporters : null;
-    if (exps && exps.length) {
-      /* Denominator: world exports from the atlas, not the sum of the 5-10 exporters it lists; the listed sum pushed
-         short lists towards 100% and raised false alerts (sheep & goat 82 against 50). */
-      const listed = exps.reduce((s,e)=>s+(e.kt||0),0) || 1;
-      const gEx = !/different bases/i.test((com.global && com.global.note) || '') && com.global && Array.isArray(com.global.exports) ? Number(com.global.exports[com.global.exports.length - 1]) : NaN;
-      const gYr = com.global && Array.isArray(com.global.years) ? com.global.years[com.global.years.length - 1] : null;
-      const tot = Number.isFinite(gEx) && gEx > 0 ? Math.max(gEx, listed) : listed;
-      const worldBase = Number.isFinite(gEx) && gEx > 0;
-      const sorted = exps.slice().sort((a,b)=>(b.kt||0)-(a.kt||0));
-      const top2Share = Math.round(100*(sorted.slice(0,2).reduce((s,e)=>s+(e.kt||0),0))/tot);
-      const top3Share = Math.round(100*(sorted.slice(0,3).reduce((s,e)=>s+(e.kt||0),0))/tot);
-      const names = sorted.slice(0,3).map(e=>_nameFromISO(e.iso)||e.iso);
-      const score = Math.min(100, Math.round(top2Share*0.7 + top3Share*0.3));
-      const story = top2Share >= 60
-        ? `<b>${names.slice(0,2).join(' + ')} = ${top2Share}%</b> of ${worldBase ? 'world' : 'listed'} exports`
-        : `Top 3 exporters hold <b>${top3Share}%</b> of ${worldBase ? 'world' : 'listed'} exports (${names.join(', ')})`;
-      return { score: score, story: story, topShare: top2Share, top2Names: names.slice(0,2), topIso: sorted[0].iso,
-        basis: '0.7 × CR2 + 0.3 × CR3; CR2/CR3 = top 2/3 exporter shares (%). Denominator: ' + Math.round(tot).toLocaleString() + ' kt, ' + (worldBase ? 'world exports ' + (gYr || '') + ' (the listed exporters cover ' + Math.round(Math.min(100, listed / tot * 100)) + '%' + (listed > gEx ? '; they sum to more than the world figure, an atlas inconsistency' : '') + ')' : 'sum of listed exporters (no world total on file)') + '. Source: commodity atlas; data year: ' + (com.rankings.year || gYr || 'not supplied') };
-    }
-  } catch(e){}
+  if (route && Array.isArray(route.exporters) && route.exporters.length)
+    return build(route.exporters.map(e => ({ iso: e.iso, share: e.share })), 'HHI over the curated route shares (this project, year ' + (route.year || 'not supplied') + ').');
   return null;
 }
 
 // v22 — color for concentration score band
-function concBandColor(score) {
-  if (score >= 70) return '#c44b3c';   // alert red
-  if (score >= 50) return '#d27a3e';   // amber
-  if (score >= 30) return '#c9a957';   // yellow
-  return '#6ba36b';                    // green
+function concBandColor(hhi) {
+  if (hhi >= 5000) return '#c44b3c';
+  if (hhi >= 2500) return '#d27a3e';
+  if (hhi >= 1500) return '#c9a957';
+  return '#6ba36b';
 }
 
 // v22.2 — pick the "today's signal" — the commodity with the biggest absolute
@@ -42423,7 +42423,7 @@ function _commodityTodaysSignal() {
     return c ? { cm, score: c.score, story: c.story } : null;
   }).filter(Boolean);
   concs.sort((a,b) => b.score - a.score);
-  if (concs[0] && concs[0].score >= 70) {
+  if (concs[0] && concs[0].score >= 2500) {
     const top = concs[0];
     return {
       cm: top.cm,
@@ -42470,6 +42470,15 @@ function _recomputeCommodityMeta(){
       const gEx = sameBasis && com.global && Array.isArray(com.global.exports) ? Number(com.global.exports[com.global.exports.length-1]) : NaN;
       const gYr = com.global && Array.isArray(com.global.years) ? com.global.years[com.global.years.length-1] : null;
       const fmtKt = kt => kt >= 1000 ? (kt/1000).toFixed(1) + ' Mt' : Math.round(kt) + ' kt';
+      const _mx = _tmCommodity(cm.dataKey);
+      if (_mx) {
+        _commodityLiveMeta[cm.key] = {
+          flows: _mx.corridors_total, obsPct: Math.round(100 - _mx.mirror_share_pct),
+          topExp: conc && conc.topIso ? (conc.topIso === 'EU27' ? 'EU-27' : conc.topIso) : (_mx.top_exporters[0] || {}).iso,
+          vol: fmtKt(_mx.world_t / 1000) + ' world exports ' + _mx.year, matrix: true,
+        };
+        continue;
+      }
       _commodityLiveMeta[cm.key] = {
         flows: f.length,
         obsPct: f.length ? Math.round(100*obs/f.length) : 0,
@@ -42547,6 +42556,10 @@ function renderCommodityGrid() {
       </div>
       ${ledeHTML}`;
   }
+  /* The trade matrix drives volumes, shares and concentration here: load it once, then redraw. */
+  if (typeof LIVE !== 'undefined' && LIVE.trade_matrix === undefined && typeof loadTradeMatrix === 'function') {
+    loadTradeMatrix().then(() => { _commodityLiveMeta = null; renderCommodityGrid(); });
+  }
   // v30.9 — search toolbar (core staples by default, search/show-all for the rest)
   const liveMeta = _recomputeCommodityMeta();
   let toolbar = document.getElementById('commodity-toolbar');
@@ -42559,7 +42572,9 @@ function renderCommodityGrid() {
   const q = _commodityQuery;
   // which commodities to render: search hit > all > core
   let shown = COMMODITY_META.filter(cm => {
-    if (q) return (cm.key.toLowerCase().includes(q) || (cm.dataKey||'').toLowerCase().includes(q) || (cm.cat||'').toLowerCase().includes(q));
+    if (q) return (cm.key.toLowerCase().includes(q) || (cm.dataKey||'').toLowerCase().includes(q) || (cm.cat||'').toLowerCase().includes(q)
+      || ((typeof COMMODITY_SYNONYMS !== 'undefined' && COMMODITY_SYNONYMS[cm.key]) || []).some(w => String(w).toLowerCase().includes(q))
+      || ({ cacao: 'Cocoa', cattle: 'Beef', urea: 'Fertilizer', potash: 'Fertilizer', maize: 'Corn', paddy: 'Rice' }[q] === cm.key));
     if (_commodityShowAll) return true;
     return COMMODITY_CORE.has(cm.key);
   });
@@ -42580,7 +42595,7 @@ function renderCommodityGrid() {
         <span class="cmd-toolbar-count">${ctxLabel}</span>
         <button type="button" class="cmd-toggle ${_commodityShowAll?'on':''}" style="${q ? 'display:none' : ''}" onclick="commodityShowAll(!_commodityShowAll)">${_commodityShowAll?'Show core only':'Show all '+total}</button>
       </div>
-      <div class="cmd-basis-note">Concentration index 0–100 = 0.7 × top-2 share + 0.3 × top-3 share of world exports. Open a row for its source and year.</div>`;
+      <div class="cmd-basis-note">Concentration = HHI, the sum of squared exporter shares (0–10,000): under 1,500 unconcentrated, 1,500–2,500 moderate, over 2,500 high. Grains: USDA projection for the current marketing year; others: FAOSTAT 2024. Volumes: FAOSTAT 2024.</div>`;
   }
   if (!shown.length) {
     grid.innerHTML = `<div class="cmd-empty">No commodity matches "<b>${_escFeed(q)}</b>". Try wheat, palm oil, cocoa, fertilizer…</div>`;
@@ -42592,7 +42607,7 @@ function renderCommodityGrid() {
   grid.innerHTML = shown.map(cm => {
     // v30.9 — prefer live-recomputed flows/obs/topExp over the stale meta fields.
     const lm = liveMeta[cm.key] || {};
-    if (lm.flows != null) { cm = Object.assign({}, cm, { flows: lm.flows, obsPct: lm.obsPct, topExp: lm.topExp, vol: lm.vol }); }
+    if (lm.flows != null) { cm = Object.assign({}, cm, { flows: lm.flows, obsPct: lm.obsPct, topExp: lm.topExp, vol: lm.vol, matrix: lm.matrix }); }
     const live = commodityLivePrice(cm.key);
     // Split price into number + unit for the V1-style layout
     const priceStr = live ? live.price : cm.price;
@@ -42611,7 +42626,7 @@ function renderCommodityGrid() {
     const score = conc ? conc.score : null;
     const story = conc ? conc.story : `<span style="color:var(--t3);">Concentration data unavailable</span>`;
     const bandColor = score != null ? concBandColor(score) : 'var(--t3)';
-    const alertPill = (score != null && score >= 70)
+    const alertPill = (score != null && score >= 2500)
       ? `<span class="cmd-card-alert"><span class="dot"></span>Alert</span>`
       : '';
     // v22.12 — family color, interpretation line, provenance badge
@@ -42634,9 +42649,9 @@ function renderCommodityGrid() {
       : `<span style="color:var(--t3)">no live benchmark</span>`;
     const restrict = (typeof commodityRestrictionBadge === 'function') ? commodityRestrictionBadge(cm.key) : '';
     const meta = [
-      cm.flows != null ? `${cm.flows} cited flows` : '',
+      cm.flows != null ? `${cm.flows.toLocaleString()} ${cm.matrix ? 'country pairs' : 'cited flows'}` : '',
       cm.topExp ? `${cm.topExp} #1 exporter` : '',
-      cm.obsPct != null ? `<span style="color:${cm.obsPct>=70?'#6ba36b':(cm.obsPct>=40?'#c9a957':'#c47a3c')}">${cm.obsPct}% observed</span>` : (isObserved ? 'observed · Comtrade' : 'modeled route'),
+      cm.obsPct != null ? `<span style="color:${cm.obsPct>=70?'#6ba36b':(cm.obsPct>=40?'#c9a957':'#c47a3c')}">${cm.obsPct}% ${cm.matrix ? 'importer-reported' : 'observed'}</span>` : (isObserved ? 'observed · Comtrade' : 'modeled route'),
       cm.vol ? (/ (world exports|in cited corridors)/.test(cm.vol) ? cm.vol : `${cm.vol} in cited corridors`) : '',
     ].filter(Boolean).map(s => `<span>${s}</span>`).join('');
     return `
@@ -42646,18 +42661,18 @@ function renderCommodityGrid() {
         <div class="cmd-row-cat"><i style="background:${fam.color}"></i>${fam.label || cm.cat || ''}</div>
       </div>
       <div class="cmd-row-conc">
-        <div class="cmd-row-pct" style="color:${bandColor}">${score != null ? score : '—'}<small>index</small></div>
+        <div class="cmd-row-pct" style="color:${bandColor}" title="${conc ? _escFeed(conc.band + '. ' + conc.basis) : ''}">${score != null ? score.toLocaleString() : '—'}<small>HHI</small></div>
         <div class="cmd-row-concbody">
-          <div class="cmd-row-bar"><i style="width:${score != null ? Math.max(0, Math.min(100, score)) : 0}%;background:${bandColor}"></i></div>
+          <div class="cmd-row-bar"><i style="width:${score != null ? Math.max(0, Math.min(100, score / 100)) : 0}%;background:${bandColor}"></i></div>
           <div class="cmd-row-story">${story}</div>
         </div>
       </div>
       <div class="cmd-row-price">
         ${spark}
         <div class="cmd-row-priceline">${priceLine}</div>
-        ${live ? `<div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.03em;line-height:1.3;color:var(--t3);text-align:right;">${note} · monthly avg</div>` : ''}
+        ${live ? `<div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.03em;line-height:1.3;color:var(--t3);text-align:right;">${(function(){ const yy = commodityYoY(cm.key); return yy == null ? '' : `<span style="color:${yy > 0 ? '#c44b3c' : '#6ba36b'}">${yy > 0 ? '+' : ''}${yy}% y/y</span> · `; })()}${note} · monthly avg</div>` : ''}
       </div>
-      <div class="cmd-row-meta">${meta}${restrict ? `<span class="cmd-row-badge">${restrict}</span>` : ''}${(score != null && score >= 70) ? `<span class="cmd-row-badge" style="color:#c44b3c">● concentration alert</span>` : ''}</div>
+      <div class="cmd-row-meta">${meta}${restrict ? `<span class="cmd-row-badge">${restrict}</span>` : ''}${(score != null && score >= 2500) ? `<span class="cmd-row-badge" style="color:${bandColor}">● highly concentrated</span>` : ''}</div>
     </div>`;
   }).join('');
 }
@@ -42998,13 +43013,62 @@ function renderCommodityNewsPanel(key) {
   </div>`;
 }
 
+/* FAOSTAT trade-matrix view of one commodity (null until the file is loaded or when FAOSTAT has no data). */
+function _tmCommodity(dataKey) {
+  const tm = (typeof LIVE !== 'undefined' && LIVE.trade_matrix) || null;
+  return tm && dataKey && tm[dataKey] ? tm[dataKey] : null;
+}
+function commodityMarketHTML(key) {
+  const meta = (typeof COMMODITY_META !== 'undefined') ? COMMODITY_META.find(m => m.key === key) : null;
+  const mx = meta ? _tmCommodity(meta.dataKey) : null;
+  if (!mx) return '';
+  const nm = iso => (typeof _nameFromISO === 'function' && _nameFromISO(iso)) || iso;
+  const fmtT = t => t >= 1e6 ? (t / 1e6).toFixed(1) + ' Mt' : t >= 1e3 ? Math.round(t / 1e3).toLocaleString() + ' kt' : Math.round(t) + ' t';
+  const silent = new Set(mx.exporters_not_reporting || []);
+  const conc = commodityConcentration(key);
+  const bar = (pct, col) => `<div class="cmd-mk-bar"><i style="width:${Math.max(2, Math.min(100, pct))}%;background:${col}"></i></div>`;
+  const maxE = (mx.top_exporters[0] || {}).share_pct || 1, maxI = (mx.top_importers[0] || {}).share_pct || 1;
+  const exp = mx.top_exporters.slice(0, 8).map(e => `<div class="cmd-mk-row"><span class="n">${nm(e.iso)}${silent.has(e.iso) ? ' <span class="cmd-mk-flag" title="Filed no ' + mx.year + ' export statistics: its trade is counted only where buyers reported it">understated</span>' : ''}</span>${bar(e.share_pct / maxE * 100, '#6ba36b')}<span class="v">${e.share_pct}%</span><span class="t">${fmtT(e.t)}</span></div>`).join('');
+  const imp = mx.top_importers.slice(0, 8).map(e => { const c = typeof byISO === 'function' ? byISO(e.iso) : null;
+    return `<div class="cmd-mk-row" role="link" tabindex="0" onkeydown="_kbdClick(event)" onclick="ctrOpenCountry('${e.iso}')" title="Open ${nm(e.iso)}'s Country report"><span class="n">${nm(e.iso)}${c && typeof c.fdrs === 'number' ? ` <span class="cmd-mk-fdrs" style="color:${riskColor(c.fdrs)}">${c.fdrs}</span>` : ''}</span>${bar(e.share_pct / maxI * 100, '#c44b3c')}<span class="v">${e.share_pct}%</span><span class="t">${fmtT(e.t)}</span></div>`; }).join('');
+  const corr = mx.flows.slice(0, 8).map(f => `<div class="cmd-mk-row"><span class="n">${nm(f.from)} → ${nm(f.to)}</span>${bar(f.t / mx.flows[0].t * 100, '#8aa6c4')}<span class="v">${fmtT(f.t)}</span><span class="t">${f.share_of_importer_pct != null ? f.share_of_importer_pct + '% of buyer' : ''}</span></div>`).join('');
+  return `<div class="cmd-market">
+    <div class="cmd-mk-lede">${fmtT(mx.world_t)} of ${_escFeed(mx.label.toLowerCase())} crossed borders in ${mx.year}, over ${mx.corridors_total.toLocaleString()} country pairs.${conc ? ` Concentration: <b style="color:${concBandColor(conc.score)}">HHI ${conc.score.toLocaleString()}</b> (${conc.band}).` : ''}
+      <button type="button" class="cmd-mk-map" onclick="commodityOnMap('${meta.dataKey}')">Show on the map ↗</button></div>
+    <div class="cmd-mk-grid">
+      <div><div class="cmd-mk-h">Exporters · share of world</div>${exp}</div>
+      <div><div class="cmd-mk-h">Importers · share of world · FDRS</div>${imp}</div>
+    </div>
+    <div class="cmd-mk-h" style="margin-top:14px">Largest corridors</div>${corr}
+    <div class="cmd-mk-src">${conc ? _escFeed(conc.basis) + ' ' : ''}Volumes: FAOSTAT Detailed Trade Matrix ${mx.year}, ${_escFeed(mx.basis)}; importer-declared, exporter-declared where the importer did not report (${mx.mirror_share_pct}% of tonnes).</div>
+  </div>`;
+}
+function ctrOpenCountry(iso) {
+  const sel = document.getElementById('country-sel');
+  if (typeof showTab === 'function') showTab('country');
+  if (sel) { sel.value = iso; if (typeof renderCountryTab === 'function') renderCountryTab(); }
+  try { updateURL({ tab: 'country', country: iso, commodity: null }); } catch (e) {}
+}
+function commodityOnMap(dataKey) {
+  if (typeof showTab === 'function') showTab('global', document.querySelector('.nav-btn'));
+  const st = window._mlState; if (st) st.flowsOn = true;
+  if (typeof renderMapLayers === 'function') renderMapLayers();
+  setTimeout(() => { const sel = document.getElementById('map-commodity-flows'); if (sel) { if (typeof populateCommodityFlowSelect === 'function') populateCommodityFlowSelect(); sel.value = dataKey; } toggleCommodityFlowOverlay(dataKey); }, 250);
+}
+function closeCommodityDetail() {
+  const d = document.getElementById('commodity-detail');
+  if (d) d.innerHTML = '';
+  try { updateURL({ commodity: null }); URL_STATE._last.commodity = null; } catch (e) {}
+  const g = document.getElementById('commodities-grid'); if (g) g.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 function showCommodityDetail(key) {
+  try { updateURL({ commodity: ((COMMODITY_META.find(m => m.key === key) || {}).dataKey) || key, country: null }); URL_STATE._last.commodity = key; } catch (e) {}
   _activeCommodity = key;
   const _meta0 = COMMODITY_META.find(c => c.key === key);
   if (!_meta0) return;
   /* Live-recomputed flows / observed share, the same numbers as the ledger row. */
   const _lm = ((typeof _recomputeCommodityMeta === 'function' ? _recomputeCommodityMeta() : {}) || {})[key] || {};
-  const meta = _lm.flows != null ? Object.assign({}, _meta0, { flows: _lm.flows, obsPct: _lm.obsPct }) : _meta0;
+  const meta = _lm.flows != null ? Object.assign({}, _meta0, { flows: _lm.flows, obsPct: _lm.obsPct, matrix: _lm.matrix }) : _meta0;
   var family = COMMODITY_FAMILY[meta.cat] || { color: 'var(--b2)' };
   // v21.x — read live Pink Sheet price the same way the card grid does so the
   // drilldown header price matches the card price (fixes "$403 on the card vs
@@ -43062,11 +43126,12 @@ function showCommodityDetail(key) {
 
   detail.innerHTML = `
     <div class="card" style="margin-bottom:0;">
+      <div class="cmd-detail-bar"><button type="button" class="cmd-detail-back" onclick="closeCommodityDetail()">← Back to the list</button></div>
       <div class="cmd-detail-head" style="display:grid;grid-template-columns:auto 1fr auto;gap:14px 14px;align-items:center;margin-bottom:20px;">
         <div class="cmd-row-cat" aria-hidden="true"><i style="background:${family.color}"></i></div>
         <div>
           <div style="font-size:20px;font-weight:700;color:var(--t1);">${meta.key}</div>
-          <div style="font-size:12px;color:var(--t3);">${(() => { try { const n = (((typeof _beefData === 'function' ? _beefData() : {})[meta.dataKey] || {}).global || {}).note; return n ? _escFeed(n) : meta.desc; } catch (e) { return meta.desc; } })()}</div>
+          <div style="font-size:12px;color:var(--t3);">${_escFeed(meta.desc || '')}</div>
         </div>
         <div class="cmd-detail-price" style="text-align:right;">
           <div style="font-size:22px;font-weight:600;font-family:'Geist Mono',monospace;color:var(--t1)">${headerPrice}</div>
@@ -43074,67 +43139,14 @@ function showCommodityDetail(key) {
         </div>
         <div style="grid-column:1 / -1;display:flex;flex-wrap:wrap;gap:6px;margin-top:-4px;">
           ${live ? trustChip(live.note || 'World Bank Pink Sheet', '#8aa6c4', 'Price source / update') : ''}
-          ${trustChip('Trade flows · ' + (_flowMix || 'FAOSTAT / UN Comtrade'), '#6ba36b', 'Corridor sources, by number of corridors')}
-          ${trustChip((meta.obsPct!=null ? meta.obsPct+'% observed' : 'Compiled route') + (meta.flows!=null ? ' · ' + meta.flows + ' cited flows' : ''), (meta.obsPct!=null && meta.obsPct>=60) ? '#6ba36b' : '#c9a957', 'Observed share vs compiled remainder')}
+          ${(function(){ const mx = _tmCommodity(meta.dataKey); return mx
+            ? trustChip('Trade · FAOSTAT ' + mx.year + ' · ' + (100 - mx.mirror_share_pct).toFixed(0) + '% importer-reported', '#6ba36b', 'Share of world tonnes declared by the importing country')
+            : trustChip('Trade flows · ' + (_flowMix || 'curated atlas'), '#c9a957', 'Corridor sources, by number of corridors'); })()}
         </div>
         ${_sparkBlock}
       </div>
 
-      ${(function(){
-        // v20.7 item 4: separate observed-trade flows from modeled dependency
-        // v21 expansion: now covers palm oil, sugar, coffee, cocoa, fertilizer
-        // and cattle/beef in addition to the four staples.
-        const commLower = key.toLowerCase();
-        const obsKey = /wheat/.test(commLower) ? 'wheat'
-                    : /rice/.test(commLower) ? 'rice'
-                    : /maize|corn/.test(commLower) ? 'maize'
-                    : /soy/.test(commLower) ? 'soybeans'
-                    : /palm/.test(commLower) ? 'palm_oil'
-                    : /sugar/.test(commLower) ? 'sugar'
-                    : /coffee/.test(commLower) ? 'coffee'
-                    : /cocoa|cacao/.test(commLower) ? 'cocoa'
-                    : /fertilizer|fertiliser|urea/.test(commLower) ? 'fertilizer'
-                    : /cattle|beef|bovine/.test(commLower) ? 'beef'
-                    : null;
-        if (!obsKey || !LIVE.comtrade) return '';
-        const obs = [];
-        for (const [iso, byCom] of Object.entries(LIVE.comtrade || {})) {
-          const row = byCom?.[obsKey];
-          if (row && row.total_usd_m != null) obs.push({iso, ...row});
-        }
-        if (!obs.length) return `<div style="margin-bottom:18px;padding:12px 14px;background:var(--bg1);border:1px dashed var(--b2);border-radius:3px;font-size:var(--fs-prose);color:var(--t3);"><b style="color:var(--t2);">Observed bilateral trade</b> · Unavailable. UN Comtrade staples snapshot does not cover ${key} for any tracked country.</div>`;
-        obs.sort((a,b)=> (b.total_usd_m||0)-(a.total_usd_m||0));
-        return `
-        <div style="margin-bottom:20px;padding:14px 16px;background:var(--bg1);border:1px solid var(--b2);border-radius:3px;">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-            <div style="font-size:11px;font-weight:700;color:#6ba36b;text-transform:uppercase;letter-spacing:.08em;">2024 import value · UN Comtrade sample</div>
-            <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#6ba36b;background:#6ba36b18;padding:1px 4px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">obs · comtrade</span>
-            <span style="font-size:11px;color:var(--t3);margin-left:auto;">${obs.length} priority importers only, import values (USD), not a world ranking</span>
-          </div>
-          ${(function(){
-            // v35 — alignment fix: name + value used to sit at opposite edges of the
-            // full-width card (grid 1.6fr/auto) with ~1200px of dead space between.
-            // Now a fixed name column, a proportional volume bar (scaled to the top
-            // importer, same design language as the modeled-exposure lists below),
-            // and a right-aligned value column.
-            const maxV = obs[0]?.total_usd_m || 1;
-            return obs.slice(0,12).map(o => {
-              const co = byISO(o.iso);
-              // v21 — kt column dropped (preview API returns no netWgt).
-              // total_usd_m is mis-named — upstream returns raw USD — so route it
-              // through _fmtMoneyUSD() to render as $B/$M.
-              const pct = Math.max(2, Math.round((o.total_usd_m||0)/maxV*100));
-              return `<div class="cmd-obs-row" style="display:grid;grid-template-columns:minmax(140px,180px) 1fr 78px;gap:14px;align-items:center;padding:6px 0;border-bottom:1px solid var(--b1);font-size:11.5px;">
-                <div role="link" tabindex="0" onkeydown="_kbdClick(event)" style="cursor:pointer;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" onclick="openPanel(byISO('${o.iso}'));showTab('global',document.querySelector('.nav-btn'))">${co?.name || o.iso}</div>
-                <div class="cmd-obs-bar" style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#6ba36b88,#6ba36b);border-radius:2px;"></div></div>
-                <div class="mono" style="color:var(--t1);font-weight:600;text-align:right;">${_fmtMoneyUSD(o.total_usd_m)}</div>
-              </div>`;
-            }).join('');
-          })()}
-          ${obs.length > 12 ? `<div style="font-size:10.5px;color:var(--t3);padding:8px 0 2px;">+ ${obs.length-12} more importing countries with observed Comtrade flows</div>` : ''}
-        </div>`;
-      })()}
-
+      ${commodityMarketHTML(key)}
       ${(function(){
         // v35 — cited trade corridors from the 46-commodity atlas. Before this,
         // commodities outside the 10-staple Comtrade snapshot (salmon, cod, tuna,
@@ -43144,7 +43156,7 @@ function showCommodityDetail(key) {
           const dk = (typeof COMMODITY_META !== 'undefined' && (COMMODITY_META.find(m=>m.key===key)||{}).dataKey) || null;
           const com = dk && (typeof _beefData==='function') ? _beefData()[dk] : null;
           const fl = com && Array.isArray(com.flows) ? com.flows.slice().sort((a,b)=>(b.value||0)-(a.value||0)) : [];
-          if (!fl.length) return '';
+          if (!fl.length || commodityMarketHTML(key)) return '';
           const maxV = fl[0].value || 1;
           const nObs = fl.filter(f=>f.kind==='observed').length;
           return `
@@ -43171,66 +43183,6 @@ function showCommodityDetail(key) {
         } catch(e) { return ''; }
       })()}
 
-      <!-- v79 — MODELED MATCHES FOLD AWAY.
-           This block stacked up to 20 importers + 20 exporters = 40 heuristic
-           rows directly beneath the sourced corridors, so the cited trade data
-           and the concentration signal — the reason the ledger leads with
-           concentration at all — were pushed off-screen by a keyword match on
-           curated country prose. The rows are still here for anyone who wants
-           them; they just no longer outrank the evidence. Sourced first,
-           modeled on request: the provenance tiers expressed as layout. -->
-      <details class="cmd-modeled-fold">
-      <summary>
-        <span style="font-size:11px;font-weight:700;color:#c47a3c;text-transform:uppercase;letter-spacing:.08em;">
-          Modeled dependency / exposure
-          <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#c47a3c;background:#c47a3c18;padding:1px 4px;border-radius:3px;margin-left:4px;letter-spacing:.04em;text-transform:uppercase;">modeled</span>
-        </span>
-        <span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--t3);margin-left:auto;">${importers.length} importers · ${exporters.length} exporters</span>
-      </summary>
-      <div style="font-size:10.5px;color:var(--t3);margin:10px 0;">Countries whose curated import/export list mentions ${key}. A keyword match on curated prose: <b style="color:var(--t2)">not customs records</b>, and not ranked by volume. The cited corridors above are the sourced view.</div>
-
-      <div class="grid-2">
-        <!-- Importers -->
-        <div>
-          <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">
-            Import list names ${key} (${importers.length}) · FDRS risk score
-          </div>
-          ${importers.length === 0 ? `<div style="padding:14px;border:1px dashed var(--b2);border-radius:8px;font-size:var(--fs-prose);color:var(--t3);line-height:1.6;">No curated country import list names ${key} explicitly: the heuristic exposure match found nothing. The cited corridors above are the sourced view of who buys it.</div>` : ''}
-          ${importers.slice(0,20).map(c => `
-            <div class="live-indicator-row" role="link" tabindex="0" onkeydown="_kbdClick(event)" style="cursor:pointer;" onclick="openPanel(byISO('${c.iso}'));showTab('global',document.querySelector('.nav-btn'))">
-              <div class="live-status-dot ${c.fdrs>=76?'red':c.fdrs>=51?'yellow':'green'}"></div>
-              <div class="live-indicator-name">${c.name}</div>
-              <div style="flex:1;padding:0 10px;">
-                <div style="height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;">
-                  <div style="height:100%;width:${c.fdrs}%;background:${riskColor(c.fdrs)};border-radius:2px;"></div>
-                </div>
-              </div>
-              <div style="font-family:'Geist Mono',monospace;font-size:12px;color:${riskColor(c.fdrs)};font-weight:600;">${c.fdrs}</div>
-            </div>`).join('')}
-          ${importers.length > 20 ? `<div style="font-size:11px;color:var(--t3);padding:8px 0;">+ ${importers.length-20} more countries</div>` : ''}
-        </div>
-
-        <!-- Exporters / producers -->
-        <div>
-          <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">
-            Export list names ${key} (${exporters.length}) · FDRS risk score
-          </div>
-          ${exporters.length === 0 ? `<div style="padding:14px;border:1px dashed var(--b2);border-radius:8px;font-size:var(--fs-prose);color:var(--t3);line-height:1.6;">No curated country export list names ${key} explicitly: the heuristic exposure match found nothing. The cited corridors above are the sourced view of who supplies it.</div>` : ''}
-          ${exporters.slice(0,20).map(c => `
-            <div class="live-indicator-row" role="link" tabindex="0" onkeydown="_kbdClick(event)" style="cursor:pointer;" onclick="openPanel(byISO('${c.iso}'));showTab('global',document.querySelector('.nav-btn'))">
-              <div class="live-status-dot green"></div>
-              <div class="live-indicator-name">${c.name}</div>
-              <div style="flex:1;padding:0 10px;">
-                <div style="height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;">
-                  <div style="height:100%;width:${c.fdrs}%;background:${riskColor(c.fdrs)};border-radius:2px;"></div>
-                </div>
-              </div>
-              <div style="font-family:'Geist Mono',monospace;font-size:12px;color:${riskColor(c.fdrs)};font-weight:600;">${c.fdrs}</div>
-            </div>`).join('')}
-          ${exporters.length > 20 ? `<div style="font-size:11px;color:var(--t3);padding:8px 0;">+ ${exporters.length-20} more countries</div>` : ''}
-        </div>
-      </div>
-      </details>
 
       <!-- v46 — headlines + interpretation. Commodities tab only. -->
       ${(typeof renderCommodityNewsPanel === 'function') ? renderCommodityNewsPanel(key) : ''}
