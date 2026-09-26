@@ -48856,6 +48856,16 @@ function showCommodityDetail(key) {
           '<td class="enso-ol-v">' + (typeof sr.yoy_pct === 'number' ? num(sr.yoy_pct, 0) + '%' : '—') + '</td><td class="enso-ol-v">' + (typeof sr.vs_baseline_pct === 'number' ? num(sr.vs_baseline_pct, 0) + '%<span class="enso-live-sub">' + esc(sr.baseline.window_label || '') + '</span>' : '—') + '</td><td>' + spark(sr.points) + '</td></tr>'; }).join('') +
       '</tbody></table></div><figcaption class="enso-log">Monthly ocean rates; weekly inspections (metric tons) and barge tonnage (short tons). No official Panama grain-transit series exists: USDA inspections record the port region, not the route.</figcaption></figure>';
   }
+  /* The board's state names the lane's published link and whether its phase is running; it never grades
+     risk by this site's ONI rule, so a strong-attribution lane is never called weak when ONI eases. */
+  function laneStateLabel(ln, v) {
+    if (v.level === 'restricted') return 'Restricted now · not ENSO';
+    if (ln.phase === 'none') return 'No ENSO link';
+    if (ln.attribution === 'weak') return 'Weak link';
+    var oni = S.oniLive != null ? S.oniLive : (S.enso && S.enso.latest && S.enso.latest.anom);
+    if (ln.phase === 'la_nina') return typeof oni === 'number' && oni >= 0.5 ? 'Usually eases in El Niño' : typeof oni === 'number' && oni <= -0.5 ? 'In phase: La Niña under way' : 'La Niña lane, phase not running';
+    return typeof oni === 'number' && oni >= 0.5 ? 'In phase: El Niño under way' : 'El Niño lane, phase not running';
+  }
   function laneBoard(lanes, readOn) {
     /* The board reads gauges and PortWatch, so it is stamped with the newer of the two collections. */
     var dG = Date.parse(metaDate('gauges') || 0) || 0, dP = Date.parse(metaDate('portwatch') || 0) || 0;
@@ -48867,7 +48877,7 @@ function showCommodityDetail(key) {
         return '<tr data-board-lane="' + esc(ln.id) + '"><th scope="row"><button type="button" data-open-lane="' + esc(ln.id) + '" aria-controls="enso-lane-record-' + esc(ln.id) + '">' + esc(laneName(ln)) + '</button></th>' +
           '<td data-label="ENSO link"><i class="enso-tier-sw" style="border-top:' + (laneTier(ln) === 1 ? 2.2 : 1.2) + 'px dashed ' + (laneTier(ln) === 3 ? '#7b8491' : phaseInk(ln)) + '"></i>' + (ln.phase === 'el_nino' ? 'El Niño' + '<span class="enso-live-sub">' + esc(ln.attribution) + ' attribution</span>' : ln.phase === 'la_nina' ? 'La Niña' + '<span class="enso-live-sub">' + esc(ln.attribution) + ' attribution</span>' : 'No published ENSO link') + '</td>' +
           '<td data-label="Measured now" class="enso-lane-now">' + bulletList(laneNowParts(ln).map(esc)) + '</td>' +
-          (function () { var v = laneVerdict(ln); return '<td data-label="Outlook" class="enso-lane-verdict is-' + v.level + '"><b>' + esc({ elevated: 'In phase: El Niño under way', watch: 'Weak link', eases: 'Usually eases in El Niño', other: 'No ENSO link', restricted: 'Restricted now · not ENSO' }[v.level]) + '</b>' + bulletList(bulletsOf(v.text, 3).map(esc), 'is-sub') + '</td>'; })() + '</tr>';
+          (function () { var v = laneVerdict(ln); return '<td data-label="Outlook" class="enso-lane-verdict is-' + v.level + '"><b>' + esc(laneStateLabel(ln, v)) + '</b>' + bulletList(bulletsOf(v.text, 3).map(esc), 'is-sub') + '</td>'; })() + '</tr>';
       }).join('') + '</tbody></table></div></figure>';
   }
 
