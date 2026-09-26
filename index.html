@@ -3632,8 +3632,11 @@ abbr.ac:hover, .ac:hover {
 }
 .tour-card-progress {
   font-size: 10.5px; color: var(--t3);
-  font-family: 'Geist Mono', monospace;
+  font-family: 'Geist Mono', monospace; display: flex; gap: 4px; align-items: center;
 }
+.tour-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--b2); display: inline-block; }
+.tour-dot.done { background: var(--t3); }
+.tour-dot.on { background: var(--accent); width: 14px; border-radius: 3px; }
 .tour-card-buttons { display: flex; gap: 6px; }
 .tour-btn {
   font-size: 11.5px; font-weight: 500;
@@ -9766,8 +9769,9 @@ input[type="email"]:focus {
   }
   .rail-toggle { display: none !important; }   /* collapse toggle is meaningless when stacked */
 
-  /* Country side panel: full-screen slide-over instead of a 360px column */
-  #sidepanel {
+  /* Country side panel: full-screen slide-over instead of a 360px column. The impact panel gets the
+     same layer, or the map layer control and legend draw over its header. */
+  #sidepanel, .impact-panel {
     width: 100%;
     border-left: none;
     z-index: 1200;
@@ -11103,6 +11107,19 @@ table.enso-tbl thead th:first-child { z-index:3; }
 .sp-sup-src{font-size:9px;color:var(--t-meta);font-family:'Geist Mono',monospace;margin:6px 0 10px;}
 #map.flows-on .leaflet-overlay-pane path.leaflet-interactive{fill-opacity:.28 !important;}
 #map.flows-on .map-relief-pane{opacity:.55;}
+.flow-pop .leaflet-popup-content-wrapper{background:var(--bg1);color:var(--t1);border:1px solid var(--b2);border-radius:4px;box-shadow:0 12px 32px rgba(0,0,0,.45);}
+.flow-pop .leaflet-popup-tip{background:var(--bg1);}
+.flow-pop .leaflet-popup-content{margin:12px 14px;}
+.flow-card-eyebrow{display:flex;align-items:center;gap:6px;font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);}
+.flow-card-eyebrow span{width:9px;height:9px;border-radius:50%;display:inline-block;}
+.flow-card-route{font-family:'Instrument Serif',serif;font-size:19px;line-height:1.2;margin:6px 0 4px;color:var(--t1);}
+.flow-card-route span{color:var(--t3);}
+.flow-card-v{font-family:'Geist Mono',monospace;font-size:16px;color:var(--t1);}
+.flow-card-s{font-size:12px;color:var(--t2);margin-top:2px;}
+.flow-card-src{font-size:10.5px;color:var(--t3);margin-top:8px;line-height:1.45;}
+.flow-card-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+.flow-card-btn{background:none;border:1px solid var(--b2);color:var(--t2);border-radius:3px;padding:4px 9px;font-size:11px;font-family:inherit;cursor:pointer;}
+.flow-card-btn:hover{border-color:var(--accent);color:var(--t1);}
 #map-flow-legend .fl-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
 #map-flow-legend .fl-title{font-family:'Instrument Serif',serif;font-size:19px;color:var(--t1);line-height:1.15;}
 #map-flow-legend .fl-x{background:none;border:none;color:var(--t3);cursor:pointer;font-size:16px;line-height:1;padding:2px 4px;}
@@ -13016,7 +13033,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
     </div>
 
     <!-- Side panel -->
-    <div id="sidepanel" class="hidden">
+    <div id="sidepanel" class="hidden" role="dialog" aria-labelledby="sp-name" tabindex="-1">
       <div class="sp-header">
         <div class="sp-header-bg" id="sp-header-bg"></div>
         <div class="sp-eyebrow">Country profile</div>
@@ -24981,7 +24998,10 @@ function _simulateScenario(c, selected, severityById, paramsById) {
 
     G.flows.forEach((flow, fi) => {
       const segs = greatCirclePath(flow.from, flow.to, 32);
-      const color = flow.type === 'import' ? '#c44b3c' : '#6ba36b';
+      /* Colour = exporter, the rule every flow view follows: on imports each supplier keeps its rank's
+         hue; on exports the exporter is the selected country, so one hue. */
+      const _pal = (typeof FLOW_EXPORTER_COLORS !== 'undefined') ? FLOW_EXPORTER_COLORS : ['#7fd3ff'];
+      const color = flow.type === 'import' ? (_pal[(flow.rank || fi + 1) - 1] || '#8b939c') : _pal[0];
 
       // Dim base arc
       const baseLine = L.polyline(segs, {
@@ -24999,6 +25019,17 @@ function _simulateScenario(c, selected, severityById, paramsById) {
         lineCap: 'round',
       }).addTo(G.map);
       G.flowLines.push(anim);
+
+      /* A wide invisible line takes the click and opens the same corridor card as the world view. */
+      const hub = G.selectedISO || null, partner = flow.iso || null;
+      if (hub && partner) {
+        const hit = L.polyline(segs, { color, weight: 12, opacity: 0, pane: 'flows', interactive: true }).addTo(G.map);
+        const amt = flow.volumeKt ? (flow.volumeKt >= 1000 ? (flow.volumeKt / 1000).toFixed(1) + ' Mt' : Math.round(flow.volumeKt) + ' kt') : (flow.weight ? Math.round(flow.weight) + '% of the trade shown' : '');
+        hit.on('click', (e) => flowCard(e.latlng, { from: flow.type === 'import' ? partner : hub, to: flow.type === 'import' ? hub : partner, color,
+          label: flow.commodity || 'Trade', amount: amt, share: flow.weight && flow.volumeKt ? Math.round(flow.weight) + '% of ' + (flow.type === 'import' ? 'these imports' : 'these exports') : '',
+          basis: flow.isCommodityView ? 'Supplier mix: FAOSTAT trade matrix where it covers the country, curated atlas otherwise' : 'Country trade profile' }));
+        G.flowLines.push(hit);
+      }
 
       // v21.x — keep one ref per flow so the side panel can target it
       G.flowRefs.push({
@@ -25388,7 +25419,8 @@ function _simulateScenario(c, selected, severityById, paramsById) {
   // ranked endpoint markers — 100+ flows would spam the map), stroke scaled
   // by tonnage, solid = observed, dashed = modeled. Tracked in G.flowLines
   // so clearFlowsOnly()/country selection cleans it up like any flow view.
-  function drawAtlasFlows(flowList, commodityLabel) {
+  function drawAtlasFlows(flowList, commodityLabel, opts) {
+    const colorOf = (opts && opts.colorOf) || null;
     if (!Array.isArray(flowList) || !flowList.length) return;
     clearFlowsOnly();
     if (typeof clearImpactArcs === 'function') clearImpactArcs();
@@ -25404,7 +25436,7 @@ function _simulateScenario(c, selected, severityById, paramsById) {
       const kt = parseFloat(f.value) || 0;
       const obs = f.kind === 'observed';
       const w = 0.7 + 4.3 * Math.sqrt(kt / maxKt);          // 0.7..5 px — stroke scales with tonnage
-      const color = obs ? '#6ba36b' : '#8aa6c4';
+      const color = colorOf ? colorOf(f.from) : (obs ? '#6ba36b' : '#8aa6c4');
       const segs = greatCirclePath(a, b, 24);
       // v34.1 — split at the antimeridian so trans-Pacific corridors don't render
       // as full-width horizontal streaks (consecutive lng jump > 180° = a wrap).
@@ -25420,8 +25452,10 @@ function _simulateScenario(c, selected, severityById, paramsById) {
       }).addTo(G.map);
       const ktTxt = kt >= 1000 ? (kt/1000).toFixed(1) + ' Mt' : Math.round(kt) + ' kt';
       const _nm = (x) => (typeof _nameFromISO === 'function' && _nameFromISO(x)) || x;
-      line.bindTooltip(`${_nm(f.from)} → ${_nm(f.to)} · ${ktTxt} · ${obs ? 'observed' : 'modeled'}${commodityLabel ? ' · ' + commodityLabel : ''}`,
+      line.bindTooltip(`${_nm(f.from)} → ${_nm(f.to)} · ${ktTxt} · ${obs ? 'observed' : 'modelled'}${commodityLabel ? ' · ' + commodityLabel : ''}`,
         { sticky: true, direction: 'top', className: 'map-tip' });
+      line.on('click', (e) => flowCard(e.latlng, { from: f.from, to: f.to, color, label: commodityLabel || 'Trade', year: f.year || '',
+        amount: ktTxt, share: '', basis: `Curated trade atlas · ${obs ? 'observed (a published figure)' : 'modelled route, basis stated in the source'}${f.src ? ' · ' + f.src : ''}` }));
       G.flowLines.push(line);
       // Direction arrow at ~60% along the arc, rotated to the local bearing
       // (north-up CSS rotation ≈ screen angle on this projection).
@@ -25446,6 +25480,23 @@ function _simulateScenario(c, selected, severityById, paramsById) {
       drawn++;
     });
     return drawn;
+  }
+
+  /* One card for every trade arc, whichever layer drew it: route, tonnes, what it is of the buyer's
+     imports, the basis and year, and a way into either country. */
+  function flowCard(latlng, d) {
+    const nm = (x) => (typeof _nameFromISO === 'function' && _nameFromISO(x)) || x;
+    const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    const btn = (iso) => (typeof byISO === 'function' && byISO(iso))
+      ? `<button type="button" class="flow-card-btn" onclick="(function(){const c=byISO('${iso}');if(c)openPanel(c);})()">Open ${esc(nm(iso))}</button>` : '';
+    const html = `<div class="flow-card">
+      <div class="flow-card-eyebrow"><span style="background:${d.color || '#8b939c'}"></span>${esc(d.label || 'Trade')}${d.year ? ' · ' + esc(d.year) : ''}</div>
+      <div class="flow-card-route">${esc(nm(d.from))} <span>→</span> ${esc(nm(d.to))}</div>
+      <div class="flow-card-v">${esc(d.amount)}</div>
+      ${d.share ? `<div class="flow-card-s">${esc(d.share)}</div>` : ''}
+      <div class="flow-card-src">${esc(d.basis)}</div>
+      <div class="flow-card-btns">${btn(d.from)}${btn(d.to)}</div></div>`;
+    L.popup({ className: 'flow-pop', maxWidth: 280, autoPanPadding: [40, 40] }).setLatLng(latlng).setContent(html).openOn(G.map);
   }
 
   // Measured corridors (FAOSTAT trade matrix). Each of the largest exporters gets its own
@@ -25486,6 +25537,9 @@ function _simulateScenario(c, selected, severityById, paramsById) {
         { sticky: true, direction: 'top', className: 'map-tip' });
       line.on('mouseover', () => { line.setStyle({ opacity: 1, weight: w + 1.5 }); line.bringToFront(); });
       line.on('mouseout', () => line.setStyle({ opacity: G._flowFocus ? (G._flowFocus(line) ? 0.95 : 0.08) : 0.72, weight: w }));
+      line.on('click', (e) => flowCard(e.latlng, { from: f.from, to: f.to, color, label: o.label ? o.label[0].toUpperCase() + o.label.slice(1) : 'Trade', year: o.year,
+        amount: fmtT(f.t), share: f.share_of_importer_pct != null ? `${f.share_of_importer_pct}% of ${nm(f.to)}'s ${o.label || ''} imports` : '',
+        basis: `FAOSTAT Detailed Trade Matrix · ${f.basis === 'mirror' ? 'exporter-reported (the importer did not report)' : 'importer-reported'}` }));
       G.flowLines.push(line); lines.push(line);
       drawn++;
     });
@@ -25516,6 +25570,7 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     return drawn;
   }
 
+  G.flowCard = flowCard;
   function drawExportFlows(fromIso, commodity, dests) {
     if (!fromIso || !dests) return;
     clearFlowsOnly();
@@ -26158,7 +26213,7 @@ function selectCountry(iso) {
   const c = byISO(iso); if (!c) return;
   // v34 — country selection draws that country's flows; reset the atlas overlay control
   const _cfSel = document.getElementById('map-commodity-flows');
-  if (_cfSel && _cfSel.value) { _cfSel.value = ''; const lg=document.getElementById('map-flow-legend'); if (lg) lg.style.display='none'; }
+  if (_cfSel && _cfSel.value) { _cfSel.value = ''; if (typeof toggleCommodityFlowOverlay === 'function') toggleCommodityFlowOverlay(''); }
   document.getElementById('autocomplete').style.display='none';
   document.getElementById('search-box').value = c.name;
   showTab('global', document.querySelector('.nav-btn'));
@@ -27900,14 +27955,21 @@ function openUSADrilldown() {
 
 function openPanel(c, skipDrilldown) {
   if (typeof dismissFirstHint === 'function') dismissFirstHint();
+  try {
+    const _sp0 = document.getElementById('sidepanel');
+    if (_sp0 && _sp0.classList.contains('hidden')) _sp0._returnFocus = document.activeElement;
+    /* Keyboard users land on the panel's close button; pointer users keep the map where it is. */
+    setTimeout(() => { const b = _sp0 && _sp0.querySelector('.sp-close'); if (b && !_sp0.classList.contains('hidden') && document.activeElement && document.activeElement !== document.body) b.focus({ preventScroll: true }); }, 60);
+  } catch (e) {}
   if (c && typeof loadCountryTrade === 'function') loadCountryTrade(c.iso);
   // v34.1 — entering a country profile replaces any atlas commodity overlay; keep
   // the toolbar select + legend in sync on the polygon-click path too.
   try {
+    /* Switch the commodity overlay off the same way its own × does, so the rail and the map dimming
+       come back when the panel closes (hiding only the legend left a blank rail). */
     const _cfSel2 = document.getElementById('map-commodity-flows');
-    if (_cfSel2 && _cfSel2.value) { _cfSel2.value = ''; }
-    const _lg2 = document.getElementById('map-flow-legend');
-    if (_lg2) _lg2.style.display = 'none';
+    if (_cfSel2 && _cfSel2.value) _cfSel2.value = '';
+    if (typeof _atlasFlowKey !== 'undefined' && _atlasFlowKey && typeof toggleCommodityFlowOverlay === 'function') toggleCommodityFlowOverlay('');
   } catch (e) {}
   // Intercept USA clicks to show drill-down (unless bypassed)
   if (c && c.iso === 'USA' && !skipDrilldown) {
@@ -28715,7 +28777,11 @@ function openPanel(c, skipDrilldown) {
 }
 
 function closePanel() {
-  document.getElementById('sidepanel').classList.add('hidden');
+  const _sp = document.getElementById('sidepanel');
+  const _wasOpen = _sp && !_sp.classList.contains('hidden');
+  _sp.classList.add('hidden');
+  /* Focus goes back to where the reader was (a search box, a rail row), not to the page body. */
+  if (_wasOpen) { const r = _sp._returnFocus; _sp._returnFocus = null; if (r && typeof r.focus === 'function' && document.contains(r) && !_sp.contains(r)) try { r.focus({ preventScroll: true }); } catch (e) {} }
   // v21.x — clear TFA "Clear routes" link on panel close (legacy legend/hide
   // button no longer in DOM).
   const clearLink = document.getElementById('tfa-clear-link');
@@ -36363,7 +36429,7 @@ const TOUR_STEPS = [
     // users as the literal text "${(LIVE?.manifest?.summary?.total_sources) || 40}".
     // An automated patch swapped a hardcoded 34 for an expression without
     // checking the quote style of the string it was editing.
-    body: `Countries are coloured by their <em>Food Disruption Risk Score</em>: green resilient, red severe. The score blends ${(LIVE?.manifest?.summary?.total_sources) || 55} data pipelines (imports, climate, conflict, logistics, prices) into one number you can scan in seconds.`,
+    body: () => `Countries are coloured by their <em>Food Disruption Risk Score</em>, from green (low exposure) to magenta (severe). It blends ${(LIVE?.manifest?.summary?.total_sources) || 'the'} public data sources (imports, climate, conflict, logistics, prices) into one number per country.`,
     before: () => { try { showTab('global'); } catch(e){} closePanelIfOpen(); return 300; },
   },
   {
@@ -36384,6 +36450,8 @@ const TOUR_STEPS = [
     before: () => {
       try { showTab('global'); } catch(e){}
       closePanelIfOpen();
+      /* On phones the layer panel starts folded; open it so the step shows what it describes. */
+      try { if (window._mlState) { window._mlState.panelOpen = true; if (typeof renderMapLayers === 'function') renderMapLayers(); } } catch(e) {}
       const tryActivate = (attempt = 0) => {
         const st = window._mlState;
         const globeReady = window.Globe && typeof window.Globe.showDisturbances === 'function';
@@ -36415,7 +36483,7 @@ const TOUR_STEPS = [
   {
     selector: '#sidepanel',
     title: 'Click any country for a deep brief',
-    body: 'Watch: we just opened <em>Egypt</em>. You\'d normally click a country on the map or use search. Each brief shows the risk score, where the country\'s food comes from, live shocks affecting it, and an AI-written summary.',
+    body: 'We just opened <em>Egypt</em>; normally you click a country or search for it. Each brief shows the score and what drives it, where the country\'s staples come from, the live shocks affecting it, and the hunger figures that the score itself does not measure.',
     before: () => {
       try { showTab('global'); } catch(e){}
       try { selectCountry('EGY'); } catch(e){}
@@ -36425,7 +36493,14 @@ const TOUR_STEPS = [
   {
     selector: '#sp-score',
     title: 'The headline score',
-    body: 'Egypt sits in the upper range. Why? It runs heavy structural import dependency across staples, wheat from the Black Sea, dairy from the EU and New Zealand, while servicing a 110m-person population. That structural exposure plus live FX stress drives the number.',
+    body: () => {
+      try {
+        const c = byISO('EGY'), d = FoodShieldScore.decomposition(c.c, c._sce);
+        const names = ['staple import dependence','supplier concentration','production trend','food inflation','climate','conflict and logistics','supply-chain exposure','economic access','grain buffer'];
+        const top = d.contributions.map((v, i) => ({ v, i })).filter(x => x.v != null).sort((a, b) => b.v - a.v).slice(0, 3);
+        return `Egypt scores <em>${c.fdrs}</em> (${riskLabel(c.fdrs)}). The largest parts: ${top.map(x => names[x.i] + ' ' + x.v.toFixed(1) + ' pts').join(', ')}. The breakdown under the score adds up to the number, and each part links to its source.`;
+      } catch (e) { return 'The headline score and the parts it is built from, each with its source.'; }
+    },
     before: () => 250,
   },
   {
@@ -36434,7 +36509,7 @@ const TOUR_STEPS = [
     // doesn't trigger the globe to render arcs (that's a separate function).
     selector: '#trade-atlas-cta',
     title: 'Trade Flow Atlas',
-    body: 'We just selected <em>Dairy</em> and pushed the flows to the globe. Watch the arcs appear: each one is a real import flow into Egypt, weighted by USD value. Pick any commodity for any country to see its real trade pattern.',
+    body: 'We just selected <em>Dairy</em> and drew Egypt\'s suppliers on the map. Each arc is one supplier; its colour is the exporter and its width the share of Egypt\'s imports. Click an arc for the corridor card; pick any commodity for any country.',
     before: () => {
       // Ensure Egypt panel is open
       try {
@@ -36478,7 +36553,7 @@ const TOUR_STEPS = [
     // stroke weight = tonnage). Cleaned up in `after`.
     selector: '#map-layers',
     title: 'Live commodity flows · the whole world at once',
-    body: 'We just pushed <em>Wheat</em> to the globe: every cited trade corridor on Earth, at once. <strong>Solid green</strong> = observed (real customs/FAOSTAT data), <strong>dashed blue</strong> = modeled, and line thickness = tonnage. Tick <em>Trade flows</em> in the Map layers panel and pick a commodity to trace rice, maize, soy, fertiliser and more across the whole map.',
+    body: 'We just drew world <em>wheat</em> trade from FAOSTAT\'s 2024 matrix. <strong>Colour = exporter</strong> (the eight largest), filled discs are exporters and rings importers, line width is tonnes, dashed means the importer did not report. Click any arc for its card. Tick <em>Trade flows</em> in Map layers to trace any of 36 commodities.',
     before: () => {
       try { showTab('global'); } catch(e){}
       closePanelIfOpen();
@@ -36487,7 +36562,8 @@ const TOUR_STEPS = [
       // and re-render first, so the select is visible and the checkbox matches
       // what the tour is doing.
       try {
-        if (window._mlState && !window._mlState.flowsOn) {
+        if (window._mlState) {
+          window._mlState.panelOpen = true;
           window._mlState.flowsOn = true;
           if (typeof renderMapLayers === 'function') renderMapLayers();
         }
@@ -36551,7 +36627,7 @@ const TOUR_STEPS = [
   {
     selector: '#tab-scenario',
     title: 'Stress-test the system',
-    body: 'Scenario Stress Test: pull a heuristic lever (wheat embargo, drought in India, Suez closure) and see which countries shift most. The "what would the model produce if…" tool.',
+    body: 'Pick a shock (a major supplier export ban, a chokepoint closure, a domestic drought, El Niño harvest losses) and see which countries move and why, in points and in tonnes. Every shock states its formula; none is a forecast.',
     before: () => {
       try { showTab('scenario'); } catch(e){}
       return 500;
@@ -36570,16 +36646,16 @@ const TOUR_STEPS = [
   {
     selector: '#subview-forecast',
     title: '2030 Modeled Outlook',
-    body: `An illustrative scenario estimate, not a back-tested forecast. Each country's 2030 number combines the current baseline with legacy embedded assumptions and available risk proxies. The climate component is derived from sourced inputs, WB ${ac('CCKP')} observed warming + ${ac('ND-GAIN')} food vulnerability, where those pipelines are healthy; a country falls back to its heritage value only if its climate feed is temporarily degraded (see Data Status).`,
+    body: `A trend projection, not a forecast: staple demand grows with population and food output at its 2015–24 trend, which moves import dependence; the score is recomputed. Each country shows what would change its 2030 number, and you can ask FoodShield to explain its options.`,
     before: () => {
       try { showTab('forecast'); } catch(e){}
       return 500;
     },
   },
   {
-    selector: '#subview-methodology',
+    selector: '#methodology-body nav',
     title: 'Everything is sourced',
-    body: 'Methodology lists exactly which data feeds power each score, what\'s live vs modelled, and where the gaps are. Transparency by default, no black box. That\'s the tour, explore!',
+    body: 'Methodology has the formula, a worked example, the live adjustment, validation, and every source. Jump to any part from here. That\'s the tour: press <em>/</em> any time to ask FoodShield a question.',
     before: () => {
       try { showTab('methodology'); } catch(e){}
       return 500;
@@ -36617,9 +36693,9 @@ function _ensureTourOverlay() {
     o = document.createElement('div');
     o.id = 'tour-overlay';
     o.innerHTML = `
-      <div class="tour-clickcatch" onclick="endTour()"></div>
+      <div class="tour-clickcatch"></div>
       <div class="tour-spotlight" id="tour-spotlight"></div>
-      <div class="tour-card" id="tour-card">
+      <div class="tour-card" id="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-card-title" aria-describedby="tour-card-body">
         <div class="tour-card-step" id="tour-card-step"></div>
         <div class="tour-card-title" id="tour-card-title"></div>
         <div class="tour-card-body" id="tour-card-body"></div>
@@ -36641,7 +36717,11 @@ function _ensureTourOverlay() {
     window.addEventListener('scroll', _tourResizeHandler, true);
   }
   if (!_tourEscHandler) {
-    _tourEscHandler = (e) => { if (e.key === 'Escape') endTour(); };
+    _tourEscHandler = (e) => {
+      if (e.key === 'Escape') endTour();
+      else if (e.key === 'ArrowRight') { e.preventDefault(); _tourGo(1); }
+      else if (e.key === 'ArrowLeft' && _tourIdx > 0) { e.preventDefault(); _tourGo(-1); }
+    };
     document.addEventListener('keydown', _tourEscHandler);
   }
 }
@@ -36652,9 +36732,9 @@ function _renderTourStep() {
   // Update the card copy immediately so users see progress while before() runs
   document.getElementById('tour-card-step').textContent = `Step ${_tourIdx + 1} of ${TOUR_STEPS.length}`;
   document.getElementById('tour-card-title').textContent = step.title;
-  document.getElementById('tour-card-body').innerHTML = step.body;
-  document.getElementById('tour-card-progress').textContent =
-    ''; // One counter, in the card header; keep the runtime hook.
+  document.getElementById('tour-card-body').innerHTML = typeof step.body === 'function' ? step.body() : step.body;
+  document.getElementById('tour-card-progress').innerHTML = TOUR_STEPS.map((_, i) =>
+    `<i class="tour-dot${i === _tourIdx ? ' on' : i < _tourIdx ? ' done' : ''}"></i>`).join('');
   document.getElementById('tour-back').style.visibility = _tourIdx === 0 ? 'hidden' : 'visible';
   document.getElementById('tour-next').textContent =
     _tourIdx === TOUR_STEPS.length - 1 ? 'Finish ✓' : 'Next →';
@@ -36674,6 +36754,7 @@ function _renderTourStep() {
     } catch(e) { console.warn('Tour before() failed:', e); }
   }
   setTimeout(_positionTourStep, delay);
+  setTimeout(() => { const nb = document.getElementById('tour-next'); if (nb) nb.focus({ preventScroll: true }); }, 60);
 }
 
 function _positionTourStep() {
@@ -36721,7 +36802,13 @@ function _positionTourStep() {
   spot.style.top  = sy + 'px';
   spot.style.width  = sw + 'px';
   spot.style.height = sh + 'px';
-  // The card stays docked while the spotlight follows the target.
+  /* The card sits on the side away from the target, so it never covers what the step points at. */
+  const cx = sx + sw / 2, narrow = vw0 < 700;
+  card.style.left = card.style.right = card.style.top = card.style.bottom = 'auto';
+  if (narrow) { if (sy + sh / 2 > vh0 / 2) { card.style.top = '16px'; } else { card.style.bottom = '16px'; } card.style.left = '16px'; }
+  else if (isHuge) { card.style.right = '24px'; card.style.bottom = '24px'; }
+  else if (cx < vw0 / 2) { card.style.right = '24px'; card.style.top = Math.max(72, Math.min(vh0 - 320, sy)) + 'px'; }
+  else { card.style.left = '24px'; card.style.top = Math.max(72, Math.min(vh0 - 320, sy)) + 'px'; }
   spot.style.borderColor = getComputedStyle(target).getPropertyValue('--ink').trim() || getComputedStyle(target).color;
   var vh = window.innerHeight;
   // Scroll target into view if needed
@@ -37168,6 +37255,7 @@ async function toggleCommodityFlowOverlay(dataKey) {
   _atlasFlowKey = dataKey || null;
   const legend = document.getElementById('map-flow-legend');
   const rail = document.getElementById('global-rail');
+  if (legend) legend.style.display = '';
   if (!dataKey) {
     if (window.Globe && Globe.clearFlows) Globe.clearFlows();
     if (rail) rail.classList.remove('flow-mode');   // fold the default rail cards back out
@@ -37191,7 +37279,12 @@ async function toggleCommodityFlowOverlay(dataKey) {
     const shown = flows.slice(0, cap);
     const meta = (typeof COMMODITY_META !== 'undefined') ? COMMODITY_META.find(m=>m.dataKey===dataKey) : null;
     const label = meta ? meta.key : dataKey;
-    const drawn = (window.Globe && Globe.drawAtlasFlows) ? Globe.drawAtlasFlows(shown, label) : 0;
+    /* Colour = exporter, as on the FAOSTAT view: the eight largest exporters in the cited corridors
+       get a hue, everyone else grey; dashed = modelled. */
+    const byExp = {}; flows.forEach(f => { byExp[f.from] = (byExp[f.from] || 0) + (parseFloat(f.value) || 0); });
+    const topExp8 = Object.entries(byExp).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([iso]) => iso);
+    const colorOf = iso => { const i = topExp8.indexOf(iso); return i >= 0 ? FLOW_EXPORTER_COLORS[i] : '#8b939c'; };
+    const drawn = (window.Globe && Globe.drawAtlasFlows) ? Globe.drawAtlasFlows(shown, label, { colorOf }) : 0;
     const obs = shown.filter(f=>f.kind==='observed').length;
     if (legend) {
       // v34.2 — commodity details sidebar: stats + top corridors + jump to profile.
@@ -37206,7 +37299,7 @@ async function toggleCommodityFlowOverlay(dataKey) {
       const top8 = shown.slice(0, 8).map(f => `
         <div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px dashed var(--b1);">
           <span style="color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-            <span style="color:${f.kind==='observed'?'#6ba36b':'#8aa6c4'};">${f.kind==='observed'?'●':'○'}</span>
+            <span style="color:${colorOf(f.from)};">${f.kind==='observed'?'●':'○'}</span>
             ${nm(f.from)} → ${nm(f.to)}</span>
           <span style="font-family:'Geist Mono',monospace;color:var(--t1);flex-shrink:0;">${fmtKt(parseFloat(f.value)||0)}</span>
         </div>`).join('');
@@ -37225,7 +37318,7 @@ async function toggleCommodityFlowOverlay(dataKey) {
         <div style="font-size:8.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px;">Top corridors ${flows.length > cap ? `(drawing top ${cap} of ${flows.length})` : `(${drawn} drawn)`}</div>
         ${top8}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px;">
-          <span style="font-size:9.5px;color:var(--t3);"><span style="color:#6ba36b">— observed</span> · <span style="color:#8aa6c4">‒ ‒ modeled</span> · stroke = tonnage · ▲ direction</span>
+          <span style="font-size:9.5px;color:var(--t3);">colour = exporter · solid observed, dashed modelled · width = tonnes · ▲ direction · click an arc for its card</span>
           <button onclick="showTab('commodities',document.querySelector('.nav-btn'));setTimeout(()=>{if(typeof showCommodityDetail==='function'){const mm=(typeof COMMODITY_META!=='undefined')?COMMODITY_META.find(m=>m.dataKey==='${dataKey}'):null;if(mm)showCommodityDetail(mm.key);}},250);" style="background:var(--bg2);border:1px solid var(--b2);color:var(--t2);font-size:9.5px;padding:4px 8px;cursor:pointer;white-space:nowrap;">Profile →</button>
         </div>`;
     }
@@ -37272,7 +37365,7 @@ function renderMatrixFlowOverlay(dataKey, mx) {
       const silent = (mx.exporters_not_reporting || []).filter(i => big.has(i));
       return silent.length ? `<div class="fl-warn">${silent.map(nm).join(', ')} filed no ${mx.year} export statistics. ${silent.length > 1 ? 'Their' : 'Its'} corridors appear only where buyers reported them, so ${silent.length > 1 ? 'their shares are' : 'its share is'} understated.</div>` : '';
     })()}
-    <div class="fl-key">Filled disc = exporter, ring = importer, both sized by tonnes. Line width = corridor tonnes. Dashed = exporter-reported because the importer did not report (${mx.mirror_share_pct}% of tonnes). Hover a disc or ring to isolate its trade.</div>
+    <div class="fl-key">Colour = exporter. Filled disc = exporter, ring = importer, both sized by tonnes. Line width = corridor tonnes. Dashed = exporter-reported because the importer did not report (${mx.mirror_share_pct}% of tonnes). Hover a disc or ring to isolate its trade; click an arc for its card.</div>
     <div class="fl-src">FAOSTAT Detailed Trade Matrix, ${mx.basis}. Importer-reported quantities, ${mx.corridors_total.toLocaleString()} corridors in total.</div>`;
 }
 // ── MAP LAYERS panel (v40) ──────────────────────────────────────────────────
@@ -37397,7 +37490,11 @@ function renderMapLayers(){
     (st.sstOn && window.ensoSST && window.ensoSST.legend ? '<div class="mlp-sub mlp-sst-legend">'+window.ensoSST.legend()+'</div>' : '')+
     row('mlToggleFlows',st.flowsOn,'━','Trade flows')+
     '<select class="mlp-select" id="map-commodity-flows" aria-label="Trade commodity" onfocus="populateCommodityFlowSelect()" onchange="toggleCommodityFlowOverlay(this.value)" style="'+(st.flowsOn ? '' : 'display:none')+'"><option value="">Choose a commodity…</option></select></div></details>';
-  if (st.flowsOn && typeof populateCommodityFlowSelect === 'function') populateCommodityFlowSelect();
+  if (st.flowsOn && typeof populateCommodityFlowSelect === 'function') {
+    populateCommodityFlowSelect();
+    const _sel = document.getElementById('map-commodity-flows');
+    if (_sel && typeof _atlasFlowKey !== 'undefined' && _atlasFlowKey) _sel.value = _atlasFlowKey;
+  }
 }
 function mlToggleDist(ev){ ev.stopPropagation(); var st = window._mlState; st.distOn = !st.distOn; st.expanded = st.distOn; /* the sub-list folds away with the layer */ applyMapLayers(); renderMapLayers(); }
 function mlToggleExpand(ev){ ev.stopPropagation(); window._mlState.expanded = !window._mlState.expanded; renderMapLayers(); }
@@ -37547,7 +37644,7 @@ function showDisturbanceImpact(ev){
 
 function closeImpactPanel(){
   const p = document.getElementById('impact-panel');
-  if (p) p.classList.add('hidden');
+  if (p) { p.classList.add('hidden'); const r = p._returnFocus; p._returnFocus = null; if (r && typeof r.focus === 'function' && document.contains(r)) try { r.focus({ preventScroll: true }); } catch (e) {} }
   if (window.Globe && window.Globe.clearImpactArcs) Globe.clearImpactArcs();
   if (window.Globe && window.Globe.deselectCountry) Globe.deselectCountry();
 }
@@ -37563,9 +37660,14 @@ function openImpactPanel(ev, src, dependents, isDomestic, suppliers){
     panel = document.createElement('div');
     panel.id = 'impact-panel';
     panel.className = 'impact-panel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', 'Event impact');
+    panel.tabIndex = -1;
     document.getElementById('tab-global').appendChild(panel);
   }
+  panel._returnFocus = document.activeElement;
   panel.classList.remove('hidden');
+  setTimeout(() => { try { (panel.querySelector('button, [tabindex="0"]') || panel).focus({ preventScroll: true }); } catch (e) {} }, 30);
 
   const tc = (typeof EV_TYPE !== 'undefined' && EV_TYPE[ev.type]) || {label:'Event', color:'#c44b3c'};
   const sc = (typeof SEV_COLOR !== 'undefined' && SEV_COLOR[ev.severity]) || '#c9a957';
