@@ -26581,6 +26581,27 @@ function curatedPartners(c, commodity, dir) {
       note: `FAOSTAT Detailed Trade Matrix ${tmRow.year}: ${Math.round(p.t / 1000).toLocaleString()} kt, ${p.share_pct}% of ${c.name}'s ${dir === 'export' ? 'exports' : 'imports'} (${p.basis === 'mirror' ? "exporter's declaration" : "importer's declaration"}).`,
     }));
     rows._totalKt = tmRow.t / 1000; rows._source = 'faostat'; rows._year = tmRow.year; rows._n = tmRow.n;
+    /* The importer filed nothing and a major exporter files nothing either (Russia since 2022): the
+       matrix cannot see that exporter's sales here. Use the atlas where it names that exporter. */
+    if (dir !== 'export' && Array.isArray(tmRow.mix_incomplete) && tmRow.mix_incomplete.length) {
+      rows._partial = true; rows._mixIncomplete = tmRow.mix_incomplete;
+      /* Keep the matrix's named partners and add each invisible exporter at its atlas share of this
+         country's imports, scaling the others down so the total still matches the matrix. */
+      const atlasTot = atlasRows ? atlasRows.reduce((a, r) => a + (r.kt || 0), 0) : 0;
+      const add = [];
+      tmRow.mix_incomplete.forEach(o => {
+        const ar = atlasRows && atlasRows.find(r => r.iso === o);
+        if (ar && atlasTot > 0) add.push({ iso: o, share: (ar.kt || 0) / atlasTot, note: ar.note, year: ar.year });
+      });
+      const addShare = Math.min(0.95, add.reduce((a, x) => a + x.share, 0));
+      if (addShare > 0) {
+        rows.forEach(r => { r.kt = r.kt * (1 - addShare); r.pct = r.pct != null ? Math.round(r.pct * (1 - addShare) * 10) / 10 : null; });
+        add.forEach(x => rows.push({ name: (typeof _nameFromISO === 'function' ? _nameFromISO(x.iso) : x.iso) || x.iso, iso: x.iso,
+          kt: rows._totalKt * x.share, pct: Math.round(x.share * 1000) / 10, obs: false, curated: true, src: 'atlas', kind: 'modeled', year: x.year,
+          note: `Not visible in FAOSTAT (${x.iso} files no trade statistics and this country's imports are recorded only from its suppliers' side); share from the curated atlas. ${x.note || ''}` }));
+        rows.sort((a, b) => (b.kt || 0) - (a.kt || 0));
+      }
+    }
     if (dir !== 'export') {
       const pT = psdImportsT(c.iso, key);
       if (pT) {
@@ -26674,10 +26695,15 @@ function stapleSuppliers(iso) {
   if (tm === undefined) return null;
   const imp = (tm && tm.imp) || {};
   const agg = new Map(); let total = 0, year = null, mirror = 0, psdT = 0, tmCovered = 0;
+  const cc = typeof byISO === 'function' ? byISO(iso) : null;
   STAPLE_KEYS.forEach(k => {
     const r = imp[k]; if (!r) return;
     year = year || r.year; total += r.t || 0;
-    (r.partners || []).forEach(sp => { agg.set(sp.iso, (agg.get(sp.iso) || 0) + sp.t); if (sp.basis === 'mirror') mirror += sp.t; });
+    /* Same partner rows as the Country tab (matrix, with invisible exporters added from the atlas). */
+    const cp = cc && typeof curatedPartners === 'function' ? curatedPartners(cc, k, 'import') : null;
+    if (cp && cp._source === 'faostat') cp.forEach(sp => agg.set(sp.iso, (agg.get(sp.iso) || 0) + sp.kt * 1000));
+    else (r.partners || []).forEach(sp => agg.set(sp.iso, (agg.get(sp.iso) || 0) + sp.t));
+    (r.partners || []).forEach(sp => { if (sp.basis === 'mirror') mirror += sp.t; });
     const pT = psdImportsT(iso, k);
     if (pT) { psdT += pT; tmCovered += r.t || 0; }
   });
