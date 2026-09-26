@@ -23,7 +23,7 @@ test('hero leads with the sourced CPC outlook and separates RONI from ONI',()=>{
  const out=api.oceanHeading(),cpc=S.bulletins.bulletins.find(b=>b.agency==='NOAA CPC');
  assert(cpc.summary.includes('very strong'));assert(out.includes('El Niño strengthening toward a very strong event'));
  for(const text of ['RONI','ONI','more than 90%'])assert(out.includes(text));
- assert(!out.includes('ONI band is'));assert(out.includes('the strongest warming in the east'));
+ assert(!out.includes('ONI band is'));assert(out.includes('The east runs hottest'));
 });
 test('indices use published thresholds, retain source windows, and omit the weekly bar',()=>{
  api.renderIndices();const out=node('enso-indices').innerHTML, widths={};
