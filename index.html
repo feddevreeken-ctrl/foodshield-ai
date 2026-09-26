@@ -672,6 +672,12 @@ body {
   }
 }
 .ctr-rail-sec { margin-bottom: 28px; }
+/* The section index sticks once the headlines scroll away, so the column below the fold carries
+   navigation instead of nothing. No inner scroller. */
+@media (min-width: 1101px) { .ctr-rail { align-self: stretch; } .ctr-toc { position: sticky; top: 20px; } }
+.ctr-toc { display: flex; flex-direction: column; gap: 2px; }
+.ctr-toc-a { background: none; border: 0; border-left: 2px solid var(--b1); color: var(--t2); text-align: left; font: inherit; font-size: 12.5px; padding: 5px 0 5px 12px; cursor: pointer; }
+.ctr-toc-a:hover, .ctr-toc-a:focus-visible { color: var(--t1); border-left-color: var(--accent); outline: none; }
 .ctr-rail-sec:last-child { margin-bottom: 4px; }
 /* v47.1 — quieter rail headings.
    Eight caps-mono eyebrows at identical weight (RISK, KEY FIGURES, WHAT IS MOVING,
@@ -13140,21 +13146,6 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 
       <div class="sp-open-report"><button type="button" class="sp-open-report-btn" onclick="if(typeof ctrOpenCountry==='function'&&window._spOpenIso)ctrOpenCountry(window._spOpenIso)">Full country report →</button></div>
 
-      <div class="sp-section" id="sp-comps">
-        <div class="sp-section-title">What drives the score</div>
-        <div id="sp-scorebar"></div>
-        <div id="sp-comp-list"></div>
-      </div>
-      <!-- The radar repeated the bars below it in a form that is harder to read; kept hidden so its code path stays inert. -->
-      <div class="sp-radar" hidden>
-        <canvas id="sp-radar" style="max-height:180px;"></canvas>
-      </div>
-
-      <div class="sp-section">
-        <div class="sp-section-title">Staple suppliers</div>
-        <div id="sp-suppliers"></div>
-      </div>
-
       <!-- AI Trade Flow Atlas CTA — v21.x route explorer redesign -->
       <div class="sp-flows-cta" id="trade-atlas-cta">
 
@@ -13206,6 +13197,20 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 
 
 
+
+      <div class="sp-section" id="sp-comps">
+        <div class="sp-section-title">What drives the score</div>
+        <div id="sp-comp-list"></div>
+      </div>
+      <!-- The radar repeated the bars below it in a form that is harder to read; kept hidden so its code path stays inert. -->
+      <div class="sp-radar" hidden>
+        <canvas id="sp-radar" style="max-height:180px;"></canvas>
+      </div>
+
+      <div class="sp-section">
+        <div class="sp-section-title">Staple suppliers</div>
+        <div id="sp-suppliers"></div>
+      </div>
 
       <div class="sp-section">
         <div class="sp-section-title">Key Metrics</div>
@@ -28553,7 +28558,6 @@ function openPanel(c, skipDrilldown) {
   // v2 — 9-component structural vector for the radar (migration-safe c[6..8]).
   const struct9 = liveComp.values.map((v, i) => v - (liveComp.deltas[i] || 0));
   window._spOpenIso = c.iso;
-  try { const _sb = document.getElementById('sp-scorebar'); if (_sb && typeof ctrScoreBar === 'function') _sb.innerHTML = ctrScoreBar(c); } catch (e) {}
   destroyChart('sp-radar');
   const ctx = document.getElementById('sp-radar');
   const hasLiveDelta = liveComp.deltas.some(d => d > 0);
@@ -31464,7 +31468,9 @@ function renderCountryTab() {
   const d1 = drivers[0], d2 = drivers[1];
 
   const deps = (typeof rankedDependencies === 'function') ? rankedDependencies(c) : [];
-  const worstHHI = deps.filter(d => !d.single).sort((a,b) => b.hhi - a.hhi)[0] || null;
+  /* Only flows the dependency table scores: a minor or single-corridor line (Egypt's barley, one
+     supplier, HHI 10,000) is not what "most concentrated" should name. */
+  const worstHHI = deps.filter(d => !d.single && !d.minor && d.score != null).sort((a,b) => b.hhi - a.hhi)[0] || null;
   // v48.1 — pick the top dependency by cited TONNAGE, not by the leader's share.
   // deps[0] is share-ranked, which floats any commodity with a single cited
   // corridor to the top: Egypt showed "100% Flour, pasta & malt · Turkey · 1
@@ -32037,9 +32043,10 @@ function renderCountryTab() {
     ${(function(){
       const ch = ctrCorridorChart(deps, c.name);
       if (!ch) return '';
-      return `<div class="ctr-h">Top import corridors</div>
-        <div class="ctr-note">Largest supplier of each food import, by tonnes.</div>
-        ${ch}`;
+      /* Same facts as the Top supplier column of Imports by commodity just below; folded so the
+         page reads diagram → table instead of diagram → bars → table. */
+      return `<details class="ctr-more"><summary>Top import corridors <span class="ctr-more-count">largest supplier of each food import, by tonnes</span></summary>
+        ${ch}</details>`;
     })()}
 
     <div class="ctr-2">
@@ -32190,6 +32197,12 @@ function renderCountryTab() {
            where the commodity axis is the right one. */''}
      ${(typeof countryNewsBlockHTML === 'function')
         ? `<div class="ctr-rail-sec">${countryNewsBlockHTML(c.iso, c.name)}</div>` : ''}
+
+     <nav class="ctr-rail-sec ctr-toc" aria-label="Sections of this report">
+       <div class="ctr-rail-h">In this report</div>
+       ${['What is moving right now','What drives the score','Where the food comes from','The flows in detail','How we know'].map((t, i) =>
+         `<button type="button" class="ctr-toc-a" onclick="(function(){const h=[...document.querySelectorAll('#country-report .ctr-sec-h, .ctr-sec-h')].find(x=>x.textContent.trim()==='${t}');if(h)h.closest('.ctr-sec').scrollIntoView({behavior:'smooth',block:'start'});})()">${t}</button>`).join('')}
+     </nav>
 
      <div class="ctr-rail-sec">
        <div class="ctr-note">The score is <b>modeled</b>. Missing inputs show “no data”, not zero.
