@@ -136,21 +136,34 @@ const FREE_MODEL_LABEL = 'GPT-OSS 20B via Pollinations';
 async function answerFree(body, res, outerSignal) {
   const t0 = Date.now();
   /* A hung upstream must end in an error the reader sees, well inside the function's time limit. */
-  const signal = AbortSignal.any ? AbortSignal.any([outerSignal, AbortSignal.timeout(40000)]) : outerSignal;
+  /* Two tries of 22 s each: the anonymous endpoint is intermittent (5xx or a hang), and a second
+     try usually lands. With POLLINATIONS_TOKEN the authenticated gateway is used instead. */
+  const token = process.env.POLLINATIONS_TOKEN;
+  const url = token ? 'https://gen.pollinations.ai/v1/chat/completions' : FREE_URL;
   const headers = { 'Content-Type': 'application/json' };
-  if (process.env.POLLINATIONS_TOKEN) headers.Authorization = `Bearer ${process.env.POLLINATIONS_TOKEN}`;
-  let up;
-  try {
-    up = await fetch(FREE_URL, { method: 'POST', headers, signal,
-      body: JSON.stringify({ model: 'openai', stream: true, messages: [{ role: 'system', content: SYSTEM }].concat(buildMessages(body)) }) });
-  } catch (err) {
-    console.error('[ask] free model fetch failed', signal.aborted ? '(aborted)' : '', err && err.message);
-    if (!outerSignal.aborted) send(res, { error: signal.aborted ? 'The free model did not answer in time. Try again.' : 'The free model could not be reached.' });
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const payload = JSON.stringify({ model: 'openai', stream: true, messages: [{ role: 'system', content: SYSTEM }].concat(buildMessages(body)) });
+  let up = null, signal = outerSignal, lastErr = '';
+  for (let attempt = 1; attempt <= 2 && !outerSignal.aborted; attempt++) {
+    signal = AbortSignal.any ? AbortSignal.any([outerSignal, AbortSignal.timeout(22000)]) : outerSignal;
+    try {
+      up = await fetch(url, { method: 'POST', headers, signal, body: payload });
+      if (up.ok && up.body) break;
+      lastErr = `HTTP ${up.status}`;
+      if (up.status === 429 || up.status < 500) break;
+    } catch (err) {
+      lastErr = signal.aborted ? 'timeout' : (err && err.message) || 'network';
+      up = null;
+    }
+    console.warn('[ask] free model attempt', attempt, 'failed:', lastErr, 'after', Date.now() - t0, 'ms');
+  }
+  if (!up) {
+    if (!outerSignal.aborted) send(res, { error: lastErr === 'timeout' ? 'The free model did not answer in time. Try again in a minute.' : 'The free model could not be reached. Try again in a minute.' });
     return;
   }
   console.log('[ask] free model status', up.status, 'after', Date.now() - t0, 'ms');
   if (up.status === 429) { send(res, { error: 'The free model is busy (about one question every 15 seconds). Try again shortly.' }); return; }
-  if (!up.ok || !up.body) { send(res, { error: `The free model did not answer (HTTP ${up.status}).` }); return; }
+  if (!up.ok || !up.body) { send(res, { error: `The free model is not answering right now (HTTP ${up.status}). Try again in a minute.` }); return; }
   const reader = up.body.getReader(), dec = new TextDecoder();
   let buf = '', stop = 'end_turn';
   try {
