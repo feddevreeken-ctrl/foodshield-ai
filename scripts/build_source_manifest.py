@@ -310,6 +310,13 @@ SOURCES = [
         "mode": "manual",
     },
     {
+        "key": "trade_matrix",
+        "file": "trade_matrix.json",
+        "label": "FAOSTAT Detailed Trade Matrix: bilateral food trade in tonnes",
+        "cadence": "manual rebuild (build_trade_matrix.py); FAOSTAT updates yearly",
+        "mode": "manual",
+    },
+    {
         "key": "faostat_import_dep",
         "file": "faostat_import_dep.json",
         "label": "FAOSTAT cereal import dependency",
