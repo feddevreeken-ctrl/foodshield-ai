@@ -1,10 +1,10 @@
 """
-EU JRC INFORM Risk Index — v23 (Jun 2026): read from committed local file.
+EU JRC INFORM Risk Index — Mid 2026 (v0.7.3): read from committed local file.
 
 The JRC dropped the stable versioned download URL (every
 INFORM_Risk_YYYY_vXXX.xlsx path now 404s, and the HDX/WB mirrors are stale).
-Rather than chase a moving URL, we commit the official 2026 workbook to the
-repo at scripts/vendor_data/INFORM_Risk_2026_v072.xlsx and parse it locally.
+Rather than chase a moving URL, we commit the official Mid-2026 workbook to the
+repo at scripts/vendor_data/INFORM_Risk_Mid_2026_v073.xlsx and parse it locally.
 This is honest and stable: INFORM publishes annually, so a committed snapshot
 is current for a year. To update: download the next edition from
 https://drmkc.jrc.ec.europa.eu/inform-index/INFORM-Risk/Results-and-data,
@@ -22,10 +22,10 @@ from pathlib import Path
 
 from _common import write_json
 
-LOCAL_FILE = Path(__file__).resolve().parent / "vendor_data" / "INFORM_Risk_2026_v072.xlsx"
+LOCAL_FILE = Path(__file__).resolve().parent / "vendor_data" / "INFORM_Risk_Mid_2026_v073.xlsx"
 SHEET = "INFORM Risk 2026 (a-z)"
 EDITION_YEAR = 2026
-EDITION_LABEL = "EU JRC INFORM Risk Index 2026 (v0.7.2)"
+EDITION_LABEL = "EU JRC INFORM Risk Index Mid 2026 (v0.7.3)"
 
 # Column indices (0-based) in the (a-z) sheet
 COL = {

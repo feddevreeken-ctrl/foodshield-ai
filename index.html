@@ -9978,6 +9978,8 @@ body::before {
 /* Legend */
 .enso-legend { display:flex; flex-wrap:wrap; gap:20px; margin-top:10px; align-items:flex-start; }
 .enso-legend-block { min-width:200px; }
+.leaflet-tooltip.enso-price-lbl,#enso-map .leaflet-tooltip.enso-price-lbl{background:transparent !important;border:none !important;box-shadow:none !important;padding:0 0 0 2px !important;color:#ebe9e2 !important;white-space:nowrap;font-family:'Geist Mono',monospace;font-size:10.5px;text-shadow:0 0 3px #0b1017,0 0 3px #0b1017,0 0 6px #0b1017;}
+.leaflet-tooltip.enso-price-lbl::before{display:none;}
 .enso-legend-t { font-size:var(--enso-fs-meta); font-weight:600; letter-spacing:var(--enso-tr-body); color:var(--t2); margin-bottom:5px; }
 .enso-legend-row { display:flex; align-items:center; gap:7px; font-size:var(--enso-fs-meta); color:var(--t2); margin:3px 0; }
 .enso-sw { width:16px; height:11px; border-radius:2px; flex:none; border:1px solid rgba(255,255,255,.08); }
@@ -14829,7 +14831,7 @@ const COUNTRIES = [
  exports:["Pork","Dairy","Wheat","Barley","Vegetables"],
  exportDests:["USA","France","Netherlands","UK","China"],
  suppliers:["Netherlands","France","Poland","Belgium","Italy"],supPct:[25,20,20,18,17],
- narrative:"Germany is a major food producer and net food exporter within Europe. Excellent logistics (World Bank LPI 2022: 4.1, joint 3rd), diversified EU sourcing, and single market access make it highly resilient. The 2022 energy-food nexus was notable: fertilizer production squeezed by gas price spike raised farm input costs 40%+.",
+ narrative:"Germany is a major food producer and net food exporter within Europe. Excellent logistics (World Bank LPI 2023 edition: 4.1, joint 3rd), diversified EU sourcing, and single market access make it highly resilient. The 2022 energy-food nexus was notable: fertilizer production squeezed by gas price spike raised farm input costs 40%+.",
  risk:"Energy-fertilizer nexus (gas price spike 2022 raised input costs 40%) + minor eastern European sourcing concentration",
  resp:"Domestic fertilizer production energy security · Continued CAP investment · Diversify energy sources for agricultural sector",
  trend:{years:[2018,2019,2020,2021,2022,2023,2024,2030],
@@ -42420,7 +42422,7 @@ function renderCompareTab() {
                 r('Child stunting %', 'WB WDI', fmtPct, c => LIVE.wdi_bulk?.[c.iso]?.['SH.STA.STNT.ZS']?.value ?? null, fbsCol),
                 r('Child wasting %', 'WB WDI', fmtPct, c => LIVE.wdi_bulk?.[c.iso]?.['SH.STA.WAST.ZS']?.value ?? null, fbsCol),
 
-                sec(`Governance (WB ${ac('WGI')} · 2024)`),
+                sec(`Governance (WB ${ac('WGI')} · 2025)`),
                 r('Rule of law', 'WB WGI', fmtSigned, c => LIVE.wgi?.[c.iso]?.rule_of_law?.value ?? null, wgiCol),
                 r('Government effectiveness', 'WB WGI', fmtSigned, c => LIVE.wgi?.[c.iso]?.gov_effectiveness?.value ?? null, wgiCol),
                 r('Control of corruption', 'WB WGI', fmtSigned, c => LIVE.wgi?.[c.iso]?.control_corruption?.value ?? null, wgiCol),
@@ -45886,16 +45888,16 @@ function showCommodityDetail(key) {
       corridors.map(function (c) { return '<div class="ctr-note"><b>' + esc(c.name) + '</b>: ' + esc(c.basis) + ' Sources: ' + esc((c.sources || []).join('; ')) + '.</div>'; }).join('') + '</div>';
   }
   function alertLegend() {
-    var counts = {gdacs:0, relief:0};
-    S.alertPins.forEach(function (m) { if (counts[m.options.ensoSource] != null) counts[m.options.ensoSource]++; });
-    return '<div class="enso-legend-block"><div class="enso-legend-t">Hazard alerts · reported feeds</div>' +
-      '<div class="enso-legend-row"><svg class="enso-sw-round" aria-hidden="true" width="26" height="12" viewBox="0 0 26 12"><circle cx="6" cy="6" r="4.5" fill="#e05a4a" stroke="#f2efe6" stroke-width="1.2"/><circle cx="19" cy="6" r="4.5" fill="#e0864a" stroke="#f2efe6" stroke-width="1.2"/></svg> <span>GDACS drought / flood / cyclone, red or orange alert · GDACS ' + counts.gdacs + '</span></div>' +
-      '<div class="enso-legend-row"><svg class="enso-sw-round" aria-hidden="true" width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="3" fill="#11161e" stroke="#e6e3da" stroke-width="1"/></svg> <span>ReliefWeb report in an El Niño country · ReliefWeb ' + counts.relief + (S.alertCounts && S.alertCounts.reliefOutside ? ' (' + S.alertCounts.reliefOutside + ' elsewhere not drawn)' : '') + '</span></div>' +
-      (S.alertCounts && S.alertCounts.reliefUnplaced
-        ? '<div class="enso-legend-note">' + S.alertCounts.reliefUnplaced + ' of ' + S.alertCounts.reliefTotal +
-          ' ReliefWeb reports carry no country shape this map can place, including world-level entries, and are not drawn.</div>'
-        : '') +
-      '<div class="ctr-note" style="max-width:32ch;margin-top:5px;">GDACS collected ' + esc(stamp(metaDate('gdacs'))) + '; ReliefWeb collected ' + esc(stamp(metaDate('relief'))) + '. Counts are mapped reports, not affected countries; overlapping reports share a location. The map draws every current GDACS alert worldwide and the ' + counts.relief + ' ReliefWeb reports with a country centroid. A marker shows a reported hazard, not its cause.</div></div>';
+    var c = S.alertCounts || {}, ev = 0, nw = 0;
+    S.alertPins.forEach(function (m) { if (m.options.ensoSource === 'event') ev++; else nw++; });
+    var sw = function (col, hollow) { return '<svg class="enso-sw-round" aria-hidden="true" width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="' + (hollow ? 'none' : col) + '" stroke="' + (hollow ? col : '#f2efe6') + '" stroke-width="1.3"' + (hollow ? ' stroke-dasharray="2 2"' : '') + '/></svg>'; };
+    return '<div class="enso-legend-block"><div class="enso-legend-t">Reported · fits El Niño’s usual pattern</div>' +
+      '<div class="enso-legend-row">' + sw(ensoTypeColor('drought')) + ' <span>drought, dry or hot week, IPC / FEWS NET crisis, in a region El Niño dries</span></div>' +
+      '<div class="enso-legend-row">' + sw(ensoTypeColor('flood')) + ' <span>flood or wet week, in a region El Niño wets</span></div>' +
+      '<div class="enso-legend-row">' + sw('#8fa3bf', true) + ' <span>headline naming the event (a claim, not a measurement)</span></div>' +
+      '<div class="ctr-note" style="max-width:34ch;margin-top:5px;">' + (c.fit || 0) + ' reports in ' + ev + ' countries fit the pattern, from the last ' + ENSO_REPORT_DAYS + ' days of the same feeds as the Disturbances tab' +
+      (c.news ? '; ' + c.news + ' El Niño headlines' : '') + '. Not drawn: ' + (c.opposite || 0) + ' of the opposite sign (a flood where El Niño dries), ' + (c.outside || 0) + ' outside El Niño regions' +
+      (c.unplaced ? ', ' + c.unplaced + ' without a map shape' : '') + '. Fitting the pattern is not attribution: El Niño raises the odds of these events here, it does not explain any one of them.</div></div>';
   }
 
   function intervalBand(oni) {
@@ -46042,6 +46044,7 @@ function showCommodityDetail(key) {
   }
   function rankedHotspots() {
     return Object.keys(S.asap || {}).filter(function (iso) {
+      if (S.sub === 'ensolive' && !(S.isoIndex || {})[iso]) return false;
       var a = asapFor(iso); return a && (a.hotspot_code === 1 || a.hotspot_code === 2);
     }).sort(function (a, b) {
       return S.asap[b].hotspot_code - S.asap[a].hotspot_code || nameFor(a).localeCompare(nameFor(b));
@@ -46051,9 +46054,9 @@ function showCommodityDetail(key) {
     var dates = rankedPrices().map(function (iso) { return S.rtfp[iso].as_of || ''; }).sort();
     var first = assessmentMonth(dates[0]), last = assessmentMonth(dates[dates.length-1]);
     var cpiMonths = ensoTeleIsos().filter(function (i) { return !hasRtfp(i) && fcpiOf(i); }).map(function (i) { return fcpiOf(i).month; }).sort();
-    return 'Land colour: food inflation, % y/y; markets ' +
+    return 'Circles: food inflation, % y/y, in El Niño countries; markets ' +
       (dates.length ? (first === last ? first : first + ' to ' + last) : 'reporting date unavailable') +
-      (cpiMonths.length ? ', paler: official CPI ' + monthText(cpiMonths[cpiMonths.length - 1]) : '') + '; outlines: teleconnection countries.';
+      (cpiMonths.length ? '; hollow: official CPI ' + monthText(cpiMonths[cpiMonths.length - 1]) : '') + '; circle area: size of the change.';
   }
   function renderMapRanking() {
     var el = document.getElementById('enso-map-ranking'), body = document.getElementById('enso-map-body');
@@ -46072,7 +46075,7 @@ function showCommodityDetail(key) {
         var unvalued = noMarket.filter(function (i) { return !fcpiOf(i); });
         var outside = all.filter(function (i) { return !teleSet[i]; });
         el.innerHTML = '<div class="enso-legend-t">Food inflation · El Niño teleconnection countries</div>' +
-          '<p class="enso-rank-note">' + valued.length + ' of ' + tele.length + ' have monitored markets (World Bank); ' + cpi.length + ' more have only an official food CPI (FAOSTAT, paler on the map).</p>' +
+          '<p class="enso-rank-note">' + valued.length + ' of ' + tele.length + ' have monitored markets (World Bank); ' + cpi.length + ' more have only an official food CPI (FAOSTAT, hollow circles on the map).</p>' +
           '<ol class="enso-rank-list">' + valued.slice(0, 3).map(priceRow).join('') + '</ol><details class="enso-rank-more"><summary>' + [Math.max(0, valued.length - 3) + ' more with markets', cpi.length ? cpi.length + ' by official CPI' : '', unvalued.length ? unvalued.length + ' with no value' : '', outside.length ? outside.length + ' outside the layer' : ''].filter(Boolean).join(' · ') + '</summary><ol class="enso-rank-list" start="4">' + valued.slice(3).map(priceRow).join('') + '</ol>' +
           (cpi.length ? '<div class="enso-legend-t enso-rank-t2">Official food CPI · no monitored market</div><ol class="enso-rank-list">' + cpi.map(cpiRow).join('') + '</ol>' : '') +
           (unvalued.length ? '<p class="enso-rank-missing">No value in either source, or none under a year old: ' + unvalued.map(function (iso) { return '<button type="button" data-map-country="' + esc(iso) + '" aria-pressed="' + (S.sel === iso) + '">' + esc(nameFor(iso)) + '</button>'; }).join(', ') + '.</p>' : '') +
@@ -46230,17 +46233,16 @@ function showCommodityDetail(key) {
         'IPC/CH via WFP HungerMap. This is an outcome, and it has many causes. ENSO is one of them.']
     };
     if (S.mode === 'rtfp') {
-      el.innerHTML = '<div class="enso-legend"><div class="enso-legend-block"><div class="enso-legend-t">Domestic food inflation, year on year · World Bank RTFP; FAOSTAT CPI</div>' +
-        '<div class="enso-ramp enso-price-ramp" style="background:linear-gradient(90deg,' + rtfpColor(-10) + ' 0%,' + rtfpColor(0) + ' 25%,' + rtfpColor(15) + ' 62.5%,' + rtfpColor(30) + ' 100%)"></div>' +
-        '<div class="enso-key-anchors"><span>−10%</span><span>0%</span><span>+30%</span></div>' +
-        '<div class="enso-legend-note">Blue-grey: falling · ground grey: zero · ochre to orange: rising</div>' +
-        '<div class="enso-legend-row"><span class="enso-sw" style="background:' + rtfpColor(15) + ';opacity:.42"></span><span>Paler: official food CPI (FAOSTAT), latest month against a year earlier, where the World Bank monitors no market. A different measure and month, so the two are not comparable' + (function () {
-          /* The widest gap among countries carrying both, computed so the example cannot go stale. */
-          var best = null; Object.keys(S.rtfp || {}).forEach(function (i) { var f = fcpiOf(i); if (!hasRtfp(i) || !f) return; var g = Math.abs(S.rtfp[i].food_inflation_pct - f.v); if (!best || g > best.g) best = { i: i, g: g, a: S.rtfp[i].food_inflation_pct, b: f.v }; });
-          return best && best.g >= 10 ? ': ' + esc(nameFor(best.i)) + ' reads ' + num(best.a, 0) + '% in markets and ' + num(best.b, 0) + '% in the CPI' : '';
-        })() + '</span></div>' +
-        '<div class="enso-legend-row"><span class="enso-sw enso-price-missing"></span>In the teleconnection layer, no value in either source</div>' +
-        '<div class="ctr-note">Pale outlines mark all ' + ensoTeleIsos().length + ' teleconnection countries. ' + esc(rtfpNote()) + '.</div>' +
+      var circ = function (v, hollow) { var r = priceRadius(v), d = Math.ceil(2 * r + 4), col = rtfpColor(Math.max(-10, v));
+        return '<svg class="enso-sw-round" aria-hidden="true" width="' + d + '" height="' + d + '" viewBox="0 0 ' + d + ' ' + d + '"><circle cx="' + (d / 2) + '" cy="' + (d / 2) + '" r="' + r + '" fill="' + (hollow ? 'none' : col) + '" stroke="' + (hollow ? col : '#0b1017') + '" stroke-width="' + (hollow ? 1.6 : 1) + '"' + (hollow ? ' stroke-dasharray="3 2"' : '') + '/></svg>'; };
+      var rtM = rankedTelePrices().map(function (i) { return S.rtfp[i].as_of || ''; }).sort();
+      var cpiM = ensoTeleIsos().filter(function (i) { return !hasRtfp(i) && fcpiOf(i); }).map(function (i) { return fcpiOf(i).month; }).sort();
+      el.innerHTML = '<div class="enso-legend"><div class="enso-legend-block"><div class="enso-legend-t">Food inflation in El Niño countries, year on year</div>' +
+        '<div class="enso-legend-row" style="align-items:flex-end;gap:6px;">' + circ(5) + circ(15) + circ(30) + '<span>5 · 15 · 30%: area grows with the size of the change (40% and above draw alike)</span></div>' +
+        '<div class="enso-legend-row">' + circ(-8) + ' <span>falling</span> ' + circ(8) + ' <span>rising</span> ' + circ(25) + ' <span>rising fast</span></div>' +
+        '<div class="enso-legend-row">' + circ(12) + ' <span>solid: market median, World Bank RTFP' + (rtM.length ? ', ' + esc(assessmentMonth(rtM[rtM.length - 1])) : '') + '</span></div>' +
+        '<div class="enso-legend-row">' + circ(12, true) + ' <span>hollow: official food CPI (FAOSTAT) where no market is monitored' + (cpiM.length ? ', ' + esc(monthText(cpiM[cpiM.length - 1])) : '') + '. A different measure and month: do not compare the two directly.</span></div>' +
+        '<div class="ctr-note">Only the ' + ensoTeleIsos().length + ' countries in published El Niño regions are drawn (outlined). ' + esc(rtfpNote()) + '.</div>' +
         '</div>' +
         (S.showSST ? sstLegend() : '') + (S.showLanes ? laneLegend() : '') + (S.showAlerts ? alertLegend() : '') + (S.showImports ? importLegend() : '') + '</div>';
       compactLegend(); return;
@@ -46388,7 +46390,9 @@ function showCommodityDetail(key) {
     /* The ocean is the observation on this layer; land stays unfilled so the
        modelled colours cannot be read against it. */
     if (S.mode === 'sst' || S.mode === 'none') return null;
-    if (S.mode === 'rtfp') return rtfpColor(priceValue(iso));
+    if (S.mode === 'rtfp') return (S.isoIndex || {})[iso] ? '#2b2e34' : null;
+    /* On the Reported lens the crop-stress and IPC fills are limited to El Niño countries, like its pins. */
+    if (S.sub === 'ensolive' && (S.mode === 'asap' || S.mode === 'ipc') && !(S.isoIndex || {})[iso]) return null;
     if (S.mode === 'asap') {
       var a = asapFor(iso);
       if (!a) return null;
@@ -46457,8 +46461,53 @@ function showCommodityDetail(key) {
     return parts.join('<br>');
   }
 
+  /* Prices lens: one circle per El Niño country. Area = size of the year-on-year change (square-root
+     scale, capped at 40%); colour = direction on the same ramp as before; solid = World Bank RTFP
+     market median, hollow dashed = official food CPI where no market is monitored. The six largest
+     moves carry a label. */
+  function priceRadius(v) { return 4 + 15 * Math.sqrt(Math.min(Math.abs(v), 40) / 40); }
+  function syncPricePins() {
+    if (!S.map) return;
+    if (S.mode !== 'rtfp') { (S.pricePins || []).forEach(function (m) { try { S.map.removeLayer(m); } catch (e) {} }); return; }
+    if (!S.pricePins || !S.pricePins.length) {
+      S.pricePins = [];
+      var rows = ensoTeleIsos().map(function (iso) { return { iso: iso, v: priceValue(iso), rt: hasRtfp(iso) }; })
+        .filter(function (r) { return typeof r.v === 'number' && isFinite(r.v); })
+        .sort(function (a, b) { return Math.abs(b.v) - Math.abs(a.v); });
+      var labelled = rows.slice(0, 6).map(function (r) { return r.iso; });
+      rows.forEach(function (r) {
+        var ll = (typeof COUNTRY_LL !== 'undefined' && COUNTRY_LL[r.iso]) || centroidOf(r.iso); if (!ll) return;
+        var col = rtfpColor(Math.max(-10, r.v)) || '#9a978d';
+        var m = L.circleMarker(ll, r.rt
+          ? { radius: priceRadius(r.v), color: '#0b1017', weight: 1, fillColor: col, fillOpacity: .9 }
+          : { radius: priceRadius(r.v), color: col, weight: 1.6, dashArray: '3 2', fillColor: col, fillOpacity: .08 });
+        if (labelled.indexOf(r.iso) >= 0) {
+          m._priceLabel = esc(nameFor(r.iso)) + ' ' + (r.v > 0 ? '+' : '') + num(r.v, 1).replace(/^\+/, '') + '%';
+          m.bindPopup('<b>' + esc(nameFor(r.iso)) + '</b><br>' + rtfpReadout(r.iso));
+        } else {
+          m.bindTooltip('<b>' + esc(nameFor(r.iso)) + '</b><br>' + rtfpReadout(r.iso), { direction: 'top', opacity: .96 });
+        }
+        m.on('click', function () { if (typeof selectCountry === 'function') selectCountry(r.iso, { fly: false }); });
+        S.pricePins.push(m);
+      });
+    }
+    S.pricePins.forEach(function (m) { m.addTo(S.map); });
+    /* Labels: right of the circle, else left, else dropped, so no two overlap. */
+    var boxes = [];
+    S.pricePins.forEach(function (m) {
+      if (!m._priceLabel || m._labelSet) return;
+      m._labelSet = true;
+      var pt = S.map.latLngToContainerPoint(m.getLatLng()), r = m.getRadius(), w = m._priceLabel.length * 6.4 + 6, h = 14;
+      var tryBox = function (dir) { var x = dir === 'right' ? pt.x + r + 2 : pt.x - r - 2 - w; return { x: x, y: pt.y - h / 2, w: w, h: h, dir: dir }; };
+      var hit = function (b) { return boxes.some(function (o) { return b.x < o.x + o.w && b.x + b.w > o.x && b.y < o.y + o.h && b.y + b.h > o.y; }); };
+      var b = tryBox('right'); if (hit(b)) b = tryBox('left'); if (hit(b)) return;
+      boxes.push(b);
+      m.bindTooltip(m._priceLabel, { permanent: true, direction: b.dir, offset: [b.dir === 'right' ? r - 2 : 2 - r, 0], className: 'enso-price-lbl', interactive: false });
+    });
+  }
   function paint() {
     syncInstruments();
+    try { syncPricePins(); } catch (e) {}
     var ranking = document.getElementById('enso-map-ranking');
     if (ranking) ranking.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-map-country') === S.sel)); });
     /* Callouts are a function of the painted layer, so they are re-evaluated
@@ -46484,9 +46533,7 @@ function showCommodityDetail(key) {
       var style = col
         ? { fillColor: col, fillOpacity: 1, color: LAND_TONE, opacity: .18, weight: .5 }
         : { fillColor: LAND_TONE, fillOpacity: .06, color: LAND_TONE, opacity: .18, weight: .5 };
-      if (S.mode === 'rtfp' && (S.isoIndex[iso] || []).length) { style.opacity = .6; style.weight = .7; }
-      /* The official CPI stands in where no market is monitored: same ramp, paler, so the two sources stay apart. */
-      if (S.mode === 'rtfp' && col && !hasRtfp(iso)) style.fillOpacity = .42;
+      if (S.mode === 'rtfp' && (S.isoIndex[iso] || []).length) { style.color = '#8a8578'; style.opacity = .8; style.weight = .8; }
       if ((S.sub === 'ensoharvest' || S.mode === 'rtfp' || S.mode === 'asap') && iso && iso === S.sel) { style.color = '#ebe9e2'; style.weight = 1.7; style.opacity = 1; }
       if (!rippling) { lyr.setStyle(style); if (iso === S.sel) lyr.bringToFront(); return; }
       /* One anomaly radiating outward: countries repaint in order of distance
@@ -47176,45 +47223,78 @@ function showCommodityDetail(key) {
   /* Live alert markers. Reports, not attributions — GDACS carries coordinates,
      ReliefWeb only an ISO3, so ReliefWeb events are placed on the country's own
      polygon centroid and labelled as country-level rather than sited. */
+  /* The Reported lens. The same live signals as the main map's Disturbances layer (GDACS, ReliefWeb,
+     FEWS NET and IPC, Open-Meteo weather and river flood), drawn only where two things hold: the
+     country lies in a published El Niño teleconnection region, and the hazard has the sign El Niño
+     usually brings there (a drought in a region that dries, a flood in one that wets). Opposite-sign
+     events are counted, not drawn. Headlines about the event that name one to three countries are
+     added as hollow pins. Nothing here attributes a cause: it marks what fits the usual pattern. */
+  var ENSO_REPORT_DAYS = 60;
+  function ensoSignOf(ev) {
+    if (ev.type === 'drought' || ev.type === 'famine') return 'dry';
+    if (ev.type === 'weather') return ev.weatherKind === 'wet' ? 'wet' : 'dry';
+    if (ev.type === 'flood') return 'wet';
+    return null;
+  }
+  function ensoTypeColor(t) {
+    var r = (typeof ML_TYPES !== 'undefined') ? ML_TYPES.find(function (x) { return x.t === t; }) : null;
+    return (r && r.c) || '#9a978d';
+  }
   function drawAlerts() {
     if (S.alertPins.length || !S.map) return;
-    var g = S.gdacs || {};
-    for (var k in g) {
-      var e = g[k];
-      if (!e || !e.is_current || typeof e.lat !== 'number' || !isFinite(e.lat) || Math.abs(e.lat) > 90 || typeof e.lng !== 'number' || !isFinite(e.lng) || Math.abs(e.lng) > 180) continue;
-      /* The alert level is the severity GDACS reports, so it is the colour. */
-      var lvl = String(e.alert_level || '').toLowerCase(), lc = lvl === 'red' ? '#e05a4a' : lvl === 'orange' ? '#e0864a' : '#9a978d';
-      var m = L.circleMarker([e.lat, e.lng], {
-        radius: 6, color: '#f2efe6', weight: 1.5, ensoSource: 'gdacs',
-        fillColor: lc, fillOpacity: 1
+    var evs = (typeof window !== 'undefined' && window.disturbanceEvents) || [];
+    var cutoff = Date.now() - ENSO_REPORT_DAYS * 864e5;
+    var groups = {}, counts = { fit: 0, opposite: 0, notHazard: 0, outside: 0, news: 0, unplaced: 0 };
+    evs.forEach(function (ev) {
+      if (!ev || !ev.iso || ev.claim || ev.type === 'chokepoint' || ev.type === 'restriction') return;
+      var regs = S.isoIndex && S.isoIndex[ev.iso];
+      if (!regs) { counts.outside++; return; }
+      var sign = ensoSignOf(ev);
+      if (!sign) { counts.notHazard++; return; }
+      var t = Date.parse(ev.date || ''); if (isFinite(t) && t < cutoff) return;
+      var fit = regs.filter(function (r) { return r.sign === sign; });
+      if (!fit.length) { counts.opposite++; return; }
+      counts.fit++;
+      var g = groups[ev.iso] = groups[ev.iso] || { iso: ev.iso, events: [], news: [], regions: fit };
+      g.events.push(ev);
+    });
+    ensoNews().forEach(function (r) {
+      var cm = (r.x && r.x.countries_mentioned) || [];
+      if (!cm.length || cm.length > 3) return;
+      cm.forEach(function (iso) {
+        if (!S.isoIndex || !S.isoIndex[iso]) return;
+        var g = groups[iso] = groups[iso] || { iso: iso, events: [], news: [], regions: S.isoIndex[iso] };
+        g.news.push(r.x); counts.news++;
       });
-      m.bindTooltip('<b>' + esc(e.event_type_label) + ' · ' + esc(e.alert_level) + '</b><br>' +
-        esc(e.country || '') + '<br>' + esc(e.title || '') +
-        (e.population_affected ? '<br>' + Number(e.population_affected).toLocaleString() + ' people in the affected area' : '') +
-        '<br><span style="color:#8b8980">GDACS reports the hazard, never its cause</span>',
-        { direction: 'top', opacity: .96 });
-      S.alertPins.push(m);
-    }
-    /* Every report the feed holds is offered to the map. The old `slice(0, 40)`
-       silently discarded ten of fifty, and the key counted only the rings that
-       survived, so the page reported 36 with nothing to say the other 14 ever
-       existed. What cannot be placed is now counted and named in the key: a
-       world-level entry has no country shape, and neither does a country this
-       basemap does not carry. */
-    /* Only reports from the countries El Niño reaches, as on the reporting plate below. */
-    var linked = ensoLinkedIsos(), relAll = (S.relief && S.relief.events) || [];
-    var rel = relAll.filter(function (ev) { return linked[ev.iso3]; });
-    S.alertCounts = { reliefTotal: rel.length, reliefUnplaced: 0, reliefOutside: relAll.length - rel.length };
-    rel.forEach(function (ev) {
-      var c = centroidOf(ev.iso3);
-      if (!c) { S.alertCounts.reliefUnplaced++; return; }
-      var m = L.circleMarker(c, { radius: 3, color: '#e6e3da', weight: 1, ensoSource: 'relief',
-        fillColor: '#11161e', fillOpacity: 1 });
-      m.bindTooltip('<b>' + esc(ev.country || ev.iso3) + '</b><br>' + esc(ev.title || '') +
-        '<br><span style="color:#8b8980">ReliefWeb · placed on the country, no coordinates given</span>',
-        { direction: 'top', opacity: .96 });
+    });
+    Object.keys(groups).forEach(function (iso) {
+      var g = groups[iso];
+      var ll = centroidOf(iso) || (typeof COUNTRY_LL !== 'undefined' && COUNTRY_LL[iso]);
+      if (!ll) { counts.unplaced++; return; }
+      g.events.sort(function (a, b) { return String(b.date || '').localeCompare(String(a.date || '')); });
+      var top = g.events[0], n = g.events.length + g.news.length;
+      var type = top ? top.type : 'claim', col = ensoTypeColor(type);
+      var reg = g.regions[0];
+      var html = '<div class="dist-marker" data-sev="' + (top ? top.severity || 'medium' : 'medium') + '" style="--dm:' + col + ';--dm-px:' + (top ? 17 : 13) + 'px">' +
+        '<div class="dist-marker-core' + (top ? '' : ' is-context is-claim') + '">' + (typeof distIconSVG === 'function' ? distIconSVG(type) : '') + '</div>' +
+        (n > 1 ? '<div class="dist-marker-count">' + n + '</div>' : '') + '</div>';
+      var icon = L.divIcon({ className: 'dist-marker-wrap', html: html, iconSize: [27, 27], iconAnchor: [13, 13] });
+      var m = L.marker(ll, { icon: icon, riseOnHover: true, keyboard: true, ensoSource: top ? 'event' : 'news', alt: nameFor(iso) + ': ' + n + ' reports' });
+      var rows = g.events.slice(0, 5).map(function (e) {
+        return '<div style="margin:3px 0;"><span style="color:' + ensoTypeColor(e.type) + '">●</span> ' + esc(e.title || '') + ' <span style="color:#8b8980">' + esc(String(e.source || '').split('(')[0].trim()) + ' · ' + esc(e.date || '') + '</span></div>';
+      }).join('') + (g.events.length > 5 ? '<div style="color:#8b8980">+' + (g.events.length - 5) + ' more on the Disturbances tab</div>' : '') +
+        g.news.slice(0, 3).map(function (x) {
+          return '<div style="margin:3px 0;"><span style="color:#8fa3bf">○</span> ' + esc(x.title || '') + ' <span style="color:#8b8980">headline · ' + esc(x.source || '') + '</span></div>';
+        }).join('');
+      var wetdry = reg.sign === 'dry' ? 'drier' : 'wetter';
+      m.bindTooltip('<b>' + esc(nameFor(iso)) + '</b>' + rows +
+        '<div style="margin-top:5px;color:#c9c4b8;max-width:300px;white-space:normal;">El Niño usually brings ' + wetdry + ' conditions to ' + esc(reg.label || 'this region') +
+        (reg.damage_season ? ' (' + esc(reg.damage_season) + ')' : '') + '. ' + (top ? 'These reports fit that pattern: a possible early sign, or unrelated. The feeds do not attribute causes.' : 'Headlines only: claims, not measurements.') + '</div>',
+        { direction: 'top', opacity: .97, sticky: false });
+      m.on('click', function () { if (typeof selectCountry === 'function') selectCountry(iso, { fly: false }); });
       S.alertPins.push(m);
     });
+    S.alertCounts = counts;
   }
   function resizeEnsoMap() {
     if (!S.map) return;
@@ -47286,8 +47366,20 @@ function showCommodityDetail(key) {
   }
   function toggleAlerts() {
     if (!S.map) return;
-    if (S.showAlerts) { drawAlerts(); S.alertPins.forEach(function (m) { m.addTo(S.map); }); }
-    else S.alertPins.forEach(function (m) { try { S.map.removeLayer(m); } catch (e) {} });
+    if (!S.showAlerts) { S.alertPins.forEach(function (m) { try { S.map.removeLayer(m); } catch (e) {} }); return; }
+    /* The live events load with the Disturbances layer; on a deep link to this tab they may not have yet. */
+    var ready = (window.disturbanceEvents || []).length;
+    if (!ready && typeof loadDisturbanceData === 'function' && !S._alertsLoading) {
+      S._alertsLoading = true;
+      Promise.resolve(loadDisturbanceData()).catch(function () {}).then(function () {
+        S._alertsLoading = false;
+        S.alertPins.forEach(function (m) { try { S.map.removeLayer(m); } catch (e) {} });
+        S.alertPins = [];
+        if (S.showAlerts) toggleAlerts();
+        try { if (typeof renderLegend === 'function') renderLegend(); } catch (e) {}
+      });
+    }
+    drawAlerts(); S.alertPins.forEach(function (m) { m.addTo(S.map); });
   }
 
   /* Jump from any live/news row to that country on the map. */
@@ -48948,7 +49040,7 @@ function showCommodityDetail(key) {
     S.showRegions = S.sub === 'ensoharvest';
     S.showLanes = S.sub === 'ensowater';
     S.showAlerts = S.sub === 'ensolive';
-    S.showImports = S.sub === 'ensomoney';
+    S.showImports = false;
     var pill = document.getElementById('enso-nav-pill');
     if (!S.ready) {
       skeleton();

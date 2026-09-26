@@ -698,8 +698,9 @@ def main() -> int:
             if tab == "ensomoney":
                 dates = page.evaluate("async () => Object.values((await (await fetch('data/rtfp.json')).json()).data).map(r => r.as_of).filter(Boolean).sort()")
                 legend = page.locator('#enso-legend').text_content()
-                check("rtfp legend states fixed anchors and country as_of range",
-                      all(t in legend for t in ('Fixed anchors', '−10%', '0%', '+30%', 'beyond the ends', 'as of', dates[0], dates[-1])))
+                # 2026-09-26: prices are proportional circles; the key states sizes, sources and the as_of range.
+                check("rtfp legend states circle sizes, both sources and country as_of range",
+                      all(t in legend for t in ('5 · 15 · 30%', 'solid: market median', 'hollow: official food CPI', 'as of', dates[0], dates[-1])))
                 check("rtfp legend states the shared country date once", legend.count("for every country") == 1)
             headings.append(page.locator('#tab-elnino h2:visible').count())
             # 2026-09-24: a no-wrap table once pushed the Reported ledger 557px past its plate.
@@ -1055,7 +1056,10 @@ def main() -> int:
                 if (a.left < m.right - 1) return false;
                 if (feed !== 'rtfp') {
                     const rows = isos.map(i => data[i]);
-                    const expected = Object.values(data).filter(r => [1,2].includes(r.hotspot_code));
+                    // 2026-09-26: the Reported rail lists hotspots in El Niño regions only, like its pins.
+                    const regs = (await (await fetch('data/enso_regions.json')).json()).data.regions;
+                    const teleSet = new Set(regs.flatMap(r => r.iso3 || []));
+                    const expected = Object.entries(data).filter(([i, r]) => teleSet.has(i) && [1,2].includes(r.hotspot_code)).map(([, r]) => r);
                     const top = expected.map(r => r.hotspot_code).sort((x,y) => y-x);
                     return JSON.stringify(rows.map(r => r.hotspot_code)) === JSON.stringify(top)
                         && rows.every((r,i) => buttons[i].textContent.includes(
@@ -1090,11 +1094,12 @@ def main() -> int:
                           and page.input_value('#enso-country') == iso and first.get_attribute('aria-pressed') == 'true'
                           and page.evaluate('_stageHMap.getZoom()') == before_zoom)
         check("Stage H ranked lists retain values, dates, order and lens when selecting a country", all(ranked))
-        check("Stage H alert keys count the actual mapped GDACS and ReliefWeb reports", page.evaluate("""() => {
-            const counts = {gdacs:0,relief:0};
-            _stageHMap.eachLayer(l => { if (l.options && l.options.ensoSource in counts) counts[l.options.ensoSource]++; });
+        # 2026-09-26: Reported draws the Disturbances events that fit El Niño's usual sign; the key counts countries drawn.
+        check("Stage H Reported key counts the countries it draws", page.evaluate("""() => {
+            let n = 0;
+            _stageHMap.eachLayer(l => { if (l.options && l.options.ensoSource === 'event') n++; });
             const key = document.getElementById('enso-legend').textContent;
-            return key.includes('GDACS ' + counts.gdacs) && key.includes('ReliefWeb ' + counts.relief);
+            return key.includes(' in ' + n + ' countries fit the pattern') && key.includes('not attribution');
         }"""))
         page.set_viewport_size({'width':390,'height':844})
         stacked = []
@@ -1339,29 +1344,20 @@ def main() -> int:
                 }""", labels))
             page.evaluate("showTab('ensomoney')")
             page.wait_for_timeout(150)
-            check(f"Prices at {width}: all teleconnection outlines and faint unmonitored land", page.evaluate("""async () => {
+            check(f"Prices at {width}: teleconnection outlines, one circle per valued country, nothing else filled", page.evaluate("""async () => {
                 const regions = (await (await fetch('data/enso_regions.json')).json()).data.regions;
-                const rt = (await (await fetch('data/rtfp.json')).json()).data;
-                const fc = (await (await fetch('data/faostat_food.json')).json()).data;
-                // 2026-09-24: with no monitored market, the official food CPI (same month a year
-                // earlier, under 400 days old) paints paler; only a country with neither is faint.
-                const cpi = iso => { const f = fc[iso]; return f && Number.isFinite(f.food_cpi_yoy_month_pct) && /^\d{4}-\d{2}$/.test(f.food_cpi_latest_month || '')
-                    && Date.now() - Date.UTC(+f.food_cpi_latest_month.slice(0, 4), +f.food_cpi_latest_month.slice(5) - 1, 1) < 400 * 864e5; };
                 const tele = new Set(regions.flatMap(r => r.iso3)), seen = new Set();
                 let good = true;
                 _stageHMap.eachLayer(l => {
                     const p = l.feature && l.feature.properties, iso = p && (p.ISO_A3 || p.ADM0_A3 || p.iso_a3 || p.id);
-                    if (!iso || !l.options.fillColor || !tele.has(iso)) return;
-                    seen.add(iso);
-                    good = good && l.options.opacity >= .6 && l.options.weight >= .7;
-                    if (!Number.isFinite((rt[iso] || {}).food_inflation_pct))
-                        good = good && (cpi(iso) ? l.options.fillOpacity === .42 : l.options.fillColor === '#e6e3da' && l.options.fillOpacity === .06);
+                    if (!iso) return;
+                    if (tele.has(iso) && l.options.fillColor) { seen.add(iso); good = good && l.options.opacity >= .6 && l.options.weight >= .7; }
                 });
+                let circles = 0; _stageHMap.eachLayer(l => { if (l instanceof L.CircleMarker && !l.feature && l.options.radius >= 4 && (l.options.fillOpacity === .9 || l.options.dashArray === '3 2')) circles++; });
                 const pane = _stageHMap.getPane('ensoGraticule');
-                return good && seen.size === tele.size && pane.style.zIndex === '210'
+                return good && seen.size === tele.size && circles >= 10 && pane.style.zIndex === '210'
                     && pane.querySelectorAll('.enso-grat-lab').length === 3
-                    && document.querySelectorAll('.enso-price-ramp').length === 1
-                    && !!document.querySelector('.enso-price-missing');
+                    && document.querySelectorAll('.enso-price-lbl').length >= 3;
             }"""))
 
         print("\nTier 1: figures come from the feeds (court 2026-09-23)")

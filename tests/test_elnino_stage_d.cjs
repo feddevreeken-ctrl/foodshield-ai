@@ -169,16 +169,24 @@ test('Stage H ranked-country taps stay in their lens and pan without zoom',()=>{
  }
  assert.equal(pan.length,2);assert(pan.every(p=>p.options.animate===false));S.sub='elnino';
 });
-test('Stage H alert keys count only mapped reports and rings contrast with both hotspot fills',()=>{
- const oldG=S.gdacs,oldR=S.relief,oldPins=S.alertPins;
- S.alertPins=[];S.gdacs={yes:{is_current:true,lat:1,lng:2},no:{is_current:false,lat:1,lng:2},bad:{is_current:true,lat:NaN,lng:2}};
- S.relief={events:[{iso3:'ZWE'},{iso3:'WLD'}]};api.drawAlerts();
- assert.equal(S.alertPins.length,2);assert(api.alertLegend().includes('GDACS 1'));assert(api.alertLegend().includes('ReliefWeb 1'));
- function luminance(hex){const rgb=hex.match(/[0-9a-f]{2}/gi).map(h=>parseInt(h,16)/255).map(v=>v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4));return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;}
- for(const p of S.alertPins)for(const fill of ['#7d6a3e','#b4602c'])assert((luminance(p.options.color)+.05)/(luminance(fill)+.05)>3);
- // 2026-09-24: GDACS alerts fill with their alert level; ReliefWeb reports stay dark.
- assert(S.alertPins.every(p=>p.options.fillOpacity===1&&(p.options.ensoSource==='gdacs'?['#e05a4a','#e0864a','#9a978d'].includes(p.options.fillColor):p.options.fillColor==='#11161e')));
- S.gdacs=oldG;S.relief=oldR;S.alertPins=oldPins;
+test('Reported draws only events that fit El Niño\'s usual sign in its regions, and counts the rest',()=>{
+ const oldPins=S.alertPins,oldEv=ctx.window.disturbanceEvents,oldNews=S.news;
+ const zweSign=(S.isoIndex.ZWE||[{}])[0].sign, today=new Date().toISOString().slice(0,10);
+ const fitType=zweSign==='dry'?'drought':'flood', oppType=zweSign==='dry'?'flood':'drought';
+ S.alertPins=[];S.news={items:[{title:'El Niño headline',source:'x',countries_mentioned:['ZWE']},{title:'too broad',countries_mentioned:['ZWE','ZAF','MOZ','MWI']}]};
+ ctx.window.disturbanceEvents=[
+  {iso:'ZWE',type:fitType,date:today,title:'fits',severity:'high',source:'GDACS'},
+  {iso:'ZWE',type:oppType,date:today,title:'opposite',severity:'high',source:'GDACS'},
+  {iso:'FRA',type:'drought',date:today,title:'outside',severity:'high',source:'GDACS'},
+  {iso:'ZWE',type:'conflict',date:today,title:'not a hazard',severity:'high',source:'HAPI'},
+  {iso:'ZWE',type:fitType,date:'2020-01-01',title:'too old',severity:'high',source:'GDACS'}];
+ api.drawAlerts();
+ assert.equal(S.alertPins.length,1);
+ assert.equal(S.alertCounts.fit,1);assert.equal(S.alertCounts.opposite,1);assert.equal(S.alertCounts.outside,1);assert.equal(S.alertCounts.news,1);
+ assert(S.alertPins[0].tooltip.includes('fits'));assert(!S.alertPins[0].tooltip.includes('opposite'));
+ assert(S.alertPins[0].tooltip.includes('do not attribute causes'));
+ const leg=api.alertLegend();assert(leg.includes('1 of the opposite sign'));assert(leg.includes('not attribution'));
+ S.alertPins=oldPins;ctx.window.disturbanceEvents=oldEv;S.news=oldNews;
 });
 test('Shipping keeps one unboxed SVG label per chokepoint, with no corridor chips',()=>{
  assert.equal(S.corridorLabels.length,0);
@@ -292,10 +300,11 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    assert.equal(key.includes('diamond and ring: observed, measured at the chokepoint'),view==='ensowater');
    assert.equal(key.includes('dashed: published schematic corridor through named ports'),view==='ensowater');
    if(view==='ensowater'){assert.equal(S.corridorLines.filter(l=>S.map.hasLayer(l)).length,9);assert.equal(S.corridorLabels.length,0);for(const c of S.corridors.corridors){assert(legend.querySelector('details').textContent.includes(c.basis.replace(/'/g,'&#39;')));}}
-   assert.equal(key.includes('GDACS drought'),view==='ensolive');
-   if(view==='ensolive')for(const label of ['hotspot','major hotspot','ReliefWeb report in an El Niño country'])assert(key.includes(label));
+   assert.equal(key.includes('Reported · fits El Niño'),view==='ensolive');
+   if(view==='ensolive')for(const label of ['hotspot','major hotspot','in a region El Niño dries','in a region El Niño wets','headline naming the event'])assert(key.includes(label));
    if(view==='ensowater')for(const l of S.lanes.lanes)assert(legend.querySelector('details').textContent.includes(l.name));
-   if(view==='ensomoney')for(const label of ['−10%','0%','+30%','Blue-grey','ground grey','ochre to orange','In the teleconnection layer, no value in either source','Paler: official food CPI (FAOSTAT)'])assert(key.includes(label));
+   /* 2026-09-26: prices are circles (area = size of the change, solid RTFP, hollow CPI) over El Niño countries only. */
+   if(view==='ensomoney')for(const label of ['5 · 15 · 30%','falling','rising fast','solid: market median, World Bank RTFP','hollow: official food CPI (FAOSTAT)','do not compare the two directly'])assert(key.includes(label));
    if(cycle||view!=='elnino')assert.equal(node('scroller').scrollTop,0);
   });
  }
@@ -304,14 +313,15 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
   S.asap.ZWE.hotspot_code=2;api.paint();assert.equal(api.fillFor('ZWE'),'#b4602c');assert(country.element.classList.contains('enso-major-hotspot'));assert(!country.element.classList.contains('enso-hotspot'));
   S.mode='rtfp';api.paint();assert(!country.element.classList.contains('enso-major-hotspot'));assert.equal(api.rtfpColor(-10),'#8fb1cf');assert.equal(api.rtfpColor(0),'#606268');assert.equal(api.rtfpColor(15),'#c9773a');assert.equal(api.rtfpColor(30),'#dd5a3a');assert.equal(api.rtfpColor(60),api.rtfpColor(30));assert.equal(api.rtfpColor(null),null);S.asap=saved;
  });
- test('Prices outlines all teleconnection members and keeps missing land distinct from zero',()=>{
+ test('Prices outlines all teleconnection members and leaves other land unfilled',()=>{
   const oldBase=S.layerBase, oldMode=S.mode, oldSel=S.sel;
   const countries=Object.keys(S.isoIndex).map(iso=>{const l=new Layer();l.feature={properties:{ISO_A3:iso}};return l;});
   const outside=new Layer();outside.feature={properties:{ISO_A3:'NOT_IN_LAYER'}};
   S.layerBase={eachLayer(fn){countries.concat(outside).forEach(fn);}};S.mode='rtfp';S.sel=null;api.paint();
   countries.forEach(l=>{
-   const iso=l.feature.properties.ISO_A3;assert.equal(l.options.color,'#e6e3da');assert.equal(l.options.opacity,.6);assert.equal(l.options.weight,.7);
-   if(!Number.isFinite((S.rtfp[iso]||{}).food_inflation_pct)){assert.equal(l.options.fillColor,'#e6e3da');assert.equal(l.options.fillOpacity,.06);}
+   /* 2026-09-26: teleconnection land is one flat tone with a visible outline; the values are circles. */
+   assert.equal(l.options.color,'#8a8578');assert.equal(l.options.opacity,.8);assert.equal(l.options.weight,.8);
+   assert.equal(l.options.fillColor,'#2b2e34');assert.equal(l.options.fillOpacity,1);
   });
   assert.equal(outside.options.opacity,.18);assert.equal(outside.options.fillOpacity,.06);
   assert.equal(api.rtfpColor(0),'#606268');assert.equal(api.rtfpColor(null),null);
