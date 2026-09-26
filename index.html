@@ -10047,6 +10047,8 @@ body::before {
 .enso-krow { display:grid; grid-template-columns:30px minmax(0,1fr); gap:10px; align-items:center; margin:7px 0; }
 .enso-krow-sw { display:flex; justify-content:center; align-items:center; }
 .enso-krow-tx b { display:block; font-weight:500; font-size:12.5px; color:var(--t1); line-height:1.3; }
+.enso-krow-tx b::first-letter { text-transform:uppercase; }
+.enso-legend-hint { font-weight:400; color:var(--t3); font-size:11px; }
 .enso-krow-tx i { display:block; font-style:normal; font-size:11.5px; line-height:1.4; color:var(--t3); }
 .enso-krow-wide { grid-template-columns:minmax(0,1fr); gap:6px; margin-left:40px; }
 .enso-krow-sizes { display:flex; align-items:center; gap:8px; }
@@ -10054,7 +10056,8 @@ body::before {
 .enso-krow-glyph { font-size:11px; color:var(--t2); white-space:nowrap; }
 .enso-krow-sq { display:inline-flex; gap:3px; } .enso-krow-sq i { width:7px; height:7px; display:inline-block; box-shadow:0 0 0 1px #0b1017; }
 .enso-rank-discs { display:inline-flex; gap:2px; vertical-align:-2px; margin-left:4px; }
-.enso-verdict-row { background:none; border:0; padding:0; color:inherit; font:inherit; text-align:left; cursor:pointer; display:flex; gap:8px; align-items:center; }
+.enso-verdict-row { background:none; border:0; padding:0; color:inherit; font:inherit; text-align:left; cursor:pointer; width:100%; }
+#tab-elnino .enso-verdict-row.enso-krow { display:grid; min-height:0; }
 .enso-verdict-row[aria-pressed="true"] span { color:var(--t1); text-decoration:underline; }
 .enso-hatch-cool { fill:url(#ensoHatchCool) !important; }
 
@@ -46336,9 +46339,9 @@ function showCommodityDetail(key) {
     var row = function (sw, txt) { return '<div class="enso-legend-row">' + sw + ' <span>' + txt + '</span></div>'; };
     var land;
     if (S.mode === 'rain') {
-      land = '<div class="enso-legend-block"><div class="enso-legend-t">El Niño’s usual rainfall (published studies, not observed)</div>' +
-        row(hatchSwatch('dry'), 'usually drier in El Niño years') + row(hatchSwatch('wet'), 'usually wetter') +
-        row(hatchSwatch('mixed'), 'regions disagree (depends on the season)') + row(hatchSwatch(''), 'in a tracked region, no rainfall expectation') + '</div>';
+      land = '<div class="enso-legend-block"><div class="enso-legend-t">El Niño’s usual rainfall (published studies)</div>' +
+        krow(hatchSwatch('dry'), 'Drier', 'usually drier in El Niño years') + krow(hatchSwatch('wet'), 'Wetter', 'usually wetter') +
+        krow(hatchSwatch('mixed'), 'Regions disagree', 'depends on the season') + krow(hatchSwatch(''), 'Tracked, no expectation', 'in a tracked region, no rainfall expectation') + '</div>';
     } else if (LIVE_LEG && LIVE_LEG[S.mode]) {
       var L0 = LIVE_LEG[S.mode];
       land = '<div class="enso-legend-block"><div class="enso-legend-t">' + esc(L0[0]) + '</div>' +
@@ -46347,20 +46350,21 @@ function showCommodityDetail(key) {
     } else land = '';
     var types = ['drought', 'flood', 'cyclone', 'weather', 'earthquake'];
     var obs = '<div class="enso-legend-block"><div class="enso-legend-t">Reported now (observed)</div>' +
-      types.map(function (t) { var r = (typeof ML_TYPES !== 'undefined') ? ML_TYPES.find(function (x) { return x.t === t; }) : null; return row(discSwatch(ensoTypeColor(t)), esc(r ? r.l : t)); }).join('') +
-      '<div class="ctr-note">Size = the severity the source reports.</div></div>';
-    var vb = function (v, sw, txt) { return '<div class="enso-legend-row"><button type="button" class="enso-verdict-row" data-verdict="' + v + '" aria-pressed="' + (S.reportVerdict === v) + '">' + sw + ' <span>' + txt + '</span></button></div>'; };
-    var fit = '<div class="enso-legend-block"><div class="enso-legend-t">Does it fit El Niño’s usual pattern here?</div>' +
+      types.map(function (t) { var r = (typeof ML_TYPES !== 'undefined') ? ML_TYPES.find(function (x) { return x.t === t; }) : null; return krow(discSwatch(ensoTypeColor(t)), esc(r ? r.l : t), ''); }).join('') +
+      '<div class="enso-legend-caveat">Size = the severity the source reports.</div></div>';
+    var vb = function (v, sw, txt) { var parts = txt.split(': ');
+      return '<button type="button" class="enso-krow enso-verdict-row" data-verdict="' + v + '" aria-pressed="' + (S.reportVerdict === v) + '"><span class="enso-krow-sw">' + sw + '</span><span class="enso-krow-tx"><b>' + parts[0] + '</b>' + (parts[1] ? '<i>' + parts.slice(1).join(': ') + '</i>' : '') + '</span></button>'; };
+    var fit = '<div class="enso-legend-block"><div class="enso-legend-t">Does it fit El Niño’s usual pattern here? <span class="enso-legend-hint">click to isolate</span></div>' +
       vb('fits', discSwatch('#c47a3c', 'fits'), 'fits the usual pattern: a possible early sign, or unrelated') +
       vb('against', discSwatch('#4a7ab3', 'against'), 'runs against it') +
       vb('none', discSwatch('#4a8a9b'), 'not assessed: no rainfall expectation for this hazard or place') +
       '<div class="enso-legend-caveat">Fitting the pattern is not attribution: compared by country and direction only, season not tested.</div></div>';
     var ol = function (col, w) { return '<svg aria-hidden="true" width="18" height="12" viewBox="0 0 18 12" style="flex:none"><rect x="1" y="1" width="16" height="10" fill="none" stroke="' + col + '" stroke-width="' + w + '"/></svg>'; };
     var crisis = '<div class="enso-legend-block"><div class="enso-legend-t">Food crisis classification (IPC / FEWS NET, in force)</div>' +
-      row(ol('#e67800', 1.6), 'Phase 3, crisis') + row(ol('#c80000', 2.4), 'Phase 4, emergency') + row(ol('#640000', 3), 'Phase 5, catastrophe') + '</div>';
+      krow(ol('#e67800', 1.6), 'Phase 3', 'crisis') + krow(ol('#c80000', 2.4), 'Phase 4', 'emergency') + krow(ol('#640000', 3), 'Phase 5', 'catastrophe') + '</div>';
     var hl = '<div class="enso-legend-block"><div class="enso-legend-t">Headlines and agency reports (claims, not measurements)</div>' +
-      row('<span class="enso-hl-tab" style="cursor:default">▤ n</span>', 'items naming this country, last 30 days') +
-      row('<span style="display:inline-block;width:12px;border-left:1px solid #3a4250;height:14px"></span>', 'largest recent stories, printed as published') + '</div>';
+      krow('<span class="enso-hl-tab" style="cursor:default">▤ n</span>', 'Headline count', 'items naming this country, last 30 days') +
+      krow('<span style="display:inline-block;width:12px;border-left:1px solid #3a4250;height:14px"></span>', 'Callout', 'largest recent stories, printed as published') + '</div>';
     var cnt = '<div class="ctr-note enso-legend-wide">' + (c.n || 0) + ' reports in ' + (c.countries || 0) + ' El Niño countries (last ' + ENSO_REPORT_DAYS + ' days, plus ongoing and undated events): ' + (c.fits || 0) + ' fit the usual pattern, ' + (c.against || 0) + ' run against it, ' + (c.none || 0) + ' not assessed. ' +
       (c.headlines || 0) + ' headlines. Elsewhere: ' + (c.elsewhere || 0) + ' events (grey dots). Not drawn here: ' + (c.price || 0) + ' price or currency (Prices), ' + (c.trade || 0) + ' trade or shipping (Shipping), ' + (c.other || 0) + ' conflict or disease (Disturbances tab)' +
       (c.unplaced ? '; ' + c.unplaced + ' without a map position' : '') + '.</div>';
@@ -49735,8 +49739,9 @@ function showCommodityDetail(key) {
     tiles.push([String(live.length), live.length === 1 ? 'export measure in force' : 'export measures in force', nextEnd ? esc(nextEnd.country) + ' ' + esc(String(nextEnd.commodity).toLowerCase()) + ' ends ' + esc(fmtDate(nextEnd.ends_date)) : 'no end date due']);
     var leadEl = document.getElementById('enso-live-lead');
     /* The one-sentence answer is the map tag; the lead keeps only the lens heading. */
-    if (leadEl) leadEl.innerHTML = '<div class="enso-view-open"><h2 class="enso-h">What is being reported now</h2></div>';
-    el.innerHTML = (leadEl ? '' : '<div class="enso-after-h enso-view-open"><h2 class="enso-h">What is being reported now</h2>' + lead + '</div>') +
+    /* The lens heading is set once above the map; re-rendering must not add a second one below it. */
+    if (leadEl) leadEl.innerHTML = '';
+    el.innerHTML = (leadEl ? '' : '<div class="enso-after-h enso-view-open"><h2 class="enso-h">Hazards, crises and headlines</h2>' + lead + '</div>') +
       ledgerPlate + wirePlate + policyPlate;
     var agEl = document.getElementById('enso-agencies'); if (agEl) agEl.innerHTML = agencyPlate;
     el.querySelectorAll('[data-map-country]').forEach(function (b) { b.onclick = function () { ensoFocus(b.getAttribute('data-map-country')); }; });
@@ -50051,7 +50056,7 @@ function showCommodityDetail(key) {
     if (S.sub !== 'elnino') {
       var title = panel.querySelector('h2');
       if (title) { panel.dataset.heading = title.textContent; title.remove(); }
-      heading.innerHTML = '<h2>' + esc(panel.dataset.heading || {ensoharvest:'Harvest responses',ensowater:'Shipping restrictions and transits',ensomoney:'Prices in El Niño countries',ensolive:'What is being reported now'}[S.sub]) + '</h2>';
+      heading.innerHTML = '<h2>' + esc(panel.dataset.heading || {ensoharvest:'Harvest responses',ensowater:'Shipping restrictions and transits',ensomoney:'Prices in El Niño countries',ensolive:'Hazards, crises and headlines'}[S.sub]) + '</h2>';
     }
     syncMapTitle();
     panel.querySelectorAll('.enso-lanes-table tbody tr').forEach(function (row) {
