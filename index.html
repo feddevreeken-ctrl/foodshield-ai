@@ -48965,17 +48965,36 @@ function showCommodityDetail(key) {
       var regs = []; P.forEach(function (p) { if (regs.indexOf(p.region) < 0) regs.push(p.region); });
       out += '<figure class="enso-plate enso-ports-plate" data-kind="observed">' + plateHead('Dry-bulk imports at African gateway ports', 'IMF PortWatch · dry-bulk imports estimated from AIS · ' + P[0].window_days + ' days to ' + stamp(new Date(P[0].latest_date + 'T12:00:00Z')), stamp(metaDate('ports')), 'observed') +
         '<div class="plate-body"><p class="enso-plate-lede">' + (function () {
-          /* The answer first: how many gateways are above or below their usual intake for these weeks. */
           var up = P.filter(function (p) { return p.vs_mean_pct >= 10; }).length, dn = P.filter(function (p) { return p.vs_mean_pct <= -10; }).length;
-          return '<b>Now: ' + up + ' of ' + P.length + ' ports are taking in 10% or more above their ' + esc(P[0].prior_years || '') + ' average for these weeks, ' + dn + ' are 10% or more below.</b> ';
-        })() + (zafRow ? 'If this winter reaches ONI ' + num(((S.outlook || {}).cases || { record: { oni: 2.5 } }).record.oni, 1) + ', the model puts South Africa’s maize at ' + num(zafRow.change_pct_record, 0) + '% (' + fmtKt(zafRow.change_kt_record) + ', harvest ' + esc(zafRow.harvest) + '). ' : '') + 'If it fails, replacement grain comes through these ports: watch for imports well above the 2019–2025 average and the Beira and Nacala corridors filling for Zimbabwe, Malawi and Zambia.</p>' +
+          return '<b>' + up + ' of ' + P.length + ' ports are 10% or more above their ' + esc(P[0].prior_years || '') + ' average for these weeks; ' + dn + ' are 10% or more below.</b> ';
+        })() + (zafRow ? 'Why these ports: at ONI ' + num(((S.outlook || {}).cases || { record: { oni: 2.5 } }).record.oni, 1) + ' the model puts South Africa’s maize at ' + num(zafRow.change_pct_record, 0) + '% (harvest ' + esc(zafRow.harvest) + '), and replacement grain for the region lands here.' : '') + '</p>' +
+        /* One dot per port on a shared, zero-centred axis: dry-bulk intake against its own average for these weeks.
+           Ring: against the same weeks a year earlier. Right: tonnes. */
+        (function () {
+          var Q = P.slice().sort(function (x, y) { return (y.vs_mean_pct || 0) - (x.vs_mean_pct || 0); });
+          var lim = Math.max(25, Math.ceil(Math.max.apply(null, Q.map(function (p) { return Math.max(Math.abs(p.vs_mean_pct || 0), Math.abs(p.yoy_pct || 0)); })) / 25) * 25);
+          var W = 880, L0 = 190, R0 = 760, RH = 28, top = 24, H = top + Q.length * RH + 20, X = function (v) { return L0 + (Math.max(-lim, Math.min(lim, v)) + lim) / (2 * lim) * (R0 - L0); };
+          var ticks = [-lim, -lim / 2, 0, lim / 2, lim].map(function (v) { return '<line x1="' + X(v).toFixed(1) + '" x2="' + X(v).toFixed(1) + '" y1="' + (top - 6) + '" y2="' + (H - 16) + '" stroke="' + (v ? '#2a323c' : '#8b8980') + '"' + (v ? '' : ' stroke-dasharray="3 3"') + '/><text x="' + X(v).toFixed(1) + '" y="' + (H - 3) + '" text-anchor="middle" class="enso-hw-t">' + (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + '%</text>'; }).join('');
+          var rows = Q.map(function (p, i) {
+            var y = top + i * RH + RH / 2, v = p.vs_mean_pct, col = v >= 10 ? '#c9c6bd' : v <= -10 ? '#6d7580' : '#9a978d';
+            return '<g><title>' + esc(p.name + ' · ' + (p.serves || '') + ' · ' + kt(p.dry_bulk_import_t) + ' in ' + p.window_days + ' days, ' + p.dry_bulk_calls + ' dry-bulk calls') + '</title>' +
+              '<text x="0" y="' + (y + 4) + '" class="enso-hw-l">' + esc(p.name) + '</text><text x="' + (L0 - 12) + '" y="' + (y + 4) + '" text-anchor="end" class="enso-hw-t">' + esc(nameFor(p.iso3)) + '</text>' +
+              (typeof v === 'number' ? '<line x1="' + X(0).toFixed(1) + '" x2="' + X(v).toFixed(1) + '" y1="' + y + '" y2="' + y + '" stroke="' + col + '" stroke-width="2"/>' : '') +
+              (typeof p.yoy_pct === 'number' ? '<circle cx="' + X(p.yoy_pct).toFixed(1) + '" cy="' + y + '" r="4.5" fill="none" stroke="#8b8980" stroke-width="1.2"/>' : '') +
+              (typeof v === 'number' ? '<circle cx="' + X(v).toFixed(1) + '" cy="' + y + '" r="5.5" fill="' + col + '" stroke="#0b1017" stroke-width="1"/>' : '') +
+              '<text x="' + (R0 + 16) + '" y="' + (y + 4) + '" class="enso-hw-t" fill="#c9c6bd">' + (typeof v === 'number' ? (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(0) + '% · ' : '') + kt(p.dry_bulk_import_t) + '</text></g>';
+          }).join('');
+          return '<div class="enso-pp-key"><span><svg width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="#c9c6bd"/></svg> against the ' + esc(P[0].prior_years || '') + ' average, same weeks</span><span><svg width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" fill="none" stroke="#8b8980" stroke-width="1.2"/></svg> against a year earlier</span><span>right: change · tonnes, last ' + P[0].window_days + ' days</span></div>' +
+            '<svg class="enso-hw enso-ports-dots" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Dry-bulk imports by port against their average">' + ticks + rows + '</svg>';
+        })() +
+        '<details class="enso-ol-more"><summary>Port table: what each port serves, calls and the monthly trend</summary>' +
         '<table class="enso-live-table enso-ports-table"><thead><tr><th scope="col">Port</th><th scope="col">Serves</th><th scope="col">Dry-bulk imports, last ' + P[0].window_days + ' days</th><th scope="col">vs a year earlier</th><th scope="col">vs ' + esc(P[0].prior_years || '') + ' average, same weeks</th><th scope="col">Monthly, two years</th></tr></thead><tbody>' +
         regs.map(function (rg) {
           return '<tr class="enso-ol-year"><th colspan="6" scope="rowgroup">' + esc(rg) + '</th></tr>' + P.filter(function (p) { return p.region === rg; }).map(function (p) {
             return '<tr><th scope="row">' + esc(p.name) + '<span class="enso-live-sub">' + esc(nameFor(p.iso3)) + '</span></th><td>' + esc(p.serves) + '</td>' +
               '<td class="enso-ol-v">' + kt(p.dry_bulk_import_t) + '<span class="enso-live-sub">' + p.dry_bulk_calls + ' dry-bulk calls, loading or discharging</span></td><td class="enso-ol-v">' + sgn(p.yoy_pct) + '</td><td class="enso-ol-v">' + sgn(p.vs_mean_pct) + '</td><td>' + spark(p.monthly_t) + '</td></tr>';
           }).join('');
-        }).join('') + '</tbody></table></div>' +
+        }).join('') + '</tbody></table></details></div>' +
         '<figcaption class="enso-log">IMF PortWatch estimates tonnes from AIS draught, not customs records. Dry bulk also carries fertiliser, coal and ore, and one grain ship unloads 30–60 kt, so a 28-day change does not establish more grain imports. Maputo and Nacala mostly export coal and ore.' +
         ((S.ports.unavailable || []).length ? ' Not reached this run: ' + S.ports.unavailable.map(function (u) { return esc(u.port); }).join(', ') + '.' : '') + '</figcaption></figure>';
     }
@@ -49003,15 +49022,25 @@ function showCommodityDetail(key) {
       var proj = {}; (g.projection || []).forEach(function (p) { proj[mmdd(p.date)] = p.ft; });
       var projOnDays = days.map(function (d) { return proj[d] == null ? null : proj[d]; });
       var ds = [
-        { label: '90th percentile', data: g.band.map(function (b) { return b.p90; }), borderColor: 'rgba(143,177,207,0)', backgroundColor: 'rgba(143,177,207,.14)', pointRadius: 0, fill: '+1' },
-        { label: '10th percentile', data: g.band.map(function (b) { return b.p10; }), borderColor: 'rgba(143,177,207,0)', pointRadius: 0, fill: false },
-        line('median 1966–2025', g.band.map(function (b) { return b.p50; }), 'rgba(143,177,207,.8)', [], 1)
+        { label: '90th percentile', data: g.band.map(function (b) { return b.p90; }), borderColor: 'rgba(0,0,0,0)', backgroundColor: 'rgba(58,67,80,.55)', pointRadius: 0, fill: '+1' },
+        { label: '10th percentile', data: g.band.map(function (b) { return b.p10; }), borderColor: 'rgba(0,0,0,0)', pointRadius: 0, fill: false },
+        line('median 1966–2025', g.band.map(function (b) { return b.p50; }), '#8b8980', [], 1)
       ];
-      var col = { '1997-98': '#9d8a6a', '2015-16': '#c9a957', '2023-24': '#e0864a' };
-      Object.keys(g.analogs || {}).forEach(function (k) { ds.push(line(k, at(g.analogs[k], 'ft'), col[k] || '#b6b8be', [5, 4], 1.3)); });
+      /* Past El Niño years are observations, so solid; neutral greys, so 2026 is the only bright line. */
+      var col = { '1997-98': '#8c7a62', '2015-16': '#7d8ba0', '2023-24': '#a39b88' };
+      Object.keys(g.analogs || {}).forEach(function (k) { ds.push(line(k, at(g.analogs[k], 'ft'), col[k] || '#8b8980', [], 1.2)); });
       ds.push(line('2026', at((g.this_year || []).map(function (p) { return { day: mmdd(p.date), ft: p.ft }; }), 'ft'), '#ebe9e2', [], 2.2));
       if (projOnDays.some(function (v) { return v != null; })) ds.push(line('ACP projection', projOnDays, '#ebe9e2', [1, 3], 1.6));
-      mk('enso-c-gatun', { keyNotes: ['Band: 10th–90th percentile 1966–2025; solid pale line: median; bright line: 2026; dashed: 1997-98, 2015-16, 2023-24; dotted: ACP projection.'],
+      /* Name each past year at its last point, so the greys need no colour key. */
+      var endLabels = { id: 'ensoEndLabels', afterDatasetsDraw: function (ch) {
+        var cx = ch.ctx; cx.save(); cx.font = '10px "Geist Mono", monospace'; cx.textBaseline = 'middle';
+        ch.data.datasets.forEach(function (d, i) {
+          if (!/^\d{4}(-\d{2})?$/.test(d.label)) return;
+          var meta = ch.getDatasetMeta(i); if (meta.hidden) return;
+          for (var k = meta.data.length - 1; k >= 0; k--) { if (d.data[k] != null) { var pt = meta.data[k]; cx.fillStyle = d.borderColor; cx.textAlign = 'right'; cx.fillText(d.label, pt.x - 4, pt.y - 8); break; } }
+        });
+        cx.restore(); } };
+      mk('enso-c-gatun', { plugins: [endLabels], keyNotes: ['Band: 10th–90th percentile 1966–2025; pale line: median; bright line: 2026; muted lines: 1997-98, 2015-16, 2023-24, named at their ends; dotted: ACP projection (modelled).'],
         type: 'line', data: { labels: days, datasets: ds },
         options: defaults({ interaction: { mode: 'index', intersect: false },
           plugins: { tooltip: { filter: function (i) { return i.parsed.y != null && !/percentile/.test(i.dataset.label); }, callbacks: { label: function (c) { return c.dataset.label + ': ' + c.parsed.y.toFixed(2) + ' ft'; } } } },
