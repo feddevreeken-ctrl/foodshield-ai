@@ -83,6 +83,8 @@ ITEMS = {
     "offal":        ("Offal", [868], "edible bovine offal"),
     "procgrains":   ("Flour", [16, 58], "wheat and maize flour"),
 }
+IMPORTER_KEYS = ["wheat", "maize", "rice", "soybeans", "barley", "sorghum", "vegoils", "palmoil",
+                 "sugar", "pulses", "poultry", "beef", "dairy"]
 ITEM_TO_KEY = {code: key for key, (_, codes, _) in ITEMS.items() for code in codes}
 IMPORT_EL, EXPORT_EL = "5610", "5910"
 # FAO aggregates that would double count their members
@@ -228,6 +230,30 @@ def build():
             "totals_by_year_t": {str(y): round(t) for y, t in sorted(totals.items())},
         }
         print(f"[ok] {key:12s} {year}  world {world/1e6:8.2f} Mt  corridors {len(flows):5d}  mirror {100*mirror_share:4.1f}%")
+    # Per-importer view for the country panel and the Country tab: every importer's top five
+    # suppliers of the staples the score and the supplier cards talk about.
+    by_importer = {}
+    for key in IMPORTER_KEYS:
+        if key not in vals:
+            continue
+        year = out[key]["year"]
+        flows = corridor_values(vals[key][year])
+        per = defaultdict(list)
+        for (e, i), (v, b) in flows.items():
+            per[i].append((e, v, b))
+        for i, lst in per.items():
+            tot = sum(v for _, v, _ in lst)
+            lst.sort(key=lambda x: -x[1])
+            by_importer.setdefault(i, {})[key] = {
+                "year": year, "imports_t": round(tot),
+                "suppliers": [{"iso": e, "t": round(v), "share_pct": round(100 * v / tot, 1), "basis": b}
+                              for e, v, b in lst[:5]],
+            }
+    write_json("trade_matrix_importers.json", by_importer,
+               source="FAOSTAT Detailed Trade Matrix (TM), bulk normalized download: " + BULK_URL,
+               notes=("Per importer and commodity: total imports (t) and the top five suppliers with their share. "
+                      "Importer-reported quantity, exporter-reported mirror where the importer did not report (basis). "
+                      "Commodities: " + ", ".join(IMPORTER_KEYS) + "."))
     method = ("Corridor tonnes = importer-reported import quantity (FAO element 5610); where the importer did not "
               "report, the exporter-reported export quantity (5910) to it, flagged basis='mirror'. Items summed on "
               "a product-weight basis per commodity. Year = latest with a reported world total >= 85% of the year "

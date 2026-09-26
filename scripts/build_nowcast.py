@@ -17,7 +17,7 @@ Formula (extended May 2026, expanded May 2026 v20.27):
                                    when the near-term projection is worse than current
     + displacement_kick  (0-4)   — HDX HAPI internal-displacement magnitude band (new v43)
     + conflict_kick      (0-5)   — ACLED 30-day intensity
-    + global_food_kick   (0-2)   — FAO FFPI MoM > +3%
+    + global_food_kick   (0-2)   — FAO FFPI MoM > +1% / +3%, x staple import dependence c[0]/100
     + fx_shock           (0-3)   — local currency fell >10% in 90d vs USD
     + inflation_shock    (0)     — DISABLED v79: the YoY level now feeds
                                    structural c[3]; charging it here too was a
@@ -314,6 +314,18 @@ def main():
         freshness["caseload_kick"] = dict(freshness["ipc_pressure"])
         conflict_weight = term_weight("conflict_kick", conflict_row.get("window_end")) if conflict_row.get("is_live") else term_weight("conflict_kick", None, basis="not live; excluded")
         term_weight("global_food_kick", ffpi_date, basis="FFPI reporting month end")
+        # A world price rise reaches a country in proportion to the staples it buys abroad:
+        # scale the FFPI kick by staple import dependence (component c[0], 0-100). Before
+        # 2026-09-26 every country got the full kick, exporters included, so the live layer
+        # was positive for all 264 rows. Unknown dependence -> no kick (no evidence).
+        _c0 = None
+        try:
+            _cv = (_profiles.get(iso) or {}).get("c")
+            _cv = _cv.get("value") if isinstance(_cv, dict) else _cv
+            _c0 = _cv[0] if isinstance(_cv, list) and _cv else None
+        except Exception:
+            _c0 = None
+        country_food_kick = round(global_food_kick * max(0.0, min(1.0, (_c0 or 0) / 100)), 2) if isinstance(_c0, (int, float)) else 0.0
 
         ipc_pressure  = round(min(12, ipc_p3 * 0.12) * ipc_weight, 2)
 
@@ -586,7 +598,7 @@ def main():
         cluster_overage = max(0, crisis_cluster - 18)
 
         adj = round(
-            ipc_pressure + caseload_kick + fews_kick + displacement_kick + conflict_kick + global_food_kick
+            ipc_pressure + caseload_kick + fews_kick + displacement_kick + conflict_kick + country_food_kick
             + fx_shock + inflation_shock + weather_kick + flood_kick
             + aq_kick + us_water_kick + us_fi_kick
             + inform_amp + governance_drag + psd_shortfall
@@ -642,7 +654,7 @@ def main():
                 "caseload_kick":   round(caseload_kick, 1),
                 "fews_kick":       round(fews_kick, 1),
                 "displacement_kick": displacement_kick,
-                "global_food_kick": global_food_kick,
+                "global_food_kick": country_food_kick,
                 "fx_shock":        round(fx_shock, 1),
                 "inflation_shock": round(inflation_shock, 1),
                 "weather_kick":    round(weather_kick, 1),

@@ -203,7 +203,7 @@ test('Explore instrument preserves controls and dates modelled paint from displa
  const begin=html.indexOf('function exploreScoreDate()'),finish=html.indexOf('// Backward-compatible wrapper',begin);
  vm.runInContext(html.slice(begin,finish),main);vm.runInContext('renderMapLayers()',main);
  // 2026-09-25: the map-state strip carries the one-line lede and the computed date; the legend date line is gone.
- assert(get('map-state').textContent.includes('Food disruption risk by country'));
+ assert(get('map-state').textContent.includes('Food disruption risk, 0–100'));
  assert(get('map-state').textContent.includes(live.countries_overlay.AFG.fdrs_displayed_at.slice(0,10)));
  for(const label of ['Live disturbances','Sea temperature','Trade flows'])assert(get('map-layers').textContent.includes(label));
  for(const handler of ['mlToggleDist','mlToggleSST','mlToggleFlows','mlToggleExpand'])assert(get('map-layers').innerHTML.includes(handler+'(event)'));
@@ -226,7 +226,7 @@ test('Explore land blocks SST below unchanged bands and has a distinct opaque un
  vm.runInContext(html.slice(styleBegin,styleEnd),main);
  const unscored=vm.runInContext('styleFeature({})',main);assert.equal(unscored.fillOpacity,1);assert.equal(unscored.fillColor,'url(#fs-unscored-hatch) #343b46');
  assert.equal(vm.runInContext('styleFeature({country:{fdrs:null}}).fillColor',main),unscored.fillColor);
- for(const score of [12,38,63,82,95]){const paint=vm.runInContext('styleFeature({country:{fdrs:'+score+'}})',main);assert.equal(paint.fillColor,'#band');assert(Math.abs(paint.fillOpacity-(0.18+Math.pow(score/100,0.85)*0.78))<1e-12);} // 2026-09-26: owner restored the score-graded opacity (the map's texture)
+ for(const score of [12,38,63,82,95]){const paint=vm.runInContext('styleFeature({country:{fdrs:'+score+'}})',main);assert.equal(paint.fillColor,'#band');assert(Math.abs(paint.fillOpacity-(0.40+Math.pow(score/100,0.85)*0.56))<1e-12);} // 2026-09-26: owner restored the score-graded opacity (the map's texture)
  const legend=html.slice(html.indexOf('<div id="map-legend"'),html.indexOf('</div><!-- /#map-canvas -->'));
  for(const label of ['0–25','26–50','51–75','76–88','89–100','Unscored','map-legend-date'])assert(legend.includes(label));
 });
