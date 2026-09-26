@@ -2747,10 +2747,13 @@ body {
   cursor: pointer;
   list-style: none;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
   align-items: center;
 }
+/* The headline metric sits on its own line under the title; beside it, long titles ran through it. */
+.sp-fold > summary .sp-fold-metric { grid-column: 1; grid-row: 2; white-space: normal; color: var(--t2); }
+.sp-fold > summary .sp-fold-chev { grid-column: 2; grid-row: 1; }
 /* v71: Remove browser default details marker so the custom chevron is the only affordance. */
 .sp-fold > summary::-webkit-details-marker { display: none; }
 /* v72.1 — title and badge flow INLINE and wrap together; space-between was
@@ -2820,6 +2823,16 @@ body {
   font-family: 'Geist Mono', monospace;
   width: 32px; text-align: right;
 }
+/* Side panel: name | bar | share and tonnes on one line (they wrapped over three lines). */
+#sidepanel .supplier-row { display: grid; grid-template-columns: minmax(0, 1fr) 64px auto; gap: 10px; }
+#sidepanel .supplier-bar-wrap { width: auto; }
+#sidepanel .supplier-pct { width: auto; white-space: nowrap; }
+#sidepanel .supplier-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-open-report { margin: 4px 18px 6px; }
+.sp-open-report-btn { width: 100%; background: none; border: 1px solid var(--b2); color: var(--t1); border-radius: 3px; padding: 8px 10px; font-family: inherit; font-size: 12px; cursor: pointer; text-align: left; }
+.sp-open-report-btn:hover { border-color: var(--accent); }
+#sp-scorebar .ctr-sbar { margin: 24px 0 12px; }
+#sp-scorebar .ctr-sbar-key { font-size: 10.5px; }
 
 /* AI card */
 .ai-card {
@@ -13125,6 +13138,23 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
         </div>
       </div>
 
+      <div class="sp-open-report"><button type="button" class="sp-open-report-btn" onclick="if(typeof ctrOpenCountry==='function'&&window._spOpenIso)ctrOpenCountry(window._spOpenIso)">Full country report →</button></div>
+
+      <div class="sp-section" id="sp-comps">
+        <div class="sp-section-title">What drives the score</div>
+        <div id="sp-scorebar"></div>
+        <div id="sp-comp-list"></div>
+      </div>
+      <!-- The radar repeated the bars below it in a form that is harder to read; kept hidden so its code path stays inert. -->
+      <div class="sp-radar" hidden>
+        <canvas id="sp-radar" style="max-height:180px;"></canvas>
+      </div>
+
+      <div class="sp-section">
+        <div class="sp-section-title">Staple suppliers</div>
+        <div id="sp-suppliers"></div>
+      </div>
+
       <!-- AI Trade Flow Atlas CTA — v21.x route explorer redesign -->
       <div class="sp-flows-cta" id="trade-atlas-cta">
 
@@ -13175,28 +13205,21 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 
 
 
-      <div class="sp-radar">
-        <canvas id="sp-radar" style="max-height:180px;"></canvas>
-      </div>
 
-      <div class="sp-section" id="sp-comps">
-        <div class="sp-section-title">Score Components</div>
-        <div id="sp-comp-list"></div>
-      </div>
 
       <div class="sp-section">
         <div class="sp-section-title">Key Metrics</div>
         <div id="sp-metrics"></div>
       </div>
 
-      <div class="sp-section">
+      <div class="sp-section" hidden>
         <div class="sp-section-title">Key dependency commodities <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#c47a3c;background:#c47a3c18;padding:1px 4px;border-radius:3px;margin-left:6px;letter-spacing:.04em;text-transform:uppercase;" title="Curated structural list: not a live customs feed. Some entries are backfilled from regional defaults when the curated list is sparse. UI normalises to food-only.">curated list</span></div>
         <div id="sp-imports"></div>
       </div>
 
       <div class="sp-section">
-        <div class="sp-section-title">Staple suppliers</div>
-        <div id="sp-suppliers"></div>
+        <div class="sp-section-title">2030 Outlook</div>
+        <div id="sp-outlook" style="font-size:var(--fs-prose);color:var(--t1);line-height:1.65;"></div>
       </div>
 
       <!-- v79 — HONEST LABELLING. Nothing in this card calls a model: #sp-ai is
@@ -13216,11 +13239,6 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
           <div id="sp-ai-live-text" class="ai-narrative-text"></div>
           <div id="sp-ai-live-meta" class="ai-narrative-meta"></div>
         </div>
-      </div>
-
-      <div class="sp-section">
-        <div class="sp-section-title">2030 Outlook</div>
-        <div id="sp-outlook" style="font-size:var(--fs-prose);color:var(--t1);line-height:1.65;"></div>
       </div>
 
       <div class="sp-section">
@@ -19633,7 +19651,7 @@ function lpiCardHTML(iso3) {
     `<span style="font-size:9px;color:#6ba36b;background:#6ba36b22;border:1px solid #6ba36b44;padding:1px 6px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase;">WB · sourced</span>`,
     `Overall ${fmt(row.overall.value)}/5`,
     overallRow + subRows,
-    `<div style="font-size:9.5px;color:var(--t3);margin-top:6px;">${row.year || 'latest'} · range 1 (worst) to 5 (best) · biennial release</div>`
+    `<div style="font-size:9.5px;color:var(--t3);margin-top:6px;">${row.edition ? 'LPI ' + row.edition + ' edition' + (row.year && row.year !== row.edition ? ' (survey ' + row.year + ')' : '') : (row.year || 'latest')} · range 1 (worst) to 5 (best) · the 2025 LPI 2.0 uses a new method and is not comparable</div>`
   );
 }
 
@@ -26991,6 +27009,7 @@ function commoditySuppliers(c, commodity) {
         // Keep raw USD on the supplier so _estimateVolume can use the OBSERVED
         // per-supplier value directly instead of computing total × share again.
         usd_m: typeof s.usd_m === 'number' ? s.usd_m : null,
+        year: obsRow.year || 2024,
       };
     }).filter(p => p.name && p.pct > 0);
     if (pairs.length >= 2) return pairs;
@@ -27647,9 +27666,9 @@ function _tfaShowSidePanel(title, suppliers, dir, note) {
     }
     const prov = s.vol && s.vol.provenance;
     const provBadge = prov === 'observed'
-      ? `<span class="provenance-badge tfa-row-prov" style="color:#6ba36b;background:#6ba36b14;" title="Observed bilateral trade from UN Comtrade.">comtrade</span>`
+      ? `<span class="provenance-badge tfa-row-prov" style="color:#6ba36b;background:#6ba36b14;" title="Observed bilateral trade from UN Comtrade, ${s.vol.year || 2024}.">comtrade ${s.vol.year || 2024}</span>`
       : prov === 'observed_aggregate'
-      ? `<span class="provenance-badge tfa-row-prov" style="color:#c9a957;background:#c9a95714;" title="Observed aggregate total from UN Comtrade; supplier breakdown is approximated.">aggregate</span>`
+      ? `<span class="provenance-badge tfa-row-prov" style="color:#c9a957;background:#c9a95714;" title="Observed aggregate total from UN Comtrade, ${s.vol.year || 2024}; supplier breakdown is approximated.">aggregate ${s.vol.year || 2024}</span>`
       : `<span class="provenance-badge tfa-row-prov" style="color:#c47a3c;background:#c47a3c14;" title="Volume estimated from country net-trade balance × supplier share. Not observed bilateral trade.">modeled</span>`;
 
     const kt = s.vol && s.vol.kt ? `<b>${s.vol.kt.toLocaleString()}</b> kt` : '';
@@ -28533,6 +28552,8 @@ function openPanel(c, skipDrilldown) {
   const liveComp = liveAdjustedComponents(c);
   // v2 — 9-component structural vector for the radar (migration-safe c[6..8]).
   const struct9 = liveComp.values.map((v, i) => v - (liveComp.deltas[i] || 0));
+  window._spOpenIso = c.iso;
+  try { const _sb = document.getElementById('sp-scorebar'); if (_sb && typeof ctrScoreBar === 'function') _sb.innerHTML = ctrScoreBar(c); } catch (e) {}
   destroyChart('sp-radar');
   const ctx = document.getElementById('sp-radar');
   const hasLiveDelta = liveComp.deltas.some(d => d > 0);
@@ -38232,6 +38253,7 @@ function _estimateVolume(country, commodity, supplierIdx, supplierName, supplier
               kt: row.total_kt != null && match.share_pct != null
                 ? Math.round(row.total_kt * match.share_pct / 100) : null,
               provenance: 'observed',
+              year: row.year || 2024,
             };
           }
         }
@@ -38243,6 +38265,7 @@ function _estimateVolume(country, commodity, supplierIdx, supplierName, supplier
           usdM: Math.round(row.total_usd_m),
           kt: row.total_kt != null ? Math.round(row.total_kt) : null,
           provenance: 'observed_aggregate',
+          year: row.year || 2024,
         };
       }
     } else {
@@ -38269,6 +38292,7 @@ function _estimateVolume(country, commodity, supplierIdx, supplierName, supplier
               usdM: Math.round(supUsd),
               kt: null,
               provenance: 'observed',
+              year: destRow.year || 2024,
             };
           }
         }
@@ -38349,6 +38373,7 @@ function openCommodityDrilldown(commodity, importerIso, opts){
       usdM: Number.isFinite(vol.usdM) ? vol.usdM : 0,
       kt:   (vol.kt == null) ? null : (Number.isFinite(vol.kt) ? vol.kt : null),
       provenance: vol.provenance || 'modeled',
+      year: vol.year || null,
     };
 
     // v84 — traders are no longer attached to individual supplier countries.
@@ -44855,7 +44880,8 @@ function showCommodityDetail(key) {
      lifting on record it stays on the page as "ended, check for an extension", so a
      lapse the file has not caught up with never reads as "nothing in force". */
   function restrictionState(r, now) {
-    if (!r || r.status === 'historical') return null;
+    /* A measure the pipeline expired on its end date keeps the 45-day "check for an extension" window. */
+    if (!r || (r.status === 'historical' && !r.auto_expired)) return null;
     var end = r.ends_date ? Date.parse(r.ends_date + 'T23:59:59Z') : null;
     if (end == null || end >= now) return 'live';
     return !r.lifted_date && now - end < 45 * 864e5 ? 'lapsed' : null;
@@ -47473,10 +47499,12 @@ function showCommodityDetail(key) {
      events are counted, not drawn. Headlines about the event that name one to three countries are
      added as hollow pins. Nothing here attributes a cause: it marks what fits the usual pattern. */
   var ENSO_REPORT_DAYS = 60;
+  /* The rainfall direction an event shows, compared with the region's `rain` field (not `sign`, which is
+     the effect on production). A food crisis or an unspecified weather flag carries no rainfall direction. */
   function ensoSignOf(ev) {
-    if (ev.type === 'drought' || ev.type === 'famine') return 'dry';
-    if (ev.type === 'weather') return ev.weatherKind === 'wet' ? 'wet' : 'dry';
-    if (ev.type === 'flood') return 'wet';
+    if (ev.type === 'drought') return 'drier';
+    if (ev.type === 'weather') return ev.weatherKind === 'wet' ? 'wetter' : ev.weatherKind === 'dry' ? 'drier' : null;
+    if (ev.type === 'flood') return 'wetter';
     return null;
   }
   function ensoTypeColor(t) {
@@ -47495,7 +47523,7 @@ function showCommodityDetail(key) {
       var sign = ensoSignOf(ev);
       if (!sign) { counts.notHazard++; return; }
       var t = Date.parse(ev.date || ''); if (isFinite(t) && t < cutoff) return;
-      var fit = regs.filter(function (r) { return r.sign === sign; });
+      var fit = regs.filter(function (r) { return r.rain === sign; });
       if (!fit.length) { counts.opposite++; return; }
       counts.fit++;
       var g = groups[ev.iso] = groups[ev.iso] || { iso: ev.iso, events: [], news: [], regions: fit };
@@ -47529,7 +47557,7 @@ function showCommodityDetail(key) {
         g.news.slice(0, 3).map(function (x) {
           return '<div style="margin:3px 0;"><span style="color:#8fa3bf">○</span> ' + esc(x.title || '') + ' <span style="color:#8b8980">headline · ' + esc(x.source || '') + '</span></div>';
         }).join('');
-      var wetdry = reg.sign === 'dry' ? 'drier' : 'wetter';
+      var wetdry = reg.rain || (reg.sign === 'dry' ? 'drier' : 'wetter');
       m.bindTooltip('<b>' + esc(nameFor(iso)) + '</b>' + rows +
         '<div style="margin-top:5px;color:#c9c4b8;max-width:300px;white-space:normal;">El Niño usually brings ' + wetdry + ' conditions to ' + esc(reg.label || 'this region') +
         (reg.damage_season ? ' (' + esc(reg.damage_season) + ')' : '') + '. ' + (top ? 'These reports fit that pattern: a possible early sign, or unrelated. The feeds do not attribute causes.' : 'Headlines only: claims, not measurements.') + '</div>',

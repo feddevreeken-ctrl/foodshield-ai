@@ -362,7 +362,7 @@ def main() -> int:
     out_regions = []
     for r in regions:
         out_regions.append({
-            "id": r["id"], "label": r["label"], "iso3": r["iso3"], "sign": r.get("sign"),
+            "id": r["id"], "label": r["label"], "iso3": r["iso3"], "sign": r.get("sign"), "rain": r.get("rain"),
             "effect_direction": r.get("effect_direction"), "damage_season": r.get("damage_season"),
             "lag_months": r.get("lag_months"), "confidence": r.get("confidence"),
             "precedent": r.get("quantified"), "sources": r.get("sources", [])[:3],

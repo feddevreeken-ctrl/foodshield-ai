@@ -123,16 +123,17 @@ def build():
             sup_names = [names.get(s["iso3"], s["iso3"]) for s in sup]
             sup_pct = [round(s["share_pct"]) for s in sup if s.get("share_pct") is not None]
             food_imports = [STAPLE_LABEL.get(k, k.title()) for k, _ in ranked[:6]]
-            prov = {"source": "UN Comtrade (HS6, 2024)", "source_url": COMTRADE_URL,
-                    "as_of": "2024", "quality_flag": "sourced"}
+            yr = str(dom.get("year") or 2024)  # per-pair year: 2025 where complete, else 2024
+            prov = {"source": f"UN Comtrade (HS6, {yr})", "source_url": COMTRADE_URL,
+                    "as_of": yr, "quality_flag": "sourced"}
             lbl = STAPLE_LABEL.get(dom_key, dom_key)
             row["suppliers"] = {**prov, "value": sup_names, "_supplier_basis": dom_key,
                 "method": f"Top-5 suppliers of {lbl} (largest staple import, "
-                          f"${_total_value_usd(dom)/1e9:.2f}B), UN Comtrade 2024."}
+                          f"${_total_value_usd(dom)/1e9:.2f}B), UN Comtrade {yr}."}
             row["supPct"] = {**prov, "value": sup_pct, "_supplier_basis": dom_key,
-                "method": f"Import-value shares of top-5 {lbl} suppliers, UN Comtrade 2024."}
+                "method": f"Import-value shares of top-5 {lbl} suppliers, UN Comtrade {yr}."}
             row["imports"] = {**prov, "value": food_imports,
-                "method": "Food staples ranked by import value, UN Comtrade 2024."}
+                "method": f"Food staples ranked by import value, UN Comtrade {yr}."}
             t1 += 1
             records.append({"iso3": iso, "tier": 1, "provenance": "sourced",
                 "basis_commodity": dom_key, "verdict": "replace",
@@ -167,7 +168,7 @@ def build():
     (DATA / "countries.json").write_text(json.dumps(env, indent=2, ensure_ascii=False))
     (DATA / "reverify_records.json").write_text(json.dumps(
         {"_meta": {"generated_at": datetime.now(timezone.utc).isoformat(),
-                   "source": "trade_pipeline/build_fields.py (Comtrade 2024 + USDA PSD)",
+                   "source": "trade_pipeline/build_fields.py (Comtrade 2025 where reported, else 2024 + USDA PSD)",
                    "version": "v23",
                    "tiers": {"tier1_comtrade_full": t1, "tier2_psd_imports": t2,
                              "tier3_unavailable": t3}},

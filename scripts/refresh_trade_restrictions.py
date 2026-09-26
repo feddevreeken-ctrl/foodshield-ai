@@ -38,6 +38,8 @@ See docs/superpowers/specs/2026-06-29-trade-restriction-monitor-design.md.
 """
 import json
 
+from datetime import date, datetime, timezone
+
 from _common import DATA_DIR, write_json
 
 FILENAME = "trade_restrictions.json"
@@ -59,7 +61,50 @@ def _existing_count():
         return 0
 
 
+def expire_measures(rows, today):
+    """Mark in-force measures whose recorded end date has passed as historical. Pure and idempotent.
+
+    Only the status changes (plus a note and the date it was applied): the source, the review
+    stamps and every other field stay as recorded. An expiry says the recorded window closed, not
+    that exports are unrestricted: an extension may exist that no source here has recorded yet, so
+    the page keeps a 45-day reminder to check (restrictionState in index.html reads auto_expired)."""
+    changed = []
+    for r in rows or []:
+        if not isinstance(r, dict) or r.get("status") not in ("official", "reported"):
+            continue
+        end = r.get("ends_date")
+        try:
+            end_d = date.fromisoformat(str(end)[:10]) if end else None
+        except ValueError:
+            end_d = None
+        if end_d and end_d < today:
+            r["status_before_expiry"] = r["status"]
+            r["status"] = "historical"
+            r["auto_expired"] = today.isoformat()
+            r["expiry_note"] = f"Recorded window ended {end_d.isoformat()}; an extension is not verified."
+            changed.append(f"{r.get('country') or r.get('iso')} {r.get('commodity')}")
+    return changed
+
+
+def _expire_on_disk(today=None):
+    path = DATA_DIR / FILENAME
+    if not path.exists():
+        return []
+    obj = json.loads(path.read_text())
+    rows = obj.get("data") if isinstance(obj, dict) else obj
+    changed = expire_measures(rows, today or datetime.now(timezone.utc).date())
+    if changed:
+        if isinstance(obj, dict):
+            obj.setdefault("_meta", {})["auto_expired_at"] = (today or datetime.now(timezone.utc).date()).isoformat()
+        # Written directly, not through write_json: the review stamps in _meta must not be refreshed
+        # by a mechanical status change.
+        path.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n")
+        print(f"[EXPIRE] {len(changed)} measure(s) past their end date set to historical: {', '.join(changed)}")
+    return changed
+
+
 def main():
+    _expire_on_disk()
     # Preserve owner-curated / ingested entries — never clobber sourced restrictions.
     n = _existing_count()
     if n > 0:

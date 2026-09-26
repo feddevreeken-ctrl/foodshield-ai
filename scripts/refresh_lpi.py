@@ -64,6 +64,10 @@ INDICATORS = {
 }
 
 
+
+# World Bank API year -> published LPI edition (only 2023 differs).
+EDITION_BY_API_YEAR = {2022: 2023}
+
 def main():
     out = {}
     failures = []
@@ -107,6 +111,8 @@ def main():
             existing_year = country_slot.get("year")
             if existing_year is None or (y is not None and y > existing_year):
                 country_slot["year"] = y
+                # The API stamps the 2023 edition with its survey year, 2022.
+                country_slot["edition"] = EDITION_BY_API_YEAR.get(y, y)
             kept += 1
         print(f"  [OK] {code}: {kept} country rows")
 
@@ -131,9 +137,11 @@ def main():
         out,
         source="World Bank Logistics Performance Index (api.worldbank.org/v2)",
         notes=(
-            f"7 logistics dimensions per country, latest year per indicator. "
-            f"Score range 1 (worst) to 5 (best). Biennial release; latest 2023 "
-            f"(WB skipped 2020 and 2022 due to COVID). "
+            f"7 logistics dimensions per country, latest edition per indicator. "
+            f"Score range 1 (worst) to 5 (best). 'year' is the API year (the survey "
+            f"year); 'edition' is the published edition, so the 2023 edition reads "
+            f"'2023 survey; API year 2022'. LPI 2.0 (2025, new method) is not "
+            f"comparable and is not used in the score. "
             f"Covered {len(out)} countries."
         ),
     )

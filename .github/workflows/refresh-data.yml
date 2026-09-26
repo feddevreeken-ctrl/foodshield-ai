@@ -109,6 +109,14 @@ jobs:
           cd scripts
           python run_all.py
 
+      # Export measures past their recorded end date become historical before anything
+      # validates or commits them (also done inside run_all; this runs even if that step died).
+      - name: Expire lapsed export measures
+        run: |
+          cd scripts
+          python -c "import refresh_trade_restrictions as r; r._expire_on_disk()"
+          python test_restriction_expiry.py
+
       # v20.33 — data integrity validation. Reads every expected output file
       # produced by run_all.py, validates JSON + envelope shape + non-trivial
       # data payload. Critical failures (>= 4) trip non-zero exit, so the

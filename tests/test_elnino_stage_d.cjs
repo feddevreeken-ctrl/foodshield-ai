@@ -171,8 +171,8 @@ test('Stage H ranked-country taps stay in their lens and pan without zoom',()=>{
 });
 test('Reported draws only events that fit El Niño\'s usual sign in its regions, and counts the rest',()=>{
  const oldPins=S.alertPins,oldEv=ctx.window.disturbanceEvents,oldNews=S.news;
- const zweSign=(S.isoIndex.ZWE||[{}])[0].sign, today=new Date().toISOString().slice(0,10);
- const fitType=zweSign==='dry'?'drought':'flood', oppType=zweSign==='dry'?'flood':'drought';
+ const zweRain=(S.isoIndex.ZWE||[{}])[0].rain, today=new Date().toISOString().slice(0,10);
+ const fitType=zweRain==='drier'?'drought':'flood', oppType=zweRain==='drier'?'flood':'drought';
  S.alertPins=[];S.news={items:[{title:'El Niño headline',source:'x',countries_mentioned:['ZWE']},{title:'too broad',countries_mentioned:['ZWE','ZAF','MOZ','MWI']}]};
  ctx.window.disturbanceEvents=[
   {iso:'ZWE',type:fitType,date:today,title:'fits',severity:'high',source:'GDACS'},

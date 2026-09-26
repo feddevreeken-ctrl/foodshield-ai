@@ -278,14 +278,18 @@ def main():
     key = env("COMTRADE_API_KEY", required=False)
 
     out = defaultdict(lambda: defaultdict(lambda: {"total_kt": 0, "total_value_usd": 0, "by_supplier": defaultdict(lambda: {"kt": 0, "value_usd": 0})}))
-    year = 2024  # most recent full year for free tier as of May 2026
+    # 2025 is partly released: each importer-commodity call asks for 2025 first
+    # and falls back to 2024 for any commodity whose 2025 answer is missing or
+    # truncated. A pair's rows always come from one year, never a mix.
+    year = 2025
+    fallback_year = 2024
     skipped = 0
     succeeded = 0
     dropped_rows = 0   # v45: breakout rows filtered by _clean_rows()
 
     session = requests.Session()
     session.headers.update({"User-Agent": UA, "Accept": "application/json"})
-    use_auth = bool(key) and _auth_ok(session, key, year)
+    use_auth = bool(key) and _auth_ok(session, key, fallback_year)
     url = URL_AUTH if use_auth else URL
     auth_headers = {"Ocp-Apim-Subscription-Key": key} if use_auth else None
     print(f"  [info] Comtrade endpoint: {'authenticated data/v1/get' if use_auth else 'public preview'}")
@@ -305,17 +309,19 @@ def main():
     cmd_groups = ([tuple(COMMODITIES.items())] if use_auth
                   else [((c, n),) for c, n in COMMODITIES.items()])
     pairs_per_call = len(cmd_groups[0])
+    row_cap = 100000 if use_auth else 500
     queue = deque(
-        (reporter_code, importer_iso, cmds, 0)
+        (reporter_code, importer_iso, cmds, 0, year)
         for reporter_code, importer_iso in PRIORITY_IMPORTERS.items()
         for cmds in cmd_groups
     )
     total_calls = len(queue)
     requeued = 0
     exhausted = []
+    fell_back = 0
 
     while queue:
-        reporter_code, importer_iso, cmds, attempt = queue.popleft()
+        reporter_code, importer_iso, cmds, attempt, period = queue.popleft()
         cmd_names = dict(cmds)
         cmd_name = "+".join(cmd_names.values())
         # Throttle to stay polite to the public endpoint (~1 req/sec).
@@ -324,10 +330,10 @@ def main():
             "cmdCode": ",".join(cmd_names),
             "flowCode": "M",
             "reporterCode": reporter_code,
-            "period": year,
+            "period": period,
         }
         if use_auth:
-            params["maxRecords"] = 100000
+            params["maxRecords"] = row_cap
         else:
             params["max"] = 500
 
@@ -336,7 +342,7 @@ def main():
             nonlocal requeued, skipped
             if attempt + 1 < MAX_RETRIES_PER_CALL:
                 requeued += 1
-                queue.append((reporter_code, importer_iso, cmds, attempt + 1))
+                queue.append((reporter_code, importer_iso, cmds, attempt + 1, period))
                 print(f"    {importer_iso}/{cmd_name}: {reason} — re-queued "
                       f"(attempt {attempt + 2}/{MAX_RETRIES_PER_CALL})")
             else:
@@ -362,6 +368,10 @@ def main():
             continue
         if r.status_code != 200:
             # 4xx other than 429 is a real answer ("no such series"): not retryable.
+            if period != fallback_year:
+                fell_back += 1
+                queue.append((reporter_code, importer_iso, cmds, 0, fallback_year))
+                continue
             print(f"    {importer_iso}/{cmd_name}: HTTP {r.status_code}")
             skipped += 1
             continue
@@ -371,6 +381,20 @@ def main():
             _retry(f"unparseable body: {e}")
             continue
         raw_rows = payload.get("data", []) or []
+        if period != fallback_year:
+            # A capped response may be cut mid-commodity: drop it and use 2024.
+            if len(raw_rows) >= row_cap:
+                fell_back += 1
+                queue.append((reporter_code, importer_iso, cmds, 0, fallback_year))
+                continue
+            have = {str(x.get("cmdCode")) for x in raw_rows}
+            missing = tuple((c, n) for c, n in cmds if c not in have)
+            if missing:
+                fell_back += 1
+                queue.append((reporter_code, importer_iso, missing, 0, fallback_year))
+                cmd_names = {c: n for c, n in cmd_names.items() if c in have}
+                if not cmd_names:
+                    continue
         # v45: filter transport-mode / second-partner breakouts before any
         # accumulation. Without this the same trade is summed several times.
         rows = _clean_rows(raw_rows)
@@ -398,6 +422,7 @@ def main():
             # Public preview values in current saved files are stored as raw USD.
             # Example: Egypt 2024 wheat total is ~4.44e9 in data/comtrade_staples.json.
             entry = out[importer_iso][row_cmd]
+            entry["year"] = period
             entry["total_value_usd"] += value_usd
             # netWgt is null on public preview — we cannot compute kt. Set to 0
             # so downstream code knows volumes aren't available; UI must label as
@@ -406,7 +431,7 @@ def main():
             s["value_usd"] += value_usd
 
     print(f"  Fetched {succeeded}/{total_calls} commodity-importer combos; "
-          f"re-queued {requeued}; skipped {skipped}; "
+          f"re-queued {requeued}; {fell_back} fell back to {fallback_year}; skipped {skipped}; "
           f"dropped {dropped_rows} breakout rows (mot/partner2 duplicates)")
     if exhausted:
         print(f"  Calls exhausted after {MAX_RETRIES_PER_CALL} attempts "
@@ -428,6 +453,7 @@ def main():
             ]
             suppliers.sort(key=lambda x: -x["value_usd"])
             final[imp][cmd_name] = {
+                "year": e.get("year"),
                 "total_kt": None,   # not available on public preview endpoint
                 "total_value_usd": round(total_usd, 2),
                 "total_usd_m": round(total_usd, 2),
@@ -451,6 +477,11 @@ def main():
     # A genuine upstream shrink still gets through: when nothing was lost to
     # retryable failures (skipped == 0), a smaller result is real news about the
     # source rather than an artefact of our own rate-limiting, and is published.
+    by_year = defaultdict(int)
+    for commodities in final.values():
+        for e in commodities.values():
+            by_year[e.get("year")] += 1
+    print(f"  Pairs by year: {dict(by_year)}")
     new_importers, new_pairs = _coverage(final)
     old_importers, old_pairs = _existing_coverage()
     print(f"  Coverage: {new_importers} importers / {new_pairs} pairs this run "
@@ -499,8 +530,11 @@ def main():
         "comtrade_staples.json",
         final,
         source=(f"UN Comtrade Plus (comtradeapi.un.org, "
-                f"{'authenticated data/v1/get' if use_auth else 'public preview'}) — HS6, year {year}"),
-        notes=(f"Top 5 suppliers per importer-commodity. ~25 priority importers (free-tier quota). "
+                f"{'authenticated data/v1/get' if use_auth else 'public preview'}) — HS6, {year} where reported, else {fallback_year}"),
+        notes=(f"Each importer-commodity carries its own 'year': {year} when that year's answer "
+               f"was complete, otherwise {fallback_year} (pairs this run: "
+               f"{', '.join(f'{k}: {v}' for k, v in sorted(by_year.items(), key=lambda kv: str(kv[0])))}). "
+               f"Top 5 suppliers per importer-commodity. ~25 priority importers (free-tier quota). "
                f"Endpoint: {'authenticated data/v1/get (COMTRADE_API_KEY), one call per importer' if use_auth else 'public preview (no key accepted), one call per importer-commodity'}. "
                f"Succeeded: {succeeded}/{total_calls}, re-queued: {requeued}, skipped: {skipped}. "
                f"Coverage this run: {new_importers} importers / {new_pairs} importer-commodity "

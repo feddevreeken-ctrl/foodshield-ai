@@ -434,6 +434,16 @@ def main():
         critical_failures.extend(("commodity_interpretation.json", m) for m in interp_failures)
         honesty_failures.extend(("commodity_interpretation.json", m) for m in interp_failures)
 
+    # A measure shown as in force after its recorded end date misstates the trade situation.
+    # refresh_trade_restrictions.expire_measures runs first in run_all, so this only fires if it did not.
+    restr_failures = validate_trade_restrictions()
+    if restr_failures:
+        print("\nTrade-restriction failures:")
+        for msg in restr_failures:
+            print(f"  - {msg}")
+        critical_failures.extend(("trade_restrictions.json", m) for m in restr_failures)
+        honesty_failures.extend(("trade_restrictions.json", m) for m in restr_failures)
+
     # v25 — loud, separate report on the must-have crisis feeds.
     failed_names = {fn for fn, _ in critical_failures}
     crisis_down = [f for f in MUST_HAVE_CRISIS_FEEDS if f in failed_names]
@@ -623,7 +633,9 @@ def validate_comtrade_unit_prices():
             # (54 of 463, some from 1979/1990/1998) produce meaningless unit
             # prices and false failures.
             psd_year = psd_row.get('_year_imports_kt')
-            if not isinstance(psd_year, int) or abs(psd_year - _COMTRADE_YEAR) > _MAX_YEAR_GAP:
+            # Each pair carries the year it was pulled for (2025 where complete, else 2024).
+            ct_year = entry.get('year') if isinstance(entry.get('year'), int) else _COMTRADE_YEAR
+            if not isinstance(psd_year, int) or abs(psd_year - ct_year) > _MAX_YEAR_GAP:
                 continue
             # v73 — forecast-vintage guard. In July, PSD rolls its latest vintage
             # to the NEW marketing year (e.g. 2026/27), whose early-season import
@@ -633,7 +645,7 @@ def validate_comtrade_unit_prices():
             # "over-counted" failures that blocked every commit after the July
             # rollover. Only compare against actual-ish vintages (<= Comtrade
             # year + 1); count skips so a fully-dormant check is visible in CI.
-            if psd_year > _COMTRADE_YEAR + 1:
+            if psd_year > ct_year + 1:
                 forecast_skips += 1
                 continue
             if not isinstance(usd, (int, float)) or usd <= 0:
@@ -1025,6 +1037,30 @@ INTERPRETATION_CONTENT_TYPES = {
     True:  'ai_interpretation',
     False: 'deterministic_template',
 }
+
+
+def validate_trade_restrictions(today=None):
+    """In-force (official/reported) measures must not be past their recorded end date."""
+    from datetime import date as _date
+    today = today or _date.today()
+    path = DATA_DIR / "trade_restrictions.json"
+    if not path.exists():
+        return []
+    try:
+        obj = json.loads(path.read_text())
+    except Exception as e:
+        return [f"unreadable: {e}"]
+    rows = obj.get("data") if isinstance(obj, dict) else obj
+    out = []
+    for r in rows or []:
+        if not isinstance(r, dict) or r.get("status") not in ("official", "reported") or not r.get("ends_date"):
+            continue
+        try:
+            if _date.fromisoformat(str(r["ends_date"])[:10]) < today:
+                out.append(f"{r.get('country') or r.get('iso')} {r.get('commodity')}: ended {r['ends_date']} but still marked {r['status']}")
+        except ValueError:
+            out.append(f"{r.get('country') or r.get('iso')} {r.get('commodity')}: unreadable ends_date {r['ends_date']!r}")
+    return out
 
 
 def validate_commodity_interpretation():
