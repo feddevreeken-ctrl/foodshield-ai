@@ -21028,12 +21028,14 @@ async function loadLiveData() {
 
       f2030Adj = Math.max(-3, Math.min(10, Math.round(f2030Adj * 10) / 10));
       /* The trend projection (applyTrendProjection) replaces this heritage path once its inputs load. */
-      c.f2030 = (c._f2030Basis === 'trend' && typeof c._f2030Shift === 'number')
+      c.f2030 = ((c._f2030Basis === 'trend' || c._f2030Basis === 'none') && typeof c._f2030Shift === 'number')
         ? Math.max(0, Math.min(100, Math.round(c._fdrsStructural + c._f2030Shift)))
         : Math.max(0, Math.min(100, Math.round(c._f2030Structural + f2030Adj)));
       c._f2030Adj = f2030Adj;
     }
     console.info(`[FoodShield] Nowcast applied to ${Object.keys(LIVE.nowcast).length} countries · loaded at ${LIVE.meta.loaded_at}`);
+    /* The 2030 projection must run on the final component vector, so again here, after scoring. */
+    try { if (typeof applyTrendProjection === 'function' && LIVE.tm_staples && LIVE.faostat_prod_index) applyTrendProjection(); } catch (e) {}
     // v20: invalidate any caches that captured pre-nowcast c.fdrs / c.f2030
     if (typeof _companyIndex !== 'undefined') _companyIndex = null;
     if (typeof _commodityCache !== 'undefined') _commodityCache = null;
@@ -21596,7 +21598,9 @@ function applyTrendProjection() {
     const g = gRow && typeof gRow.value === 'number' ? gRow.value / 100 : null;
     const r = rRow && typeof rRow.trend_pct_per_year === 'number' ? rRow.trend_pct_per_year / 100 : null;
     const today = (typeof c._fdrsStructural === 'number') ? c._fdrsStructural : c.fdrs;
-    if (n == null || g == null || r == null || typeof c.c[0] !== 'number') { c._f2030Shift = 0; c.f2030 = Math.round(today); c._f2030Basis = 'trend'; c._proj = null; n0++; return; }
+    /* No inputs: no projection. f2030 keeps today's value only so arithmetic never breaks; every view that
+       shows 2030 checks f2030Known(c) and prints "no projection" instead. */
+    if (n == null || g == null || r == null || typeof c.c[0] !== 'number') { c._f2030Shift = 0; c.f2030 = Math.round(today); c._f2030Basis = 'none'; c._proj = null; n0++; return; }
     const n2030 = Math.max(0, Math.min(1, 1 - (1 - n) * Math.pow((1 + r) / (1 + g), 6)));
     const cv = c.c.slice();
     cv[0] = Math.max(0, Math.min(100, cv[0] + 100 * (n2030 - n)));
@@ -21609,8 +21613,9 @@ function applyTrendProjection() {
   });
   console.info(`[FoodShield] 2030 trend projection: ${n1} countries projected, ${n0} without the inputs`);
 }
+function f2030Known(c) { return !!c && c._f2030Basis !== 'none' && typeof c.f2030 === 'number'; }
 function f2030Delta(c) {
-  if (!c || typeof c.f2030 !== 'number') return null;
+  if (!c || typeof c.f2030 !== 'number' || c._f2030Basis === 'none') return null;
   const b = (typeof c._fdrsStructural === 'number') ? c._fdrsStructural : c.fdrs;
   return typeof b === 'number' ? Math.round(c.f2030 - b) : null;
 }
@@ -25920,6 +25925,8 @@ function showTab(tab, btn) {
   const host  = TAB_HOST[tab] || tab;
   /* The "click a country on the map" hint belongs to the map only. */
   if (host !== 'global' && typeof dismissFirstHint === 'function') dismissFirstHint();
+  /* Compare's pin list lives only on Compare. */
+  if (tab !== 'compare') { try { const u = new URL(location.href); if (u.searchParams.has('countries')) { u.searchParams.delete('countries'); history.replaceState(null, '', u.toString()); } } catch (e) {} }
   const group = TAB_GROUPS[tab] || 'explore';
   // v68.3 — leaving Explore / Global Map is an exit path for scenario paint.
   // Route it through the same hard teardown as the banner Exit and new Run.
@@ -31701,8 +31708,8 @@ function renderScoreTab() {
             <th title="Structural score: the nine components below, renormalised, plus the amplifier">Struct.</th><th title="Live nowcast adjustment">Live Δ</th>
             <th title="Import Dependency">Imp Dep</th><th title="Supplier Concentration">Sup Conc</th><th title="Production Trend">Prod</th><th title="Food Inflation">Inflation</th><th title="Climate Vulnerability">Climate</th><th title="Conflict / Logistics">Conflict</th>
             <th title="Supply-Chain Exposure">Sup Chain</th><th title="Economic Access (affordability)">Econ Acc</th><th title="Grain Reserve Buffer">Grain Buf</th>
-            <th title="Consumption minus production, curated trend table">Supply gap</th>
-            <th title="2030 outlook; the arrow compares it with the structural score">2030 vs struct.</th>
+            <th title="Net imports as a share of staple use (wheat, rice, maize, soybeans): FAOSTAT 2024 trade over USDA use; after the arrow, the 2030 trend projection">Net imports</th>
+            <th title="2030 trend projection and its change from the structural score">2030</th>
           </tr></thead>
           <tbody id="ranking-tbody">
             ${sorted.map((c,i)=>{
@@ -31719,10 +31726,10 @@ function renderScoreTab() {
               }).join(' ');
               const sparkCol = 'var(--t2)';
               return `
-              <tr tabindex="0" role="button" onkeydown="_kbdClick(event)" onclick="openPanel(byISO('${c.iso}'));showTab('global',document.querySelector('.nav-btn'))">
-                <td style="color:var(--t3);font-family:'Geist Mono'">${String(i+1).padStart(2,'0')}</td>
+              <tr tabindex="0" role="button" onkeydown="_kbdClick(event)" onclick="ctrOpenCountry('${c.iso}')" title="Open ${c.name}'s Country report">
+                <td style="color:var(--t3);font-family:'Geist Mono'">${(function(){ const r = sorted.findIndex(x => x.fdrs === c.fdrs) + 1; const tie = sorted.filter(x => x.fdrs === c.fdrs).length > 1; return (tie ? '=' : '') + String(r).padStart(2,'0'); })()}</td>
                 <td style="font-weight:500">${c.name}</td>
-                <td style="color:var(--t3);font-size:11px">${c.region}</td>
+                <td style="color:var(--t3);font-size:11px">${regionOf(c)}</td>
                 <td><span class="score-pill" style="background:${riskColor(c.fdrs)}1a;color:${riskColor(c.fdrs)}">${c.fdrs}</span></td>
                 <td style="color:${riskColor(c._fdrsRaw)};font-family:'Geist Mono';font-size:11px">${c._fdrsRaw != null ? c._fdrsRaw : '—'}</td>
                 <td style="color:var(--t3);font-family:'Geist Mono';font-size:11px">${c._fdrsAdj ? (c._fdrsAdj > 0 ? '+' : '') + c._fdrsAdj : '0'}</td>
@@ -31738,8 +31745,8 @@ function renderScoreTab() {
                     return `<td style="color:${riskColor(v)};font-family:'Geist Mono';font-size:11px">${Math.round(v)}</td>`;
                   }).join('');
                 })()}
-                <td><svg width="60" height="16" viewBox="0 0 60 16" preserveAspectRatio="none" style="vertical-align:middle"><polyline points="${pts}" fill="none" stroke="${sparkCol}" stroke-width="1.4"/></svg></td>
-                <td><span style="color:${riskColor(c.f2030)};font-weight:600;font-size:11px;font-family:'Geist Mono'">${c.f2030} ${f2030Arrow(c)}</span></td>
+                <td style="font-family:'Geist Mono';font-size:11px;color:var(--t2)">${c._proj ? Math.round(c._proj.n * 100) + '% → ' + Math.round(c._proj.n2030 * 100) + '%' : (typeof scnNetImportShare === 'function' && scnNetImportShare(c) != null ? Math.round(scnNetImportShare(c) * 100) + '%' : '—')}</td>
+                <td style="font-family:'Geist Mono';font-size:11px">${f2030Known(c) ? `<span style="color:${riskColor(c.f2030)};font-weight:600">${c.f2030}</span> <span style="color:${f2030Col(c)}">(${f2030Delta(c) > 0 ? '+' : ''}${f2030Delta(c)})</span>` : '<span style="color:var(--t-meta)" title="No projection: a staple-use figure, a population growth rate or a production trend is missing">—</span>'}</td>
               </tr>`;
             }).join('')}
           </tbody>
@@ -31752,7 +31759,7 @@ function renderScoreTab() {
     <div class="card">
       <div class="card-title"><span class="card-marker"></span> 2×2 Dependency Matrix</div>
       <div style="font-size:var(--fs-prose);color:var(--t3);margin-bottom:14px;line-height:1.5;">
-        Up = more import-dependent. Right = steadier domestic supply (100 minus the average of the production-trend and conflict scores). Top-left is the double bind. 193 UN countries.
+        Up = more import-dependent. Right = steadier domestic supply (100 minus the average of the production-trend and conflict scores). Top-left: import-dependent with an unsteady domestic supply. 193 UN countries.
       </div>
       <div style="height:380px;position:relative;">
         <canvas id="matrix-chart"></canvas>
@@ -31962,7 +31969,7 @@ function _renderFcMoverRows() {
     if (typeof NON_UN_TERRITORIES !== 'undefined' && NON_UN_TERRITORIES.has(x.iso)) return false;
     if (seen.has(x.iso)) return false;
     seen.add(x.iso);
-    return true;
+    return f2030Known(x);   // no projection inputs: not ranked
   });
   let sorted;
   if (_fcMoverMode === 'worsen') {
@@ -41944,10 +41951,12 @@ let _compareInited = false;
 
 function initCompareTab() {
   const selIds = ['cmp-sel-a','cmp-sel-b','cmp-sel-c','cmp-sel-d'];
-  const defaults = ['EGY','NLD','ETH','BRA'];
+  /* ?countries=JPN,CHL (up to four UN members) sets the pins; otherwise the defaults. */
+  const _urlC = (new URLSearchParams(location.search).get('countries') || '').toUpperCase().split(',').filter(x => /^[A-Z]{3}$/.test(x) && byISO(x)).slice(0, 4);
+  const defaults = _urlC.length >= 2 ? _urlC : ['EGY','NLD','ETH','BRA'];
   if (!_compareInited) {
     _compareInited = true;
-    const countries2 = COUNTRIES.filter(c=>!c.iso.startsWith('US-')).sort((a,b)=>a.name.localeCompare(b.name));
+    const countries2 = sovereignRows().slice().sort((a,b)=>a.name.localeCompare(b.name));
     const opts = ['<option value="">— none —</option>',
       ...countries2.map(c=>`<option value="${c.iso}">${c.name}</option>`)].join('');
     selIds.forEach((id, i) => {
@@ -41978,7 +41987,7 @@ function renderCmpPins() {
       <span class="cmp-pin-dot" style="background:${CMP_COLORS[i]}"></span>
       <span class="cmp-pin-name">${c.name}</span>
       <span class="cmp-pin-score" style="color:${riskColor(c.fdrs)}">${c.fdrs}</span>
-      <button type="button" class="cmp-pin-x" aria-label="Remove ${_escFeed((byISO(id) || {}).name || id)}" onclick="removeCmpPin('${id}')">×</button>
+      <button type="button" class="cmp-pin-x" aria-label="Remove ${_escFeed(c.name)}" onclick="removeCmpPin('${id}')">×</button>
     </div>`;
   }).filter(Boolean).join('');
   host.innerHTML = pins || `<span style="font-size:11px;color:var(--t3);font-style:italic;">No countries pinned</span>`;
@@ -42031,8 +42040,8 @@ function filterCmpAdd(q) {
     return el ? el.value : '';
   }).filter(Boolean));
   const ql = (q||'').toLowerCase().trim();
-  const matches = COUNTRIES
-    .filter(c => !c.iso.startsWith('US-') && !taken.has(c.iso))
+  const matches = sovereignRows()
+    .filter(c => !taken.has(c.iso))
     .filter(c => !ql || c.name.toLowerCase().includes(ql))
     .slice(0, 30);
   host.innerHTML = matches.map(c => `
@@ -42058,6 +42067,7 @@ function addCmpCountry(iso) {
 
 function renderCompareTab() {
   const selIds = ['cmp-sel-a','cmp-sel-b','cmp-sel-c','cmp-sel-d'];
+  try { const isos = selIds.map(id => (document.getElementById(id) || {}).value).filter(Boolean); if (typeof updateURL === 'function') updateURL({ countries: isos.join(',') || null }); } catch (e) {}
   const selected = selIds.map((id, _slot) => {
     const el = document.getElementById(id);
     const c = el && el.value ? byISO(el.value) : null;
@@ -42135,6 +42145,14 @@ function renderCompareTab() {
               </td>`;}).join('')}
             </tr>`).join('')}
             <tr style="border-top:1px solid var(--b2);">
+              <td style="color:var(--t2);font-size:11.5px;">Structural score (components + amplifier)</td>
+              ${selected.map(c=>`<td style="text-align:center;font-family:'Geist Mono',monospace;font-size:12px;color:${riskColor(c._fdrsRaw)}">${c._fdrsRaw != null ? c._fdrsRaw : '—'}</td>`).join('')}
+            </tr>
+            <tr>
+              <td style="color:var(--t2);font-size:11.5px;">Live adjustment (nowcast)</td>
+              ${selected.map(c=>`<td style="text-align:center;font-family:'Geist Mono',monospace;font-size:12px;color:var(--t2)">${c._fdrsAdj ? (c._fdrsAdj > 0 ? '+' : '') + c._fdrsAdj : '0'}</td>`).join('')}
+            </tr>
+            <tr>
               <td style="color:var(--t1);font-weight:700;font-size:12px;">FDRS Total</td>
               ${selected.map(c=>`<td style="text-align:center;">
                 <span style="color:${riskColor(c.fdrs)};font-family:'Geist Mono',monospace;font-weight:700;font-size:13px;">${c.fdrs}</span>
@@ -42257,10 +42275,8 @@ function renderCompareTab() {
                 r(`${ac('IPC')} Phase 3+ population %`, `${ac('IPC')} (via WFP)`, fmtPct,
                   c => LIVE.ipc?.[c.iso]?.phase3plus_pct ?? null,
                   v => v == null ? 'var(--t3)' : v > 30 ? '#c44b3c' : v > 15 ? '#d27a3e' : v > 5 ? '#c9a957' : '#6ba36b'),
-                r('Food inflation %/yr', 'Eurostat > FAOSTAT', fmtPct,
-                  c => LIVE.eurostat_food?.[c.iso]?.food_hicp_yoy_pct
-                    ?? LIVE.faostat_food?.[c.iso]?.food_cpi_yoy_pct
-                    ?? null,
+                r('Food inflation %/yr', 'RTFP > Eurostat > IMF > FAOSTAT (the score\'s chain)', fmtPct,
+                  c => { const a = (typeof calibrationAnchors === 'function') ? calibrationAnchors(c) : {}; return (a.food_inflation_label && /all-items/.test(a.food_inflation_label)) ? null : (a.food_inflation_pct ?? null); },
                   fiCol),
               ].join('');
             })()}
@@ -42271,9 +42287,7 @@ function renderCompareTab() {
 
     <!-- FDRS modeled backcast overlay chart -->
     <div class="card">
-      <div class="card-title"><span class="card-marker"></span> Illustrative FDRS reconstruction since 2018
-        <span style="font-family:'Geist Mono',monospace;font-size:9.5px;color:var(--accent);background:var(--accent)18;padding:1px 6px;border-radius:3px;margin-left:8px;letter-spacing:.05em;text-transform:uppercase;">modeled</span>
-      </div>
+      <div class="card-title"><span class="card-marker"></span> Structural score on the daily record</div>
       <div style="height:220px;"><canvas id="cmp-hist-chart"></canvas></div>
     </div>`;
 
@@ -42314,39 +42328,21 @@ function renderCompareTab() {
     destroyChart('cmp-hist-chart');
     const ctx2 = document.getElementById('cmp-hist-chart');
     if (!ctx2) return;
-    var histYears = Object.keys(getFDRSHistory(selected[0])).map(Number).sort();
+    /* The daily record (data/fdrs_history.json), structural score, current method only: the old chart
+       was a 2018-2025 reconstruction extrapolated backwards from the 2030 value, with hand-placed bumps. */
+    const recs = selected.map(c => { const r = fdrsRecord(c); const m = r.length ? r[r.length - 1].method : null; return r.filter(x => x.method === m); });
+    const dates = [...new Set(recs.flat().map(r => r.date))].sort();
+    if (dates.length < 2) { ctx2.parentNode.innerHTML = '<div class="ctr-note">Fewer than two days on the daily record under the current method.</div>'; return; }
     chartInstances['cmp-hist-chart'] = _safeChart(ctx2, {
       type: 'line',
-      data: {
-        labels: histYears.map(fdrsHistoryLabel),
-        datasets: selected.map((c,i) => {
-          const hist = getFDRSHistory(c);
-          return {
-            label: c.name,
-            borderDash: [5, 4],
-            data: histYears.map(y => hist[y] == null ? null : hist[y]),
-            borderColor: cmpCols[i],
-            backgroundColor: cmpCols[i] + '18',
-            borderWidth: 2,
-            pointRadius: 3,
-            pointBackgroundColor: cmpCols[i],
-            tension: 0,
-            fill: false
-          };
-        })
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          subtitle: { display: true, text: 'Source: FoodShield reconstruction; current model as of ' + (fdrsDataDate() || 'unavailable') },
-          legend: { position:'bottom', labels:{ color:'#9a988f', font:{size:10,family:'Geist'}, usePointStyle:true, padding:12 } },
-          tooltip: { backgroundColor:'#14141a', titleColor:'#ebe9e2', bodyColor:'#ebe9e2', borderColor:'#2a2a34', borderWidth:1 }
-        },
-        scales: {
-          x: { grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#6a685e',font:{size:10,family:'Geist Mono'}}, border:{display:false} },
-          y: { min:0, max:100, grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#6a685e',font:{size:10,family:'Geist Mono'}}, border:{display:false} }
-        }
-      }
+      data: { labels: dates, datasets: selected.map((c, i) => { const m = new Map(recs[i].map(r => [r.date, r.structural]));
+        return { label: c.name, data: dates.map(d => m.has(d) ? m.get(d) : null), borderColor: cmpCols[i], backgroundColor: cmpCols[i] + '18',
+          borderWidth: 2, pointRadius: dates.length < 12 ? 3 : 0, tension: 0, fill: false, spanGaps: false }; }) },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { subtitle: { display: true, text: 'Structural score, one stored snapshot a day (data/fdrs_history.json)' },
+          legend: { position:'bottom', labels:{ color:'#9a988f', font:{size:10,family:'Geist'}, usePointStyle:true, padding:12 } } },
+        scales: { x: { ticks:{color:'#6a685e',font:{size:10,family:'Geist Mono'},maxTicksLimit:8}, grid:{color:'rgba(255,255,255,0.04)'} },
+                  y: { min:0, max:100, ticks:{color:'#6a685e',font:{size:10,family:'Geist Mono'}}, grid:{color:'rgba(255,255,255,0.04)'} } } }
     });
   }, 60);
 }
