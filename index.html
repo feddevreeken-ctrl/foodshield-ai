@@ -10061,7 +10061,9 @@ body::before {
 @media (max-width:900px) { .pf-row { grid-template-columns:minmax(0,1fr); gap:6px; } .pf-head .pf-name, .pf-head .pf-ev { display:none; } }
 
 /* On this page (El Niño): right rail on wide screens, pill + popover otherwise */
-.enso-onpage { position:fixed; z-index:1200; right:18px; top:190px; width:196px; font:12px/1.35 'Geist',sans-serif; }
+/* Desktop: the rail is always open; the lens content gives up the right gutter for it. */
+@media (min-width:1100px) { #tab-elnino .content-page { padding-right:236px !important; } }
+.enso-onpage { position:fixed; z-index:1200; right:18px; top:150px; width:200px; max-height:calc(100vh - 220px); overflow:auto; font:12px/1.35 'Geist',sans-serif; }
 .enso-onpage .op-h { display:flex; justify-content:space-between; align-items:baseline; font:10.5px 'Geist Mono',monospace; letter-spacing:.06em; text-transform:uppercase; color:var(--t3); }
 .enso-onpage .op-h b { font-weight:500; color:var(--t2); }
 .enso-onpage .op-prog { height:2px; background:var(--b1); margin:8px 0 6px; } .enso-onpage .op-prog i { display:block; height:2px; width:0; background:var(--warm); }
@@ -10074,7 +10076,7 @@ body::before {
 .enso-onpage .op-foot button:hover { color:var(--t1); border-color:var(--t2); }
 .enso-onpage-btn { display:none; }
 #tab-elnino:not(.active) :is(.enso-onpage,.enso-onpage-btn) { display:none !important; }
-@media (max-width:1559px) {
+@media (max-width:1099px) {
   .enso-onpage { display:none; top:auto; bottom:104px; right:16px; width:min(300px, calc(100vw - 32px)); max-height:60vh; overflow:auto; background:var(--bg1, #10141b); border:1px solid var(--b2); padding:12px 14px; box-shadow:0 16px 40px rgba(0,0,0,.5); }
   .enso-onpage.is-open { display:block; }
   .enso-onpage-btn { display:inline-flex; align-items:center; gap:8px; position:fixed; z-index:1201; right:16px; bottom:58px; background:var(--bg1, #10141b); border:1px solid var(--b2); color:var(--t1); font:12px 'Geist',sans-serif; padding:8px 12px; cursor:pointer; box-shadow:0 8px 24px rgba(0,0,0,.4); }
@@ -46429,10 +46431,10 @@ function showCommodityDetail(key) {
   }
   function reportVerdict() {
     var c = S.alertCounts;
-    var when = c && c.newest ? ' · updated ' + stamp(new Date(c.newest)) : '';
+    var when = c && c.newest ? ' · ' + stamp(new Date(c.newest)) : '';
     if (!c) return 'Loading the hazard reports for El Niño countries.';
     if (!c.n) return 'No hazard reports in El Niño countries in the last ' + ENSO_REPORT_DAYS + ' days' + when + '.';
-    return c.fits + ' of ' + c.n + ' hazard reports in El Niño countries agree with its usual rain pattern, ' + c.against + ' run against it, ' + c.none + ' not assessed' + when + '.';
+    return c.fits + ' of ' + c.n + ' hazard reports in El Niño countries fit its usual rain pattern; ' + c.against + ' against, ' + c.none + ' not assessed' + when + '.';
   }
   function applyVerdictFilter() {
     S.alertPins.forEach(function (m) { try { m.setOpacity(S.reportVerdict && m.options.ensoVerdict !== S.reportVerdict ? .25 : 1); } catch (e) {} });
@@ -46705,7 +46707,7 @@ function showCommodityDetail(key) {
   function priceVerdict() {
     var q = stapleSummary(), m0 = q.months[0], m1 = q.months[q.months.length - 1];
     var mm = function (ym) { var i = monIdx(ym); return i == null ? '' : MON3[i % 12]; };
-    return q.series + ' of ' + q.total + ' El Niño countries have staple prices: ' + q.fits + ' fit El Niño’s usual pattern, ' + q.ahead + ' with the exposed harvest window still ahead · FPMA ' +
+    return q.series + ' of ' + q.total + ' El Niño countries have staple prices: ' + q.fits + ' fit El Niño’s usual pattern; ' + q.ahead + ' harvests still ahead · FPMA ' +
       (!m1 ? 'date unavailable' : m0 === m1 ? mm(m1) + ' ' + String(m1).slice(0, 4) : mm(m0) + '–' + mm(m1) + ' ' + String(m1).slice(0, 4)) + ((S.priceBasis || 'real') === 'real' ? ', after inflation.' : ', local currency.');
   }
   /* World benchmark: the Pink Sheet month against the same month a year earlier, nominal USD. */
@@ -46835,7 +46837,7 @@ function showCommodityDetail(key) {
        Both steps are named now. Crop and coverage are read straight from the
        model and keep the model's own date. */
     var source = { impact: 'FAOSTAT yield fit 1961–2024, weighted by FAOSTAT production', crop: 'FAOSTAT yield fit, 1961–2024', coverage: 'FAOSTAT yield fit, 1961–2024',
-      staple: 'FAO GIEWS FPMA staple prices · published ENSO teleconnections · World Bank Pink Sheet', rain: 'Published studies (hatch) · GDACS · FEWS NET · IPC · Open-Meteo · ReliefWeb · news', asap: 'JRC ASAP assessments', gdacs: 'GDACS hazard reports', ipc: 'IPC/CH via WFP HungerMap', rtfp: 'World Bank RTFP via HDX · FAOSTAT food CPI where no market is monitored', sst: 'NOAA OISST v2.1',
+      staple: 'FAO GIEWS FPMA · ENSO teleconnections · World Bank Pink Sheet', rain: 'Studies · GDACS · FEWS NET · IPC · Open-Meteo · ReliefWeb · news', asap: 'JRC ASAP assessments', gdacs: 'GDACS hazard reports', ipc: 'IPC/CH via WFP HungerMap', rtfp: 'World Bank RTFP via HDX · FAOSTAT food CPI where no market is monitored', sst: 'NOAA OISST v2.1',
       none: S.showLanes ? 'IMF PortWatch AIS transits, Panama Canal Authority advisories, lane evidence' : 'Natural Earth geography' }[S.mode];
     /* With no land fill the plate is named for what it does show: the lanes and
        chokepoints when they are on, otherwise the bare reference geography. */
