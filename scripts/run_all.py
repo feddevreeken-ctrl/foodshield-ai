@@ -249,7 +249,7 @@ OPTIONAL_OUTPUTS = {"commodity_interpretation.json"}
 # dedup fix landed hit [TIMEOUT] and kept serving the pre-dedup (over-counted)
 # file. 2700s covers the observed worst case (~55 rate-limited calls × up to
 # 3 × 30s backoff) with headroom; all other steps keep the 900s default.
-STEP_TIMEOUTS = {"Comtrade": 2700}
+STEP_TIMEOUTS = {"Comtrade": 2700, "Commodity interpretation": 900}  # ~55 model calls at 6 s spacing
 
 
 # v79 — GLOBAL WALL-CLOCK BUDGET.

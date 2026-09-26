@@ -61,7 +61,6 @@ SYNONYMS = {
     ],
     "soybeans": [
         "soybeans", "soybean", "soya", "soyabean", "soymeal", "soybean meal",
-        "soybean oil", "soyoil",
     ],
     "palm_oil": [
         "palm oil", "palm-oil", "crude palm oil", "cpo", "palm kernel oil",
@@ -594,7 +593,9 @@ EXTRA_SYNONYMS = {
     "sorghum":    ["sorghum", "milo"],
     "oilseeds":   ["oilseed", "oilseeds", "rapeseed", "canola", "sunflower seed",
                    "sunflower oil", "sunseed"],
-    "vegoils":    ["vegetable oil", "vegetable oils", "vegoil", "soybean oil",
+    # Soybean oil is an oil: it matched "soybeans" (a bean corridor) and left palm/soy oil duty news unmatched.
+    "vegoils":    ["vegetable oil", "vegetable oils", "vegoil", "soybean oil", "soybean oils",
+                   "soyoil", "soy oil", "edible oil", "edible oils",
                    "sunflower oil", "rapeseed oil"],
     "pulses":     ["pulses", "lentil", "lentils", "chickpea", "chickpeas",
                    "dry beans", "peas"],

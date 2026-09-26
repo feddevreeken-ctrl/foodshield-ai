@@ -317,6 +317,13 @@ def _ffpi_facts(ffpi_payload, component):
     out["ffpi_month"] = latest.get("month")
     if isinstance(change, dict):
         out["ffpi_change_mom_pct"] = _r(change.get(component), 1)
+    else:
+        # fao_ffpi.json stores only the headline change; the component change comes from the last two months.
+        series = ffpi_payload.get("series") or []
+        if len(series) >= 2:
+            a, b = series[-2].get(component), series[-1].get(component)
+            if isinstance(a, (int, float)) and isinstance(b, (int, float)) and a:
+                out["ffpi_change_mom_pct"] = _r((b / a - 1) * 100, 1)
     return out
 
 

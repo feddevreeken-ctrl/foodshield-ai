@@ -171,6 +171,10 @@ def corridors_for(commodities, countries):
             # order recorded Egypt as merely "downstream" and the card read
             # "Reaches EGY" for a story that is explicitly about Egypt. Being
             # named is the stronger claim, so it wins.
+            # Both ends named ("USDA: China buys US soybeans", "Egypt buys
+            # Russian wheat"): that corridor IS the story and must beat a larger
+            # corridor the headline never mentions.
+            named_pair = src in countries and dst in countries
             if dst in countries:
                 role, iso, via = "direct", dst, src
             elif src in countries:
@@ -182,11 +186,14 @@ def corridors_for(commodities, countries):
             # Keep the largest single corridor per country. Summing across
             # commodities would add wheat kt to palm-oil kt and present the
             # result with unearned authority.
-            if prev is None or kt > prev["kt"]:
+            if prev is None or (named_pair, kt) > (prev["_pair"], prev["kt"]):
                 tally[iso] = {"iso": iso, "kt": round(float(kt)),
-                              "commodity": commodity, "role": role, "via": via}
+                              "commodity": commodity, "role": role, "via": via,
+                              "_pair": named_pair}
 
-    ranked = sorted(tally.values(), key=lambda r: -r["kt"])
+    ranked = sorted(tally.values(), key=lambda r: (not r["_pair"], -r["kt"]))
+    for r in ranked:
+        del r["_pair"]
     return ranked[:MAX_EXPOSED_PER_ITEM]
 
 

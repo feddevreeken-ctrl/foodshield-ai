@@ -326,6 +326,7 @@ NON_SOVEREIGN = {"EU"}
 # with an explicit leading boundary and no trailing one.
 DOTTED_FORMS = {
     "u.s.": "USA",
+    "usda": "USA",
     "u.k.": "GBR",
     "u.a.e.": "ARE",
 }

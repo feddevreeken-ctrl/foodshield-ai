@@ -1301,7 +1301,7 @@ body {
   border-top: 1px solid rgba(235,233,226,.10);
 }
 .news-masthead-bar {
-  display: flex; align-items: baseline; gap: 14px;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px;
   padding-bottom: 9px; border-bottom: 2px solid var(--t1);
 }
 .news-masthead-name {
@@ -1557,7 +1557,8 @@ body {
   text-transform: uppercase; margin-bottom: 6px;
   display: flex; align-items: baseline; gap: 6px;
 }
-.news-kicker .news-kick-word { color: #cc1452; }        /* FT claret-80, lifted for dark */
+.news-kicker .news-kick-word { color: #cc1452; }
+.news-kicker .news-kick-time { text-transform: none; }        /* FT claret-80, lifted for dark */
 .news-kicker .news-kick-sep  { color: var(--t3); opacity: .6; }
 .news-kicker .news-kick-time { color: var(--t3); font-weight: 400; letter-spacing: .05em; }
 .news-item.tier-lead .news-kicker { font-size: 11px; margin-bottom: 8px; }
@@ -1621,7 +1622,7 @@ body {
    enough to read. */
 .news-item.tier-mid .news-card-img { display: none; }
 .news-item.tier-lead .news-card-img {
-  height: 168px; border-radius: 3px; margin-bottom: 12px;
+  width: 100%; height: 168px; border-radius: 3px; margin-bottom: 12px;
   filter: brightness(.92) saturate(.95); border-bottom: none;
 }
 
@@ -1973,6 +1974,15 @@ body {
   outline: 2px solid #8aa6c4; outline-offset: 3px; border-radius: 3px;
 }
 .news-meta { font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) {
+  .news-masthead { padding: 14px 14px 12px; }
+  .news-masthead-rule { display: none; }
+  .news-masthead-date, .news-interp-counter { white-space: normal; }
+  .news-chiprow { position: relative; }
+  .news-more { position: static; }
+  .news-more-pop { left: 0; right: 0; width: auto; max-width: none; }
+  .news-item.tier-mid .news-headline { font-size: 19px; line-height: 22px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .news-item:hover { transform: none; }
   .news-interp > summary { transition: none; }
@@ -4021,6 +4031,7 @@ abbr.ac:hover, .ac:hover {
 
 /* v22.5 — Founder note 2-column body collapses below 900px */
 @media (max-width: 900px) {
+  .about-mission-grid { grid-template-columns: 1fr; }
   .founder-body { grid-template-columns: 1fr !important; }
   .founder-body > div:first-child { border-right: none !important; border-bottom: 1px solid var(--b1); }
 }
@@ -6182,6 +6193,16 @@ button.scn-bar-row:focus-visible { outline: 2px solid var(--accent); outline-off
   transition: background .12s, color .12s;
 }
 .cmp-pin-x:hover { background: var(--bg3); color: var(--t1); }
+@media (max-width: 640px) {
+  .ds-table thead { display: none; }
+  .ds-table, .ds-table tbody, .ds-table tr, .ds-table td { display: block; width: 100%; }
+  .ds-table tr { padding: 8px 0; }
+  .ds-table td { padding: 3px 14px !important; white-space: normal !important; }
+}
+@media (max-width: 600px) {
+  #live-data-body .live-indicator-row { flex-wrap: wrap; }
+  .live-indicator-note { order: 5; flex-basis: 100%; padding: 2px 0 0 14px !important; }
+}
 @media (max-width: 768px) {
   #score-body .grid-2 { grid-template-columns: minmax(0, 1fr); }
   #cmp-table { overflow-x: auto; }
@@ -10666,6 +10687,107 @@ table.enso-tbl thead th:first-child { z-index:3; }
   #enso-map { min-height:340px; }
 }
 
+/* Moved from renderMethodologyTab(): applies from first paint. */
+    /* ══════════════════════════════════════════════════════════
+       v22: DESIGN NORMALIZATION LAYER
+       Scoped to the eight non-map tabs + the country side panel.
+       #tab-global (the map view) is deliberately absent: the map,
+       its layer control, stat strip, legend and lede are off-limits.
+       ══════════════════════════════════════════════════════════ */
+
+    /* 1. DECORATIVE SURFACE EFFECTS — glass/blur/gradient read as
+          template. Data-bearing fills (score bars, sparklines,
+          chart tracks) are excluded: their colour carries meaning. */
+    #tab-country [class*="card"], #tab-score [class*="card"],
+    #tab-scenario [class*="card"], #tab-disturbances [class*="card"],
+    #tab-about [class*="card"], #tab-commodities [class*="card"],
+    #tab-companies [class*="card"], #tab-livedata [class*="card"],
+    #sidepanel [class*="card"],
+    #tab-country [class*="callout"], #tab-score [class*="callout"],
+    #tab-scenario [class*="callout"], #tab-commodities [class*="callout"],
+    #tab-companies [class*="callout"], #sidepanel [class*="callout"] {
+      background-image: none;
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      box-shadow: none;
+    }
+    /* data marks keep their fills */
+    #tab-country [class*="fill"], #tab-score [class*="fill"],
+    #tab-scenario [class*="fill"], #sidepanel [class*="fill"],
+    [class*="-bar"], [class*="spark"], [class*="track"], canvas, svg {
+      background-image: revert;
+    }
+
+    /* 2. CARD DEMOTION — a border is reserved for genuinely discrete,
+          repeating objects (a company, a preset, a live stat). Secondary
+          and explanatory panels drop to whitespace + one hairline. */
+    #tab-country .ct-ai-card, #tab-score .insight-card,
+    #tab-scenario .scn-why-card, #tab-scenario .scn-crisis-card,
+    #tab-commodities .co-callout-card, #tab-commodities .tr-dep-card,
+    #tab-about .about-mission-card, #sidepanel .ai-card,
+    #tab-country .metric-card {
+      border: none;
+      border-top: var(--hair);
+      border-radius: 0;
+      background: transparent;
+      padding: var(--sp-2) 0 var(--sp-1);
+      box-shadow: none;
+    }
+    /* discrete objects keep exactly one edge weight and one radius */
+    #tab-companies .company-result-card, #tab-scenario .scn-preset-card,
+    #tab-livedata .live-stat-card, #tab-commodities .cmd-card,
+    #tab-score .fc-mover-card, #tab-scenario .scn-card {
+      border: var(--edge);
+      border-radius: 3px;
+      box-shadow: none;
+    }
+
+    /* 3. MICRO-LABEL FREQUENCY — the caps label + coloured square is a
+          section marker. At one per panel it became wallpaper. The dot
+          survives only on a true section head; nested labels keep the
+          caps treatment but lose the bullet. */
+    #tab-country [class*="-label"]::before,
+    #tab-score [class*="-label"]::before,
+    #tab-scenario [class*="-label"]::before,
+    #tab-commodities [class*="-label"]::before,
+    #tab-companies [class*="-label"]::before,
+    #tab-livedata [class*="-label"]::before,
+    #sidepanel [class*="-label"]::before { content: none; }
+    /* primary section heads keep their marker */
+    #sidepanel .sp-eyebrow::before,
+    #sidepanel .sp-section-title::before { content: ""; }
+
+    /* 4. TYPE — the five steps, enforced on the common panel roles so
+          inline leftovers cannot reintroduce a sixth or seventh size. */
+    #tab-country .sp-section-title,
+    #tab-score [class*="eyebrow"], #tab-scenario [class*="eyebrow"],
+    #tab-commodities [class*="eyebrow"], #tab-companies [class*="eyebrow"] {
+      font-size: var(--fs-meta);
+      letter-spacing: 0.12em;
+    }
+    #sidepanel .sp-section-title,
+    #sidepanel .ai-narrative-eyebrow {
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      color: var(--t-meta);
+    }
+    #sidepanel .sp-row .k, #sidepanel .sp-row .v { font-size: var(--fs-body); }
+
+    /* 5. NUMERALS — tabular figures stop columns twitching between
+          renders and make the mono/sans mix read as one system. */
+    #tab-country [class*="-val"], #tab-score [class*="-val"],
+    #tab-scenario [class*="-val"], #tab-commodities [class*="-val"],
+    #tab-companies [class*="-val"], #tab-livedata [class*="-val"],
+    #sidepanel .sp-row .v, .mono {
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum";
+    }
+
+    /* 6. SPACING RHYTHM — sections separate by whitespace, not by a
+          second border on top of the first. */
+    #sidepanel .sp-section { padding: var(--sp-2) 20px; }
+    #sidepanel .sp-section + .sp-section { border-top: var(--hair); }
+
 </style>
 <style id="fs-hero-deepening">
 /* Score-hero deepening (Plan 1). AA-compliant on --bg0..3 (verified). */
@@ -12571,7 +12693,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
     <!-- v20.30 — compact status indicator. Full per-source table lives in
          the footer 'Data status' link; the topbar pill is now just a tiny
          dot+count so it doesn't dominate the chrome. -->
-    <div class="status-pill" id="live-status-pill" title="Click for per-source status." style="cursor:pointer;padding:4px 9px;font-size:10px;" onclick="showLiveStatusDialog()">
+    <div class="status-pill" id="live-status-pill" title="Click for per-source status." style="cursor:pointer;padding:4px 9px;font-size:10px;" onclick="showLiveStatusDialog()" role="button" tabindex="0" aria-label="Source health, open per-source status" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showLiveStatusDialog();}">
       <div class="live-dot" style="width:6px;height:6px;"></div>
       <span class="status-label" id="live-status-label" style="font-size:10px;letter-spacing:.04em;">…</span>
     </div>
@@ -12654,7 +12776,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
   <button class="subnav-btn" data-tab="companies" data-sub-group="analyze" onclick="showTab('companies',this)" title="Company exposure to country-level food disruption risk: sourced from each trader's own published disclosures, with a modeled fallback for smaller players.">Companies<span class="subnav-modeled-pill" style="display:inline-block;margin-left:6px;padding:1px 5px;font-family:'Geist Mono',monospace;font-size:8.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#c47a3c;background:rgba(196,122,60,0.14);border:1px solid rgba(196,122,60,0.35);border-radius:3px;">modeled</span></button>
   <!-- Live -->
   <button class="subnav-btn" data-tab="disturbances" data-sub-group="live" onclick="showTab('disturbances',this)" title="Full list of live food-security disturbances with sources, dates, severity.">Disturbances</button>
-  <button class="subnav-btn" data-tab="livedata" data-sub-group="live" onclick="showTab('livedata',this)" title="Live market indicators: and per-source health, last refresh and what each pipeline feeds, as a sub-view.">Data<span class="subnav-audit-pill" id="datastatus-pill-count" style="display:none;margin-left:6px;padding:1px 5px;font-family:'Geist Mono',monospace;font-size:8.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#6ba36b;background:rgba(107,163,107,0.14);border:1px solid rgba(107,163,107,0.35);border-radius:3px;"></span></button>
+  <button class="subnav-btn" data-tab="livedata" data-sub-group="live" onclick="showTab('livedata',this)" title="Market benchmarks, plus per-source health and last refresh for every data feed.">Data<span class="subnav-audit-pill" id="datastatus-pill-count" style="display:none;margin-left:6px;padding:1px 5px;font-family:'Geist Mono',monospace;font-size:8.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#6ba36b;background:rgba(107,163,107,0.14);border:1px solid rgba(107,163,107,0.35);border-radius:3px;"></span></button>
   <button class="subnav-btn" data-tab="news" data-sub-group="live" onclick="showTab('news',this)" title="Headlines from agriculture and commodity trade press, joined to the bilateral trade corridors they touch and the production behind them.">News</button>
   <!-- About -->
   <button class="subnav-btn" data-tab="about" data-sub-group="about" onclick="showTab('about',this)" title="What FoodShield is, and the full open methodology behind every number.">About &amp; Method</button>
@@ -13115,7 +13237,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
           <span class="news-masthead-rule"></span>
           <span class="news-masthead-date" id="news-masthead-date"></span>
           <span class="news-masthead-live">
-            <span id="news-refresh-dot" class="news-refresh-dot" title="Auto-refreshes every 5 minutes"></span>Live
+            <span id="news-refresh-dot" class="news-refresh-dot" title="Checks for a new edition every 5 minutes; editions are built every 6 hours"></span>6-hourly
           </span>
         </div>
         <p class="news-standfirst" id="news-lede">Loading headlines…</p>
@@ -13199,7 +13321,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
           </div>
           <div class="editorial-headline">The score, its weights and its inputs, <em>on one page</em>.</div>
           <div class="editorial-standfirst">
-            The <b>Food Disruption Risk Score</b> is one 0–100 composite per country, built from <b>nine independently-sourced components</b> using public data only. The weights, the inputs and the formula are all on this page, so the number can be recomputed by hand. The score shown on a country panel is that structural composite plus two live steps, the supply-chain exposure blend and the nowcast adjustment printed on the panel, so it can sit above the value stored in countries.json by the nowcast amount. Below: the math, the data, the limitations.
+            The <b>Food Disruption Risk Score</b> is one 0–100 composite per country, built from <b>nine components drawn from public data</b> using public data only. The weights, the inputs and the formula are all on this page, so the number can be recomputed by hand. The score shown on a country panel is that structural composite plus two live steps, the supply-chain exposure blend and the nowcast adjustment printed on the panel, so it can sit above the value stored in countries.json by the nowcast amount. Below: the math, the data, the limitations.
           </div>
           <div class="editorial-colophon">
             <span class="src">Built from</span>
@@ -13362,8 +13484,8 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
           <span style="width:7px;height:7px;border-radius:50%;background:#6ba36b;display:inline-block;" id="datastatus-eyebrow-dot"></span>
           Source health · refreshed every six hours
         </div>
-        <div class="page-title">What's <em>happening now</em>: and how sound is it?</div>
-        <div class="page-sub">Live food-system indicators on one side, the audit of every pipeline behind them on the other. <span id="live-last-updated" style="opacity:.6;"></span></div>
+        <div class="page-title">What's <em>happening now</em>, and how sound is it?</div>
+        <div class="page-sub">Market benchmarks under Live Data; the health of every feed behind the site under Data Status. <span id="live-last-updated" style="opacity:.6;"></span></div>
       </div>
       <div class="viewswitch" role="tablist" aria-label="Data views">
         <button class="viewswitch-btn active" id="viewbtn-livedata" role="tab" aria-selected="true" aria-controls="subview-livedata" onclick="showTab('livedata',this)">Live Data</button>
@@ -13377,12 +13499,12 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
            viewer's own clock as the snapshot time. -->
       <div class="subview active" id="subview-livedata" role="tabpanel" aria-labelledby="viewbtn-livedata">
         <div class="subview-lede">Market benchmarks behind the score: the FAO Food Price Index and the World Bank Pink Sheet commodity references. Country risk lives on the Global Map; events live on Disturbances.</div>
-      <div id="live-last-updated" style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.06em;color:var(--t3);margin-bottom:16px;"></div>
+      
       <div id="live-data-body"></div>
       </div>
 
       <div class="subview" id="subview-datastatus" role="tabpanel" aria-labelledby="viewbtn-datastatus">
-        <div class="subview-lede">Every public pipeline behind FoodShield: what it provides, when it last refreshed, whether it is healthy now. Read live from<code style="font-size:11px;background:var(--bg1);padding:1px 6px;border-radius:3px;">data/source_manifest.json</code>, regenerated on every refresh cycle.</div>
+        <div class="subview-lede">Every public pipeline behind FoodShield: what it provides, when it last refreshed, whether it is healthy now. Read live from <code style="font-size:11px;background:var(--bg1);padding:1px 6px;border-radius:3px;">data/source_manifest.json</code>, regenerated on every refresh cycle.</div>
       <div id="datastatus-body" class="fade-in"></div>
       </div>
     </div>
@@ -19736,7 +19858,8 @@ function updateLiveStatusUI() {
     // v21.x — manifest now includes the 4 static deep-link helpers (FAO GIEWS,
     // FEWS NET, WFP ACR, USDA GAIN) in total_sources directly. Use the manifest's
     // healthy_sources field (or recompute) without double-counting helpers.
-    const issues  = (summary.degraded_sources || 0) + (summary.setup_required_sources || 0) + (summary.failed_sources || 0);
+    /* Unhealthy = everything not healthy (degraded, stale, setup required, failed), one number everywhere. */
+  const issues = Math.max(0, (summary.total_sources || 0) - (summary.healthy_sources ?? ((summary.ok_sources || 0) + (summary.manual_sources || 0))));
     const healthy = summary.healthy_sources != null
       ? summary.healthy_sources
       : (summary.ok_sources || 0) + (summary.manual_sources || 0);
@@ -19756,7 +19879,7 @@ function updateLiveStatusUI() {
     dot.style.background = color;
     dot.style.boxShadow = `0 0 6px ${color}`;
     const issuesText = issues > 0 ? `, ${issues} need attention` : '';
-    const staleText = stale > 0 ? `, ${stale} refresh-overdue` : '';
+    const staleText = '';
     pill.title = `Source health: ${healthy} of ${total} feeds healthy${issuesText}${staleText}. Snapshot refreshed ${formatSnapshotTime(summary.loaded_at)}${age ? ` (${age})` : ''}. Click for details.`;
     // v20.30 — also tint the footer 'Data status' dot
     const footerDot = document.getElementById('bb-status-dot');
@@ -19811,14 +19934,14 @@ function showLiveStatusDialog() {
         <div style="display:flex;align-items:baseline;gap:10px;min-width:0;">
           <div style="font-size:13px;font-weight:700;color:var(--t1);letter-spacing:-.01em;">Data status</div>
           <div style="font-size:10.5px;color:var(--t3);">
-            ${summary ? `${(summary.healthy_sources != null ? summary.healthy_sources : (summary.ok_sources || 0) + (summary.manual_sources || 0))}/${summary.total_sources || 0} healthy${summary.stale_sources ? ` · <span style="color:#c9a957;">${summary.stale_sources} refresh-overdue</span>` : ''} · ${summary.total_sources || 34} pipelines (incl. static deep-link helpers; FX + net-food-trade added v23)` : 'Retrieving the source manifest…'}
+            ${summary ? `${(summary.healthy_sources != null ? summary.healthy_sources : (summary.ok_sources || 0) + (summary.manual_sources || 0))}/${summary.total_sources || 0} healthy · ${summary.total_sources || 34} pipelines` : 'Retrieving the source manifest…'}
             ${summary && summary.loaded_at ? ` · ${formatAge(summary.loaded_at) || formatSnapshotTime(summary.loaded_at)}` : ''}
           </div>
         </div>
         <button onclick="this.closest('div[style*=fixed]').remove()" style="background:transparent;color:var(--t3);border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:14px;line-height:1;">✕</button>
       </div>
       <div style="font-size:var(--fs-prose);color:var(--t3);margin-bottom:10px;line-height:1.5;">
-        <span style="color:#6ba36b">Healthy</span> · <span style="color:#7c9fcf">Manual</span> · <span style="color:#c9a957">Degraded</span> · <span style="color:#d27a3e">Setup required</span> · <span style="color:#c44b3c">Failed</span>. Monthly and annual upstreams can be healthy even when they did not change today.
+        <span style="color:#6ba36b">Healthy</span> · <span style="color:#7c9fcf">Manual</span> · <span style="color:#c9a957">Degraded</span> · <span style="color:#d27a3e">Setup required</span> · <span style="color:#c44b3c">Failed</span> · <span style="color:#c9a957">Stale data</span>. Monthly and annual upstreams can be healthy even when they did not change today.
       </div>
       <div style="background:var(--bg0);border:1px solid var(--b1);border-radius:3px;padding:0 12px;">
         ${rows || '<div style="padding:12px 0;color:var(--t3);font-size:12px;">Source manifest not loaded yet.</div>'}
@@ -19889,11 +20012,12 @@ const DATASTATUS_FEEDS = {
   fewsnet:       'FEWS NET country reports · per-country deep-link helper (curated)',
   wfp_acr:       'WFP Annual Country Reports · country-panel deep-link (static)',
   usda_gain:     'USDA GAIN attaché reports · commodity-panel deep-link (static)',
+  nasa_firms:    'Wildfire detections. Not collected since 3 Aug 2026, when NASA rejected the API key; nothing on the site uses it, and wildfire remains a coverage gap.',
 };
 
 function dataStatusFeedsDescription(key, row) {
   return DATASTATUS_FEEDS[key]
-    || row?.notes
+    || (row?.notes ? String(row.notes).split(/(?<=\.)\s/)[0] : '')
     || row?.source
     || 'Reference data: see source notes.';
 }
@@ -19907,6 +20031,7 @@ function dataStatusTypeMeta(mode) {
   if (m === 'reference') return { label: 'sourced',  color: '#7c9fcf' };
   if (m === 'trade')     return { label: 'sourced',  color: '#7c9fcf' };
   if (m === 'manual')    return { label: 'manual',   color: '#7c9fcf' };
+  if (m === 'static_helper') return { label: 'link', color: 'var(--t3)' };
   return { label: mode || 'data', color: 'var(--t3)' };
 }
 
@@ -19942,11 +20067,11 @@ function renderDataStatusTab() {
   const setupReq = summary.setup_required_sources || 0;
   const failed   = summary.failed_sources || 0;
 
-  const issues = degraded + setupReq + failed;
+  const staleN = entries.filter(([,r]) => r?.status === 'stale').length; const issues = degraded + setupReq + failed + staleN;
   const summaryColor = issues === 0 ? '#6ba36b' : issues <= 3 ? '#c9a957' : '#c44b3c';
 
   const lastRefreshAge = formatAge(summary.loaded_at) || '—';
-  const lastRefreshAbs = summary.loaded_at ? formatSnapshotTime(summary.loaded_at) : 'unknown';
+  const lastRefreshAbs = summary.loaded_at ? summary.loaded_at.slice(0,16).replace('T',' ') + ' UTC' : 'unknown';
   const nextRefresh    = nextRefreshUTC();
 
   // Sort: issues first, then by label
@@ -19963,7 +20088,7 @@ function renderDataStatusTab() {
     const statusLabel = sourceStatusLabel(row.status);
     const age = row.generated_at ? (formatAge(row.generated_at) || 'just now') : '—';
     const ageTitle = row.generated_at ? formatSnapshotTime(row.generated_at) : 'no snapshot yet';
-    const feeds = dataStatusFeedsDescription(key, row);
+    const feeds = dataStatusFeedsDescription(key, row); const dataAsOf = row.latest_data_date ? (row.data_granularity === 'monthly' ? row.latest_data_date.slice(0,7) : row.latest_data_date) : (row.latest_period || '');
     const reason = row.reason && row.reason !== 'healthy' ? ` · ${row.reason}` : '';
     return `
       <tr style="border-bottom:1px solid var(--b1);">
@@ -19974,7 +20099,7 @@ function renderDataStatusTab() {
         <td style="padding:11px 14px;vertical-align:top;white-space:nowrap;">
           <span style="display:inline-block;padding:2px 7px;font-family:'Geist Mono',monospace;font-size:9.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${typeMeta.color};background:${typeMeta.color}22;border:1px solid ${typeMeta.color}55;border-radius:3px;">${typeMeta.label}</span>
         </td>
-        <td style="padding:11px 14px;vertical-align:top;white-space:nowrap;font-family:'Geist Mono',monospace;font-size:11px;color:var(--t2);" title="${ageTitle}">${age}</td>
+        <td style="padding:11px 14px;vertical-align:top;white-space:nowrap;font-family:'Geist Mono',monospace;font-size:11px;color:var(--t2);" title="${ageTitle}">${age}${dataAsOf ? `<div style="font-size:10px;color:var(--t3);margin-top:3px;">data ${dataAsOf}</div>` : ''}</td>
         <td style="padding:11px 14px;vertical-align:top;white-space:nowrap;">
           <span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:${statusColor};">
             <span style="width:7px;height:7px;border-radius:50%;background:${statusColor};display:inline-block;"></span>
@@ -20009,11 +20134,11 @@ function renderDataStatusTab() {
           <span style="font-size:11.5px;color:var(--t2);">sources healthy</span>
         </div>
         <div style="font-size:10.5px;color:var(--t3);margin-top:4px;">
-          ${degraded > 0 ? `<span style="color:#c9a957">${degraded} degraded</span>` : ''}${degraded > 0 && (setupReq > 0 || failed > 0) ? ' · ' : ''}${setupReq > 0 ? `<span style="color:#d27a3e">${setupReq} setup-required</span>` : ''}${setupReq > 0 && failed > 0 ? ' · ' : ''}${failed > 0 ? `<span style="color:#c44b3c">${failed} failed</span>` : ''}${issues === 0 ? 'All feeds nominal' : ''}
+          ${degraded > 0 ? `<span style="color:#c9a957">${degraded} degraded</span>` : ''}${degraded > 0 && (setupReq > 0 || failed > 0) ? ' · ' : ''}${setupReq > 0 ? `<span style="color:#d27a3e">${setupReq} setup-required</span>` : ''}${setupReq > 0 && failed > 0 ? ' · ' : ''}${failed > 0 ? `<span style="color:#c44b3c">${failed} failed</span>` : ''}${staleN > 0 ? ` · <span style="color:#c9a957">${staleN} stale data</span>` : ''}${issues === 0 ? 'All feeds nominal' : ''}
         </div>
       </div>
       <div>
-        <div style="font-size:10.5px;color:var(--t3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;">Last full refresh</div>
+        <div style="font-size:10.5px;color:var(--t3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;">Newest snapshot</div>
         <div style="font-family:'Geist Mono',monospace;font-size:18px;font-weight:600;color:var(--t1);" title="${lastRefreshAbs}">${lastRefreshAge}</div>
         <div style="font-size:10.5px;color:var(--t3);margin-top:4px;">${lastRefreshAbs}</div>
       </div>
@@ -20024,7 +20149,7 @@ function renderDataStatusTab() {
       </div>
       ${fdrsDays ? `<div>
         <div style="font-size:10.5px;color:var(--t3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;">FDRS history</div>
-        <div style="font-family:'Geist Mono',monospace;font-size:18px;font-weight:600;color:var(--t1);" title="Daily point-in-time structural-FDRS snapshots: reproducible from data/fdrs_history.json. The score's dated record, not backfilled after the fact.">${fdrsDays} days on record</div>
+        <div style="font-family:'Geist Mono',monospace;font-size:18px;font-weight:600;color:var(--t1);" title="Daily point-in-time structural-FDRS snapshots: reproducible from data/fdrs_history.json. The score's dated record, not backfilled after the fact.">${fdrsDays} daily snapshots</div>
         <div style="font-size:10.5px;color:var(--t3);margin-top:4px;">${fdrsSpan}</div>
       </div>` : ''}
       <div>
@@ -20058,7 +20183,7 @@ function renderDataStatusTab() {
           const note  = (n != null && n < 20)
             ? 'overlay under-populated; embedded heritage values rendered as fallback'
             : '';
-          lines.push(fmtRow('data/countries.json overlay', n == null ? '—' : `${n} countries`, color, note));
+          lines.push(fmtRow('data/countries.json overlay', n == null ? '—' : `${n - 50} countries & territories + 50 US states`, color, note));
         } catch(e) {}
 
         // CCKP
@@ -20087,7 +20212,7 @@ function renderDataStatusTab() {
           }
           const n = countries.length;
           const color = n === 0 ? '#c44b3c' : '#6ba36b';
-          lines.push(fmtRow('USDA PSD (wheat/rice/corn/soy)', `${n} countries × ${commodities} commodities`, color, n === 0 ? 'no PSD data loaded' : ''));
+          lines.push(fmtRow('USDA PSD (7 grains and oilseeds)', `${n} countries × ${commodities} commodities`, color, n === 0 ? 'no PSD data loaded' : ''));
         } catch(e) {}
 
         // ReliefWeb
@@ -20103,7 +20228,7 @@ function renderDataStatusTab() {
             }
           }
           const color = evCount === 0 ? '#c44b3c' : (evCount < 10 ? '#c9a957' : '#6ba36b');
-          lines.push(fmtRow('ReliefWeb situation reports', `${evCount} events`, color, evCount === 0 ? 'no events loaded' : ''));
+          lines.push(fmtRow('ReliefWeb situation reports', `latest ${evCount} reports (one API page)`, color, evCount === 0 ? 'no events loaded' : ''));
         } catch(e) {}
 
         return lines.join('');
@@ -20122,7 +20247,7 @@ function renderDataStatusTab() {
         </div>
       </div>
       <div style="overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <table class="ds-table" style="width:100%;border-collapse:collapse;font-size:12px;">
           <thead>
             <tr style="background:var(--bg0);border-bottom:1px solid var(--b2);">
               <th style="padding:10px 14px;text-align:left;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--t3);font-weight:600;">Source</th>
@@ -20151,15 +20276,19 @@ function renderDataStatusTab() {
         </div>
         <div>
           <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#c9a957;"></span><b style="color:var(--t1);">Degraded</b></div>
-          The fetch ran but returned empty or fewer countries than expected &mdash; usually upstream API outage or schema drift. FoodShield falls back to the structural FDRS for that dimension; nothing is fabricated.
+          The feed is serving something, but not the intended thing: a fallback source, a partial result, or a file more than 5 days past its last successful refresh. FoodShield falls back to the structural FDRS for that dimension; nothing is fabricated.
         </div>
         <div>
           <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#d27a3e;"></span><b style="color:var(--t1);">Setup required</b></div>
-          The pipeline needs an API key or registration approval that has not been completed on the deployment running this build (e.g. ACLED, OpenAQ). Source code is wired and ready; just no credentials.
+          The pipeline needs an API key or registration approval that has not been completed on the deployment running this build (none at present). The collector is written; only the credentials are missing.
         </div>
         <div>
           <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#c44b3c;"></span><b style="color:var(--t1);">Failed</b></div>
-          The fetch raised an uncaught error in the last refresh and wrote a <code style="font-size:10.5px;background:var(--bg0);padding:1px 5px;border-radius:3px;">*_FAILED.json</code> stub. Workflow continues; affected signals are dropped from the nowcast until the next successful run.
+          No usable rows are served: the file is missing or the upstream rejected the request (for example an expired API key). Its signals are dropped from the nowcast until it recovers.
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#c9a957;"></span><b style="color:var(--t1);">Stale data</b></div>
+          The file refreshed on schedule but its newest data point is older than its cadence allows: 7 days for daily data, 21 for weekly, 60 for monthly. Counted as unhealthy.
         </div>
       </div>
     </div>
@@ -20764,21 +20893,17 @@ async function loadLiveData() {
       const sig = ncRow.signals || {};
       const cmp = ncRow.components || {};
       let f2030Adj = 0;
+      /* Dropped: inflation_shock, inform_amp, governance_drag (always 0 in the nowcast) and fire_kick,
+         econ_access_drift, reserve_draw (never written). */
       f2030Adj += (cmp.ipc_pressure   || 0) * 0.5;    // half-weight: chronic crisis persists
       f2030Adj += (cmp.fx_shock       || 0) * 0.7;    // currency collapses leave a multi-year drag
-      f2030Adj += (cmp.inflation_shock|| 0) * 0.6;
       f2030Adj += (cmp.weather_kick   || 0) * 0.3;    // climate trend reinforcement
-      f2030Adj += (cmp.fire_kick      || 0) * 0.4;    // deforestation/cropland loss
       f2030Adj += (cmp.conflict_kick  || 0) * 0.5;    // active conflict often persists
       // v20.27 — nowcast-new components also have durable signal value
-      f2030Adj += (cmp.inform_amp      || 0) * 0.4;   // composite humanitarian risk persists
-      f2030Adj += (cmp.governance_drag || 0) * 0.6;   // institutional decay is slow-recovery
       f2030Adj += (cmp.psd_shortfall   || 0) * 0.3;   // production shortfalls correct year-on-year
       // v2 — two durable structural-economic signals (spec §6 point 2). Both feed the
       // MODELED overlay only, never the curated baseline. They sit inside the existing
       // Math.max(-3, Math.min(10, ...)) clamp below so they can't dominate the forecast.
-      f2030Adj += (cmp.econ_access_drift || 0) * 0.6; // structural FX/reserve fragility persists multi-year
-      f2030Adj += (cmp.reserve_draw      || 0) * 0.3; // stock buffers correct year-on-year (transient-ish)
 
       // ── v20.27: structural climate kick from CCKP + ND-GAIN ────────────────
       // Replaces the heuristic "climate adjustment" step of the 2030 forecast
@@ -20836,7 +20961,7 @@ async function loadLiveData() {
     if (_link && _n) {
       const _ok = Number(_sum.ok_sources);
       _link.title = `Open Data Status: per-source health for all ${_n} pipelines`
-        + (Number.isFinite(_ok) ? ` (${_ok} refreshing automatically)` : '');
+        + '';
     }
     // v81 — the About paragraph carried its own hardcoded "35 public data
     // sources — 30 of them", against a 34/29 manifest, and stated "34" twelve
@@ -28098,7 +28223,7 @@ function _newsAgeCompact(it) {
   const h = (Date.now() - t) / 36e5;
   if (h < 0) return 'now';
   if (h < 1) return Math.max(1, Math.round(h * 60)) + 'm';
-  if (h < 24) return Math.round(h) + 'h';
+  if (h < 48) return Math.round(h) + 'h';
   return Math.round(h / 24) + 'd';
 }
 
@@ -28133,7 +28258,7 @@ function _newsTileSvg(key, c1, c2, it) {
   const kt = Number(it && it.exposure_kt);
   let figure = '', label = '';
   if (isFinite(kt) && kt > 0) {
-    figure = kt >= 1000 ? (kt / 1000).toFixed(kt >= 10000 ? 0 : 1) + ' Mt'
+    figure = kt >= 1000 ? (kt / 1000).toFixed(1) + ' Mt'
                         : Math.round(kt) + ' kt';
     label = 'corridor exposure';
   }
@@ -28307,7 +28432,7 @@ function countryNewsBlockHTML(iso, name, limit) {
   </div>`;
 }
 
-function _newsInterpretationDetails(it) {
+function _newsInterpretationDetails(it, seen) {
   // _cnInterpretationBlock lives in a later <script> block. It is hoisted and
   // defined long before any render runs, but guard anyway — the codebase
   // already carries the same defensive check at :26314 for this exact reason.
@@ -28317,6 +28442,8 @@ function _newsInterpretationDetails(it) {
   const matched = Array.isArray(it.matched) ? it.matched : [];
 
   const blocks = matched.map(m => {
+    if (seen && seen.has(m)) return '';
+    if (seen) seen.add(m);
     const entry = ienv.data[m] || null;
     if (!entry || !entry.interpretation) return '';
     const isAI = entry.is_ai_generated_interpretation === true
@@ -28538,7 +28665,7 @@ function renderNewsTab() {
     }
   }
 
-  _renderNewsToday(shown);
+  _renderNewsToday(shown, _newsFilter !== 'all' || _newsCountry !== 'all' || !!_newsQuery.trim());
 
   // ── Lede: lead with the join, not the count ──
   const joined = shown.filter(it => (it.exposed || []).length).length;
@@ -28548,6 +28675,11 @@ function renderNewsTab() {
     ? `<b>${shown.length}</b> headlines from the agriculture and commodity trade press. `
       + `<b>${joined}</b> touch a trade corridor reaching <b>${reach.size}</b> tracked ${reach.size === 1 ? 'country' : 'countries'}.`
     : `<b>${shown.length}</b> headlines. None currently name a country on a corridor we map.`;
+  { const _st = ((LIVE.commodity_news || {}).data || {}).commodity_status || {};
+    const _f = Object.keys(_st).filter(k => k.startsWith('_feed:'));
+    const _bad = _f.filter(k => _st[k] !== 'ok').map(k => k.slice(6));
+    if (_f.length) lede.innerHTML += ` <span class="news-feedhealth">${_f.length - _bad.length} of ${_f.length} publisher feeds answered`
+      + (_bad.length ? `; no response from ${_escFeed(_bad.join(', '))}.` : '.') + `</span>`; }
 
   // ── Stream: the ledger ──
   //
@@ -28562,7 +28694,7 @@ function renderNewsTab() {
   // does not match its own order reads as a sorting bug — the same flaw the
   // leaderboard has. Recency is what the Today strip above is for; this is the
   // ledger, and a ledger is ordered by size. Recency breaks ties only.
-  const _peakKt = it => (it.exposed || []).reduce((m, e) => Math.max(m, e.kt || 0), 0);
+  const _peakKt = it => (((it.exposed || [])[0]) || {}).kt || 0;
   // Not `Date.parse(x || 0)`: Date.parse(0) coerces to Date.parse("0"), which
   // V8 reads as 1999-12-31 rather than NaN, so the fallback never fired and a
   // missing timestamp silently became 1999.
@@ -28603,6 +28735,7 @@ function renderNewsTab() {
   const _tierOf = i => i === 0 ? 'tier-lead' : i < 12 ? 'tier-mid' : 'tier-tail';
   let _brokeTier = false;
   let _brokeMid = false;
+  const _interpSeen = new Set();
 
   stream.innerHTML = ranked.map((it, _idx) => {
     const exposed = it.exposed || [];
@@ -28674,7 +28807,7 @@ function renderNewsTab() {
     // Computed once: it decides both what renders and whether the row is
     // keyboard-focusable. A row with no interpretation must not advertise an
     // affordance it does not have.
-    const _interpHtml = _newsInterpretationDetails(it);
+    const _interpHtml = _newsInterpretationDetails(it, _interpSeen);
     // v49 — the kicker. FT's o-teaser puts a small tag ABOVE the headline and
     // fuses the timestamp to it as __tag-suffix, so a list row needs no separate
     // meta line. It is the only coloured element in a row, and it demotes by
@@ -28710,8 +28843,7 @@ function renderNewsTab() {
     return `${_break}<div class="news-item ${_tier}">
       ${_rail}
       <div class="news-body-wrap" style="--i:${Math.min(_idx, 12)}"${
-        _interpHtml ? ' tabindex="0" role="button" aria-expanded="false"'
-                    + ' aria-label="Show the commodity interpretation for this headline"' : ''}>
+        _interpHtml ? ' data-interp="1"' : ''}>
       <div class="news-card-body">
         <div class="news-kicker">${_kicker}</div>
         ${(() => { const href = _safeUrl(it.url); const t = _escFeed(it.title);
@@ -28776,6 +28908,7 @@ function renderNewsTab() {
   // ignores clicks inside details — so opening a panel by its own summary left
   // the row button still announcing aria-expanded="false". `toggle` does not
   // bubble, hence capture.
+  if (!stream._newsToggleBound) { stream._newsToggleBound = true;
   stream.addEventListener('toggle', (ev) => {
     const det = ev.target;
     if (!det || !det.classList || !det.classList.contains('news-interp')) return;
@@ -28784,7 +28917,7 @@ function renderNewsTab() {
     const dets = body.querySelectorAll('details.news-interp');
     body.setAttribute('aria-expanded',
       Array.from(dets).some(d => d.open) ? 'true' : 'false');
-  }, true);
+  }, true); }
 
   // ── Exposure leaderboard ──
   //
@@ -34605,8 +34738,8 @@ function renderAboutTab() {
       <div class="founder-body" style="display:grid;grid-template-columns:1.4fr 1fr;gap:0;">
         <div style="padding:28px 30px;border-right:1px solid var(--b1);">
           <dl class="founder-figures" aria-label="Project figures">
-            <div><dt>Public data feeds</dt><dd>34</dd></div>
-            <div><dt>Countries + 50 US states</dt><dd>193</dd></div>
+            <div><dt>Public data feeds</dt><dd>${Number(LIVE?.manifest?.summary?.total_sources)||'—'}</dd></div>
+            <div><dt>Countries &amp; territories + 50 US states</dt><dd>214</dd></div>
             <div><dt>Refresh cadence</dt><dd>6h</dd></div>
             <div><dt>Paywalls</dt><dd>0</dd></div>
           </dl>
@@ -34619,7 +34752,7 @@ function renderAboutTab() {
               ${ac('FAO')} has prices. ${ac('WFP')} has hunger. World Bank has trade. ${ac('NASA')} has weather. ${ac('ACLED')} has conflict. Each is excellent. <b style="color:var(--t1)">None of them, alone, answers that question.</b>
             </p>
             <p style="margin:0 0 14px;">
-              So I started wiring them together. One pipeline became three. Three became ten. It ended up at <b style="color:var(--t1)">${(Number(LIVE?.manifest?.summary?.total_sources) || 35)} public sources: ${((Number(LIVE?.manifest?.summary?.total_sources) - Number(LIVE?.manifest?.summary?.manual_sources)) || 30)} of them refreshing every six hours, covering 193 countries and 50 US states</b>, distilled into one 0–100 Food Disruption Risk Score per country with every input traceable.
+              So I started wiring them together. One pipeline became three. Three became ten. It ended up at <b style="color:var(--t1)">${(Number(LIVE?.manifest?.summary?.total_sources) || '—')} public sources: ${(Object.values(LIVE?.manifest?.sources || {}).filter(r => !['manual','static_helper'].includes(r.mode) && r.status !== 'manual' && r.status !== 'failed').length || '—')} of them fetched automatically, covering 214 countries and territories and 50 US states</b>, distilled into one 0–100 Food Disruption Risk Score per country with every input traceable.
             </p>
             <p style="margin:0;">
               I'm not a food-security expert. I'm a student, this is open and honest about what it knows and doesn't know. <em style="font-style:italic;color:var(--t1);">The synthesis is the product.</em>
@@ -34662,7 +34795,7 @@ function renderAboutTab() {
 
     <!-- v35 — Data licenses & attribution: an auditable site models its own sourcing -->
     <div class="card" style="margin-bottom:16px;padding:20px 22px;">
-      <details><summary class="card-title" style="margin-bottom:0;cursor:pointer;list-style:none;"><span class="card-marker"></span> Data licenses &amp; attribution <span style="font-size:10px;color:var(--t3);font-weight:400;font-family:'Geist Mono',monospace;">— 23 public sources ▾</span></summary>
+      <details><summary class="card-title" style="margin-bottom:0;cursor:pointer;list-style:none;"><span class="card-marker"></span> Data licenses &amp; attribution <span style="font-size:10px;color:var(--t3);font-weight:400;font-family:'Geist Mono',monospace;">— 23 main sources ▾</span></summary>
       <div style="font-size:var(--fs-prose);color:var(--t2);line-height:1.7;margin:12px 0 10px;">
         FoodShield is built entirely on public data. Each source below retains its own license and attribution terms;
         per-figure provenance (source, year, method, quality flag) is shown next to every number in the app.
@@ -37190,7 +37323,7 @@ function fsValidationHTML(){
   const hits = (v.hits_top_crisis || []).slice(0, 6)
     .map(h => `<span class="fs-val-chip"><b>${_valName(h[0])}</b> FDRS ${h[1]} · IPC ${Math.round(h[2])}%</span>`).join('');
   const miss = (v.misses_crisis_low_fdrs || [])
-    .map(m => `<b>${_valName(m[0])}</b> (FDRS ${m[1]}, yet ${Math.round(m[2])}% in crisis)`).join(', ');
+    .map(m => `<b>${_valName(m[0])}</b> (FDRS ${m[1]}, yet ${m[2] >= 20 ? Math.round(m[2]) + '% in IPC Phase 3+' : 'FEWS NET Phase ' + m[3]})`).join(', ');
   // v42 — the displayed tier, computed in-browser. See computeDisplayedValidation().
   // If it returns null (data not loaded, or a thrown error already routed through
   // logSoftFail), every branch below collapses and the card renders exactly as before.
@@ -37219,9 +37352,9 @@ function fsValidationHTML(){
       <div class="fs-val-auc"><span class="fs-val-auc-num">${headAuc.toFixed(2)}</span><span class="fs-val-auc-lbl">${headLbl}</span></div>
     </div>
     ${tierTable}
-    <p class="fs-val-p">FDRS is checked against <b>independent</b> ground truth it does not use to compute itself: the IPC/CH classification (share of population in Phase&nbsp;3+ &ldquo;crisis or worse&rdquo;) and FEWS&nbsp;NET phase. A structural AUC of <b>${auc.toFixed(2)}</b> (0.5&nbsp;=&nbsp;chance, 1.0&nbsp;=&nbsp;perfect) means the structural score cleanly separates the ${ac.n_crisis} countries in documented crisis from the other ${ac.n_total - ac.n_crisis}. Rank correlation: <b>${sgn(rhoI)}</b> vs IPC&nbsp;%, <b>${sgn(rhoF)}</b> vs FEWS phase.</p>
+    <p class="fs-val-p">FDRS is checked against <b>independent</b> ground truth it does not use to compute itself: the IPC/CH classification (share of population in Phase&nbsp;3+ &ldquo;crisis or worse&rdquo;) and FEWS&nbsp;NET phase. A structural AUC of <b>${auc.toFixed(2)}</b> (0.5&nbsp;=&nbsp;chance, 1.0&nbsp;=&nbsp;perfect) means the structural score ranks the ${ac.n_crisis} countries in documented crisis above most of the others in documented crisis from the other ${ac.n_total - ac.n_crisis}. Rank correlation: <b>${sgn(rhoI)}</b> vs IPC&nbsp;%, <b>${sgn(rhoF)}</b> vs FEWS phase.</p>
     <div class="fs-val-chips">${hits}</div>
-    ${miss ? `<p class="fs-val-miss"><b>Honest miss:</b> ${miss}. The structural model ranks these low because they are food-<i>exporting</i>, not import-fragile: their food insecurity is conflict-driven and acute, which a structural exposure score is not designed to catch. FDRS measures standing structural fragility, not acute shocks.</p>` : ''}
+    ${miss ? `<p class="fs-val-miss"><b>Honest miss:</b> ${miss}. A structural exposure score ranks a country low when it grows most of its own food; acute regional crises there, which a structural exposure score is not designed to catch. FDRS measures standing structural fragility, not acute shocks.</p>` : ''}
     <p class="fs-val-note">Concurrent structural validation, not an ex-ante backtest (reproducible point-in-time scores exist only from 2026-05). IPC/FEWS monitor already-stressed countries, so read the rank correlations alongside the AUC. Reproduce it: <a href="/data/fdrs_validation.json" target="_blank" rel="noopener">fdrs_validation.json&nbsp;&#8599;</a> · scripts/validate_fdrs.py${disp ? ': that file and that script cover the structural row only; the displayed row is computed in this page from /data/ipc.json and /data/fews.json.' : '.'}</p>
   </div>`;
 }
@@ -37296,106 +37429,8 @@ function renderMethodologyTab() {
     #methodology-body .mth-hero{animation:mthIn .6s cubic-bezier(.2,.7,.2,1) forwards;}
     @media(max-width:640px){#methodology-body .mth-title{font-size:30px;}#methodology-body .mth-stat .v{font-size:30px;}}
 
-    /* ══════════════════════════════════════════════════════════
-       v22: DESIGN NORMALIZATION LAYER
-       Scoped to the eight non-map tabs + the country side panel.
-       #tab-global (the map view) is deliberately absent: the map,
-       its layer control, stat strip, legend and lede are off-limits.
-       ══════════════════════════════════════════════════════════ */
-
-    /* 1. DECORATIVE SURFACE EFFECTS — glass/blur/gradient read as
-          template. Data-bearing fills (score bars, sparklines,
-          chart tracks) are excluded: their colour carries meaning. */
-    #tab-country [class*="card"], #tab-score [class*="card"],
-    #tab-scenario [class*="card"], #tab-disturbances [class*="card"],
-    #tab-about [class*="card"], #tab-commodities [class*="card"],
-    #tab-companies [class*="card"], #tab-livedata [class*="card"],
-    #sidepanel [class*="card"],
-    #tab-country [class*="callout"], #tab-score [class*="callout"],
-    #tab-scenario [class*="callout"], #tab-commodities [class*="callout"],
-    #tab-companies [class*="callout"], #sidepanel [class*="callout"] {
-      background-image: none;
-      -webkit-backdrop-filter: none;
-      backdrop-filter: none;
-      box-shadow: none;
-    }
-    /* data marks keep their fills */
-    #tab-country [class*="fill"], #tab-score [class*="fill"],
-    #tab-scenario [class*="fill"], #sidepanel [class*="fill"],
-    [class*="-bar"], [class*="spark"], [class*="track"], canvas, svg {
-      background-image: revert;
-    }
-
-    /* 2. CARD DEMOTION — a border is reserved for genuinely discrete,
-          repeating objects (a company, a preset, a live stat). Secondary
-          and explanatory panels drop to whitespace + one hairline. */
-    #tab-country .ct-ai-card, #tab-score .insight-card,
-    #tab-scenario .scn-why-card, #tab-scenario .scn-crisis-card,
-    #tab-commodities .co-callout-card, #tab-commodities .tr-dep-card,
-    #tab-about .about-mission-card, #sidepanel .ai-card,
-    #tab-country .metric-card {
-      border: none;
-      border-top: var(--hair);
-      border-radius: 0;
-      background: transparent;
-      padding: var(--sp-2) 0 var(--sp-1);
-      box-shadow: none;
-    }
-    /* discrete objects keep exactly one edge weight and one radius */
-    #tab-companies .company-result-card, #tab-scenario .scn-preset-card,
-    #tab-livedata .live-stat-card, #tab-commodities .cmd-card,
-    #tab-score .fc-mover-card, #tab-scenario .scn-card {
-      border: var(--edge);
-      border-radius: 3px;
-      box-shadow: none;
-    }
-
-    /* 3. MICRO-LABEL FREQUENCY — the caps label + coloured square is a
-          section marker. At one per panel it became wallpaper. The dot
-          survives only on a true section head; nested labels keep the
-          caps treatment but lose the bullet. */
-    #tab-country [class*="-label"]::before,
-    #tab-score [class*="-label"]::before,
-    #tab-scenario [class*="-label"]::before,
-    #tab-commodities [class*="-label"]::before,
-    #tab-companies [class*="-label"]::before,
-    #tab-livedata [class*="-label"]::before,
-    #sidepanel [class*="-label"]::before { content: none; }
-    /* primary section heads keep their marker */
-    #sidepanel .sp-eyebrow::before,
-    #sidepanel .sp-section-title::before { content: ""; }
-
-    /* 4. TYPE — the five steps, enforced on the common panel roles so
-          inline leftovers cannot reintroduce a sixth or seventh size. */
-    #tab-country .sp-section-title,
-    #tab-score [class*="eyebrow"], #tab-scenario [class*="eyebrow"],
-    #tab-commodities [class*="eyebrow"], #tab-companies [class*="eyebrow"] {
-      font-size: var(--fs-meta);
-      letter-spacing: 0.12em;
-    }
-    #sidepanel .sp-section-title,
-    #sidepanel .ai-narrative-eyebrow {
-      font-size: 9px;
-      letter-spacing: 0.08em;
-      color: var(--t-meta);
-    }
-    #sidepanel .sp-row .k, #sidepanel .sp-row .v { font-size: var(--fs-body); }
-
-    /* 5. NUMERALS — tabular figures stop columns twitching between
-          renders and make the mono/sans mix read as one system. */
-    #tab-country [class*="-val"], #tab-score [class*="-val"],
-    #tab-scenario [class*="-val"], #tab-commodities [class*="-val"],
-    #tab-companies [class*="-val"], #tab-livedata [class*="-val"],
-    #sidepanel .sp-row .v, .mono {
-      font-variant-numeric: tabular-nums;
-      font-feature-settings: "tnum";
-    }
-
-    /* 6. SPACING RHYTHM — sections separate by whitespace, not by a
-          second border on top of the first. */
-    #sidepanel .sp-section { padding: var(--sp-2) 20px; }
-    #sidepanel .sp-section + .sp-section { border-top: var(--hair); }
-
+    /* The v22 design normalization layer now lives in the global stylesheet (it styles other tabs too, which
+       otherwise changed look only after a Methodology visit). */
   </style>
   <div class="grid-2">
 
@@ -37412,7 +37447,7 @@ function renderMethodologyTab() {
         <div class="mth-stat"><span class="v accent">${_mthStats.obsPct}%</span><span class="l">Importer-observed</span></div>
         <div class="mth-stat"><span class="v">${_mthFmt(_mthStats.countries)}</span><span class="l">Countries in cited flows</span></div>
         <div class="mth-stat"><span class="v">${(typeof SCENARIOS!=='undefined'?SCENARIOS.length:184)}</span><span class="l">Stress scenarios</span></div>
-        <div class="mth-stat"><span class="v accent">${_mthStats.legacyPct!=null?_mthStats.legacyPct+'%':'17.6%'}</span><span class="l">Legacy structural <span style="opacity:.6;">· from 83.7% baseline</span></span></div>
+        <div class="mth-stat"><span class="v accent">${_mthStats.legacyPct!=null?_mthStats.legacyPct+'%':'—'}</span><span class="l">Legacy structural <span style="opacity:.6;">· from 83.7% baseline</span></span></div>
       </div>
     </div>
 
@@ -37587,8 +37622,8 @@ function renderMethodologyTab() {
         sub-component, the trade-dependency overlays, and the company sourcing shares all fall here), or
         <b style="color:#d27a3e">legacy_curated</b> (heritage carry-overs from earlier vintages, kept until
         a sourced replacement lands). When you read FDRS, the structural climate and conflict components are
-        ~60% sourced / 40% heritage; the supply-chain exposure component is modeled from FAO Food Balance
-        Sheets + UN Comtrade + USDA PSD; everything else is direct-from-source. Treat the modeled views
+        a 60/40 blend of sourced and heritage values, as are import dependency, supplier concentration and production trend; food inflation, economic access and grain buffer are direct from source where a feed covers the country; supply-chain exposure is computed from USDA PSD balances,
+        with a menu fallback where PSD has no row. Treat the modeled views
         (commodity trade-dependency, company sourcing shares) as <em>directional screens</em>, not audited
         customs records.
       </div>
@@ -37642,7 +37677,7 @@ function renderMethodologyTab() {
         <div style="width:6%;background:#b08bd6" title="Grain Reserve Buffer 6% (v2)"><span>6%</span></div>
       </div>
       <div class="meth-weight-legend">
-        <span><span class="mwl-dot" style="background:#c44b3c"></span> Import Dep. (caloric)</span>
+        <span><span class="mwl-dot" style="background:#c44b3c"></span> Import Dep. (cereals)</span>
         <span><span class="mwl-dot" style="background:#c47a3c"></span> Supplier Conc.</span>
         <span><span class="mwl-dot" style="background:#c9a957"></span> Prod. Trend</span>
         <span><span class="mwl-dot" style="background:#c9a957;opacity:.75"></span> Food Infl.</span>
@@ -37654,16 +37689,16 @@ function renderMethodologyTab() {
       </div>
       <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:3px;padding:18px 22px;font-family:'Geist Mono',monospace;font-size:13px;margin-bottom:18px;line-height:2.2;">
         <div style="color:var(--t3);font-size:11px;margin-bottom:8px;font-family:'Geist',sans-serif;letter-spacing:.06em;text-transform:uppercase;">FDRS Equation</div>
-        <div><span style="color:var(--accent)">FDRS</span> = <span style="color:#c44b3c">(Import Dependency, caloric)</span> × 0.23</div>
+        <div><span style="color:var(--accent)">FDRS</span> = <span style="color:#c44b3c">(Import Dependency, cereal)</span> × 0.23 <span style="color:var(--t3);font-size:11px;">← 60% FAOSTAT cereal ratio / 40% heritage</span></div>
         <div style="padding-left:52px">+ <span style="color:#c47a3c">(Supplier Concentration)</span> × 0.16</div>
         <div style="padding-left:52px">+ <span style="color:#c9a957">(Production Trend)</span> × 0.11</div>
         <div style="padding-left:52px">+ <span style="color:#c9a957">(Food Inflation)</span> × 0.09 <span style="color:var(--t3);font-size:11px;">← price stress only; no FX, no income</span></div>
-        <div style="padding-left:52px">+ <span style="color:#6ba36b">(Climate Vulnerability)</span> × 0.09 <span style="color:var(--t3);font-size:11px;">← 60% sourced (ND-GAIN + Aqueduct + CCKP)</span></div>
-        <div style="padding-left:52px">+ <span style="color:#6ba36b">(Conflict / Logistics)</span> × 0.08 <span style="color:var(--t3);font-size:11px;">← 60% sourced (INFORM + WGI + LPI)</span></div>
-        <div style="padding-left:52px">+ <span style="color:#8aa6c4">(Supply-Chain Exposure, trade)</span> × 0.06 <span style="color:var(--t3);font-size:11px;">← modeled from FBS + Comtrade + PSD</span></div>
+        <div style="padding-left:52px">+ <span style="color:#6ba36b">(Climate Vulnerability)</span> × 0.09 <span style="color:var(--t3);font-size:11px;">← 60% sourced (ND-GAIN + Aqueduct + FAO ASAP + CCKP) / 40% heritage</span></div>
+        <div style="padding-left:52px">+ <span style="color:#6ba36b">(Conflict / Logistics)</span> × 0.08 <span style="color:var(--t3);font-size:11px;">← 60% sourced (INFORM + WGI + LPI) / 40% heritage</span></div>
+        <div style="padding-left:52px">+ <span style="color:#8aa6c4">(Supply-Chain Exposure, trade)</span> × 0.06 <span style="color:var(--t3);font-size:11px;">← USDA PSD net imports ÷ use (wheat .45 / rice .30 / maize .25) + supplier concentration</span></div>
         <div style="padding-left:52px">+ <span style="color:#7c9fcf">(Economic Access / affordability)</span> × 0.12 <span style="color:var(--t3);font-size:11px;">← v2: one-sided FX stress + reserves (high-income exempt) + debt-service + income</span></div>
         <div style="padding-left:52px">+ <span style="color:#b08bd6">(Grain Reserve Buffer)</span> × 0.06 <span style="color:var(--t3);font-size:11px;">← v2: USDA PSD stocks-to-use</span></div>
-        <div style="padding-left:52px;margin-top:6px;">+ <span style="color:var(--accent)">AMP</span> = min( 6 × (Import&nbsp;Dep/100) × (Econ&nbsp;Access/100), 6 ) <span style="color:var(--t3);font-size:11px;">← capped double-bind amplifier (≤6 pts)</span></div>
+        <div style="padding-left:52px;margin-top:6px;">+ <span style="color:var(--accent)">AMP</span> = min( 6 × (Import&nbsp;Dep/100) × (Econ&nbsp;Access/100), 6 ) <span style="color:var(--t3);font-size:11px;">← capped double-bind amplifier (≤6 pts); 0 if either input is missing</span></div>
         <div style="margin-top:14px;padding:10px 14px;background:var(--bg0);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;font-family:'Geist',sans-serif;font-size:var(--fs-prose);color:var(--t2);line-height:1.6;">
           <b style="color:var(--t1)">What you see in the country panel.</b> The headline FDRS is the
           <b style="color:var(--accent)">nowcast-adjusted</b> value: structural formula above, plus a live-signal delta
@@ -37674,7 +37709,7 @@ function renderMethodologyTab() {
         <div style="margin-top:10px;padding:10px 14px;background:var(--bg0);border-left:3px solid var(--t3);border-radius:0 6px 6px 0;font-family:'Geist',sans-serif;font-size:var(--fs-prose);color:var(--t2);line-height:1.6;">
           <b style="color:var(--t1)">Reproducing the structural score.</b> The 9 weights above sum to <b>100%</b>
           (0.23 + 0.16 + 0.11 + 0.09 + 0.09 + 0.08 + 0.06 + 0.12 + 0.06). Plug each component's 0–100 value into the
-          weighted sum (BASE), add the capped amplifier (AMP), round to integer, clip to [0, 100]. Then the nowcast
+          weighted sum divided by the sum of the weights present (BASE); add the capped amplifier (AMP, skipped when import dependency or economic access is missing), round, clip to [0, 100]. Then the nowcast
           delta (Δ<sub>nowcast</sub>) is added on top. A complete worked example, computed live from this page's data so it can never drift from the score you see, follows below.
         </div>
         ${(function(){
@@ -37702,26 +37737,26 @@ function renderMethodologyTab() {
           } catch(e) { return ''; }
         })()}
       </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:10px;">
         ${[
-          {w:'23%',label:'Import Dependency (caloric)',col:'#c44b3c',
-           desc:`Share of national caloric supply imported. From ${ac('FAO')} Food Balance Sheets. CALORIC view: what fraction of food eaten comes from abroad. Distinct from trade volume (see Supply-Chain Exposure).`},
+          {w:'23%',label:'Import Dependency (cereals)',col:'#c44b3c',
+           desc:`60% sourced, 40% heritage. The sourced term is ${ac('FAO')}'s cereal import-dependency ratio from the Food Balance Sheets: wheat, rice and maize imports ÷ domestic supply (2023), clamped 0–100. It counts grain bought abroad, not all calories.`},
           {w:'16%',label:'Supplier Concentration',col:'#c47a3c',
            desc:'Herfindahl-Hirschman Index of import sources (UN Comtrade 2024), damped by how much the country imports, blended 60/40 with the heritage value. 100 = single-source monopoly; 0 = perfectly diversified.'},
           {w:'11%',label:'Production Trend',col:'#c9a957',
-           desc:`5-year CAGR of domestic food production (${ac('USDA')} ${ac('PSD')} 2018-2024). Negative trends score higher. Normalized against global peers.`},
+           desc:`60% sourced, 40% heritage. The sourced term is the OLS slope of ${ac('FAO')}STAT's gross food production index over 2015–2024: flat or growing scores 0, −1%/yr scores 20, −5%/yr or worse scores 100.`},
           {w:'9%',label:'Food Inflation',col:'#c9a957',
-           desc:`Annual food CPI change. Live-sourced from ${ac('WFP')} HungerMap → Eurostat HICP → ${ac('FAO')}STAT food CPI → World Bank CPI fallback. Captures realised PRICE stress only: by design it carries no FX or income term (those live in Economic Access), so the two never double-count. 100 = >60% inflation.`},
+           desc:`Year-on-year food CPI. The score reads World Bank RTFP → ${ac('WFP')} HungerMap → Eurostat HICP → ${ac('FAO')}STAT food CPI; countries with none keep the heritage value. Captures realised PRICE stress only: by design it carries no FX or income term (those live in Economic Access), so the two never double-count. Scale: 0% → 15, 15% → 50, 60% → 85, 250%+ → 100.`},
           {w:'9%',label:'Climate Vulnerability',col:'#6ba36b',
            desc:`60% sourced composite, 40% heritage. The composite averages whatever is present of ${ac('ND-GAIN')} food vulnerability (0.45), Aqueduct water stress (0.20; drought risk where water stress is missing), Aqueduct riverine flood (0.15), FAO ASAP agricultural stress (0.20) and WB ${ac('CCKP')} observed warming (0.20), renormalised over the present terms. Needs ND-GAIN plus two other terms, else the heritage value stands.`},
           {w:'8%',label:'Conflict / Logistics',col:'#6ba36b',
            desc:`60% sourced composite, 40% heritage. The composite averages ${ac('INFORM')} Risk (0.30), ${ac('WGI')} Rule of Law (0.20) and ${ac('LPI')} Overall (0.15), renormalised over the present terms; needs two of the three. Live conflict intensity (HDX HAPI) is counted once, in the nowcast, not here.`},
           {w:'6%',label:'Supply-Chain Exposure (trade)',col:'#8aa6c4',
            desc:'Trade dependence for wheat (0.45), rice (0.30) and maize (0.25), plus (supplier concentration − 50) × 0.08. Each crop: net imports ÷ use from the country\'s own USDA PSD balance (2022 or later); EU members without one use the EU-27 bloc balance (extra-EU trade, labelled on the Country tab). Without a PSD row a menu heuristic applies: a producer 5–75 by its trade pattern, a listed exporter of a core staple 10, any other non-producer 95. Captures sourcing risk distinct from caloric reliance: a country can eat little rice and still import all of it.'},
-          {w:'12%',label:'Economic Access / Affordability · v2',col:'#7c9fcf',
-           desc:`NEW (v2). The structural capacity to PAY FOR and afford food: the answer to "what about economic risk?". Blends four sub-inputs (re-normalised over whatever is present, so it degrades honestly): FX depreciation (structural 12-month level), reserve adequacy in months of import cover (a convex "cliff" below ~3 months: the one justified non-linearity), external debt-service burden (% of exports), and income (${ac('HDI')} GNI per capita, log-scaled). It is NOT a price index: realised price stress stays entirely in Food Inflation, so there is no double-count. Where reserves/debt/FX feeds are missing it runs on income alone and is badged partial / heritage; never a fabricated value. This is the component reviewers flagged as missing: Sri Lanka 2022, Egypt's devaluation cycle, Ghana 2022 are exactly the fragility it now captures.`},
-          {w:'6%',label:'Grain Reserve Buffer · v2',col:'#b08bd6',
-           desc:`NEW (v2). ${ac('USDA')} ${ac('PSD')} stocks-to-use for staple grains (ending stocks ÷ consumption). A thin buffer means less cushion against the next shock and scores higher (more fragile). Sourced where PSD covers the country; heritage otherwise.`},
+          {w:'12%',label:'Economic Access / Affordability',col:'#7c9fcf',
+           desc:`The structural capacity to pay for food. Blends four sub-inputs (re-normalised over whatever is present, so it degrades honestly): FX depreciation (structural 12-month level), reserve adequacy in months of import cover (a convex "cliff" below ~3 months: the one justified non-linearity), external debt-service burden (% of exports), and income (${ac('HDI')} GNI per capita, log-scaled). It is NOT a price index: realised price stress stays entirely in Food Inflation, so there is no double-count. Where reserves/debt/FX feeds are missing it runs on income alone and is badged partial / heritage; never a fabricated value. This is the component reviewers flagged as missing: Sri Lanka 2022, Egypt's devaluation cycle, Ghana 2022 are exactly the fragility it now captures.`},
+          {w:'6%',label:'Grain Reserve Buffer',col:'#b08bd6',
+           desc:`${ac('USDA')} ${ac('PSD')} stocks-to-use for staple grains (ending stocks ÷ consumption). A thin buffer means less cushion against the next shock and scores higher (more fragile). Sourced where PSD covers the country; heritage otherwise.`},
         ].map(c=>`
           <div style="background:var(--bg0);border:1px solid var(--b1);border-radius:3px;padding:14px 16px;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
@@ -37779,14 +37814,14 @@ function renderMethodologyTab() {
         Country panels show <b style="color:var(--t1)">two FDRS values</b>: a slow-moving <b style="color:var(--t1)">Structural</b> score
         and a daily-updating <b style="color:var(--accent)">Nowcast</b>. They answer different questions.
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:14px;margin-bottom:18px;">
         <div style="background:var(--bg0);border:1px solid var(--b1);border-radius:3px;padding:14px 16px;">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
             <div style="width:8px;height:8px;border-radius:50%;background:var(--t1);"></div>
             <div style="font-size:12.5px;font-weight:600;color:var(--t1)">Structural FDRS</div>
           </div>
           <div style="font-size:var(--fs-prose);color:var(--t3);line-height:1.6;margin-bottom:8px;">
-            The nine-component composite above (23/16/11/9/9/8/6/12/6) plus the bounded double-bind amplifier. Rebuilt annually as new vintages drop (FAO SOFI, USDA WASDE, ND-GAIN, ACLED).
+            The nine-component composite above (23/16/11/9/9/8/6/12/6) plus the bounded double-bind amplifier. Rebuilt on every 6-hour run; it moves when a new FAOSTAT, USDA PSD, ND-GAIN, INFORM, WGI or World Bank vintage lands.
             Captures the underlying fragility of a country's food system: answers <b>"how exposed is this country, in steady state?"</b>
           </div>
           <div style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--t3);">cadence: annual · vintage: 2024–2026</div>
@@ -37797,8 +37832,8 @@ function renderMethodologyTab() {
             <div style="font-size:12.5px;font-weight:600;color:var(--t1)">Nowcast FDRS</div>
           </div>
           <div style="font-size:var(--fs-prose);color:var(--t3);line-height:1.6;margin-bottom:8px;">
-            Structural FDRS adjusted daily by live signals: IPC phase shifts, FEWS NET forward projections, HDX internal-displacement totals, ACLED conflict spikes (only when the licensed feed is live), FAO Food Price Index,
-            ReliefWeb humanitarian alerts and WFP HungerMap consumption flags. Answers <b>"what's moving right now?"</b>
+            Structural FDRS plus a bounded adjustment rebuilt every 6 hours: IPC Phase 3+ share and headcount, FEWS NET projections, HDX HAPI displacement, ACLED conflict (90-day window), WFP consumption, the FAO Food Price Index, FX, weather, flood and USDA PSD harvest drops.
+            Answers <b>"what's moving right now?"</b>
           </div>
           <div style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--accent);">cadence: 6h · 00/06/12/18 UTC</div>
         </div>
@@ -37807,28 +37842,18 @@ function renderMethodologyTab() {
         <div style="color:var(--t3);font-size:10.5px;margin-bottom:6px;font-family:'Geist',sans-serif;letter-spacing:.06em;text-transform:uppercase;">Nowcast Adjustment Δ<sub>nowcast</sub></div>
         <div><span style="color:var(--accent)">Nowcast FDRS</span> = Structural FDRS + Δ<sub>nowcast</sub></div>
         <div style="padding-left:18px;margin-top:6px;font-size:11.5px;">
-          Δ<sub>nowcast</sub> = ipc_pressure (0–12)
-          + fews_kick (0–6) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— FEWS NET forward projection: gap-fills where IPC is absent + deterioration nudge</span>
-          + displacement (0–4) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— HDX HAPI internal-displacement magnitude (new v43)</span>
-          + wfp_consumption (0–6)
-          + conflict (0–5) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— ACLED, only when the feed is live</span>
-          + global_price (0–2)
-          <br>+ fx_shock (0–3)
-          + inflation_shock (0–3)
-          + weather_extremes (0–4)
-          + flood (0–3)
-          + fire (0–2)
-          + air_quality (0–1)
-          + us_water (0–2)
-          <br>+ inform_amp (0–3) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— INFORM &gt; 7.0</span>
-          + governance_drag (0–2) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— WGI rule of law ≤ −1.0</span>
-          + psd_shortfall (0–3) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— USDA PSD staple production gap</span>
-          − humanitarian_response (0–2) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— active ReliefWeb response reports LOWER the acute score (mitigation present, not extra risk)</span>
+          Δ<sub>nowcast</sub> = [ ipc_pressure (0–12) + caseload_kick (0–5) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— IPC Phase 3+ headcount, log-scaled</span>
+          + fews_kick (0–6) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— FEWS NET: fills gaps where IPC is absent, plus a nudge when the projection worsens</span>
+          + wfp_consumption (0–6) + displacement (0–4) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— HDX HAPI internal displacement, fades between 18 and 36 months old</span>
+          + conflict (0–5) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— ACLED events via HDX HAPI, 90-day window, per capita</span> ] <span style="color:var(--t3);font-family:'Geist',sans-serif;">crisis cluster, capped at +18</span>
+          <br>+ global_price (0–2) + fx_shock (0–3) + weather_extremes (0–4) + flood (0–3) + air_quality (0–1) + us_water (0–2, US states)
+          <br>+ psd_shortfall (0–3) <span style="color:var(--t3);font-family:'Geist',sans-serif;">— a USDA PSD staple harvest down ≥10% on the previous marketing year</span>
+          <br><span style="color:var(--t3);font-family:'Geist',sans-serif;">Kept in the file at 0 so the breakdown stays complete: inflation_shock (the level already sits in Food Inflation), inform_amp and governance_drag (INFORM and WGI already sit in Conflict / Logistics), relief_damp, us_fi_kick.</span>
         </div>
         <div style="padding-left:18px;color:var(--t3);font-size:11px;font-family:'Geist',sans-serif;margin-top:8px;">
           Bounded to [−10, +35] so live noise never overwhelms the structural baseline.
           A country panel showing <b style="color:var(--accent)">Δ +N</b> next to FDRS is the nowcast above the structural score: click <b>"show breakdown"</b> there to see every component's exact contribution.
-          <br><b style="color:var(--t2)">Display-only vs scored:</b> only the components in the formula above move a number. GDACS disaster alerts, the ReliefWeb news list on the Disturbances tab, and FEWS map events are shown for situational <em>context</em> and never change the FDRS or nowcast. ReliefWeb's <em>count</em> of active responses is the one exception: it enters as the small negative damper above.
+          <br><b style="color:var(--t2)">Display-only vs scored:</b> only the components in the formula above move a number. GDACS disaster alerts, the ReliefWeb news list on the Disturbances tab, and FEWS map events are shown for situational <em>context</em> and never change the FDRS or nowcast. ReliefWeb report counts no longer enter: a document count measures publication volume, not response capacity.
         </div>
       </div>
       <div style="font-size:var(--fs-prose);color:var(--t3);line-height:1.7;margin-bottom:14px;">
@@ -37869,7 +37894,7 @@ function renderMethodologyTab() {
           {src:'WFP HungerMap per-country',role:'FX, food inflation, nutrition',key:'no key'},
           {src:'IPC Acute Food Insecurity',role:'phase classifications via HungerMap mirror',key:'no key'},
           {src:'ReliefWeb',role:'humanitarian alerts (Food & Nutrition theme)',key:'appname'},
-          {src:'ACLED',role:'conflict event count + fatalities: structural conflict baseline (free tier is 12-month-lagged, so it feeds the FDRS conflict component, not the live feed)',key:'OAuth login'},
+          {src:'ACLED via HDX HAPI',role:'conflict events and fatalities, 90-day window, per capita: the nowcast conflict term (the direct ACLED tier is 12-month-lagged and scores nothing)',key:'HDX app identifier'},
           {src:'GDACS (in-browser)',role:'natural-disaster alerts on Disturbances tab',key:'no key'},
           // Prices + trade
           {src:'FAO Food Price Index (FFPI)',role:'global price shock signal',key:'no key'},
@@ -37920,7 +37945,7 @@ function renderMethodologyTab() {
 
       <!-- Per-metric provenance system -->
       <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:3px;padding:14px 18px;">
-        <div style="font-size:11px;color:var(--t3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px;">Per-metric provenance · introduced v20.5, expanded v20.6–v20.25</div>
+        <div style="font-size:11px;color:var(--t3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px;">Per-metric provenance</div>
         <div style="font-size:var(--fs-prose);color:var(--t2);line-height:1.7;margin-bottom:10px;">
           Every metric on a country panel carries a <b style="color:var(--t1)">quality_flag</b> recorded in
           <code style="font-size:10.5px;background:var(--bg0);padding:1px 5px;border-radius:3px;">data/countries.json</code>
@@ -37933,7 +37958,7 @@ function renderMethodologyTab() {
             {flag:'partial',col:'#c9a957',desc:'Real cited data with incomplete lineage or coverage: truncated partner extracts (coverage: top_partner_only, e.g. a mirror query that surfaced one supplier), rows whose exact source query could not be reconstructed from their own metadata, or buffers blending stale input series (flagged stale_inputs). Rendered with reduced visual confidence; never dressed up as fully sourced.'},
             {flag:'manual',col:'#7c9fcf',desc:'Hand-maintained snapshot from an annual / static public release. Today this is Feeding America Map the Meal Gap (US state food-insecurity %), refreshed each May.'},
             {flag:'modeled',col:'#c9a957',desc:'Computed at render time from sourced inputs or explicit structural assumptions. Includes the Supply-Chain Exposure component, illustrative reconstruction since 2018, the 2030 modeled-outlook persistent-shock overlay.'},
-            {flag:'legacy_curated',col:'#d27a3e',desc:'Hand-authored heritage value from the May 2026 embedded dataset, not yet re-verified. Being re-sourced progressively: the field-level legacy ratio is now 17.6%, down from 83.7% at the original reviewer feedback. Trade snapshots, caloric shares and the food-inflation fallback have been re-sourced or correctly reclassified; what remains is a residual set of micro-territories and non-reporting countries genuinely outside FBS/trade-reporter coverage.'},
+            {flag:'legacy_curated',col:'#d27a3e',desc:'Hand-authored heritage value from the May 2026 embedded dataset, not yet re-verified. Being re-sourced progressively: the field-level legacy share is shown live in the header above (it started at 83.7%). Trade snapshots, caloric shares and the food-inflation fallback have been re-sourced or correctly reclassified; what remains is a residual set of micro-territories and non-reporting countries genuinely outside FBS/trade-reporter coverage.'},
             {flag:'legacy_import_dependency',col:'#c44b3c',desc:'Heritage value where the field name suggests caloric share but the original meaning was import-dependency %. Tagged explicitly so the UI displays a red "import-dep · legacy" pill instead of mis-rendering it as caloric share. Cleared one country at a time as FBS coverage expands.'},
           ].map(b=>`
             <div style="background:var(--bg0);border:1px solid var(--b1);border-left:3px solid ${b.col};border-radius:6px;padding:9px 11px;">
@@ -37951,13 +37976,13 @@ function renderMethodologyTab() {
       <summary>
         <span class="meth-acc-marker"></span>
         <span class="meth-acc-title">Live source health</span>
-        <span class="meth-acc-teaser">Per-feed status from the latest 6h refresh: Healthy / Manual / Degraded / Failed</span>
+        <span class="meth-acc-teaser">Per-feed status from the latest 6h refresh: Healthy / Manual / Degraded / Stale / Failed</span>
         <span class="meth-acc-chev">▾</span>
       </summary>
       <div class="meth-acc-body">
       <div style="font-size:var(--fs-prose);color:var(--t2);line-height:1.7;margin-bottom:14px;">
         Pulled from <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">data/source_manifest.json</code>
-        rebuilt by every workflow run. Status categories: <b style="color:#6ba36b">Healthy</b> · <b style="color:#7c9fcf">Manual</b> · <b style="color:#c9a957">Degraded</b> · <b style="color:#d27a3e">Setup required</b> · <b style="color:#c44b3c">Failed</b>.
+        rebuilt by every workflow run. Status categories: <b style="color:#6ba36b">Healthy</b> · <b style="color:#7c9fcf">Manual</b> · <b style="color:#c9a957">Degraded</b> · <b style="color:#c9a957">Stale data</b> · <b style="color:#d27a3e">Setup required</b> · <b style="color:#c44b3c">Failed</b>.
         The status pill in the top-right of the app shows the same headline numbers from the latest six-hourly refresh.
       </div>
       ${(() => {
@@ -37972,14 +37997,14 @@ function renderMethodologyTab() {
           const bo = order[b[1]?.status] ?? 9;
           return ao - bo || (a[1]?.label || a[0]).localeCompare(b[1]?.label || b[0]);
         });
-        return `<div style="display:grid;grid-template-columns:minmax(0,2fr) 110px 100px 1fr;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--b2);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);font-weight:600;">
+        return `<div style="display:grid;grid-template-columns:minmax(0,2fr) 88px 80px minmax(0,1.4fr);gap:10px;overflow-wrap:anywhere;align-items:center;padding:8px 0;border-bottom:1px solid var(--b2);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);font-weight:600;">
           <div>Feed</div>
           <div>Status</div>
           <div>Updated</div>
           <div>Cadence · mode</div>
         </div>` +
         entries.map(([key, row]) => `
-          <div style="display:grid;grid-template-columns:minmax(0,2fr) 110px 100px 1fr;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--b1);">
+          <div style="display:grid;grid-template-columns:minmax(0,2fr) 88px 80px minmax(0,1.4fr);gap:10px;overflow-wrap:anywhere;align-items:center;padding:9px 0;border-bottom:1px solid var(--b1);">
             <div style="font-size:11.5px;color:var(--t1);font-weight:500;">${row.label || key}</div>
             <div style="font-size:10.5px;color:${typeof sourceStatusColor === 'function' ? sourceStatusColor(row.status) : 'var(--t3)'};font-weight:600;">${typeof sourceStatusLabel === 'function' ? sourceStatusLabel(row.status) : (row.status || '—')}</div>
             <div style="font-size:10.5px;font-family:'Geist Mono',monospace;color:var(--t2);">${row.generated_at ? (typeof formatAge === 'function' ? formatAge(row.generated_at) : '—') : 'pending'}</div>
@@ -37995,13 +38020,13 @@ function renderMethodologyTab() {
       <summary>
         <span class="meth-acc-marker"></span>
         <span class="meth-acc-title">Primary Data Sources</span>
-        <span class="meth-acc-teaser">34 upstream feeds with vintage + scope: FAO · USDA · World Bank · WFP · IPC · ACLED · …</span>
+        <span class="meth-acc-teaser">Every upstream feed with its vintage and scope: FAO · USDA · World Bank · WFP · IPC · ACLED · …</span>
         <span class="meth-acc-chev">▾</span>
       </summary>
       <div class="meth-acc-body">
       <div style="display:flex;flex-direction:column;gap:0;">
         ${[
-          {src:'FAOSTAT Food Balance Sheets',yr:'2022 vintage (Feb 2026)',used:'Caloric shares of wheat / rice / maize per country: 177 countries via bulk download',url:'https://www.fao.org/faostat/en/#data/FBS'},
+          {src:'FAOSTAT Food Balance Sheets',yr:'2023 data',used:'Cereal import-dependency ratio (wheat, rice, maize) and caloric shares: 177 countries via bulk download',url:'https://www.fao.org/faostat/en/#data/FBS'},
           {src:'FAOSTAT Trade Crops & Livestock (TCL)',yr:'2024 vintage',used:'Observed net food trade balance on the FAOSTAT TCL "Food, Total" (2024) basis, USD, for 185 countries. Note: this basis is slightly narrower than total-agriculture, so the figure can differ modestly from USDA / national headline ag-trade numbers: sign and rank-order are unaffected.',url:'https://www.fao.org/faostat/en/#data/TCL'},
           {src:'USDA PSD (Production, Supply & Distribution)',yr:'May 2026 WASDE',used:'Observed production / imports / exports / consumption / stocks for wheat, rice, corn, soybeans. Known gap: USDA PSD reports the EU as a single EU-27 aggregate, so Germany, France, Italy etc. have no per-country PSD row. Members without a current national row use the EU-27 bloc balance, which measures extra-EU trade, not the position of the member itself.',url:'https://apps.fas.usda.gov/psdonline'},
           {src:'World Bank WDI bulk',yr:'2024 / quarterly',used:'20 structural indicators: GDP/capita, ag % of GDP, stunting, fertilizer use, water stress, irrigation, food imports % of merchandise…',url:'https://databank.worldbank.org/data/download/WDI_CSV.zip'},
@@ -38009,11 +38034,11 @@ function renderMethodologyTab() {
           {src:'World Bank WFSO',yr:'2026 quarterly',used:'Food-security outlook with historical + baseline + downside projections to 2031',url:'https://microdata.worldbank.org/index.php/catalog/6103/data-api'},
           {src:'WFP HungerMap LIVE',yr:'live',used:'Daily food consumption + IPC mirror + alerts + per-country FX / food inflation / nutrition',url:'https://hungermap.wfp.org'},
           {src:'IPC Acute Food Insecurity',yr:'2025–2026',used:'Phase 3+/Emergency/Catastrophe figures for crisis countries (via HungerMap mirror)',url:'https://www.ipcinfo.org'},
-          {src:'ND-GAIN Country Index',yr:'2023 vintage',used:'Climate vulnerability + readiness + food-sector sub-score for ~192 countries',url:'https://gain.nd.edu/our-work/country-index/'},
+          {src:'ND-GAIN Country Index',yr:'2024 vintage',used:'Climate vulnerability + readiness + food-sector sub-score for ~192 countries',url:'https://gain.nd.edu/our-work/country-index/'},
           {src:'WRI Aqueduct 4.0',yr:'2023 release',used:'Water stress, drought risk, riverine + coastal flood risk: 5 indicators per country',url:'https://www.wri.org/data/aqueduct-40-country-rankings'},
           {src:'EU JRC INFORM Risk Index',yr:'2026',used:'Composite humanitarian risk (0–10) + 3 dimensions: hazard/exposure, vulnerability, lack of coping capacity',url:'https://drmkc.jrc.ec.europa.eu/inform-index/INFORM-Risk'},
           {src:'FAO FFPI + WB Pink Sheet',yr:'monthly',used:'Global food price index + commodity benchmarks (wheat, rice, corn, palm oil, fertilizer)',url:'https://www.fao.org/worldfoodsituation/foodpricesindex'},
-          {src:'ACLED (Armed Conflict Location & Event Data)',yr:'live when licensed',used:'Conflict fatality + event counts. Feeds the nowcast conflict signal ONLY when the feed is live (is_live); on a lagged/degraded tier it is already captured in the structural conflict component and contributes 0 to the live delta (no double-count)',url:'https://acleddata.com'},
+          {src:'ACLED (Armed Conflict Location & Event Data)',yr:'live when licensed',used:'Conflict events and fatalities. The nowcast conflict term (≤+5) reads ACLED through HDX HAPI (rolling 90-day window, per capita); the lagged direct tier adds nothing. ACLED is not an input to the structural Conflict / Logistics component.',url:'https://acleddata.com'},
           {src:'ReliefWeb',yr:'live',used:'Humanitarian situation reports tagged Food & Nutrition theme',url:'https://reliefweb.int'},
           {src:'GDACS',yr:'live',used:'Drought, flood and tropical-cyclone alerts on the Disturbances tab, collected server-side by scripts/refresh_gdacs.py into data/gdacs.json: shown for situational context only, NOT a scoring input (does not affect FDRS or the nowcast)',url:'https://www.gdacs.org'},
           {src:'Google News RSS + publisher feeds',yr:'live · 6h',used:'Commodity-news headlines on the Commodities tab, tagged by exposed country/commodity. Stores headline + link + publisher + timestamp only: no article text, and the redirect link is never resolved (headline aggregation, not reproduction). Situational context, NOT a scoring input.',url:'https://news.google.com/'},
@@ -38063,9 +38088,9 @@ function renderMethodologyTab() {
       <div style="display:flex;flex-direction:column;gap:12px;">
         ${[
           {step:'01',title:'2030 baseline: illustrative scenario estimate',
-           body:'<b style="color:var(--t1)">2030 values are illustrative scenario estimates.</b> They combine the current country baseline with legacy embedded assumptions and available risk proxies. Read them as directional stress-test indicators, not as official FAO-OECD, CCKP, or ND-GAIN forecasts. Where live source coverage is unavailable (CCKP currently 0 countries; ND-GAIN last download failed), the model falls back to embedded assumptions and marks the result as illustrative.'},
-          {step:'02',title:'Climate component (sourced, with heritage fallback)',
-           body:'The climate component derives from sourced inputs, WB CCKP observed warming + ND-GAIN food vulnerability, blended with the heritage value. Formula: <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">climate_kick = piecewise(observed_warming) + max(0, (food_vuln − 0.5) × 8)</code>, capped at +5 points. A country falls back to its heritage value only if its climate feed is temporarily degraded: see Data Status for live coverage.'},
+           body:'<b style="color:var(--t1)">2030 values are illustrative scenario estimates.</b> f2030 = the structural score today (after live supply-chain exposure and the US-state blend) + a hand-set drift (the authored 2030 value minus the heritage score it was written against) + the live overlay in step 07, clamped to −3..+10. Read them as directional stress-test indicators, not as official FAO-OECD, CCKP, or ND-GAIN forecasts. Where CCKP or ND-GAIN has no row for a country, the climate kick is skipped.'},
+          {step:'02',title:'2030 climate kick',
+           body:'Observed warming (WB CCKP) and ND-GAIN food vulnerability: <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">piecewise(warming) + min(2, (fv − 0.5) × 8) if fv &gt; 0.5, − min(1, (0.35 − fv) × 4) if fv &lt; 0.35</code>, clamped −1..+5; skipped without ND-GAIN.'},
           {step:'03',title:'Demographic Scaling',
            body:'UN WPP medium-scenario population growth is applied to consumption. Countries with >2% annual population growth face increasing import dependency unless production growth matches pace.'},
           {step:'04',title:'Policy & Geopolitical Overlay',
@@ -38074,8 +38099,8 @@ function renderMethodologyTab() {
            body:'Annual when new structural vintages drop (FAO SOFI, USDA WASDE, ND-GAIN). A formal back-testing pipeline is on the roadmap: not yet built. Until then, the model is a structured expert projection, not a validated forecast.'},
           {step:'06',title:'Uncertainty (not yet calibrated)',
            body:'Confidence intervals require a backtest pipeline we haven\'t built yet. The displayed 2030 number is a point estimate from the structured projection: treat it as a directional outlook, not a probabilistic forecast. Use the Scenario Stress Test to push beyond the baseline.'},
-          {step:'07',title:'Live Overlay (v20, May 2026)',
-           body:'Persistent live signals, IPC Phase 3+ status, currency collapse, sticky food inflation, active conflict, sustained drought, fire-driven cropland loss, adjust the 2030 modeled outlook by −3 to +10 points. Transient signals (single-week flood, AQ spikes, US river noise) do not. The structural f2030 is preserved on each country as <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">_f2030Structural</code>.'},
+          {step:'07',title:'Live overlay',
+           body:'Persistent signals adjust the 2030 outlook by −3 to +10 points: 0.5× IPC pressure, 0.7× FX shock, 0.5× conflict, 0.3× weather and 0.3× PSD shortfall, plus the step-02 climate kick. Inflation, INFORM and governance terms are zero in the nowcast, so they add nothing. Transient signals (single-week flood, AQ spikes, US river noise) do not. The structural f2030 is preserved on each country as <code style="font-size:10.5px;background:var(--bg1);padding:1px 5px;border-radius:3px;">_f2030Structural</code>.'},
         ].map(s=>`
           <div style="display:flex;gap:14px;align-items:flex-start;">
             <div style="font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--accent);background:var(--accent)18;border-radius:4px;padding:3px 7px;flex-shrink:0;margin-top:1px;">${s.step}</div>
@@ -38098,16 +38123,16 @@ function renderMethodologyTab() {
         <span class="meth-acc-chev">▾</span>
       </summary>
       <div class="meth-acc-body">
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:14px;">
         ${[
-          {icon:'✓',title:'6-Hour Refresh (v21.x trust pass)',body:`Live signals from ${(LIVE?.manifest?.summary?.total_sources) || 40} public pipelines: WFP HungerMap (global + per-country FX/inflation), IPC, ACLED, FAO FFPI, ReliefWeb, Eurostat food HICP, FAOSTAT food CPI, World Bank WDI/WGI/WFSO/Pink Sheet/Aqueduct/CCKP/LPI, UNDP HDI, USDA PSD, ND-GAIN, INFORM, Open-Meteo (weather + river flood), USGS Water, OpenAQ, UN Comtrade, Feeding America: are fetched every 6 hours via GitHub Actions. The status pill in the top-right reads from a daily-generated <code style="font-size:10px;background:var(--bg1);padding:1px 4px;border-radius:3px;">data/source_manifest.json</code> showing per-feed Healthy / Manual / Degraded / Setup-required / Failed status. The structural baseline (FAO/USDA/WB/ND-GAIN) updates annually; a per-country <b>nowcast adjustment</b> (range &minus;10 to +35) is layered on top, plus a smaller persistent-shock overlay that nudges the 2030 modeled outlook.`},
+          {icon:'✓',title:'6-Hour Refresh',body:`Live signals from ${(LIVE?.manifest?.summary?.total_sources) || 40} public pipelines: WFP HungerMap (global + per-country FX/inflation), IPC, ACLED, FAO FFPI, ReliefWeb, Eurostat food HICP, FAOSTAT food CPI, World Bank WDI/WGI/WFSO/Pink Sheet/Aqueduct/CCKP/LPI, UNDP HDI, USDA PSD, ND-GAIN, INFORM, Open-Meteo (weather + river flood), USGS Water, OpenAQ, UN Comtrade, Feeding America: are fetched every 6 hours via GitHub Actions. The status pill in the top-right reads the 6-hourly <code style="font-size:10px;background:var(--bg1);padding:1px 4px;border-radius:3px;">data/source_manifest.json</code> showing per-feed Healthy / Manual / Degraded / Stale / Setup-required / Failed status. The structural baseline (FAO/USDA/WB/ND-GAIN) updates annually; a per-country <b>nowcast adjustment</b> (range &minus;10 to +35) is layered on top, plus a smaller persistent-shock overlay that nudges the 2030 modeled outlook.`},
           {icon:'✓',title:'Sub-national Drill-Down',body:'For crisis countries with IPC sub-national analysis (Sudan, Yemen, Somalia, Afghanistan, Haiti, S.Sudan, DRC, Burkina, Niger, Nigeria and ~25 others), the country panel shows admin-1 area scores. Where IPC sub-national data is unavailable we now report the national min/max range so users see variance, not just the average.'},
           {icon:'✓',title:'Absolute Calibration Anchors',body:'Every country panel shows the relative FDRS alongside <b>absolute</b> reference numbers: FAO prevalence of undernourishment %, IPC Phase 3+ population %, WFP poor food consumption % (FCS), and World Bank food CPI inflation %. Use these to translate the FDRS into something concrete.'},
           {icon:'✓',title:'US States Methodology',body:'US state scores now incorporate <b>Feeding America Map the Meal Gap</b> food-insecurity prevalence at state level (annual release, May). The base score of each state = round(0.7 × MMG + 0.3 × structural), where MMG = clip(round((food insecurity % − 5) ÷ 15 × 75 + 10)) and structural is the nine-component score; the nowcast is added on top.'},
           {icon:'✓',title:'Real Trade Volumes',body:'When the UN Comtrade refresh is configured, import/export arcs use actual bilateral trade in cereal staples (HS 1001 wheat, 1005 maize, 1006 rice, 1201 soybeans): tonnage and USD values, not estimated shares. Arc weight reflects real % of imports.'},
           {icon:'ℹ',title:'FDRS Remains a Composite Index',body:'FDRS is a ranked-position score, not a direct % of food-insecure population. The new <b>absolute anchors</b> address this by sitting next to it. A country at FDRS 50 is in the middle of the global distribution; the anchors tell you what 50 looks like in human terms.'},
           {icon:'ℹ',title:'Source Lag (Structural Layer Only)',body:'Annual data, FAOSTAT food balance sheets, USDA PSD production, still has 6–18 month lags inherent to those releases. The nowcast layer compensates by adjusting for live signals that the slow data cannot capture (active conflict, recent IPC declarations, current price shocks).'},
-          {icon:'ℹ',title:'Where the Numbers Come From · provenance classes',body:'Every panel labels its inputs by one of five classes (in order of trustworthiness). <b style="color:#6ba36b">SOURCED</b>: fetched live from a public pipeline (WFP HungerMap, FAO FFPI, Eurostat HICP, USDA PSD, WB WDI/Pink Sheet/Aqueduct/CCKP, ND-GAIN, INFORM, ReliefWeb, Open-Meteo, USGS, OpenAQ, UN Comtrade). <b style="color:#7c9fcf">MANUAL</b>: hand-maintained snapshot of an official public release (e.g. Feeding America Map the Meal Gap; updated each May). <b style="color:var(--accent)">MODELED</b>: computed at render time from sourced inputs (Supply-Chain Exposure, the illustrative reconstruction since 2018, the 2030 persistent-shock overlay). <b style="color:#c47a3c">CURATED</b>: legacy heritage value awaiting re-derivation from a sourced feed; shown as <code style="font-size:10px;background:var(--bg1);padding:1px 4px;border-radius:3px;">CURATED · STATIC</code> or <code style="font-size:10px;background:var(--bg1);padding:1px 4px;border-radius:3px;">CURATED · IMPORT-DEP</code>. <b style="color:#c44b3c">ILLUSTRATIVE</b>, plausible example with no upstream data (e.g. company sourcing shares, traders don\'t publish per-country tonnage). The v21 nowcast composes 15 sub-signals from these inputs; the formula is open in /scripts/build_nowcast.py and the per-feed status is in the Data Status tab.'},
+          {icon:'ℹ',title:'Where the Numbers Come From · provenance classes',body:'Every panel labels its inputs by one of five classes (in order of trustworthiness). <b style="color:#6ba36b">SOURCED</b>: fetched live from a public pipeline (WFP HungerMap, FAO FFPI, Eurostat HICP, USDA PSD, WB WDI/Pink Sheet/Aqueduct/CCKP, ND-GAIN, INFORM, ReliefWeb, Open-Meteo, USGS, OpenAQ, UN Comtrade). <b style="color:#7c9fcf">MANUAL</b>: hand-maintained snapshot of an official public release (e.g. Feeding America Map the Meal Gap; updated each May). <b style="color:var(--accent)">MODELED</b>: computed at render time from sourced inputs (Supply-Chain Exposure, the illustrative reconstruction since 2018, the 2030 persistent-shock overlay). <b style="color:#c47a3c">CURATED</b>: legacy heritage value awaiting re-derivation from a sourced feed; shown as <code style="font-size:10px;background:var(--bg1);padding:1px 4px;border-radius:3px;">CURATED · STATIC</code> or <code style="font-size:10px;background:var(--bg1);padding:1px 4px;border-radius:3px;">CURATED · IMPORT-DEP</code>. <b style="color:#c44b3c">ILLUSTRATIVE</b>, plausible example with no upstream data (e.g. company sourcing shares, traders don\'t publish per-country tonnage). The nowcast combines 13 live terms (5 more are kept at zero) from these inputs; the formula is open in /scripts/build_nowcast.py and the per-feed status is in the Data Status tab.'},
         ].map(c=>`
           <div style="background:var(--bg1);border:1px solid var(--b1);border-radius:3px;padding:14px 16px;">
             <div style="font-size:12.5px;font-weight:600;color:var(--t1);margin-bottom:6px;">${c.icon} ${c.title}</div>
@@ -40267,13 +40292,13 @@ async function refreshLiveData() {
     <!-- Commodity prices · World Bank Pink Sheet -->
     <div class="card" style="margin-bottom:18px;">
       <div class="card-title"><span class="card-marker"></span> Commodity Benchmarks · World Bank Pink Sheet
-        <span style="font-family:'Geist Mono',monospace;font-size:9.5px;color:var(--accent);background:var(--accent)18;padding:1px 6px;border-radius:3px;margin-left:8px;letter-spacing:.05em;text-transform:uppercase;">monthly source</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:9.5px;color:var(--accent);background:var(--accent)18;padding:1px 6px;border-radius:3px;margin-left:8px;letter-spacing:.05em;text-transform:uppercase;">change vs prior month</span>
       </div>
       ${commodities.map(cm=>`
         <div class="live-indicator-row">
           <div class="live-status-dot ${cm.status}"></div>
           <div class="live-indicator-name">${cm.name}</div>
-          <div style="font-size:10px;color:var(--t3);flex:1;padding-left:10px;">${cm.note}</div>
+          <div class="live-indicator-note" style="font-size:10px;color:var(--t3);flex:1;padding-left:10px;">${cm.note}</div>
           <div class="live-indicator-val">${cm.val}<span style="color:var(--t3);font-size:10px"> ${cm.unit}</span></div>
           <div class="live-indicator-chg" style="color:${cm.chg.startsWith('+')?'#c44b3c':cm.chg==='n/a'?'var(--t3)':'#6ba36b'}">${cm.chg}</div>
         </div>`).join('')}
