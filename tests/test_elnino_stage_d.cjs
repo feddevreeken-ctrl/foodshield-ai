@@ -176,7 +176,7 @@ test('Reported draws every hazard in El Niño countries, rings the verdict, and 
  const oldPins=S.alertPins,oldEv=ctx.window.disturbanceEvents,oldNews=S.news,oldHl=S._hl;
  const zweRain=(S.isoIndex.ZWE||[{}]).map(r=>r.rain).filter(Boolean)[0], today=new Date().toISOString().slice(0,10);
  const fitType=zweRain==='drier'?'drought':'flood', oppType=zweRain==='drier'?'flood':'drought';
- S.alertPins=[];S._hl=null;S.news={items:[{title:'El Niño headline',source:'x',countries_mentioned:['ZWE'],published_at:today},{title:'too broad',countries_mentioned:['ZWE','ZAF','MOZ','MWI'],published_at:today}]};
+ const oldG=S.gdacs;S.gdacs=null;S.alertPins=[];S._hl=null;S.news={items:[{title:'El Niño headline',source:'x',countries_mentioned:['ZWE'],published_at:today},{title:'too broad',countries_mentioned:['ZWE','ZAF','MOZ','MWI'],published_at:today}]};
  ctx.window.disturbanceEvents=[
   {iso:'ZWE',type:fitType,date:today,title:'fits',severity:'high',source:'GDACS'},
   {iso:'ZWE',type:oppType,date:today,title:'opposite',severity:'high',source:'GDACS'},
@@ -194,7 +194,7 @@ test('Reported draws every hazard in El Niño countries, rings the verdict, and 
  assert(S.alertPins.find(m=>m.options.ensoVerdict==='against').tooltip.includes('Runs against the usual pattern'));
  assert.equal(c.headlines,2,'both El Niño-country headlines are counted; only the one naming one to three countries gets a map tab');
  const oldShow=S.showAlerts;S.showAlerts=true;const leg=api.alertLegend();S.showAlerts=oldShow;assert(leg.includes('1 run against it'));assert(leg.includes('Fitting the pattern is not attribution'));
- S.alertPins=oldPins;ctx.window.disturbanceEvents=oldEv;S.news=oldNews;S._hl=oldHl;
+ S.alertPins=oldPins;ctx.window.disturbanceEvents=oldEv;S.news=oldNews;S._hl=oldHl;S.gdacs=oldG;
 });
 test('Shipping keeps one unboxed SVG label per chokepoint, with no corridor chips',()=>{
  assert.equal(S.corridorLabels.length,0);

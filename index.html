@@ -10028,6 +10028,16 @@ body::before {
 #enso-legend .enso-legend.is-reported > .enso-legend-wide { grid-column:1 / -1; }
 @media (max-width:1099px) { #enso-legend .enso-legend.is-reported { grid-template-columns:minmax(0,1fr); } }
 .enso-legend-caveat { margin-top:6px; font-size:11px; line-height:1.45; color:var(--t3); max-width:38ch; }
+.enso-ledger-map { display:flex; align-items:center; gap:3px; flex-wrap:wrap; }
+.enso-ledger-map svg { flex:none; }
+.enso-hw { width:100%; height:auto; display:block; }
+.enso-hw .enso-hw-t { font:10px 'Geist Mono',monospace; fill:#8b8980; }
+.enso-hw .enso-hw-l { font:12px 'Geist',sans-serif; fill:#c9c6bd; }
+.enso-pw-more { margin-top:6px; font-size:12px; font-weight:400; white-space:normal; overflow-wrap:anywhere; max-width:34ch; }
+#enso-pricewatch th[scope=row] { white-space:normal; }
+.enso-pw-more summary { cursor:pointer; color:var(--t3); font:11px 'Geist Mono',monospace; }
+.enso-pw-more p { margin:6px 0 0; color:var(--t2); }
+.enso-wp-more > summary { cursor:pointer; margin:12px 0; color:var(--t2); font-size:13px; }
 .enso-rank-discs { display:inline-flex; gap:2px; vertical-align:-2px; margin-left:4px; }
 .enso-verdict-row { background:none; border:0; padding:0; color:inherit; font:inherit; text-align:left; cursor:pointer; display:flex; gap:8px; align-items:center; }
 .enso-verdict-row[aria-pressed="true"] span { color:var(--t1); text-decoration:underline; }
@@ -13678,8 +13688,9 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
       </div>
 
       <div class="subview" id="subview-ensomoney" role="tabpanel" aria-labelledby="viewbtn-ensomoney">
-        <div id="enso-whopays"></div>
+        <div id="enso-pricewindows"></div>
         <div id="enso-pricewatch"></div>
+        <div id="enso-whopays"></div>
         <section id="enso-money" class="enso-sec"></section>
         <section id="enso-people" class="enso-sec"></section>
       </div>
@@ -44976,10 +44987,7 @@ function showCommodityDetail(key) {
     try {
       var grid = document.querySelector('#tab-elnino .enso-mapgrid'), sv = document.getElementById('subview-' + S.sub);
       if (!grid || !sv) return;
-      if (S.sub === 'ensowater') {
-        var slot = document.getElementById('enso-water-lead'), lb = document.querySelector('#enso-water .enso-lane-board');
-        if (slot && lb) { slot.innerHTML = ''; slot.appendChild(lb); }
-      }
+
       /* Ocean is the landing view: the sea-surface map opens it, the strength odds follow. */
       if (S.sub === 'elnino' || S.sub === 'ensolive' || S.sub === 'ensomoney' || S.sub === 'ensowater') { if (sv.firstElementChild !== grid) { sv.insertBefore(grid, sv.firstElementChild); resizeEnsoMap(); } return; }
       var lead = document.getElementById({ ensoharvest: 'enso-outlook', ensowater: 'enso-water-lead', ensomoney: 'enso-whopays', ensolive: 'enso-live-lead' }[S.sub]);
@@ -48086,7 +48094,22 @@ function showCommodityDetail(key) {
   }
   function drawAlerts() {
     if (S.alertPins.length || !S.map) return;
-    var evs = (typeof window !== 'undefined' && window.disturbanceEvents) || [];
+    var evs = ((typeof window !== 'undefined' && window.disturbanceEvents) || []).slice();
+    /* A GDACS drought or flood can cover several countries, but the event feed pins it once, at its
+       epicentre. Each affected El Niño country gets its own report, so Somalia's share of a Horn of
+       Africa drought is on the map, not only Djibouti's. */
+    var seenG = {}; evs.forEach(function (e) { if (e && /GDACS/.test(e.source || '')) seenG[e.iso + '|' + (e.url || '')] = 1; });
+    Object.keys(S.gdacs || {}).forEach(function (k) {
+      var g = S.gdacs[k]; if (!g || !g.url) return;
+      var ty = { DR: 'drought', FL: 'flood', TC: 'cyclone', EQ: 'earthquake' }[g.event_type]; if (!ty) return;
+      if (!g.is_current && !(Date.parse(g.to_date || '') >= Date.now() - ENSO_REPORT_DAYS * 864e5)) return;
+      (g.affected_iso3 || []).forEach(function (iso) {
+        if (!(S.isoIndex || {})[iso] || seenG[iso + '|' + g.url]) return;
+        seenG[iso + '|' + g.url] = 1;
+        evs.push({ iso: iso, type: ty, severity: g.alert_level === 'Red' ? 'critical' : 'high', source: 'GDACS', url: g.url, date: g.to_date || g.from_date,
+          title: (g.event_type_label || ty) + ' · ' + (g.alert_level || '') + ' alert covering ' + (g.affected_iso3 || []).length + ' countries' + (g.from_date ? ', since ' + g.from_date : '') });
+      });
+    });
     var now = Date.now(), SEVPX = { critical: 20, high: 17, medium: 14, low: 11 }, SEVR = { critical: 4, high: 3, medium: 2, low: 1 };
     var c = { n: 0, fits: 0, against: 0, none: 0, countries: 0, crisis: 0, headlines: 0, elsewhere: 0, price: 0, trade: 0, other: 0, unplaced: 0, newest: null };
     var groups = {};
@@ -48349,7 +48372,7 @@ function showCommodityDetail(key) {
     if (S.showElsewhere) S.contextPins.forEach(function (m) { m.addTo(S.map); });
     if (S.showHeadlines) { drawHeadlines(); S.headlinePins.forEach(function (m) { m.addTo(S.map); }); }
     drawCallouts();
-    if (S.sub === 'ensolive') { paint(); try { renderMapRanking(); } catch (e) {} }
+    if (S.sub === 'ensolive') { paint(); try { renderMapRanking(); } catch (e) {} try { renderLive(); } catch (e) {} }
   }
 
   /* Jump from any live/news row to that country on the map. */
@@ -48707,6 +48730,8 @@ function showCommodityDetail(key) {
       ['stlouis', 'Mississippi at St. Louis', 'ft', 'enso-c-stl'], ['barge_stlouis', 'St. Louis barge rate', '% of tariff', 'enso-c-barge'], ['gulf_loadings', 'Grain ships loaded, US Gulf', 'ships in 7 days', 'enso-c-gulf'],
       ['kaub', 'Rhine at Kaub', 'cm', 'enso-c-kaub'], ['rosario', 'Paraná at Rosario', 'm', 'enso-c-rosario'], ['manaus', 'Rio Negro at Manaus', 'm', 'enso-c-manaus']
     ].filter(function (x) { return G[x[0]]; });
+    /* Order: Panama, then what the squeeze costs (freight), then the rivers, then ports. */
+    var beforeGauge = out.length;
     if (cells.length) {
       out += '<figure class="enso-plate enso-gauge-plate">' + plateHead('River levels and barge costs now', 'NOAA NWPS · USDA AgTransport and Grain Transportation Report · WSV PEGELONLINE · INA Argentina · ANA Brazil', gd, 'observed') +
         plateKey([['is-line', '#ebe9e2', 'Measured'], ['is-dash', '#e0864a', 'Reference named under each gauge'], ['is-dash', '#ebe9e2', 'Dotted: NWS forecast (St. Louis)']]) +
@@ -48733,7 +48758,7 @@ function showCommodityDetail(key) {
         '<figcaption class="enso-log">River stage, barge rate and Gulf loadings are one chain: low water at St. Louis raises barge freight first and, if it lasts, shows up as fewer ocean ships loading grain at the Gulf. The Mississippi and Rhine have no published El Niño link; they are shown because low water there slows grain whatever the Pacific does.' +
         ((S.gauges.unavailable || []).length ? ' Not reached this run: ' + S.gauges.unavailable.map(function (u) { return esc(u.key); }).join(', ') + '.' : '') + '</figcaption></figure>';
     }
-    out += freightPlate();
+    out = out.slice(0, beforeGauge) + freightPlate() + out.slice(beforeGauge);
     /* The harvest × lane table repeated the harvest ledger and mostly read "no El Niño slope";
        its one useful join, the southern African shortfall that these ports must replace, opens the ports plate. */
     var zafRow = ((S.outlook && S.outlook.rows_all) || []).filter(function (r) { return r.iso === 'ZAF' && r.crop === 'corn' && r.status === 'shown'; })[0];
@@ -48835,7 +48860,7 @@ function showCommodityDetail(key) {
     if (!lanes.length) { el.innerHTML = ''; return; }
     var pan = lanes.filter(function (l) { return l.id === 'panama'; })[0], readOn = stamp(metaDate('lanes'));
     var out = '<div class="enso-view-open"><h2 class="enso-h">Shipping restrictions and transits</h2></div>';
-    out += shippingStatus(lanes) + laneBoard(lanes, readOn);
+    /* The phase and the Panama readings are the map tag now; the lane board closes the lens as its index. */
     if (pan) {
       out += '<section class="enso-plate enso-panama-pair" aria-label="Panama capacity and observed transits">';
       var pr = pan.precedent_2023, lv = pan.live_2026, pw = laneStatus(pan);
@@ -48880,7 +48905,7 @@ function showCommodityDetail(key) {
           (pw ? '<p class="enso-meta">Baseline ' + esc(pwWindow(pw.baseline_window)) + ' · IMF PortWatch, read ' + esc(stamp(metaDate('portwatch'))) + '</p>' : ln.portwatch_key ? '<p>AIS data unavailable; awaiting the next PortWatch update.</p>' : '') +
           (ln.sources || []).map(function (src) { return '<p><a href="' + esc(safeUrl(src.url)) + '" target="_blank" rel="noopener">' + esc(src.label) + '</a></p>'; }).join('') + '</div></div></details></td></tr>';
       }).join('') + '</tbody></table>' + (lanes.length > 3 ? '</details>' : '') + '</div><figcaption class="enso-log">Attribution describes each lane’s mechanism; today’s transit changes have several causes.</figcaption></figure>';
-    el.innerHTML = out;
+    el.innerHTML = out + laneBoard(lanes, readOn);
     el.querySelectorAll('[data-board-lane]').forEach(function (row) {
       row.onclick = function () {
         var id = row.dataset.boardLane, lane = lanes.find(function (ln) { return ln.id === id; });
@@ -48952,7 +48977,8 @@ function showCommodityDetail(key) {
       plateHead('Who pays for the harvest changes', 'This site’s model × USDA trade balances × UN Comtrade buyers × World Bank prices · at ONI ' + num(O.cases.record.oni, 1), stamp(metaDate('outlook')), 'modelled') +
       '<div class="plate-body"><div class="enso-wp-totals">' + totals + '</div>' + lede +
       '<div class="enso-wp-table" role="table" aria-label="Who pays for each producer’s shortfall"><div class="enso-wp-row enso-wp-head" role="row"><div role="columnheader">Producer and shortfall</div><div role="columnheader"><i class="k-imp"></i>Producer must import</div><div role="columnheader"><i class="k-exp"></i>Its buyers must replace · one block per buyer</div></div>' +
-      W.map(row).join('') + '</div></div>' +
+      W.slice(0, 2).map(row).join('') + '</div>' +
+      (W.length > 2 ? '<details class="enso-wp-more"><summary>' + (W.length - 2) + ' more producers</summary><div class="enso-wp-table" role="table" aria-label="More producers">' + W.slice(2).map(row).join('') + '</div></details>' : '') + '</div>' +
       '<figcaption class="enso-log"><b>Order of magnitude only.</b> ' + (weak.length ? 'For ' + esc(weak.join(', ')) + ', the El Niño term sized past El Niño changes no better than the same fit without it, so treat ' + (weak.length > 1 ? 'those rows' : 'that row') + ' as rough. ' : '') +
       '* marks a buyer capped at its normal imports; the rest goes to others. Bars share one scale, set by ' + esc(nameFor(W[0].iso)) + '’s ' + kt(W[0].loss_kt) + ' shortfall. Costs use today’s World Bank prices, not forecasts; freight and the white-maize premium are extra, so the real bill is higher.</figcaption>' +
       '<details class="enso-evidence-note"><summary>How this is counted</summary><p>' + esc(O.who_pays_rule) + ' Buyer shares are UN Comtrade ' + esc(String((W[0] || {}).comtrade_year || '')) + ' export values, not tonnes, five largest buyers named.</p>' +
@@ -48965,6 +48991,34 @@ function showCommodityDetail(key) {
      harvest window, the dated local precedent from the last events, today's
      World Bank price, what local markets are monitored, and any export measure
      in force. Every value comes from a feed or a curated, cited file. */
+  /* When the harvests El Niño usually hits come in: one row per published region, a bar from the start to
+     the end of its lag window after the December peak. Dashed = still ahead, filled = being harvested now,
+     grey = passed. Same dashes as the map's rings. Read from the regions file; not a forecast. */
+  function renderHarvestWindows() {
+    var el = document.getElementById('enso-pricewindows'); if (!el) return;
+    var pk = peakIdx(), regs = ((S.regions && S.regions.regions) || []).filter(function (r) { return r.id !== 'peru_ecuador' && parseLag(r.lag_months); });
+    if (pk == null || !regs.length) { el.innerHTML = ''; return; }
+    var now = new Date(), today = now.getUTCFullYear() * 12 + now.getUTCMonth();
+    var rows = regs.map(function (r) { var l = parseLag(r.lag_months); return { r: r, lo: pk + l.lo, hi: pk + l.hi }; }).sort(function (a, b) { return a.lo - b.lo || a.hi - b.hi; });
+    var x0 = Math.min(today, rows[0].lo) - 1, x1 = Math.max.apply(null, rows.map(function (q) { return q.hi; })) + 1;
+    var W = 880, L0 = 250, RH = 22, top = 26, H = top + rows.length * RH + 12, X = function (m) { return L0 + (m - x0) / (x1 - x0) * (W - L0 - 10); };
+    var ticks = ''; for (var m = x0; m <= x1; m++) if (m % 3 === 0) ticks += '<line x1="' + X(m).toFixed(1) + '" x2="' + X(m).toFixed(1) + '" y1="' + (top - 4) + '" y2="' + (H - 8) + '" stroke="#2a323c" stroke-width="1"/><text x="' + X(m).toFixed(1) + '" y="' + (top - 9) + '" text-anchor="middle" class="enso-hw-t">' + MON3[m % 12] + (m % 12 === 0 ? ' ' + Math.floor(m / 12) : '') + '</text>';
+    var body = rows.map(function (q, i) {
+      var y = top + i * RH, st = today < q.lo ? 'ahead' : today <= q.hi ? 'now' : 'passed', sg = q.r.effect_direction < 0 ? 'dry' : 'wet';
+      var bar = st === 'ahead' ? '<rect x="' + X(q.lo).toFixed(1) + '" y="' + (y + 5) + '" width="' + Math.max(3, X(q.hi + 1) - X(q.lo)).toFixed(1) + '" height="11" fill="none" stroke="#d8c9a8" stroke-width="1.2" stroke-dasharray="2 3"/>' :
+        '<rect x="' + X(q.lo).toFixed(1) + '" y="' + (y + 5) + '" width="' + Math.max(3, X(q.hi + 1) - X(q.lo)).toFixed(1) + '" height="11" fill="' + (st === 'now' ? '#d8c9a8' : '#606268') + '" fill-opacity="' + (st === 'now' ? .55 : .5) + '"/>';
+      return '<g><title>' + esc((q.r.label || q.r.id) + ': ' + (q.r.damage_season || '') + '; lag ' + q.r.lag_months + ' months after the peak; ' + monTxt(q.lo) + '–' + monTxt(q.hi) + ', ' + (st === 'ahead' ? 'still ahead' : st === 'now' ? 'under way' : 'passed')) + '</title>' +
+        '<svg x="4" y="' + (y + 5) + '" width="16" height="11" viewBox="0 0 18 12">' + hatchSwatch(sg).replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '') + '</svg>' +
+        '<text x="26" y="' + (y + 14) + '" class="enso-hw-l">' + esc(q.r.label || q.r.id) + '</text>' + bar + '</g>';
+    }).join('');
+    var tx = X(today + (now.getUTCDate() - 1) / 30).toFixed(1), px = X(pk + .5).toFixed(1);
+    el.innerHTML = '<figure class="enso-plate enso-pricewindows-plate is-published" data-kind="published" id="enso-pricewindows-fig">' +
+      plateHead('When the harvests El Niño usually hits come in', 'Published teleconnection lags after the ' + monTxt(pk) + ' peak · enso_regions.json', stamp(metaDate('regions')), 'published') +
+      '<div class="plate-body"><svg class="enso-hw" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Harvest windows by region, ' + rows.length + ' regions">' + ticks +
+      '<line x1="' + px + '" x2="' + px + '" y1="' + (top - 4) + '" y2="' + (H - 8) + '" stroke="#e0673c" stroke-width="1" stroke-dasharray="3 3"/><text x="' + px + '" y="' + (H - 1) + '" text-anchor="middle" class="enso-hw-t" fill="#e0673c">peak</text>' +
+      body + '<line x1="' + tx + '" x2="' + tx + '" y1="' + (top - 4) + '" y2="' + (H - 8) + '" stroke="#ebe9e2" stroke-width="1.2"/><text x="' + tx + '" y="' + (H - 1) + '" text-anchor="middle" class="enso-hw-t" fill="#ebe9e2">today</text></svg></div>' +
+      '<figcaption class="enso-log">Dashed: the harvest El Niño usually hits is still ahead, so prices there cannot show it yet (the map’s dashed rings). Filled: under way. Grey: passed. Hatch: output usually falls (ochre) or rises (blue). Windows are the published lag after the December peak of the event now under way; not a forecast. The anchoveta region is left out.</figcaption></figure>';
+  }
   function renderPriceWatch() {
     var el = document.getElementById('enso-pricewatch'); if (!el) return;
     var O = S.outlook, rows = ((O && O.rows_all) || []).filter(function (r) { return r.status === 'shown' && !r.in_season && r.change_pct_record < 0; });
@@ -49033,10 +49087,10 @@ function showCommodityDetail(key) {
     if (!items.length) { el.innerHTML = ''; return; }
     el.innerHTML = '<figure class="enso-plate enso-pricewatch-plate is-published" data-kind="published">' +
       plateHead('Which prices to watch, and when', 'This site’s fit · curated local-price precedents · World Bank Pink Sheet · World Bank RTFP · export measures in force', stamp(metaDate('outlook')), 'published') +
-      '<div class="plate-body"><table class="enso-live-table"><thead><tr><th scope="col">Commodity</th><th scope="col">Harvest change at ONI ' + num(((S.outlook || {}).cases || { record: { oni: 2.5 } }).record.oni, 1) + ' (this site’s fit)</th><th scope="col">What happened last time</th><th scope="col">World price, five years</th><th scope="col">Policy in force</th></tr></thead><tbody>' +
+      '<div class="plate-body"><table class="enso-live-table"><thead><tr><th scope="col">Commodity</th><th scope="col">Harvest change at ONI ' + num(((S.outlook || {}).cases || { record: { oni: 2.5 } }).record.oni, 1) + ' (this site’s fit)</th><th scope="col">World price, five years</th><th scope="col">Policy in force</th></tr></thead><tbody>' +
       items.map(function (x) {
-        return '<tr><th scope="row">' + esc(x.k) + '</th><td>' + (x.fit.length ? line(x.fit) : '<span class="enso-ol-na">no fitted pair</span>') + '</td>' +
-          '<td>' + (x.prec || '<span class="enso-ol-na">—</span>') + (x.lit ? '<span class="enso-live-sub">Published estimates: ' + esc(x.lit) + '</span>' : '') + '</td>' +
+        /* Precedent and published estimates are the reference behind a row, so they fold under the commodity. */
+        return '<tr><th scope="row">' + esc(x.k) + (x.prec || x.lit ? '<details class="enso-pw-more"><summary>Last time</summary>' + (x.prec ? '<p>' + x.prec + '</p>' : '') + (x.lit ? '<p class="enso-live-sub">Published estimates: ' + esc(x.lit) + '</p>' : '') + '</details>' : '') + '</th><td>' + (x.fit.length ? line(x.fit) : '<span class="enso-ol-na">no fitted pair</span>') + '</td>' +
           '<td class="enso-ol-v">' + (x.p ? priceSpark(x.p.history) + '$' + Math.round(x.p.usd_per_t).toLocaleString('en-US') + '/t <span class="enso-live-sub">' + esc(x.p.series) + ', ' + esc(/^\d{4}-\d{2}$/.test(x.p.month) ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+x.p.month.slice(5) - 1] + ' ' + x.p.month.slice(0, 4) : x.p.month) + (x.p.mom != null ? ' · ' + (x.p.coarse ? '≈' : '') + pct(x.p.mom) + ' m/m' : '') + (x.p.yoy != null ? ' · ' + (x.p.coarse ? '≈' : '') + pct(x.p.yoy) + ' y/y' : '') + (x.p.coarse ? ' (approximate)' : '') + '</span>' : '<span class="enso-ol-na">—</span>') + (x.now ? '<span class="enso-live-sub">FAO: ' + x.now + '</span>' : '') + '</td>' +
           '<td>' + (x.pol || '<span class="enso-ol-na">' + ((S.restrictions || []).some(function (r) { return x.polRe.test(r.commodity || ''); }) ? 'none in force' : 'not tracked') + '</span>') + '</td></tr>';
       }).join('') + '</tbody></table></div>' +
@@ -49262,7 +49316,7 @@ function showCommodityDetail(key) {
         '<td class="enso-ol-v">' + when + '</td><td>' + esc(r.status) + '</td></tr>';
     };
     var policyPlate = '<figure class="enso-plate is-published enso-policy-plate" data-kind="published">' +
-      plateHead('Decisions affecting supply', 'Government notifications and wire reports, each checked by hand', stamp(metaDate('restrictions')), 'published') +
+      plateHead('Export decisions in force', 'Government notifications and wire reports, each checked by hand · the lanes they move are on the Shipping lens', stamp(metaDate('restrictions')), 'published') +
       '<div class="plate-body">' + reviewDue('restrictions', 14) + (live.length ? '<table class="enso-live-table"><thead><tr><th scope="col">Country</th><th scope="col">Commodity</th><th scope="col">Measure</th><th scope="col">Ends · next step</th><th scope="col">Status</th></tr></thead><tbody>' + live.map(policyRow).join('') + '</tbody></table>' : '<p class="ctr-note">No export restriction on record is in force today.</p>') +
       (live.some(function (r) { return r.ends_date && (Date.parse(r.ends_date + 'T00:00:00Z') - today) / day < 14; }) ? '<p class="enso-outlook-gap"><b>Review due:</b> ' + live.filter(function (r) { return r.ends_date && (Date.parse(r.ends_date + 'T00:00:00Z') - today) / day < 14 && Date.parse(r.ends_date + 'T23:59:59Z') >= today; }).map(function (r) { return esc(r.country) + '’s ' + esc(String(r.commodity).toLowerCase()) + ' ' + esc(r.measure) + ' ends ' + esc(fmtDate(r.ends_date)); }).join('; ') + ', and no extension is on record (checked ' + esc(stamp(metaDate('restrictions'))) + ').</p>' : '') +
       (function () {
@@ -49344,13 +49398,18 @@ function showCommodityDetail(key) {
     (few.regions || []).forEach(function (r) { (r.iso3 || []).forEach(function (i) { pool[i] = 1; }); });
     Object.keys(linkedIso).forEach(function (i) { if (S.asap && S.asap[i] && S.asap[i].hotspot_code) pool[i] = 1; });
     gd.forEach(function (e) { (e.affected_iso3 || [e.iso3]).forEach(function (i) { if (linkedIso[i]) pool[i] = 1; }); });
+    /* Every country with a hazard mark or a crisis outline on the Reported map has a row here. */
+    var REP = S.reported || {};
+    Object.keys(REP).forEach(function (i) { if (REP[i].events.length || REP[i].crisis) pool[i] = 1; });
     var crop = function (c) { return { corn: 'maize' }[c] || c; };
     /* FEWS NET's high-concern countries count as a signal: their season may not have opened yet. */
     var fewsHigh = {}; (few.regions || []).forEach(function (r) { if (r.concern === 'high') (r.iso3 || []).forEach(function (i) { fewsHigh[i] = 1; }); });
     var ledger = Object.keys(pool).map(function (iso) {
       var a = S.asap && S.asap[iso], cmr = cmBy[iso] || [], al = gdIn([iso]), rt = S.rtfp && S.rtfp[iso], f = fitBy[iso];
       /* Reported signals only; the fit breaks ties and does not raise a country on its own. */
-      var score = cmr.length * 3 + (a && a.hotspot_code === 2 ? 3 : a && a.hotspot_code ? 2 : 0) + (aaTrig[iso] ? 2 : 0) + (aaPri[iso] ? 1 : 0) + Math.min(al.length, 1) + (fewsHigh[iso] ? 2 : 0);
+      var rp = REP[iso] || { events: [], fits: 0 };
+      var score = cmr.length * 3 + (a && a.hotspot_code === 2 ? 3 : a && a.hotspot_code ? 2 : 0) + (aaTrig[iso] ? 2 : 0) + (aaPri[iso] ? 1 : 0) + Math.min(al.length, 1) + (fewsHigh[iso] ? 2 : 0) +
+        (rp.events.length ? 1 : 0) + (rp.fits ? 1 : 0) + (rp.crisis ? rp.crisis - 2 : 0);
       var tie = f && f.change_kt_record < 0 ? 1 : 0;
       return { iso: iso, a: a, cm: cmr, al: al, rt: rt, f: f, score: score, tie: tie };
     }).filter(function (r) { return r.score > 0; }).sort(function (x, y) { return (y.score - x.score) || (y.tie - x.tie) || nameFor(x.iso).localeCompare(nameFor(y.iso)); });
@@ -49367,7 +49426,17 @@ function showCommodityDetail(key) {
       var crops = (r.cm.length ? r.cm.map(function (c) { return '<p><b>' + esc(c.crop) + '</b> ' + esc(c.status) + ' <span class="enso-live-src">Crop Monitor</span><span class="enso-live-sub">' + esc(c.driver) + '</span></p>'; }).join('') : '') +
         (r.a && r.a.hotspot_code ? '<p><b>' + esc(r.a.hotspot_label) + '</b> <span class="enso-live-src">ASAP, ' + esc(assessmentMonth(r.a.assessment_date)) + '</span>' +
           (r.a.comment ? '<details class="enso-live-comment"><summary>ASAP note</summary><p>' + esc(firstSentence(r.a.comment)) + '</p></details>' : '') + '</p>' : '');
-      var haz = (r.al.length ? (function () {
+      /* The map's own reading first: one disc per hazard type with the same verdict ring, then the headline count. */
+      var rp = REP[r.iso], mapLine = '';
+      if (rp && (rp.events.length || rp.crisis)) {
+        var seenT = {}, types = rp.events.filter(function (e) { var k = e.type + (e.weatherKind || ''); if (seenT[k]) return false; seenT[k] = 1; return true; });
+        var hl = headlinesFor(r.iso).length;
+        mapLine = '<p class="enso-ledger-map">' + types.slice(0, 4).map(function (e) { var v = fitVerdict(e), col = ensoTypeColor(e.type);
+            return '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14">' + (v === 'fits' ? '<circle cx="7" cy="7" r="6.2" fill="none" stroke="#f2efe6" stroke-width="1.4"/>' : v === 'against' ? '<circle cx="7" cy="7" r="5.4" fill="none" stroke="#8b8980"/>' : '') + '<circle cx="7" cy="7" r="4" fill="' + col + '"/></svg>'; }).join('') +
+          ' <span>' + (rp.events.length ? rp.events.length + ' report' + (rp.events.length === 1 ? '' : 's') + ': ' + rp.fits + ' fit' + (rp.against ? ', ' + rp.against + ' against' : '') : '') +
+          (rp.crisis ? (rp.events.length ? ' · ' : '') + 'IPC Phase ' + rp.crisis + ' in force' : '') + (hl ? ' · ▤ ' + hl : '') + '</span> <span class="enso-live-src">on the map</span></p>';
+      }
+      var haz = mapLine + (r.al.length ? (function () {
           /* Overlapping alerts of one type and level read as one, dated by the earliest. */
           var by = {}; r.al.forEach(function (e) { var k = e.event_type_label + '|' + e.alert_level; if (!by[k] || String(e.from_date) < String(by[k].from_date)) by[k] = e; });
           return Object.keys(by).map(function (k) { var e = by[k]; return '<p><span class="enso-live-alert is-' + esc(String(e.alert_level || '').toLowerCase()) + '">' + esc(e.event_type_label) + ' · ' + esc(e.alert_level) + '</span> <span class="enso-live-src">GDACS' + (e.from_date ? ', since ' + esc(fmtDate(e.from_date)) : '') + '</span></p>'; }).join('');
@@ -49398,7 +49467,8 @@ function showCommodityDetail(key) {
       '<div class="enso-sec-h"><span>Reported now</span> country by country, joined across the monitoring feeds; strongest signals first</div>' +
       '<table class="enso-live-table enso-ledger">' + lhead + '<tbody>' + ledger.slice(0, 12).map(ledgerRow).join('') + '</tbody></table>' +
       (ledger.length > 12 ? '<details class="enso-ol-more"><summary>' + (ledger.length - 12) + ' more countries with a signal</summary><table class="enso-live-table enso-ledger">' + lhead + '<tbody>' + ledger.slice(12).map(ledgerRow).join('') + '</tbody></table></details>' : '') +
-      '</div><figcaption class="enso-log">Concern levels are FEWS NET’s; the rest is reported by the feed named. A dash: no entry. ' +
+      '</div><figcaption class="enso-log">' + (wfp.added_m ? 'WFP (' + esc(fmtDate(wfp.date)) + '): up to ' + wfp.added_m + ' million more people in acute food insecurity by the ' + esc(wfp.horizon || '') + '. ' : '') +
+      'Concern levels are FEWS NET’s; the rest is reported by the feed named. Discs and rings as on the map. A dash: no entry. ' +
       (function () { var all = Object.keys(S.asap || {}).filter(function (i) { return S.asap[i] && S.asap[i].hotspot_code; }), inside = all.filter(function (i) { return pool[i]; }); return all.length > inside.length ? inside.length + ' of ' + all.length + ' ASAP hotspots are in El Niño-linked or flagged countries and listed here; the other ' + (all.length - inside.length) + ' are on the map. ' : ''; })() +
       '</figcaption></figure>';
 
@@ -49511,10 +49581,10 @@ function showCommodityDetail(key) {
     var nextEnd = live.filter(function (r) { return r.ends_date && Date.parse(r.ends_date + 'T23:59:59Z') >= today; })[0];
     tiles.push([String(live.length), live.length === 1 ? 'export measure in force' : 'export measures in force', nextEnd ? esc(nextEnd.country) + ' ' + esc(String(nextEnd.commodity).toLowerCase()) + ' ends ' + esc(fmtDate(nextEnd.ends_date)) : 'no end date due']);
     var leadEl = document.getElementById('enso-live-lead');
-    if (leadEl) leadEl.innerHTML = '<div class="enso-view-open"><h2 class="enso-h">What is being reported now</h2></div><div class="enso-live-tiles" role="list">' +
-      tiles.map(function (t) { return '<div class="enso-live-tile" role="listitem"><b>' + t[0] + '</b><span>' + t[1] + '</span><i>' + t[2] + '</i></div>'; }).join('') + '</div>';
+    /* The one-sentence answer is the map tag; the lead keeps only the lens heading. */
+    if (leadEl) leadEl.innerHTML = '<div class="enso-view-open"><h2 class="enso-h">What is being reported now</h2></div>';
     el.innerHTML = (leadEl ? '' : '<div class="enso-after-h enso-view-open"><h2 class="enso-h">What is being reported now</h2>' + lead + '</div>') +
-      policyPlate + ledgerPlate + wirePlate;
+      ledgerPlate + wirePlate + policyPlate;
     var agEl = document.getElementById('enso-agencies'); if (agEl) agEl.innerHTML = agencyPlate;
     el.querySelectorAll('[data-map-country]').forEach(function (b) { b.onclick = function () { ensoFocus(b.getAttribute('data-map-country')); }; });
 
@@ -50086,7 +50156,7 @@ function showCommodityDetail(key) {
         renderControls(); renderCoeffs(); renderDetail(); renderCalendar(); renderOutlook();
         if (S.drawn.live) renderLive();
         if (S.drawn.water) renderWater();
-        if (S.drawn.money) { renderWhoPays(); renderPriceWatch(); renderMoney(); renderPeople(); }
+        if (S.drawn.money) { renderHarvestWindows(); renderWhoPays(); renderPriceWatch(); renderMoney(); renderPeople(); }
         if (S.drawn.mech) renderMechanism();
         S.drawn.map = true;
       }
@@ -50097,7 +50167,7 @@ function showCommodityDetail(key) {
     if (S.sub === 'ensowater' && !S.drawn.water) {
       renderWater(); S.drawn.water = true;
     } else if (S.sub === 'ensomoney' && !S.drawn.money) {
-      renderWhoPays(); renderPriceWatch(); renderMoney(); renderPeople(); S.drawn.money = true;
+      renderHarvestWindows(); renderWhoPays(); renderPriceWatch(); renderMoney(); renderPeople(); S.drawn.money = true;
     }
     /* Only draw charts for the view being entered. drawCharts() used to run on
        every switch, tearing down and rebuilding all five Chart.js instances
