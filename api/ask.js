@@ -145,14 +145,21 @@ async function answerFree(body, res, outerSignal) {
   const payload = JSON.stringify({ model: 'openai', stream: true, messages: [{ role: 'system', content: SYSTEM }].concat(buildMessages(body)) });
   let up = null, signal = outerSignal, lastErr = '';
   for (let attempt = 1; attempt <= 2 && !outerSignal.aborted; attempt++) {
-    signal = AbortSignal.any ? AbortSignal.any([outerSignal, AbortSignal.timeout(22000)]) : outerSignal;
+    /* The 22 s limit covers the wait for a first response only; once it starts, the answer may stream. */
+    const ctl = new AbortController();
+    const onOuter = () => ctl.abort();
+    outerSignal.addEventListener('abort', onOuter, { once: true });
+    const timer = setTimeout(() => ctl.abort(), 22000);
+    signal = ctl.signal;
     try {
       up = await fetch(url, { method: 'POST', headers, signal, body: payload });
+      clearTimeout(timer);
       if (up.ok && up.body) break;
       lastErr = `HTTP ${up.status}`;
       if (up.status === 429 || up.status < 500) break;
     } catch (err) {
-      lastErr = signal.aborted ? 'timeout' : (err && err.message) || 'network';
+      clearTimeout(timer);
+      lastErr = signal.aborted && !outerSignal.aborted ? 'timeout' : (err && err.message) || 'network';
       up = null;
     }
     console.warn('[ask] free model attempt', attempt, 'failed:', lastErr, 'after', Date.now() - t0, 'ms');
