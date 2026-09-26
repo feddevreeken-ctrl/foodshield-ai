@@ -1156,21 +1156,15 @@ def _load_prod_trend():
 def _load_food_inflation_overlay():
     """Year-over-year food inflation % per ISO3, from live feeds.
 
-    Source priority (highest wins): World Bank RTFP > WFP per-country >
-    Eurostat food HICP > FAOSTAT food CPI. Returns {iso3: {"value": float,
-    "source": str, "as_of": str|None}}. Only countries with a real number are
-    included; everyone else keeps their legacy_curated `fi`.
-
-    v83 — RTFP added at the top, and it matters most for the countries this
-    dashboard is about. The FAOSTAT rung underneath it is measured badly: 158 of
-    162 countries carry year_latest 2026 with only 3 months in it, so its
-    "year-on-year" is a 3-month average against a full prior year — a
-    seasonality artefact, not a price signal — and 146 of its 176 rows carry no
-    as_of at all. RTFP is market-level, monthly, updated weekly, and every row
-    is stamped with a real date. It covers 37 countries, which is exactly the
-    crisis set the FAOSTAT artefact distorted worst: Ethiopia, Sudan, Somalia,
-    South Sudan, Chad, Haiti, Afghanistan, Yemen's neighbours.
+    One chain shared with the country panel and the nowcast (scripts/food_inflation.py):
+    RTFP > Eurostat > IMF (fresh, not older than FAOSTAT) > FAOSTAT monthly yoy > FAOSTAT
+    complete-year mean. Before 2026-09-26 this took an empty "WFP per-country" field and
+    FAOSTAT's partial-year mean, so the score and the panel could disagree.
+    Returns {iso3: {"value", "source", "as_of", ...}}; countries with no reading keep
+    their legacy `fi`.
     """
+    import food_inflation
+
     def _read(name):
         p = DATA_DIR / name
         if not p.exists():
@@ -1179,93 +1173,15 @@ def _load_food_inflation_overlay():
             obj = json.loads(p.read_text())
         except Exception:
             return {}
-        return obj.get("data", obj) if isinstance(obj, dict) else {}
+        d = obj.get("data", obj) if isinstance(obj, dict) else {}
+        return {k.upper(): v for k, v in d.items() if isinstance(v, dict)}
 
-    # v79 — plausibility band. A higher-priority source must not win with a
-    # physically impossible reading: WFP reports -97.6% YoY food inflation for
-    # South Sudan (prices cannot fall 97.6%) while FAOSTAT reports +118.4% for
-    # the same country. Rejecting the bad value lets the lower-priority source
-    # stand, because sources are written lowest-priority-first. The upper bound
-    # stays generous — Argentina genuinely prints ~250%.
-    FI_MIN, FI_MAX = -50.0, 1000.0
-
-    def _plausible(v):
-        try:
-            f = float(v)
-        except (TypeError, ValueError):
-            return None
-        if f != f or f < FI_MIN or f > FI_MAX:   # NaN or out of band
-            return None
-        return f
-
+    rt, es, imf, fs = (_read(n) for n in ("rtfp.json", "eurostat_food.json", "imf_food_cpi.json", "faostat_food.json"))
     out = {}
-    # 3. FAOSTAT (lowest priority — written first so higher sources overwrite)
-    for iso, rec in _read("faostat_food.json").items():
-        if not isinstance(rec, dict):
-            continue
-        # v79 — refresh_faostat.py writes "food_cpi_yoy_pct"; this lookup asked
-        # for "food_cpi_yoy" and never matched, so all 162 FAOSTAT rows were
-        # silently dropped and only Eurostat's 30 reached the overlay. The
-        # legacy aliases stay as fallbacks.
-        v = (rec.get("food_cpi_yoy_pct") or rec.get("food_cpi_yoy")
-             or rec.get("food_inflation_yoy") or rec.get("yoy"))
-        f = _plausible(v)
-        if f is not None:
-            # v85 — carry a REAL as_of, and say when the comparison is partial.
-            #
-            # 158 of 162 FAOSTAT rows have year_latest 2026 with only 3 months in
-            # it, so "year-on-year" is a 3-month average against a full prior
-            # year — a seasonality artefact, not a price signal. Every one of
-            # those rows was published with as_of null and quality_flag
-            # "sourced". India is the clearest case: 2.33% here against ~5.5%
-            # reported by MOSPI for the same period.
-            _months = rec.get("months_in_latest_year")
-            _yr = rec.get("year_latest") or rec.get("year")
-            _partial = isinstance(_months, int) and 0 < _months < 12
-            out[iso.upper()] = {
-                "value": round(f, 1),
-                "source": "FAOSTAT Consumer Price Indices (food CPI, yoy)",
-                "as_of": (f"{_yr} ({_months}m)" if (_yr and _partial)
-                          else (rec.get("month") or _yr)),
-                "partial_year": _partial,
-                "months_in_year": _months,
-            }
-    # 2. Eurostat (EU/EEA member states)
-    for iso, rec in _read("eurostat_food.json").items():
-        if not isinstance(rec, dict):
-            continue
-        f = _plausible(rec.get("food_hicp_yoy_pct"))
-        if f is not None:
-            out[iso.upper()] = {"value": round(f, 1),
-                                "source": "Eurostat food HICP (yoy %)",
-                                "as_of": rec.get("month")}
-    # 1b. WFP per-country (broad crisis-country coverage)
-    for iso, rec in _read("wfp_country.json").items():
-        if not isinstance(rec, dict):
-            continue
-        # v79 — refresh_wfp_country.py writes "food_inflation_pct"; this asked
-        # for "food_inflation" and matched 0 of 172 rows (147 carry a value).
-        v = (rec.get("food_inflation_pct") or rec.get("food_inflation")
-             or rec.get("food_inflation_yoy") or rec.get("headline_food_inflation"))
-        f = _plausible(v)
-        if f is not None:
-            out[iso.upper()] = {"value": round(f, 1),
-                                "source": "WFP per-country food inflation",
-                                "as_of": rec.get("month") or rec.get("as_of")}
-    # 1a. World Bank RTFP (highest priority — market-observed, real per-country
-    # as_of, weekly refresh). Written last so it wins.
-    for iso, rec in _read("rtfp.json").items():
-        if not isinstance(rec, dict):
-            continue
-        f = _plausible(rec.get("food_inflation_pct"))
-        if f is not None:
-            out[iso.upper()] = {
-                "value": round(f, 1),
-                "source": "World Bank Real-Time Food Prices (RTFP) via HDX",
-                "as_of": rec.get("as_of"),
-                "markets": rec.get("markets"),
-                "confidence": rec.get("confidence"),
-            }
+    for iso in set(rt) | set(es) | set(imf) | set(fs):
+        r = food_inflation.pick(iso, rt, es, imf, fs)
+        if r:
+            out[iso] = r
     return out
 
 

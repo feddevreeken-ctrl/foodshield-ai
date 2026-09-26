@@ -8528,6 +8528,7 @@ button.scn-bar-row:focus-visible { outline: 2px solid var(--accent); outline-off
 }
 .dist-marker .dist-marker-core svg { width: 64%; height: 64%; }
 .dist-marker.is-choke .dist-marker-core { border-radius: 4px; }
+.dist-marker .dist-marker-core.is-context { background: rgba(12,13,15,.9); color: var(--dm); border: 1.5px dashed var(--dm); }
 .dist-marker .dist-marker-ring { inset: auto; width: calc(var(--dm-px) + 10px); height: calc(var(--dm-px) + 10px); border: 1.5px solid var(--dm); opacity: .7; }
 .dist-marker-count {
   position: absolute; top: -3px; right: -4px; min-width: 14px; height: 14px; padding: 0 3px;
@@ -13366,7 +13367,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
           </div>
           <div class="editorial-headline">Which countries run short of food first when a shock hits, <em>and why</em>.</div>
           <div class="editorial-standfirst">
-            When one country fails tomorrow (a war, a drought, a port closure), FoodShield shows <b>who gets hurt, and how badly</b>. Built by one student at Erasmus University Rotterdam, it combines <b id="about-source-count">58</b> public data sources into one comparable score per country: <b id="about-source-auto">51</b> refreshed automatically, six curated by hand, and two currently degraded upstream. Each input links to its source.
+            When one country fails tomorrow (a war, a drought, a port closure), FoodShield shows <b>who gets hurt, and how badly</b>. Built by one student at Erasmus University Rotterdam, it combines <b id="about-source-count">58</b> public data sources into one comparable score per country: <b id="about-source-auto">50</b> refreshed automatically, six curated by hand, and two currently degraded upstream. Each input links to its source.
           </div>
         </div>
         <div id="about-body" class="fade-in"></div>
@@ -25382,7 +25383,7 @@ function _simulateScenario(c, selected, severityById, paramsById) {
       const html = `
         <div class="dist-marker${isChoke ? ' is-choke' : ''}" data-sev="${sev}" style="--dm:${color};--dm-px:${px}px">
           ${sev === 'critical' ? '<div class="dist-marker-ring"></div>' : ''}
-          <div class="dist-marker-core">${distIconSVG(top.type)}</div>
+          <div class="dist-marker-core${top.live || top.type === 'chokepoint' ? '' : ' is-context'}">${distIconSVG(top.type)}</div>
           ${n > 1 ? `<div class="dist-marker-count">${n}</div>` : ''}
           <div class="dist-marker-label" style="border-left:2px solid ${color};">
             <div class="dist-marker-title">${title}</div>
@@ -30645,7 +30646,7 @@ function renderCountryTab() {
       if (fiv) rows.push([fiv.food ? 'Food inflation' : 'Inflation (all items)',
         `<span style="color:${fiv.v > 15 ? '#c44b3c' : fiv.v > 8 ? '#d27a3e' : 'var(--t1)'}">${fiv.v.toFixed(1)}%/yr</span>${fiv.v > 15 ? ' <span style="color:#c44b3c" title="Above the 15% shock threshold">▲</span>' : fiv.v > 8 ? ' <span style="color:#d27a3e">▲</span>' : ''}`,
         esc0(fiv.src || 'live feed') + (fiStale ? ' <span style="color:#c9a957">· stale</span>' : ''),
-        '', 'Source priority: World Bank RTFP > Eurostat > FAOSTAT > World Bank all-items CPI.']);
+        '', 'Source priority: World Bank RTFP > Eurostat > IMF food CPI (when newer) > FAOSTAT food CPI > World Bank all-items CPI (shown, labelled, never scored).']);
       else rows.push(['Food inflation', '<span style="color:var(--t3)">not sourced</span>', 'no feed covers this country', '', '']);
       /* Market prices of the staples people buy, from FAO GIEWS FPMA (median across series, retail where available). */
       const anc = calibrationAnchors(c);
@@ -36375,13 +36376,16 @@ const ML_TYPES = [
   { t:'disease',     c:'#b0607a', l:'Disease outbreak' },
   { t:'earthquake',  c:'#6b5a8a', l:'Earthquake' },
   { t:'chokepoint',  c:'#3a8f8f', l:'Chokepoint' },
+  { t:'restriction', c:'#c9683c', l:'Export restriction' },
   // v87 — a real category for hazards the title-inference ladder cannot name.
   { t:'other',       c:'#7a7a86', l:'Other hazard' },
-  // Capital-city rain / dry / heat anomalies from Open-Meteo: a statistical flag at one
-  // point, not an event. Listed so it can be switched on, off by default.
+  // Capital-city rain / dry / heat anomalies from Open-Meteo: a statistical flag at one point.
   { t:'weather',     c:'#5f7f96', l:'Weather anomaly (capital)' },
+  // Documents and headlines: shown so nothing the feeds carry is hidden, each on its own switch.
+  { t:'report',      c:'#8a8a94', l:'Situation reports' },
+  { t:'claim',       c:'#d8b86a', l:'News headlines' },
 ];
-window._mlState = window._mlState || { distOn:false, sstOn:false, flowsOn:false, expanded:false, hidden:new Set(['weather']) };
+window._mlState = window._mlState || { distOn:false, sstOn:false, flowsOn:false, expanded:false, hidden:new Set() };
 
 /* One icon set for the map markers, the event list and the detail modal: 24-unit line
    drawings in currentColor, so a type reads the same wherever it appears. */
@@ -36406,20 +36410,17 @@ function distIconSVG(type, size) {
   const px = size ? ' width="' + size + '" height="' + size + '"' : '';
   return '<svg viewBox="0 0 24 24"' + px + ' fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
 }
-/* What the "Live disturbances" layer draws: feed events of a listed type. Curated baseline
-   events, restrictions and headline claims live on the Disturbances tab and the Trade tab;
-   chokepoints are standing infrastructure with measured transits. */
+/* What the "Live disturbances" layer draws: every event the Disturbances tab lists, each type on
+   its own switch. Curated context events and restrictions draw hollow (not a live feed reading);
+   news headlines draw as claims. Nothing is dropped silently. */
 function distOnLiveLayer(e) {
-  if (!e || e.source === 'News' || e.type === 'report') return false;
-  if (!ML_TYPES.some(x => x.t === e.type)) return false;
-  return !!e.live || e.type === 'chokepoint';
+  return !!e && ML_TYPES.some(x => x.t === e.type);
 }
 
 function _mlCounts(){
   const c = {};
   if (typeof disturbanceEvents !== 'undefined' && Array.isArray(disturbanceEvents))
-    /* Counts on the "Live disturbances" layer: feed events only. Curated baselines and news claims are
-       drawn (muted or tagged) but not counted as live; chokepoints are standing infrastructure. */
+    /* Counts per type on the layer: every event the Disturbances tab lists. */
     disturbanceEvents.forEach(e => { if (distOnLiveLayer(e)) c[e.type] = (c[e.type] || 0) + 1; });
   return c;
 }
@@ -38043,7 +38044,7 @@ function renderMethodologyTab() {
           {w:'11%',label:'Production Trend',col:'#c9a957',
            desc:`60% sourced, 40% heritage. The sourced term is the OLS slope of ${ac('FAO')}STAT's gross food production index over 2015–2024: flat or growing scores 0, −1%/yr scores 20, −5%/yr or worse scores 100.`},
           {w:'9%',label:'Food Inflation',col:'#c9a957',
-           desc:`Year-on-year food CPI. The score reads World Bank RTFP → Eurostat HICP → ${ac('FAO')}STAT food CPI; countries with none keep the heritage value. Captures realised PRICE stress only: by design it carries no FX or income term (those live in Economic Access), so the two never double-count. Scale: 0% → 15, 15% → 50, 60% → 85, 250%+ → 100.`},
+           desc:`Year-on-year food CPI. The score and the country panel read one chain: World Bank RTFP → Eurostat HICP → IMF food CPI (when newer than FAOSTAT) → ${ac('FAO')}STAT food CPI for the latest month against a year earlier → a complete FAOSTAT year. All-items CPI is never scored. Countries with none keep the heritage value. Captures realised PRICE stress only: by design it carries no FX or income term (those live in Economic Access), so the two never double-count. Scale: 0% → 15, 15% → 50, 60% → 85, 250%+ → 100.`},
           {w:'9%',label:'Climate Vulnerability',col:'#6ba36b',
            desc:`60% sourced composite, 40% heritage. The composite averages whatever is present of ${ac('ND-GAIN')} food vulnerability (0.45), Aqueduct water stress (0.20; drought risk where water stress is missing), Aqueduct riverine flood (0.15), FAO ASAP agricultural stress (0.20) and WB ${ac('CCKP')} observed warming (0.20), renormalised over the present terms. Needs ND-GAIN plus two other terms, else the heritage value stands.`},
           {w:'8%',label:'Conflict / Logistics',col:'#6ba36b',
@@ -39343,8 +39344,9 @@ async function loadDisturbanceData() {
     const k = e.type === 'report' ? e.iso + '|report|' + e.date : e.iso + '|' + norm;
     if (_rwSeen.has(k)) return false;
     _rwSeen.add(k);
+    /* No per-country cap any more: the map groups a country's reports into one marker. */
     _rwPerIso[e.iso] = (_rwPerIso[e.iso] || 0) + 1;
-    return _rwPerIso[e.iso] <= 3;
+    return true;
   });
 
   const seen = new Set();
@@ -39384,15 +39386,18 @@ async function loadDisturbanceData() {
   try {
     const newsEnv = LIVE.commodity_news;
     const newsItems = (newsEnv && newsEnv.data && newsEnv.data.items) || [];
-    const cutoff = Date.now() - 72 * 3600 * 1000;
+    // Every headline from the last seven days that names a country, or touches a mapped
+    // corridor, is placed on that country as a claim. The country named in the story wins
+    // over our corridor attribution.
+    const cutoff = Date.now() - 7 * 24 * 3600 * 1000;
     let promoted = 0;
     for (const it of newsItems) {
-      if (!(it.disruption || []).length) continue;
-      const exposed = (it.exposed || [])[0];
+      const named = (it.countries_mentioned || [])[0];
+      const exposed = named ? { iso: named } : (it.exposed || [])[0];
       if (!exposed) continue;
       const ts = it.published_at ? Date.parse(it.published_at) : NaN;
       if (!isFinite(ts) || ts < cutoff) continue;
-      if (promoted >= 8) break;              // never let news dominate the board
+      if (promoted >= 60) break;
       const c = (typeof byISO === 'function') ? byISO(exposed.iso) : null;
       // Route each promoted item to the map layer that MATCHES what it is.
       // Forcing everything to one type was wrong in both directions: a tariff
@@ -39420,11 +39425,11 @@ async function loadDisturbanceData() {
         // COUNTRY_LL, which is more accurate than anything we could attach
         // here, and it hard-drops any event that stays at 0,0.
         lat: 0, lng: 0,
-        detail: `Reported by ${it.source}. Names: ${it.disruption.join(', ')}. `
-              + `Touches a ${_newsCommodityLabel(exposed.commodity)} corridor of `
-              + `${_newsFmtKt(exposed.kt)} into ${c ? c.name : exposed.iso}. `
-              + `This is a third-party HEADLINE CLAIM, not a verified event, and the `
-              + `country match is our own keyword attribution.`,
+        detail: `Reported by ${it.source}.`
+              + ((it.disruption || []).length ? ` Names: ${it.disruption.join(', ')}.` : '')
+              + (named ? ` The story names ${c ? c.name : exposed.iso}.`
+                       : ` Touches a ${_newsCommodityLabel(exposed.commodity)} corridor of ${_newsFmtKt(exposed.kt)} into ${c ? c.name : exposed.iso} (our keyword attribution).`)
+              + ` A third-party headline, not a verified event.`,
         source: 'News',
         date: (it.published_at || '').slice(0, 10) || new Date().toISOString().slice(0, 10),
         live: true,

@@ -41,10 +41,14 @@ import json
 import math
 import calendar
 import re
+import sys
 from pathlib import Path
 from datetime import datetime, timezone
 
 DATA = Path(__file__).resolve().parent.parent / "data"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import food_inflation  # noqa: E402  (shared with build_countries_dataset and the page)
+_FI_RTFP, _FI_IMF = {}, {}
 
 
 _MONTHS = {m: i for i, m in enumerate(
@@ -145,6 +149,9 @@ def main():
     usgs    = load("usgs_water.json")["data"]
     estat   = load("eurostat_food.json")["data"]
     faostat = load("faostat_food.json")["data"]
+    global _FI_RTFP, _FI_IMF
+    _FI_RTFP = (load("rtfp.json") or {}).get("data", {}) if (DATA / "rtfp.json").exists() else {}
+    _FI_IMF = (load("imf_food_cpi.json") or {}).get("data", {}) if (DATA / "imf_food_cpi.json").exists() else {}
     # v79 — the FX signal was dead. refresh_fx.py has written a real 90-day
     # depreciation for 156/157 countries since v20, but this file only ever read
     # wfp_country.fx_90d_change_pct, which is null in all 172 WFP rows — so
@@ -418,22 +425,12 @@ def main():
         if isinstance(fx_pct, (int, float)) and fx_pct < -10:
             fx_shock = min(3, abs(fx_pct + 10) * 0.1)
 
-        # Food inflation shock — best of three sources, priority HungerMap > Eurostat > FAOSTAT
-        # HungerMap per-country (sticky for crisis countries)
-        food_infl = wc.get("food_inflation_pct")
-        food_infl_source = "hungermap" if food_infl is not None else None
-        # Eurostat (EU only, fresher than FAOSTAT)
-        if food_infl is None:
-            es = estat.get(iso) or {}
-            if es.get("food_hicp_yoy_pct") is not None:
-                food_infl = es["food_hicp_yoy_pct"]
-                food_infl_source = "eurostat"
-        # FAOSTAT (global, but lagged 4-12 months)
-        if food_infl is None:
-            fs = faostat.get(iso) or {}
-            if fs.get("food_cpi_yoy_pct") is not None:
-                food_infl = fs["food_cpi_yoy_pct"]
-                food_infl_source = "faostat"
+        # Food inflation: the same chain as the country panel and the structural score
+        # (scripts/food_inflation.py). Reported for the breakdown only; contributes 0 below.
+        _fi = food_inflation.pick(iso, _FI_RTFP, estat, _FI_IMF, faostat)
+        food_infl = _fi["value"] if _fi else None
+        food_infl_source = ("eurostat" if _fi and _fi["source"].startswith("Eurostat") else
+                            (_fi["source"] if _fi else None))
         # v79 — THE SAME READING WAS BEING CHARGED TWICE.
         #
         # Until today, food inflation only ever reached the display field `fi`,
