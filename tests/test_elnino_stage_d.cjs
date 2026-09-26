@@ -162,31 +162,37 @@ test('Stage H ASAP ranks major before hotspot and exposes assessment months',()=
 });
 test('Stage H ranked-country taps stay in their lens and pan without zoom',()=>{
  const pan=[];S.map.panTo=(center,options)=>pan.push({center,options});
+ const oldRep=S.reported;S.reported={ZWE:{events:[{iso:'ZWE',type:'drought',date:'2026-09-01'}],fits:1,against:0,none:0}};
  for(const [sub,mode] of [['ensomoney','rtfp'],['ensolive','asap']]) {
   S.sub=sub;S.mode=mode;api.renderMapRanking();const button=node('enso-map-ranking').querySelectorAll('button')[0];
   button.onclick();assert.equal(S.sel,button.getAttribute('data-map-country'));assert.equal(S.sub,sub);assert.equal(S.mode,mode);
   api.selectCountry('ZWE',{fly:true});assert.equal(country.options.color,'#ebe9e2');
  }
- assert.equal(pan.length,2);assert(pan.every(p=>p.options.animate===false));S.sub='elnino';
+ assert(pan.length>=2);assert(pan.every(p=>p.options.animate===false));S.sub='elnino';S.reported=oldRep;
 });
-test('Reported draws only events that fit El Niño\'s usual sign in its regions, and counts the rest',()=>{
- const oldPins=S.alertPins,oldEv=ctx.window.disturbanceEvents,oldNews=S.news;
- const zweRain=(S.isoIndex.ZWE||[{}])[0].rain, today=new Date().toISOString().slice(0,10);
+test('Reported draws every hazard in El Niño countries, rings the verdict, and counts the rest',()=>{
+ const oldPins=S.alertPins,oldEv=ctx.window.disturbanceEvents,oldNews=S.news,oldHl=S._hl;
+ const zweRain=(S.isoIndex.ZWE||[{}]).map(r=>r.rain).filter(Boolean)[0], today=new Date().toISOString().slice(0,10);
  const fitType=zweRain==='drier'?'drought':'flood', oppType=zweRain==='drier'?'flood':'drought';
- S.alertPins=[];S.news={items:[{title:'El Niño headline',source:'x',countries_mentioned:['ZWE']},{title:'too broad',countries_mentioned:['ZWE','ZAF','MOZ','MWI']}]};
+ S.alertPins=[];S._hl=null;S.news={items:[{title:'El Niño headline',source:'x',countries_mentioned:['ZWE'],published_at:today},{title:'too broad',countries_mentioned:['ZWE','ZAF','MOZ','MWI'],published_at:today}]};
  ctx.window.disturbanceEvents=[
   {iso:'ZWE',type:fitType,date:today,title:'fits',severity:'high',source:'GDACS'},
   {iso:'ZWE',type:oppType,date:today,title:'opposite',severity:'high',source:'GDACS'},
+  {iso:'ZWE',type:'cyclone',date:today,title:'no rain link',severity:'medium',source:'GDACS'},
   {iso:'FRA',type:'drought',date:today,title:'outside',severity:'high',source:'GDACS'},
   {iso:'ZWE',type:'conflict',date:today,title:'not a hazard',severity:'high',source:'HAPI'},
   {iso:'ZWE',type:fitType,date:'2020-01-01',title:'too old',severity:'high',source:'GDACS'}];
  api.drawAlerts();
- assert.equal(S.alertPins.length,1);
- assert.equal(S.alertCounts.fit,1);assert.equal(S.alertCounts.opposite,1);assert.equal(S.alertCounts.outside,1);assert.equal(S.alertCounts.news,1);
- assert(S.alertPins[0].tooltip.includes('fits'));assert(!S.alertPins[0].tooltip.includes('opposite'));
- assert(S.alertPins[0].tooltip.includes('do not attribute causes'));
- const leg=api.alertLegend();assert(leg.includes('1 of the opposite sign'));assert(leg.includes('not attribution'));
- S.alertPins=oldPins;ctx.window.disturbanceEvents=oldEv;S.news=oldNews;
+ /* Nothing is filtered by the verdict: fit, opposite and no-link hazards are all drawn, each with its ring. */
+ assert.equal(S.alertPins.length,3);
+ const c=S.alertCounts;assert.equal(c.n,3);assert.equal(c.fits,1);assert.equal(c.against,1);assert.equal(c.none,1);assert.equal(c.elsewhere,1);assert.equal(c.other,1);
+ assert.deepEqual(S.alertPins.map(m=>m.options.ensoVerdict).sort(),['against','fits','none']);
+ const fit=S.alertPins.find(m=>m.options.ensoVerdict==='fits');
+ assert(fit.tooltip.includes('Fits the usual pattern'));assert(fit.tooltip.includes('do not attribute causes'));
+ assert(S.alertPins.find(m=>m.options.ensoVerdict==='against').tooltip.includes('Runs against the usual pattern'));
+ assert.equal(c.headlines,2,'both El Niño-country headlines are counted; only the one naming one to three countries gets a map tab');
+ const oldShow=S.showAlerts;S.showAlerts=true;const leg=api.alertLegend();S.showAlerts=oldShow;assert(leg.includes('1 run against it'));assert(leg.includes('Fitting the pattern is not attribution'));
+ S.alertPins=oldPins;ctx.window.disturbanceEvents=oldEv;S.news=oldNews;S._hl=oldHl;
 });
 test('Shipping keeps one unboxed SVG label per chokepoint, with no corridor chips',()=>{
  assert.equal(S.corridorLabels.length,0);
@@ -242,7 +248,8 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
  const svg=new Element('svg'), query=ctx.document.querySelectorAll;
  ctx.document.querySelectorAll=s=>s==='#enso-map svg'?[svg]:[];
  api.buildDefs();ctx.document.querySelectorAll=query;
- assert.deepEqual(svg.querySelectorAll('line').map(n=>n.getAttribute('stroke')),['#c9773a','#6ba36b']);
+ /* Harvest hatches first; then the Reported rain hatches, in the drought and flood hues (dry, wet, and both crossed). */
+ assert.deepEqual(svg.querySelectorAll('line').map(n=>n.getAttribute('stroke')),['#c9773a','#6ba36b','#c47a3c','#4a7ab3','#c47a3c','#4a7ab3']);
  S.mode='impact';S.showRegions=true;S.showSST=false;S.showLanes=false;api.renderLegend();
  const key=node('enso-legend').querySelector('.enso-legend').innerHTML;
  for(const c of ['#c9773a','#6ba36b'])assert(key.includes('repeating-linear-gradient(45deg,'+c));
@@ -276,7 +283,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
   minus.onclick();assert.equal(m.getZoom(),2);plus.onclick();reset.onclick();assert.equal(m.getZoom(),2);
   for(let i=0;i<4;i++)plus.onclick();assert(plus.disabled);reset.onclick();assert(!plus.disabled);
  });
- const expected={elnino:'sst',ensoharvest:'impact',ensowater:'none',ensomoney:'rtfp',ensolive:'asap'};
+ const expected={elnino:'sst',ensoharvest:'impact',ensowater:'none',ensomoney:'rtfp',ensolive:'rain'};
  for(let cycle=0;cycle<2;cycle++) for(const [view,mode] of Object.entries(expected)) {
   node('scroller').scrollTop=1400;
   await ctx.window.ensoInit(view);pending.splice(0).forEach(fn=>fn());
@@ -300,8 +307,8 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    assert.equal(key.includes('diamond and ring: observed, measured at the chokepoint'),view==='ensowater');
    assert.equal(key.includes('dashed: published schematic corridor through named ports'),view==='ensowater');
    if(view==='ensowater'){assert.equal(S.corridorLines.filter(l=>S.map.hasLayer(l)).length,9);assert.equal(S.corridorLabels.length,0);for(const c of S.corridors.corridors){assert(legend.querySelector('details').textContent.includes(c.basis.replace(/'/g,'&#39;')));}}
-   assert.equal(key.includes('Reported · fits El Niño'),view==='ensolive');
-   if(view==='ensolive')for(const label of ['hotspot','major hotspot','in a region El Niño dries','in a region El Niño wets','headline naming the event'])assert(key.includes(label));
+   assert.equal(key.includes('Does it fit El Niño’s usual pattern here?'),view==='ensolive');
+   if(view==='ensolive')for(const label of ['usually drier in El Niño years','usually wetter','fits the usual pattern','runs against it','no rainfall expectation','Fitting the pattern is not attribution'])assert(key.includes(label),label+' | '+key.slice(0,600));
    if(view==='ensowater')for(const l of S.lanes.lanes)assert(legend.querySelector('details').textContent.includes(l.name));
    /* 2026-09-26: prices are circles (area = size of the change, solid RTFP, hollow CPI) over El Niño countries only. */
    if(view==='ensomoney')for(const label of ['5 · 15 · 30%','falling','rising fast','solid: market median, World Bank RTFP','hollow: official food CPI (FAOSTAT)','do not compare the two directly'])assert(key.includes(label));

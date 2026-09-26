@@ -207,7 +207,7 @@ def main() -> int:
         page.evaluate("showTab('elnino')")
         page.wait_for_selector('#subview-elnino.active .enso-subview-meta')
         check("a hand-picked layer stays on its view; the next view opens on its own lens",
-              picked_here == 'rtfp' and after_switch == 'asap' and 'enso_mode=rtfp' not in url_after,
+              picked_here == 'rtfp' and after_switch == 'rain' and 'enso_mode=rtfp' not in url_after,
               f"{picked_here} -> {after_switch} {url_after}")
         page.eval_on_selector_all(".enso-idx", "els => els.forEach(e => e.open = true)")
         kinds = page.eval_on_selector_all(
@@ -687,7 +687,7 @@ def main() -> int:
         lens_results, headings, frames, lens_texts, spill = [], [], [], [], []
         heights = {}
         page.evaluate("window._stageAMap = document.getElementById('enso-map'); window._stageAMapId = window._stageAMap._leaflet_id")
-        for tab, mode in (("elnino", "sst"), ("ensoharvest", "impact"), ("ensowater", "none"), ("ensomoney", "rtfp"), ("ensolive", "asap")):
+        for tab, mode in (("elnino", "sst"), ("ensoharvest", "impact"), ("ensowater", "none"), ("ensomoney", "rtfp"), ("ensolive", "rain")):
             page.evaluate("tab => showTab(tab)", tab)
             page.wait_for_selector(f'#subview-{tab}.active .enso-subview-meta')
             lens_results.append(page.input_value('#enso-mode') == mode
@@ -1039,7 +1039,7 @@ def main() -> int:
               and not page.locator('#enso-scenario-toggle').is_visible()
               and page.input_value('#enso-level') == '-1.5')
         ranked = []
-        for tab, feed in (('ensomoney', 'rtfp'), ('ensolive', 'asap')):
+        for tab, feed in (('ensomoney', 'rtfp'), ('ensolive', 'reported')):
             page.evaluate("tab => showTab(tab)", tab)
             page.wait_for_selector('#enso-map-ranking button')
             # The price rail no longer ranks the twelve highest inflations in the
@@ -1048,6 +1048,18 @@ def main() -> int:
             # valued ones first in descending order, then those with no monitored
             # market, then the monitored countries outside the layer.
             valid = page.evaluate("""async feed => {
+                if (feed === 'reported') {
+                    // 2026-09-26: the Reported rail lists El Niño countries with a report, a crisis in force or a
+                    // headline, sorted by fits, then IPC phase, then report count; the title counts the rows.
+                    const b = [...document.querySelectorAll('#enso-map-ranking button')];
+                    const k = x => [+x.dataset.fits, +x.dataset.phase, +x.dataset.total];
+                    const sorted = b.every((x, i) => { if (!i) return true; const p = k(b[i-1]), q = k(x);
+                        for (let j = 0; j < 3; j++) { if (p[j] !== q[j]) return p[j] > q[j]; } return true; });
+                    const m = document.getElementById('enso-map').getBoundingClientRect();
+                    const a = document.getElementById('enso-map-ranking').getBoundingClientRect();
+                    const title = document.querySelector('#enso-map-ranking .enso-legend-t').textContent;
+                    return a.left >= m.right - 1 && sorted && b.length > 0 && title.includes(b.length + ' El Niño countries');
+                }
                 const data = (await (await fetch('data/' + feed + '.json')).json()).data;
                 const buttons = [...document.querySelectorAll('#enso-map-ranking button')];
                 const isos = buttons.map(b => b.dataset.mapCountry);
@@ -1099,7 +1111,9 @@ def main() -> int:
             let n = 0;
             _stageHMap.eachLayer(l => { if (l.options && l.options.ensoSource === 'event') n++; });
             const key = document.getElementById('enso-legend').textContent;
-            return key.includes(' in ' + n + ' countries fit the pattern') && key.includes('not attribution');
+            const tag = document.getElementById('enso-maptag').textContent;
+            const m = tag.match(/^(\d+) of (\d+) hazard reports/);
+            return n > 0 && key.includes('Fitting the pattern is not attribution') && !!m && key.includes(m[2] + ' reports in ');
         }"""))
         page.set_viewport_size({'width':390,'height':844})
         stacked = []
@@ -1325,7 +1339,7 @@ def main() -> int:
                 ('ensomoney', ['Food inflation', 'Grain imports']),
                 ('elnino', ['Sea-surface']),
                 ('ensoharvest', ['Production shock', 'Strongest crop', 'Coverage', 'Teleconnections']),
-                ('ensolive', ['Hotspots', 'IPC', 'Hazards'])):
+                ('ensolive', ['Rain pattern', 'Hotspots', 'IPC', 'Hazards', 'Headlines', 'Elsewhere'])):
                 page.evaluate('tab => showTab(tab)', tab)
                 page.wait_for_timeout(150)
                 # Search and zoom sit on the map (2026-09-23), so the header is

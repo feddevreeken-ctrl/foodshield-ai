@@ -9990,6 +9990,34 @@ body::before {
 /* Hatched overlay = published teleconnection. CSS `fill` beats the presentation
    attribute Leaflet writes, so setStyle can never clobber the pattern. */
 .enso-hatch-warm { fill:url(#ensoHatchWarm) !important; }
+/* Reported lens: what El Niño usually does to rainfall, from published studies. Hatched, because it is an
+   expectation; the observed reports on top are solid discs. */
+.enso-rain-dry { fill:url(#ensoRainDry) !important; fill-opacity:1 !important; }
+.enso-rain-wet { fill:url(#ensoRainWet) !important; fill-opacity:1 !important; }
+.enso-rain-mixed { fill:url(#ensoRainMixed) !important; fill-opacity:1 !important; }
+/* The verdict ring on a reported hazard: cream with a gap = fits the usual pattern, grey hairline = runs
+   against it, no ring = no rainfall expectation. Never dashed: dashed means modelled on this page. */
+/* Reported hazard discs are drawn in SVG: the tab squares every CSS corner, and a report is a disc. */
+.enso-hz-marker { pointer-events:auto !important; }
+.enso-hz-wrap { position:relative; width:100%; height:100%; }
+.enso-hz-wrap svg.enso-hz { display:block; overflow:visible; filter:drop-shadow(0 1px 3px rgba(0,0,0,.55)); }
+.enso-hz-n { position:absolute; top:-4px; right:-6px; min-width:13px; height:13px; padding:0 2px; background:#f2efe6; color:#111317; font:700 9px/13px 'Geist Mono',monospace; text-align:center; box-shadow:0 0 0 1.5px #0b1017; pointer-events:none; }
+.leaflet-marker-icon.enso-hz-marker:focus-visible { outline:2px solid #f2efe6; outline-offset:2px; }
+.enso-hl-tab { display:inline-flex; align-items:center; height:18px; padding:0 5px; border:1px solid #8b8980; border-radius:2px; background:rgba(11,16,23,.72);
+  color:#ebe9e2; font:500 10px/1 'Geist Mono',monospace; white-space:nowrap; cursor:pointer; }
+.enso-hl-wrap:focus-visible .enso-hl-tab, .enso-hl-tab:hover, .enso-hl-tab.is-lit { border-color:#ebe9e2; }
+.enso-callout-wrap { pointer-events:auto !important; }
+.enso-callout { display:block; width:210px; padding:2px 0 2px 9px; border-left:1px solid #3a4250; text-decoration:none; }
+.enso-callout .t { display:block; font-size:12px; line-height:1.3; font-weight:500; color:#ebe9e2; text-shadow:0 0 3px #0b1017, 0 0 6px #0b1017; }
+.enso-callout .m { display:block; margin-top:3px; font:10px/1.2 'Geist Mono',monospace; color:#8b8980; text-shadow:0 0 3px #0b1017; }
+.enso-callout:hover .t, .enso-callout:focus-visible .t { text-decoration:underline; }
+#enso-legend .enso-legend.is-reported { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px 26px; }
+#enso-legend .enso-legend.is-reported > .enso-legend-wide { grid-column:1 / -1; }
+@media (max-width:1099px) { #enso-legend .enso-legend.is-reported { grid-template-columns:minmax(0,1fr); } }
+.enso-legend-caveat { margin-top:6px; font-size:11px; line-height:1.45; color:var(--t3); max-width:38ch; }
+.enso-rank-discs { display:inline-flex; gap:2px; vertical-align:-2px; margin-left:4px; }
+.enso-verdict-row { background:none; border:0; padding:0; color:inherit; font:inherit; text-align:left; cursor:pointer; display:flex; gap:8px; align-items:center; }
+.enso-verdict-row[aria-pressed="true"] span { color:var(--t1); text-decoration:underline; }
 .enso-hatch-cool { fill:url(#ensoHatchCool) !important; }
 
 /* Chokepoints — a third grammar: never a filled area */
@@ -44148,7 +44176,7 @@ function showCommodityDetail(key) {
     enso: null, exp: null, model: null, regions: null, lanes: null,
     econ: null, mech: null, indices: null, portwatch: null, rtfp: null, ffpi: null,
     asap: null, gdacs: null, ipc: null, relief: null,
-    news: null, restrictions: null, alertPins: [], showAlerts: false, importPins: [], showImports: false,
+    news: null, restrictions: null, alertPins: [], showAlerts: false, contextPins: [], headlinePins: [], calloutPins: [], showHeadlines: false, showElsewhere: false, reportVerdict: null, importPins: [], showImports: false,
     meta: {}, sel: null, charts: {}, isoIndex: {}, sub: 'elnino', drawn: {}
   };
 
@@ -44272,7 +44300,7 @@ function showCommodityDetail(key) {
     var mode = p.get('enso_mode');
     return { level: isFinite(level) ? level : null, mode: mode || null };
   };
-  var LENS_DEFAULT = { elnino: 'sst', ensoharvest: 'impact', ensowater: 'none', ensomoney: 'rtfp', ensolive: 'asap' };
+  var LENS_DEFAULT = { elnino: 'sst', ensoharvest: 'impact', ensowater: 'none', ensomoney: 'rtfp', ensolive: 'rain' };
   /* The scenario is a global what-if and follows the reader across views. The
      layer is not: a deep link is honoured on arrival, a layer picked by hand
      applies to the view it was picked on, and a view change returns to that
@@ -44924,7 +44952,7 @@ function showCommodityDetail(key) {
         if (slot && lb) { slot.innerHTML = ''; slot.appendChild(lb); }
       }
       /* Ocean is the landing view: the sea-surface map opens it, the strength odds follow. */
-      if (S.sub === 'elnino') { if (sv.firstElementChild !== grid) { sv.insertBefore(grid, sv.firstElementChild); resizeEnsoMap(); } return; }
+      if (S.sub === 'elnino' || S.sub === 'ensolive') { if (sv.firstElementChild !== grid) { sv.insertBefore(grid, sv.firstElementChild); resizeEnsoMap(); } return; }
       var lead = document.getElementById({ ensoharvest: 'enso-outlook', ensowater: 'enso-water-lead', ensomoney: 'enso-whopays', ensolive: 'enso-live-lead' }[S.sub]);
       if (lead && lead.parentNode === sv && lead.nextSibling !== grid) { sv.insertBefore(grid, lead.nextSibling); resizeEnsoMap(); }
     } catch (e) {}
@@ -46016,7 +46044,7 @@ function showCommodityDetail(key) {
        cosmetic: the first says what a 64-year regression expects, the second
        says what feeds are reporting today. Mixing them in one flat list would
        invite exactly the conflation this page exists to prevent. */
-    var modelled = [['impact', 'Modelled production shock'],
+    var modelled = [['rain', 'El Niño’s usual rainfall (published studies)'], ['impact', 'Modelled production shock'],
                     ['crop', 'Strongest fitted crop'],
                     ['coverage', 'Model coverage']];
     var liveModes = [['asap', 'Agricultural hotspots (JRC ASAP)'],
@@ -46048,15 +46076,16 @@ function showCommodityDetail(key) {
     }).join(''); };
     var overlays = [['regions', 'Teleconnections', 'var(--warm)', S.showRegions],
       ['lanes', 'Shipping', '#d2693a', S.showLanes], ['alerts', 'Hazards', '#c44b3c', S.showAlerts],
-      ['sst', 'Sea-surface', '#8aa6c4', S.showSST !== false], ['imports', 'Grain imports', '#8fb1cf', S.showImports]];
+      ['sst', 'Sea-surface', '#8aa6c4', S.showSST !== false], ['imports', 'Grain imports', '#8fb1cf', S.showImports],
+      ['headlines', 'Headlines', '#8b8980', S.showHeadlines], ['elsewhere', 'Elsewhere', '#5d636b', S.showElsewhere]];
     var lens = {
       ensowater: {modes:['none'], overlays:['lanes']},
       ensomoney: {modes:['rtfp'], overlays:['imports']},
       elnino: {modes:['sst'], overlays:[]},
       ensoharvest: {modes:['impact','crop','coverage'], overlays:['regions']},
-      ensolive: {modes:['asap','ipc'], overlays:['alerts']}
+      ensolive: {modes:['rain','asap','ipc'], overlays:['alerts','headlines','elsewhere']}
     }[S.sub] || {modes:['sst'], overlays:[]};
-    var layers = [['impact','Production shock'],['crop','Strongest crop'],['coverage','Coverage'],
+    var layers = [['rain','Rain pattern'],['impact','Production shock'],['crop','Strongest crop'],['coverage','Coverage'],
       ['asap','Hotspots'],['gdacs','Hazards'],['ipc','IPC'],['rtfp','Food inflation'],['sst','Sea-surface'],['none','No land layer']];
     function layerChoices(primary) {
       return buttons(layers.filter(function (m) { return (lens.modes.indexOf(m[0]) >= 0) === primary; })) +
@@ -46104,6 +46133,10 @@ function showCommodityDetail(key) {
     if (tim) tim.onchange = function () { S.showImports = this.checked; toggleImports(); renderLegend(); };
     var ta = document.getElementById('enso-tog-alerts');
     if (ta) ta.onchange = function () { S.showAlerts = this.checked; toggleAlerts(); renderLegend(); };
+    var thl = document.getElementById('enso-tog-headlines');
+    if (thl) thl.onchange = function () { S.showHeadlines = this.checked; toggleAlerts(); renderLegend(); };
+    var tel = document.getElementById('enso-tog-elsewhere');
+    if (tel) tel.onchange = function () { S.showElsewhere = this.checked; toggleAlerts(); renderLegend(); };
     var ts = document.getElementById('enso-tog-sst');
     if (ts) ts.onchange = function () { S.showSST = this.checked; toggleSST(); renderLegend(); };
     el.querySelectorAll('[data-native]').forEach(function (b) {
@@ -46160,17 +46193,63 @@ function showCommodityDetail(key) {
       '<div class="ctr-note">Published schematic corridors reviewed ' + esc(stamp(metaDate('corridors'))) + '. ' + esc((S.meta.corridors || {}).source || 'Corridor feed unavailable.') + ' Hover a route for its evidence; all corridors are listed here.</div>' +
       corridors.map(function (c) { return '<div class="ctr-note"><b>' + esc(c.name) + '</b>: ' + esc(c.basis) + ' Sources: ' + esc((c.sources || []).join('; ')) + '.</div>'; }).join('') + '</div>';
   }
-  function alertLegend() {
-    var c = S.alertCounts || {}, ev = 0, nw = 0;
-    S.alertPins.forEach(function (m) { if (m.options.ensoSource === 'event') ev++; else nw++; });
-    var sw = function (col, hollow) { return '<svg class="enso-sw-round" aria-hidden="true" width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="' + (hollow ? 'none' : col) + '" stroke="' + (hollow ? col : '#f2efe6') + '" stroke-width="1.3"' + (hollow ? ' stroke-dasharray="2 2"' : '') + '/></svg>'; };
-    return '<div class="enso-legend-block"><div class="enso-legend-t">Reported · fits El Niño’s usual pattern</div>' +
-      '<div class="enso-legend-row">' + sw(ensoTypeColor('drought')) + ' <span>drought, dry or hot week, IPC / FEWS NET crisis, in a region El Niño dries</span></div>' +
-      '<div class="enso-legend-row">' + sw(ensoTypeColor('flood')) + ' <span>flood or wet week, in a region El Niño wets</span></div>' +
-      '<div class="enso-legend-row">' + sw('#8fa3bf', true) + ' <span>headline naming the event (a claim, not a measurement)</span></div>' +
-      '<div class="ctr-note" style="max-width:34ch;margin-top:5px;">' + (c.fit || 0) + ' reports in ' + ev + ' countries fit the pattern, from the last ' + ENSO_REPORT_DAYS + ' days of the same feeds as the Disturbances tab' +
-      (c.news ? '; ' + c.news + ' El Niño headlines' : '') + '. Not drawn: ' + (c.opposite || 0) + ' of the opposite sign (a flood where El Niño dries), ' + (c.outside || 0) + ' outside El Niño regions' +
-      (c.unplaced ? ', ' + c.unplaced + ' without a map shape' : '') + '. Fitting the pattern is not attribution: El Niño raises the odds of these events here, it does not explain any one of them.</div></div>';
+  function hatchSwatch(kind) {
+    var L1 = '<line x1="0" y1="12" x2="12" y2="0" stroke="#c47a3c" stroke-width="1.4"/><line x1="-6" y1="12" x2="6" y2="0" stroke="#c47a3c" stroke-width="1.4"/><line x1="6" y1="12" x2="18" y2="0" stroke="#c47a3c" stroke-width="1.4"/>';
+    var L2 = '<line x1="0" y1="0" x2="12" y2="12" stroke="#4a7ab3" stroke-width="1.4"/><line x1="-6" y1="0" x2="6" y2="12" stroke="#4a7ab3" stroke-width="1.4"/><line x1="6" y1="0" x2="18" y2="12" stroke="#4a7ab3" stroke-width="1.4"/>';
+    return '<svg aria-hidden="true" width="18" height="12" viewBox="0 0 18 12" style="flex:none"><rect width="18" height="12" fill="#e6e3da" fill-opacity=".05" stroke="#8b8980" stroke-width="1"/>' +
+      (kind === 'dry' ? L1 : kind === 'wet' ? L2 : kind === 'mixed' ? L1 + L2 : '') + '</svg>';
+  }
+  function discSwatch(col, ring) {
+    var sh = ring === 'fits' ? '<circle cx="9" cy="9" r="8" fill="none" stroke="#f2efe6" stroke-width="1.6"/>' : ring === 'against' ? '<circle cx="9" cy="9" r="6.6" fill="none" stroke="#8b8980" stroke-width="1"/>' : '';
+    return '<svg class="enso-sw-round" aria-hidden="true" width="18" height="18" viewBox="0 0 18 18">' + sh + '<circle cx="9" cy="9" r="5.4" fill="' + col + '" stroke="#0b1017" stroke-width="1"/></svg>';
+  }
+  function reportVerdict() {
+    var c = S.alertCounts;
+    var when = c && c.newest ? ' · updated ' + stamp(new Date(c.newest)) : '';
+    if (!c) return 'Loading the hazard reports for El Niño countries.';
+    if (!c.n) return 'No hazard reports in El Niño countries in the last ' + ENSO_REPORT_DAYS + ' days' + when + '.';
+    return c.fits + ' of ' + c.n + ' hazard reports in El Niño countries fit its usual rain pattern' + when + '.';
+  }
+  function applyVerdictFilter() {
+    S.alertPins.forEach(function (m) { try { m.setOpacity(S.reportVerdict && m.options.ensoVerdict !== S.reportVerdict ? .25 : 1); } catch (e) {} });
+  }
+  /* Kept for callers that still ask for the old block (the other lenses' "Hazards" overlay). */
+  function alertLegend() { return reportedLegend(null, true); }
+  function reportedLegend(LIVE_LEG, inner) {
+    var c = S.alertCounts || {};
+    var row = function (sw, txt) { return '<div class="enso-legend-row">' + sw + ' <span>' + txt + '</span></div>'; };
+    var land;
+    if (S.mode === 'rain') {
+      land = '<div class="enso-legend-block"><div class="enso-legend-t">El Niño’s usual rainfall (published studies, not observed)</div>' +
+        row(hatchSwatch('dry'), 'usually drier in El Niño years') + row(hatchSwatch('wet'), 'usually wetter') +
+        row(hatchSwatch('mixed'), 'regions disagree (depends on the season)') + row(hatchSwatch(''), 'in a tracked region, no rainfall expectation') + '</div>';
+    } else if (LIVE_LEG && LIVE_LEG[S.mode]) {
+      var L0 = LIVE_LEG[S.mode];
+      land = '<div class="enso-legend-block"><div class="enso-legend-t">' + esc(L0[0]) + '</div>' +
+        L0[1].map(function (r) { return row('<span class="enso-sw" style="background:' + r[0] + '"></span>', esc(r[1])); }).join('') +
+        '<div class="ctr-note">' + esc(L0[2]) + '</div></div>';
+    } else land = '';
+    var types = ['drought', 'flood', 'cyclone', 'weather', 'earthquake'];
+    var obs = '<div class="enso-legend-block"><div class="enso-legend-t">Reported now (observed)</div>' +
+      types.map(function (t) { var r = (typeof ML_TYPES !== 'undefined') ? ML_TYPES.find(function (x) { return x.t === t; }) : null; return row(discSwatch(ensoTypeColor(t)), esc(r ? r.l : t)); }).join('') +
+      '<div class="ctr-note">Size = the severity the source reports.</div></div>';
+    var vb = function (v, sw, txt) { return '<div class="enso-legend-row"><button type="button" class="enso-verdict-row" data-verdict="' + v + '" aria-pressed="' + (S.reportVerdict === v) + '">' + sw + ' <span>' + txt + '</span></button></div>'; };
+    var fit = '<div class="enso-legend-block"><div class="enso-legend-t">Does it fit El Niño’s usual pattern here?</div>' +
+      vb('fits', discSwatch('#c47a3c', 'fits'), 'fits the usual pattern: a possible early sign, or unrelated') +
+      vb('against', discSwatch('#4a7ab3', 'against'), 'runs against it') +
+      vb('none', discSwatch('#4a8a9b'), 'no rainfall expectation for this hazard or place') +
+      '<div class="enso-legend-caveat">Fitting the pattern is not attribution. Published studies link El Niño to these conditions in these regions; they do not explain any single event.</div></div>';
+    var ol = function (col, w) { return '<svg aria-hidden="true" width="18" height="12" viewBox="0 0 18 12" style="flex:none"><rect x="1" y="1" width="16" height="10" fill="none" stroke="' + col + '" stroke-width="' + w + '"/></svg>'; };
+    var crisis = '<div class="enso-legend-block"><div class="enso-legend-t">Food crisis classification (IPC / FEWS NET, in force)</div>' +
+      row(ol('#e67800', 1.6), 'Phase 3, crisis') + row(ol('#c80000', 2.4), 'Phase 4, emergency') + row(ol('#640000', 3), 'Phase 5, catastrophe') + '</div>';
+    var hl = '<div class="enso-legend-block"><div class="enso-legend-t">Headlines and agency reports (claims, not measurements)</div>' +
+      row('<span class="enso-hl-tab" style="cursor:default">▤ n</span>', 'items naming this country, last 30 days') +
+      row('<span style="display:inline-block;width:12px;border-left:1px solid #3a4250;height:14px"></span>', 'largest recent stories, printed as published') + '</div>';
+    var cnt = '<div class="ctr-note enso-legend-wide">' + (c.n || 0) + ' reports in ' + (c.countries || 0) + ' El Niño countries, last ' + ENSO_REPORT_DAYS + ' days: ' + (c.fits || 0) + ' fit the usual pattern, ' + (c.against || 0) + ' run against it, ' + (c.none || 0) + ' have no rainfall link. ' +
+      (c.headlines || 0) + ' headlines. Elsewhere: ' + (c.elsewhere || 0) + ' events (grey dots). Not drawn here: ' + (c.price || 0) + ' price or currency (Prices), ' + (c.trade || 0) + ' trade or shipping (Shipping), ' + (c.other || 0) + ' conflict or disease (Disturbances tab)' +
+      (c.unplaced ? '; ' + c.unplaced + ' without a map position' : '') + '.</div>';
+    var blocks = land + (S.showAlerts ? obs + fit + crisis : '') + (S.showHeadlines ? hl : '') + cnt;
+    return inner ? blocks : '<div class="enso-legend is-reported">' + blocks + '</div>';
   }
 
   function intervalBand(oni) {
@@ -46334,7 +46413,8 @@ function showCommodityDetail(key) {
   function renderMapRanking() {
     var el = document.getElementById('enso-map-ranking'), body = document.getElementById('enso-map-body');
     if (!el || !body) return;
-    var prices = S.mode === 'rtfp', visible = prices || S.mode === 'asap';
+    var reported = S.sub === 'ensolive';
+    var prices = !reported && S.mode === 'rtfp', visible = prices || reported || S.mode === 'asap';
     var changed = body.classList.contains('has-ranking') !== visible;
     body.classList.toggle('has-ranking', visible); el.hidden = !visible;
     if (visible) {
@@ -46355,7 +46435,32 @@ function showCommodityDetail(key) {
           (outside.length ? '<div class="enso-legend-t enso-rank-t2">Also painted · ' + outside.length + ' monitored countries outside the layer</div>' +
             '<ol class="enso-rank-list">' + outside.map(priceRow).join('') + '</ol>' : '') + '</details>';
       }
-      if (!prices) {
+      if (reported) {
+        /* Reported now: every El Niño country with a hazard report, a crisis classification in force or a
+           headline. Discs carry the same verdict rings as the map. The list does not depend on the land layer. */
+        var R = S.reported || {}, isos = Object.keys(S.isoIndex || {}).filter(function (i) {
+          return (R[i] && (R[i].events.length || R[i].crisis)) || headlinesFor(i).length;
+        });
+        var sum = function (i) { var r = R[i] || { events: [], fits: 0 }; return { fits: r.fits || 0, phase: r.crisis || 0, total: r.events.length, hl: headlinesFor(i).length }; };
+        isos.sort(function (a, b) { var x = sum(a), y = sum(b); return y.fits - x.fits || y.phase - x.phase || y.total - x.total || y.hl - x.hl || nameFor(a).localeCompare(nameFor(b)); });
+        var disc = function (ev) {
+          var v = fitVerdict(ev), col = ensoTypeColor(ev.type);
+          return '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14">' + (v === 'fits' ? '<circle cx="7" cy="7" r="6.2" fill="none" stroke="#f2efe6" stroke-width="1.4"/>' : v === 'against' ? '<circle cx="7" cy="7" r="5.4" fill="none" stroke="#8b8980" stroke-width="1"/>' : '') +
+            '<circle cx="7" cy="7" r="4" fill="' + col + '"/></svg>';
+        };
+        var rowOf = function (iso) {
+          var r = R[iso] || { events: [] }, q = sum(iso), seenT = {}, discs = r.events.filter(function (e) { var k = e.type + (e.weatherKind || ''); if (seenT[k]) return false; seenT[k] = 1; return true; }).slice(0, 4).map(disc).join('');
+          var meta = [q.total ? q.total + ' report' + (q.total === 1 ? '' : 's') + (q.fits ? ', ' + q.fits + ' fit' : '') : '', q.phase ? 'IPC Phase ' + q.phase : '', q.hl ? '▤ ' + q.hl : ''].filter(Boolean).join(' · ');
+          return '<li><button type="button" data-map-country="' + esc(iso) + '" data-fits="' + q.fits + '" data-phase="' + q.phase + '" data-total="' + q.total + '" aria-pressed="' + (S.sel === iso) + '"' +
+            (q.phase ? ' style="box-shadow:inset 3px 0 0 ' + ({ 3: '#e67800', 4: '#c80000', 5: '#640000' }[Math.min(5, q.phase)] || '#e67800') + ';padding-left:9px"' : '') + '>' +
+            '<span class="enso-rank-main"><b>' + esc(nameFor(iso)) + '</b> <span class="enso-rank-discs">' + discs + '</span></span><span class="enso-rank-meta">' + esc(meta) + '</span></button></li>';
+        };
+        el.innerHTML = '<div class="enso-legend-t">Reported now · ' + isos.length + ' El Niño countries</div>' +
+          (isos.length ? '<ol class="enso-rank-list">' + isos.slice(0, 8).map(rowOf).join('') + '</ol>' +
+            (isos.length > 8 ? '<details class="enso-rank-more"><summary>' + (isos.length - 8) + ' more countries</summary><ol class="enso-rank-list" start="9">' + isos.slice(8).map(rowOf).join('') + '</ol></details>' : '')
+            : '<p class="enso-rank-note">No hazard report, crisis classification or headline for an El Niño country in the loaded feeds.</p>');
+      }
+      if (!prices && !reported) {
         var hotspots = rankedHotspots();
         el.innerHTML = '<div class="enso-legend-t">ASAP hotspots (crops, rangeland) · ' + hotspots.length + ' countries</div>' +
           
@@ -46381,11 +46486,11 @@ function showCommodityDetail(key) {
        Both steps are named now. Crop and coverage are read straight from the
        model and keep the model's own date. */
     var source = { impact: 'FAOSTAT yield fit 1961–2024, weighted by FAOSTAT production', crop: 'FAOSTAT yield fit, 1961–2024', coverage: 'FAOSTAT yield fit, 1961–2024',
-      asap: 'JRC ASAP assessments', gdacs: 'GDACS hazard reports', ipc: 'IPC/CH via WFP HungerMap', rtfp: 'World Bank RTFP via HDX · FAOSTAT food CPI where no market is monitored', sst: 'NOAA OISST v2.1',
+      rain: 'Published studies (hatch) · GDACS · FEWS NET · IPC · Open-Meteo · ReliefWeb · news', asap: 'JRC ASAP assessments', gdacs: 'GDACS hazard reports', ipc: 'IPC/CH via WFP HungerMap', rtfp: 'World Bank RTFP via HDX · FAOSTAT food CPI where no market is monitored', sst: 'NOAA OISST v2.1',
       none: S.showLanes ? 'IMF PortWatch AIS transits, Panama Canal Authority advisories, lane evidence' : 'Natural Earth geography' }[S.mode];
     /* With no land fill the plate is named for what it does show: the lanes and
        chokepoints when they are on, otherwise the bare reference geography. */
-    var title = { impact: 'Modelled production shock', crop: 'Strongest fitted crop', coverage: 'Model coverage', asap: 'Where crops are under stress this season',
+    var title = { rain: 'What is being reported in El Niño countries', impact: 'Modelled production shock', crop: 'Strongest fitted crop', coverage: 'Model coverage', asap: 'Where crops are under stress this season',
       gdacs: 'Drought and flood alerts', ipc: 'Food insecurity, IPC 3+', rtfp: 'Food inflation, year on year', sst: 'Sea-surface anomaly',
       none: S.showLanes ? 'Shipping restrictions and transits' : 'No land layer' }[S.mode];
     var key = {impact:'exp',crop:'model',coverage:'model'}[S.mode] || S.mode;
@@ -46396,6 +46501,7 @@ function showCommodityDetail(key) {
       'collected ' + stamp(metaDate(key)) + (modelled ? '' : '; assessment periods vary by record');
     if (S.mode === 'rtfp') date = rtfpNote();
     if (S.mode === 'asap') date = asapNote();
+    if (S.mode === 'rain') date = (S.alertCounts && S.alertCounts.newest) ? 'newest report ' + stamp(new Date(S.alertCounts.newest)) : 'no reports loaded yet';
     if (S.mode === 'sst' && !S.showSST) title += ' (backdrop hidden)';
     if (S.mode === 'sst' && !S.sst) date = 'source unavailable';
     return { kind: kind, title: title, source: source, date: date };
@@ -46412,6 +46518,7 @@ function showCommodityDetail(key) {
     el.textContent = (marks[S.mode] || 'Reference geography') + ' · ' + m.date + '.';
     if (S.mode === 'none' && S.showLanes) el.textContent = 'Rings: transit change, % y/y · IMF PortWatch' + (S.portwatch && S.portwatch.panama && S.portwatch.panama.latest_date ? ', to ' + stamp(new Date(S.portwatch.panama.latest_date)) : '') + ', collected ' + stamp(metaDate('portwatch')) + '. Squares: gateway ports. Dashed lines: published corridors.';
     if (S.mode === 'rtfp') el.textContent = priceMapSentence();
+    if (S.sub === 'ensolive') el.textContent = reportVerdict();
     instrumentNumbers(el);
     mapChrome();
     var st = document.getElementById('enso-status'); if (st) st.textContent = el.textContent;
@@ -46505,6 +46612,13 @@ function showCommodityDetail(key) {
         [[RAMP[0], 'lower share'], [RAMP[2], 'mid'], [RAMP[4], 'higher share of population']],
         'IPC/CH via WFP HungerMap. This is an outcome, and it has many causes. ENSO is one of them.']
     };
+    if (S.sub === 'ensolive') {
+      el.innerHTML = reportedLegend(LIVE_LEG);
+      el.querySelectorAll('[data-verdict]').forEach(function (b) {
+        b.onclick = function () { var v = b.getAttribute('data-verdict'); S.reportVerdict = S.reportVerdict === v ? null : v; applyVerdictFilter(); renderLegend(); };
+      });
+      compactLegend(); return;
+    }
     if (S.mode === 'rtfp') {
       var circ = function (v, hollow) { var r = priceRadius(v), d = Math.ceil(2 * r + 4), col = rtfpColor(Math.max(-10, v));
         return '<svg class="enso-sw-round" aria-hidden="true" width="' + d + '" height="' + d + '" viewBox="0 0 ' + d + ' ' + d + '"><circle cx="' + (d / 2) + '" cy="' + (d / 2) + '" r="' + r + '" fill="' + (hollow ? 'none' : col) + '" stroke="' + (hollow ? col : '#0b1017') + '" stroke-width="' + (hollow ? 1.6 : 1) + '"' + (hollow ? ' stroke-dasharray="3 2"' : '') + '/></svg>'; };
@@ -46664,8 +46778,8 @@ function showCommodityDetail(key) {
        modelled colours cannot be read against it. */
     if (S.mode === 'sst' || S.mode === 'none') return null;
     if (S.mode === 'rtfp') return (S.isoIndex || {})[iso] ? '#2b2e34' : null;
-    /* On the Reported lens the crop-stress and IPC fills are limited to El Niño countries, like its pins. */
-    if (S.sub === 'ensolive' && (S.mode === 'asap' || S.mode === 'ipc') && !(S.isoIndex || {})[iso]) return null;
+    /* Rain pattern: members get a base fill that the hatch class replaces; the hatch is the expectation. */
+    if (S.mode === 'rain') return (S.isoIndex || {})[iso] ? '#e6e3da' : null;
     if (S.mode === 'asap') {
       var a = asapFor(iso);
       if (!a) return null;
@@ -46705,6 +46819,17 @@ function showCommodityDetail(key) {
   function tooltipFor(iso, nm) {
     var parts = ['<b>' + esc(nm || nameFor(iso)) + '</b>'];
     if (S.mode === 'rtfp') return parts[0] + '<br>' + rtfpReadout(iso);
+    if (S.mode === 'rain') {
+      var rr = rainOf(iso), R = (S.reported || {})[iso], cr0 = S.crisis && S.crisis[iso];
+      if (!rr.member) return parts[0] + '<br><span style="color:#8b8980">Outside the El Niño regions this page tracks.</span>';
+      rr.all.forEach(function (r) {
+        parts.push(esc(r.label || r.id) + ': ' + (r.rain ? 'usually ' + esc(r.rain) + ' in El Niño years' : 'no rainfall expectation') +
+          (r.damage_season ? ' <span style="color:#8b8980">(' + esc(r.damage_season) + ')</span>' : ''));
+      });
+      if (R) parts.push(R.events.length + ' hazard report' + (R.events.length === 1 ? '' : 's') + ', last ' + ENSO_REPORT_DAYS + ' days: ' + R.fits + ' fit the usual pattern, ' + R.against + ' run against it');
+      if (cr0) parts.push('Food crisis in force: Phase ' + cr0.phase + ' <span style="color:#8b8980">(' + esc(String(cr0.ev.source || '').split('(')[0].trim()) + ', ' + esc(cr0.ev.date || '') + ')</span>');
+      return parts.join('<br>');
+    }
     var b = strongestCrop(iso);
     if (b) parts.push('measured · ' + esc(b.crop) + ' ' + num(cropEffect(b.c), 1) + '% at this scenario' +
       ' <span style="color:#8b8980">(' + num(cropSlope(b.c), 1) + ' %/ONI, ' + esc(phaseWord()) + ' slope)</span>' +
@@ -46802,12 +46927,19 @@ function showCommodityDetail(key) {
         var assessment = S.mode === 'asap' && asapFor(iso);
         path.classList.toggle('enso-hotspot', !!assessment && assessment.hotspot_code === 1);
         path.classList.toggle('enso-major-hotspot', !!assessment && assessment.hotspot_code === 2);
+        var rc = S.mode === 'rain' ? rainClass(iso) : null;
+        ['dry', 'wet', 'mixed'].forEach(function (k) { path.classList.toggle('enso-rain-' + k, rc === k); });
       }
       var style = col
         ? { fillColor: col, fillOpacity: 1, color: LAND_TONE, opacity: .18, weight: .5 }
         : { fillColor: LAND_TONE, fillOpacity: .06, color: LAND_TONE, opacity: .18, weight: .5 };
       if (S.mode === 'rtfp' && (S.isoIndex[iso] || []).length) { style.color = '#8a8578'; style.opacity = .8; style.weight = .8; }
-      if ((S.sub === 'ensoharvest' || S.mode === 'rtfp' || S.mode === 'asap') && iso && iso === S.sel) { style.color = '#ebe9e2'; style.weight = 1.7; style.opacity = 1; }
+      if (S.mode === 'rain' && (S.isoIndex || {})[iso]) { style.color = '#8b8980'; style.opacity = .7; style.weight = rainClass(iso) === 'outline' ? 1 : .6; }
+      /* Food-crisis classification in force (IPC / FEWS NET): an outline in the IPC phase colour, not a point. */
+      var cr = S.sub === 'ensolive' && S.showAlerts && S.crisis && S.crisis[iso];
+      if (cr) { var CR = { 3: ['#e67800', 1.6], 4: ['#c80000', 2.4], 5: ['#640000', 3] }[Math.min(5, Math.max(3, cr.phase))];
+        style.color = CR[0]; style.weight = CR[1]; style.opacity = (S.isoIndex || {})[iso] ? 1 : .5; }
+      if ((S.sub === 'ensoharvest' || S.sub === 'ensolive' || S.mode === 'rtfp' || S.mode === 'asap') && iso && iso === S.sel) { style.color = '#ebe9e2'; style.weight = 1.7; style.opacity = 1; }
       if (!rippling) { lyr.setStyle(style); if (iso === S.sel) lyr.bringToFront(); return; }
       /* One anomaly radiating outward: countries repaint in order of distance
          from the Niño 3.4 box, so the Pacific rim moves before the Sahel. */
@@ -47180,6 +47312,24 @@ function showCommodityDetail(key) {
         ln.setAttribute('stroke', p[1]); ln.setAttribute('stroke-width', '2.2');
         pat.appendChild(ln); defs.appendChild(pat);
       });
+      /* Rainfall expectation (Reported lens): ochre 45° where El Niño usually dries, blue 135° where it
+         usually wets, both crossed where a country's regions disagree. Hues match the drought and flood marks. */
+      [['ensoRainDry', [['#c47a3c', 0]], 45], ['ensoRainWet', [['#4a7ab3', 0]], -45], ['ensoRainMixed', [['#c47a3c', 0], ['#4a7ab3', 90]], 45]].forEach(function (p) {
+        var pat = document.createElementNS(ns, 'pattern');
+        pat.setAttribute('id', p[0]); pat.setAttribute('width', '6'); pat.setAttribute('height', '6');
+        pat.setAttribute('patternUnits', 'userSpaceOnUse'); pat.setAttribute('patternTransform', 'rotate(' + p[2] + ')');
+        var bg = document.createElementNS(ns, 'rect');
+        bg.setAttribute('width', '6'); bg.setAttribute('height', '6'); bg.setAttribute('fill', '#e6e3da'); bg.setAttribute('fill-opacity', '.05');
+        pat.appendChild(bg);
+        p[1].forEach(function (l) {
+          var ln = document.createElementNS(ns, 'line');
+          if (l[1]) { ln.setAttribute('x1', '0'); ln.setAttribute('y1', '0'); ln.setAttribute('x2', '6'); ln.setAttribute('y2', '0'); }
+          else { ln.setAttribute('x1', '0'); ln.setAttribute('y1', '0'); ln.setAttribute('x2', '0'); ln.setAttribute('y2', '6'); }
+          ln.setAttribute('stroke', l[0]); ln.setAttribute('stroke-width', '1.4'); ln.setAttribute('stroke-opacity', '.7');
+          pat.appendChild(ln);
+        });
+        defs.appendChild(pat);
+      });
       svg.insertBefore(defs, svg.firstChild);
     }
   }
@@ -47480,7 +47630,7 @@ function showCommodityDetail(key) {
      announced and mirrored in the control. */
   function selectCountry(iso, opts) {
     S.sel = iso || null;
-    if (iso && S.sub !== 'ensoharvest' && S.mode !== 'rtfp' && S.mode !== 'asap') showTab('ensoharvest');
+    if (iso && S.sub !== 'ensoharvest' && ['ensolive', 'ensomoney', 'ensowater'].indexOf(S.sub) < 0 && S.mode !== 'rtfp' && S.mode !== 'asap') showTab('ensoharvest');
     renderDetail(); syncCountrySelect(); paint();
     var st = document.getElementById('enso-status');
     if (st && iso) st.textContent = nameFor(iso) + ' selected.' + (S.mode === 'rtfp' ? ' ' + rtfpReadout(iso).replace(/<[^>]*>/g, ' ') : S.mode === 'asap' ? ' ' + ((asapFor(iso) || {}).hotspot_label || 'No assessment') : ' Details below the map.');
@@ -47490,7 +47640,8 @@ function showCommodityDetail(key) {
       if (host && iso) {
         if (!card) { card = document.createElement('div'); card.id = 'enso-selcard'; card.className = 'enso-selcard'; card.setAttribute('role', 'status'); host.appendChild(card);
           ['click', 'dblclick', 'wheel', 'mousedown', 'touchstart'].forEach(function (ev) { card.addEventListener(ev, function (e) { e.stopPropagation(); }); }); }
-        card.innerHTML = tooltipFor(iso, nameFor(iso)) + '<div class="enso-selcard-btns"><button type="button" onclick="var d=document.getElementById(\'enso-detail\');if(d)d.scrollIntoView({behavior:\'smooth\',block:\'start\'})">Full detail ↓</button><button type="button" aria-label="Clear the selection" onclick="this.closest(\'.enso-selcard\').remove()">×</button></div>';
+        var tgt = S.sub === 'ensolive' ? 'enso-live' : 'enso-detail';
+        card.innerHTML = tooltipFor(iso, nameFor(iso)) + '<div class="enso-selcard-btns"><button type="button" onclick="var d=document.getElementById(\'' + tgt + '\');if(d)d.scrollIntoView({behavior:\'smooth\',block:\'start\'})">' + (S.sub === 'ensolive' ? 'In the list ↓' : 'Full detail ↓') + '</button><button type="button" aria-label="Clear the selection" onclick="this.closest(\'.enso-selcard\').remove()">×</button></div>';
       } else if (card) card.remove();
     } catch (e) {}
     if (opts && opts.fly) flyTo(iso);
@@ -47512,73 +47663,247 @@ function showCommodityDetail(key) {
      events are counted, not drawn. Headlines about the event that name one to three countries are
      added as hollow pins. Nothing here attributes a cause: it marks what fits the usual pattern. */
   var ENSO_REPORT_DAYS = 60;
-  /* The rainfall direction an event shows, compared with the region's `rain` field (not `sign`, which is
-     the effect on production). A food crisis or an unspecified weather flag carries no rainfall direction. */
-  function ensoSignOf(ev) {
+  /* The rainfall direction a hazard shows. It is compared with the region's `rain` field, never `sign`
+     (the effect on production). A cyclone, an earthquake or a food crisis carries no rainfall direction. */
+  function hazardRainClass(ev) {
     if (ev.type === 'drought') return 'drier';
-    if (ev.type === 'weather') return ev.weatherKind === 'wet' ? 'wetter' : ev.weatherKind === 'dry' ? 'drier' : null;
+    if (ev.type === 'weather') return ev.weatherKind === 'wet' ? 'wetter' : (ev.weatherKind === 'dry' || ev.weatherKind === 'heat') ? 'drier' : null;
     if (ev.type === 'flood') return 'wetter';
     return null;
   }
+  var ensoSignOf = hazardRainClass;
+  /* A country's rainfall expectation: the non-null `rain` values of its regions. The fishery region has
+     none, so it never judges a flood or a drought. */
+  function rainOf(iso) {
+    var all = (S.isoIndex || {})[iso] || [], regs = all.filter(function (r) { return r.rain; }), set = [];
+    regs.forEach(function (r) { if (set.indexOf(r.rain) < 0) set.push(r.rain); });
+    return { member: all.length > 0, all: all, regions: regs, set: set, mixed: set.length > 1 };
+  }
+  function rainClass(iso) {
+    var r = rainOf(iso); if (!r.member) return null;
+    return r.mixed ? 'mixed' : r.set[0] === 'drier' ? 'dry' : r.set[0] === 'wetter' ? 'wet' : 'outline';
+  }
+  function fitVerdict(ev) {
+    var cls = hazardRainClass(ev), r = rainOf(ev.iso);
+    if (!cls || !r.set.length || r.mixed) return 'none';
+    return r.set[0] === cls ? 'fits' : 'against';
+  }
+  function verdictText(k) {
+    return { fits: 'fits El Niño’s usual pattern here', against: 'runs against the usual pattern', ahead: 'too early: the exposed harvest is still ahead',
+      none: 'no rainfall link', mixed: 'mixed signal by season' }[k] || '';
+  }
+  var BANNED_CAUSAL = /caused|due to El Ni|because of El Ni|El Ni[nñ]o-driven/i;
   function ensoTypeColor(t) {
     var r = (typeof ML_TYPES !== 'undefined') ? ML_TYPES.find(function (x) { return x.t === t; }) : null;
     return (r && r.c) || '#9a978d';
   }
+  /* Feeds with a home elsewhere: counted in the legend, not drawn here. `report` is ReliefWeb documents,
+     which go to the headline tabs. */
+  var ENSO_NOT_DRAWN = { price_spike: 'price', restriction: 'trade', chokepoint: 'trade', conflict: 'other', disease: 'other', report: 'headline' };
+  function evInWindow(ev, now) {
+    var t = Date.parse(ev.date || '');
+    if (ev.type === 'famine') {
+      /* A classification stays on while in force: its published end, else 120 days from issue. */
+      var end = Date.parse(ev.valid_to || ev.projection_end || '');
+      return isFinite(end) ? end >= now : (!isFinite(t) || t + 120 * 864e5 >= now);
+    }
+    if (ev.to_date && Date.parse(ev.to_date) >= now) return true;
+    return !isFinite(t) || t >= now - ENSO_REPORT_DAYS * 864e5;
+  }
+  function evLatLng(ev) {
+    if (typeof ev.lat === 'number' && typeof ev.lng === 'number' && (ev.lat || ev.lng)) return [ev.lat, ev.lng];
+    return centroidOf(ev.iso) || (typeof COUNTRY_LL !== 'undefined' && COUNTRY_LL[ev.iso]) || null;
+  }
+  function crisisPhase(ev) {
+    var m = /Phase\s*(\d)/i.exec(ev.title || '') || /\((\d)\)/.exec(ev.detail || '');
+    return m ? +m[1] : ev.severity === 'critical' ? 4 : 3;
+  }
+  function dayMon(t) {
+    var d = new Date(t); if (!isFinite(d)) return '';
+    return d.getUTCDate() + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()];
+  }
+  function verdictLine(v, ev) {
+    var r = rainOf(ev.iso), cls = hazardRainClass(ev);
+    var where = function (regs) { return regs.map(function (x) { return esc(x.label || x.id) + (x.damage_season ? ' (' + esc(x.damage_season) + ')' : ''); }).join('; '); };
+    if (v === 'fits') return 'Fits the usual pattern: El Niño usually brings ' + esc(cls) + ' conditions to ' + where(r.regions) + '. A possible early sign, or unrelated; the feeds do not attribute causes.';
+    if (v === 'against') return 'Runs against the usual pattern: El Niño usually brings ' + esc(r.set[0]) + ' conditions to ' + where(r.regions) + '.';
+    if (r.mixed) return 'Regions disagree: ' + r.regions.map(function (x) { return esc(x.label || x.id) + ' usually ' + esc(x.rain); }).join('; ') + '. No verdict without the season.';
+    return !cls ? 'No rainfall expectation for this kind of hazard.' : 'No rainfall expectation in the regions here.';
+  }
   function drawAlerts() {
     if (S.alertPins.length || !S.map) return;
     var evs = (typeof window !== 'undefined' && window.disturbanceEvents) || [];
-    var cutoff = Date.now() - ENSO_REPORT_DAYS * 864e5;
-    var groups = {}, counts = { fit: 0, opposite: 0, notHazard: 0, outside: 0, news: 0, unplaced: 0 };
+    var now = Date.now(), SEVPX = { critical: 20, high: 17, medium: 14, low: 11 }, SEVR = { critical: 4, high: 3, medium: 2, low: 1 };
+    var c = { n: 0, fits: 0, against: 0, none: 0, countries: 0, crisis: 0, headlines: 0, elsewhere: 0, price: 0, trade: 0, other: 0, unplaced: 0, newest: null };
+    var groups = {};
+    S.crisis = {}; S.reported = {}; S.contextPins = []; S._anchor = {};
     evs.forEach(function (ev) {
-      if (!ev || !ev.iso || ev.claim || ev.type === 'chokepoint' || ev.type === 'restriction') return;
-      var regs = S.isoIndex && S.isoIndex[ev.iso];
-      if (!regs) { counts.outside++; return; }
-      var sign = ensoSignOf(ev);
-      if (!sign) { counts.notHazard++; return; }
-      var t = Date.parse(ev.date || ''); if (isFinite(t) && t < cutoff) return;
-      var fit = regs.filter(function (r) { return r.rain === sign; });
-      if (!fit.length) { counts.opposite++; return; }
-      counts.fit++;
-      var g = groups[ev.iso] = groups[ev.iso] || { iso: ev.iso, events: [], news: [], regions: fit };
+      if (!ev || !ev.iso || ev.claim) return;
+      var inside = !!(S.isoIndex || {})[ev.iso];
+      var nd = ENSO_NOT_DRAWN[ev.type];
+      if (nd) { if (nd !== 'headline' && inside) c[nd]++; return; }
+      if (!evInWindow(ev, now)) return;
+      var t = Date.parse(ev.date || '');
+      if (ev.type === 'famine') {
+        var ph = crisisPhase(ev);
+        if (!S.crisis[ev.iso] || ph > S.crisis[ev.iso].phase) S.crisis[ev.iso] = { phase: ph, ev: ev };
+        return;
+      }
+      if (!inside) {
+        c.elsewhere++;
+        var ll0 = evLatLng(ev);
+        if (ll0) {
+          var dot = L.circleMarker(ll0, { radius: 2.5, stroke: false, fillColor: '#5d636b', fillOpacity: .8, ensoSource: 'elsewhere' });
+          dot.bindTooltip('<b>' + esc(nameFor(ev.iso)) + '</b><br>' + esc(ev.title || '') + ' <span style="color:#8b8980">' + esc(String(ev.source || '').split('(')[0].trim()) + ' · ' + esc(ev.date || '') + '</span><br><span style="color:#8b8980">Outside the El Niño regions this page tracks.</span>', { direction: 'top', opacity: .96 });
+          S.contextPins.push(dot);
+        }
+        return;
+      }
+      var v = fitVerdict(ev);
+      c[v]++; c.n++;
+      if (isFinite(t) && (!c.newest || t > c.newest)) c.newest = t;
+      var key = ev.iso + '|' + ev.type + (ev.type === 'weather' ? '|' + (ev.weatherKind || '') : '');
+      var g = groups[key] = groups[key] || { iso: ev.iso, type: ev.type, verdict: v, events: [] };
       g.events.push(ev);
+      var R = S.reported[ev.iso] = S.reported[ev.iso] || { events: [], fits: 0, against: 0, none: 0 };
+      R.events.push(ev); R[v]++;
     });
-    ensoNews().forEach(function (r) {
-      var cm = (r.x && r.x.countries_mentioned) || [];
-      if (!cm.length || cm.length > 3) return;
-      cm.forEach(function (iso) {
-        if (!S.isoIndex || !S.isoIndex[iso]) return;
-        var g = groups[iso] = groups[iso] || { iso: iso, events: [], news: [], regions: S.isoIndex[iso] };
-        g.news.push(r.x); counts.news++;
-      });
+    Object.keys(S.crisis).forEach(function (iso) {
+      if (!(S.isoIndex || {})[iso]) return;
+      c.crisis++;
+      var R = S.reported[iso] = S.reported[iso] || { events: [], fits: 0, against: 0, none: 0 };
+      R.crisis = S.crisis[iso].phase;
     });
-    Object.keys(groups).forEach(function (iso) {
-      var g = groups[iso];
-      var ll = centroidOf(iso) || (typeof COUNTRY_LL !== 'undefined' && COUNTRY_LL[iso]);
-      if (!ll) { counts.unplaced++; return; }
+    c.countries = Object.keys(S.reported).filter(function (i) { return S.reported[i].events.length; }).length;
+    Object.keys(groups).forEach(function (k) {
+      var g = groups[k];
       g.events.sort(function (a, b) { return String(b.date || '').localeCompare(String(a.date || '')); });
-      var top = g.events[0], n = g.events.length + g.news.length;
-      var type = top ? top.type : 'claim', col = ensoTypeColor(type);
-      var reg = g.regions[0];
-      var html = '<div class="dist-marker" data-sev="' + (top ? top.severity || 'medium' : 'medium') + '" style="--dm:' + col + ';--dm-px:' + (top ? 17 : 13) + 'px">' +
-        '<div class="dist-marker-core' + (top ? '' : ' is-context is-claim') + '">' + (typeof distIconSVG === 'function' ? distIconSVG(type) : '') + '</div>' +
-        (n > 1 ? '<div class="dist-marker-count">' + n + '</div>' : '') + '</div>';
-      var icon = L.divIcon({ className: 'dist-marker-wrap', html: html, iconSize: [27, 27], iconAnchor: [13, 13] });
-      var m = L.marker(ll, { icon: icon, riseOnHover: true, keyboard: true, ensoSource: top ? 'event' : 'news', alt: nameFor(iso) + ': ' + n + ' reports' });
+      var ll = null;
+      for (var i = 0; i < g.events.length && !ll; i++) { var e0 = g.events[i]; if (typeof e0.lat === 'number' && (e0.lat || e0.lng)) ll = [e0.lat, e0.lng]; }
+      ll = ll || evLatLng(g.events[0]);
+      if (!ll) { c.unplaced += g.events.length; return; }
+      var worst = g.events.reduce(function (a, e) { return (SEVR[e.severity] || 2) > (SEVR[a] || 2) ? e.severity : a; }, 'low');
+      var px = SEVPX[worst] || 14, n = g.events.length, col = ensoTypeColor(g.type);
+      var tl = (typeof ML_TYPES !== 'undefined' && ML_TYPES.find(function (x) { return x.t === g.type; })) || {};
+      var D = px + 12, cc = D / 2, ic = Math.round(px * 0.62);
+      var ring = g.verdict === 'fits' ? '<circle cx="' + cc + '" cy="' + cc + '" r="' + (px / 2 + 3.2) + '" fill="none" stroke="#f2efe6" stroke-width="2"/>' :
+        g.verdict === 'against' ? '<circle cx="' + cc + '" cy="' + cc + '" r="' + (px / 2 + 1.6) + '" fill="none" stroke="#8b8980" stroke-width="1"/>' : '';
+      var glyph = (typeof distIconSVG === 'function' ? distIconSVG(g.type) : '<svg></svg>').replace('<svg ', '<svg x="' + (cc - ic / 2) + '" y="' + (cc - ic / 2) + '" width="' + ic + '" height="' + ic + '" ');
+      var html = '<div class="enso-hz-wrap"><svg class="enso-hz" width="' + D + '" height="' + D + '" viewBox="0 0 ' + D + ' ' + D + '" aria-hidden="true">' + ring +
+        '<circle cx="' + cc + '" cy="' + cc + '" r="' + (px / 2) + '" fill="' + col + '" stroke="#0b1017" stroke-width="1.5"/><g style="color:#111317">' + glyph + '</g></svg>' +
+        (n > 1 ? '<span class="enso-hz-n">' + n + '</span>' : '') + '</div>';
+      var icon = L.divIcon({ className: 'enso-hz-marker enso-ring-' + g.verdict, html: html, iconSize: [D, D], iconAnchor: [cc, cc] });
+      var m = L.marker(ll, { icon: icon, riseOnHover: true, keyboard: true, ensoSource: 'event', ensoVerdict: g.verdict, ensoIso: g.iso,
+        alt: nameFor(g.iso) + ': ' + n + ' ' + (tl.l || g.type).toLowerCase() + ' report' + (n === 1 ? '' : 's') + ', ' + verdictText(g.verdict) });
       var rows = g.events.slice(0, 5).map(function (e) {
-        return '<div style="margin:3px 0;"><span style="color:' + ensoTypeColor(e.type) + '">●</span> ' + esc(e.title || '') + ' <span style="color:#8b8980">' + esc(String(e.source || '').split('(')[0].trim()) + ' · ' + esc(e.date || '') + '</span></div>';
-      }).join('') + (g.events.length > 5 ? '<div style="color:#8b8980">+' + (g.events.length - 5) + ' more on the Disturbances tab</div>' : '') +
-        g.news.slice(0, 3).map(function (x) {
-          return '<div style="margin:3px 0;"><span style="color:#8fa3bf">○</span> ' + esc(x.title || '') + ' <span style="color:#8b8980">headline · ' + esc(x.source || '') + '</span></div>';
-        }).join('');
-      var wetdry = reg.rain || (reg.sign === 'dry' ? 'drier' : 'wetter');
-      m.bindTooltip('<b>' + esc(nameFor(iso)) + '</b>' + rows +
-        '<div style="margin-top:5px;color:#c9c4b8;max-width:300px;white-space:normal;">El Niño usually brings ' + wetdry + ' conditions to ' + esc(reg.label || 'this region') +
-        (reg.damage_season ? ' (' + esc(reg.damage_season) + ')' : '') + '. ' + (top ? 'These reports fit that pattern: a possible early sign, or unrelated. The feeds do not attribute causes.' : 'Headlines only: claims, not measurements.') + '</div>',
+        return '<div style="margin:3px 0;"><span style="color:' + col + '">●</span> ' + esc(e.title || '') + ' <span style="color:#8b8980">' + esc(String(e.source || '').split('(')[0].trim()) + ' · ' + esc(e.date || '') + '</span></div>';
+      }).join('') + (g.events.length > 5 ? '<div style="color:#8b8980">+' + (g.events.length - 5) + ' more on the Disturbances tab</div>' : '');
+      m.bindTooltip('<b>' + esc(nameFor(g.iso)) + '</b>' + rows + '<div style="margin-top:5px;color:#c9c4b8;max-width:300px;white-space:normal;">' + verdictLine(g.verdict, g.events[0]) + '</div>',
         { direction: 'top', opacity: .97, sticky: false });
-      m.on('click', function () { if (typeof selectCountry === 'function') selectCountry(iso, { fly: false }); });
+      m.on('click', function () { if (typeof selectCountry === 'function') selectCountry(g.iso, { fly: false }); });
       S.alertPins.push(m);
+      if (!S._anchor[g.iso] || px > S._anchor[g.iso].px) S._anchor[g.iso] = { ll: ll, px: px };
     });
-    S.alertCounts = counts;
+    c.headlines = headlineItems().filter(function (h) { return h.isos.some(function (i) { return (S.isoIndex || {})[i]; }); }).length;
+    S.alertCounts = c;
+    applyVerdictFilter();
+  }
+  /* Headlines and agency reports naming El Niño countries: ReliefWeb documents, El Niño news and commodity
+     news, the last 30 days, deduplicated. Titles are kept exactly as published. */
+  function headlineItems() {
+    if (S._hl) return S._hl;
+    var now = Date.now(), cut = now - 30 * 864e5, seen = {}, out = [];
+    var norm = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); };
+    var add = function (o) {
+      if (!o.title || /charity|donor/i.test(o.title)) return;
+      if (isFinite(o.t) && o.t < cut) return;
+      var k = o.key || o.url || norm(o.title), k2 = norm(o.title);
+      if (seen[k] || seen[k2]) return; seen[k] = seen[k2] = 1; out.push(o);
+    };
+    ((typeof window !== 'undefined' && window.disturbanceEvents) || []).forEach(function (ev) {
+      if (!ev || !ev.iso || ev.claim || !/ReliefWeb/i.test(ev.source || '')) return;
+      add({ title: ev.title, source: 'ReliefWeb', url: ev.url, t: Date.parse(ev.date || ''), isos: [ev.iso], agency: true, outlets: 1, key: ev.url });
+    });
+    var cn = (typeof LIVE !== 'undefined' && LIVE && LIVE.commodity_news && (LIVE.commodity_news.data || LIVE.commodity_news).items) || [];
+    ensoNews().map(function (r) { return r.x; }).concat(cn).forEach(function (x) {
+      if (!x) return;
+      add({ title: x.title, source: x.source || '', url: x.url, t: Date.parse(x.published_at || x.date || ''), isos: (x.countries_mentioned || []).slice(), outlets: x.outlets || 1, key: x.dedup_key || x.url });
+    });
+    S._hl = out.sort(function (a, b) { return (b.t || 0) - (a.t || 0); });
+    return S._hl;
+  }
+  /* Items placed on a country: those naming one to three countries. */
+  function headlinesFor(iso) {
+    return headlineItems().filter(function (h) { return h.isos.length >= 1 && h.isos.length <= 3 && h.isos.indexOf(iso) >= 0; })
+      .sort(function (a, b) { return (b.agency ? 1 : 0) - (a.agency ? 1 : 0) || (b.t || 0) - (a.t || 0); });
+  }
+  function drawHeadlines() {
+    if (S.headlinePins.length || !S.map) return;
+    Object.keys(S.isoIndex || {}).forEach(function (iso) {
+      var items = headlinesFor(iso); if (!items.length) return;
+      var an = (S._anchor || {})[iso], ll = an ? an.ll : (centroidOf(iso) || (typeof COUNTRY_LL !== 'undefined' && COUNTRY_LL[iso]));
+      if (!ll) return;
+      var off = an ? Math.round(an.px / 2) + 8 : -4;
+      var icon = L.divIcon({ className: 'enso-hl-wrap', html: '<span class="enso-hl-tab" data-hl-iso="' + esc(iso) + '">▤ ' + items.length + '</span>', iconSize: null, iconAnchor: [-off, 9] });
+      var m = L.marker(ll, { icon: icon, keyboard: true, ensoSource: 'news', ensoIso: iso, alt: nameFor(iso) + ': ' + items.length + ' headline' + (items.length === 1 ? '' : 's') });
+      m.bindTooltip('<b>' + esc(nameFor(iso)) + '</b>' + items.slice(0, 6).map(function (h) {
+        return '<div style="margin:3px 0;max-width:320px;white-space:normal;">' + esc(h.title) + ' <span style="color:#8b8980">' + esc(h.source) + (isFinite(h.t) ? ' · ' + dayMon(h.t) : '') + '</span></div>';
+      }).join('') + (items.length > 6 ? '<div style="color:#8b8980">+' + (items.length - 6) + ' more</div>' : '') +
+        '<div style="margin-top:5px;color:#8b8980">Headlines are claims, not measurements.</div>', { direction: 'top', opacity: .97 });
+      m.on('click', function () { selectCountry(iso, { fly: false }); });
+      S.headlinePins.push(m);
+    });
+  }
+  /* The largest recent stories, printed as published in the ocean gutters with a leader to their country. */
+  /* Open ocean only: E Pacific, S Pacific, N and S Atlantic, Arabian Sea, S Indian (two), W Pacific. */
+  var CALLOUT_SLOTS = [[-5, -120], [-38, -100], [32, -48], [-25, -20], [9, 60], [-30, 62], [-36, 100], [10, 160]];
+  var CALLOUT_RX = /drought|flood|rain|cyclone|storm|harvest|crop|hunger|famine|El Ni[nñ]o/i;
+  function drawCallouts() {
+    (S.calloutPins || []).forEach(function (o) { try { S.map.removeLayer(o); } catch (e) {} });
+    S.calloutPins = [];
+    if (!S.map || !S.showHeadlines || S.sub !== 'ensolive' || typeof S.map.getBounds !== 'function') return;
+    var w = window.innerWidth || 1440, max = w >= 1280 ? 3 : w >= 1024 ? 2 : w > 768 ? 1 : 0;
+    if (!max) return;
+    var cut = Date.now() - 14 * 864e5, bounds = S.map.getBounds(), done = {};
+    var cands = headlineItems().filter(function (h) {
+      return (!isFinite(h.t) || h.t >= cut) && CALLOUT_RX.test(h.title || '') &&
+        h.isos.some(function (i) { return (S.isoIndex || {})[i]; }) && (h.isos.length <= 3 || h.outlets >= 3);
+    }).sort(function (a, b) { return (b.outlets || 1) - (a.outlets || 1) || (b.agency ? 0 : 1) - (a.agency ? 0 : 1) || (b.t || 0) - (a.t || 0); });
+    /* Pick the stories first (one per country), then give them the slots with the least total leader
+       length, so leaders do not cross the map to reach a slot a higher-ranked story took. */
+    var pick = [];
+    cands.forEach(function (h) {
+      if (pick.length >= max) return;
+      var iso = h.isos.filter(function (i) { return (S.isoIndex || {})[i]; })[0];
+      if (done[iso]) return;
+      var an = (S._anchor || {})[iso], ll = an ? an.ll : (centroidOf(iso) || (typeof COUNTRY_LL !== 'undefined' && COUNTRY_LL[iso]));
+      if (!ll) return;
+      done[iso] = 1; pick.push({ h: h, iso: iso, ll: ll });
+    });
+    var slots = CALLOUT_SLOTS.map(function (sl, i) { return i; }).filter(function (i) { return bounds.contains(CALLOUT_SLOTS[i]); });
+    var dist = function (i, ll) { var sl = CALLOUT_SLOTS[i], dl = ((sl[1] - ll[1] + 540) % 360) - 180; return Math.pow(sl[0] - ll[0], 2) + dl * dl; };
+    pick = pick.slice(0, slots.length);
+    var bestSet = null, bestCost = 1e9;
+    (function perm(k, usedS, acc, cost) {
+      if (cost >= bestCost) return;
+      if (k === pick.length) { bestCost = cost; bestSet = acc.slice(); return; }
+      slots.forEach(function (i) { if (usedS[i]) return; usedS[i] = 1; acc.push(i); perm(k + 1, usedS, acc, cost + dist(i, pick[k].ll)); acc.pop(); usedS[i] = 0; });
+    })(0, {}, [], 0);
+    (bestSet || []).forEach(function (si, k) {
+      var h = pick[k].h, iso = pick[k].iso, ll = pick[k].ll;
+      var sl = CALLOUT_SLOTS[si], t = String(h.title || ''); t = t.length > 60 ? t.slice(0, 59).trim() + '…' : t;
+      var lead = L.polyline([sl, ll], { color: '#8b8980', weight: .75, opacity: .8, interactive: false });
+      /* A box near the right edge hangs left of its slot so it never runs off the map. */
+      var sx = S.map.latLngToContainerPoint(sl).x, flip = sx + 230 > S.map.getSize().x;
+      var box = L.marker(sl, { keyboard: true, ensoSource: 'callout', icon: L.divIcon({ className: 'enso-callout-wrap', iconSize: null, iconAnchor: [flip ? 222 : 0, 0],
+        html: '<a class="enso-callout" href="' + esc(h.url || '#') + '" target="_blank" rel="noopener" data-hl-iso="' + esc(iso) + '"><span class="t">' + esc(t) + '</span><span class="m">' + esc(h.source) + (isFinite(h.t) ? ' · ' + dayMon(h.t) : '') + '</span></a>' }) });
+      box.on('click', function () { selectCountry(iso, { fly: false }); });
+      box.on('mouseover', function () { lead.setStyle({ color: '#ebe9e2', opacity: 1 }); var tb = document.querySelector('.enso-hl-tab[data-hl-iso="' + iso + '"]'); if (tb) tb.classList.add('is-lit'); });
+      box.on('mouseout', function () { lead.setStyle({ color: '#8b8980', opacity: .8 }); var tb = document.querySelector('.enso-hl-tab[data-hl-iso="' + iso + '"]'); if (tb) tb.classList.remove('is-lit'); });
+      S.calloutPins.push(lead, box);
+    });
+    S.calloutPins.forEach(function (o) { o.addTo(S.map); });
+    if (!S._calloutHooked && S.map.on) { S._calloutHooked = true; S.map.on('zoomend moveend', function () { if (S.sub === 'ensolive') drawCallouts(); }); }
   }
   function resizeEnsoMap() {
     if (!S.map) return;
@@ -47650,25 +47975,38 @@ function showCommodityDetail(key) {
   }
   function toggleAlerts() {
     if (!S.map) return;
-    if (!S.showAlerts) { S.alertPins.forEach(function (m) { try { S.map.removeLayer(m); } catch (e) {} }); return; }
+    var off = function (arr) { (arr || []).forEach(function (m) { try { S.map.removeLayer(m); } catch (e) {} }); };
+    off(S.alertPins); off(S.contextPins); off(S.headlinePins); off(S.calloutPins);
+    if (!S.showAlerts && !S.showHeadlines && !S.showElsewhere) { if (S.sub === 'ensolive') paint(); return; }
     /* The live events load with the Disturbances layer; on a deep link to this tab they may not have yet. */
     var ready = (window.disturbanceEvents || []).length;
     if (!ready && typeof loadDisturbanceData === 'function' && !S._alertsLoading) {
       S._alertsLoading = true;
       Promise.resolve(loadDisturbanceData()).catch(function () {}).then(function () {
         S._alertsLoading = false;
-        S.alertPins.forEach(function (m) { try { S.map.removeLayer(m); } catch (e) {} });
-        S.alertPins = [];
-        if (S.showAlerts) toggleAlerts();
+        off(S.alertPins); off(S.headlinePins);
+        S.alertPins = []; S.headlinePins = []; S._hl = null;
+        toggleAlerts();
         try { if (typeof renderLegend === 'function') renderLegend(); } catch (e) {}
       });
     }
-    drawAlerts(); S.alertPins.forEach(function (m) { m.addTo(S.map); });
+    drawAlerts();
+    if (S.showAlerts) S.alertPins.forEach(function (m) { m.addTo(S.map); });
+    if (S.showElsewhere) S.contextPins.forEach(function (m) { m.addTo(S.map); });
+    if (S.showHeadlines) { drawHeadlines(); S.headlinePins.forEach(function (m) { m.addTo(S.map); }); }
+    drawCallouts();
+    if (S.sub === 'ensolive') { paint(); try { renderMapRanking(); } catch (e) {} }
   }
 
   /* Jump from any live/news row to that country on the map. */
   window.ensoFocus = function (iso) {
     if (!iso) return;
+    /* On Reported, Prices and Shipping a country click stays on that lens and brings the map into view. */
+    if (['ensolive', 'ensomoney', 'ensowater'].indexOf(S.sub) >= 0) {
+      selectCountry(iso, { fly: true });
+      var mw = document.getElementById('enso-mapwrap'); if (mw) mw.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      return;
+    }
     if (typeof showTab === 'function') showTab('ensoharvest');
     setTimeout(function () {
       resizeEnsoMap();
@@ -49324,6 +49662,9 @@ function showCommodityDetail(key) {
     S.showRegions = S.sub === 'ensoharvest';
     S.showLanes = S.sub === 'ensowater';
     S.showAlerts = S.sub === 'ensolive';
+    S.showHeadlines = S.showElsewhere = S.sub === 'ensolive';
+    /* The NOAA index strip belongs to Ocean; the other lenses lead with their own map. */
+    var wk = document.getElementById('enso-weekly'); if (wk) wk.hidden = ['ensomoney', 'ensowater', 'ensolive'].indexOf(S.sub) >= 0;
     S.showImports = false;
     var pill = document.getElementById('enso-nav-pill');
     if (!S.ready) {
