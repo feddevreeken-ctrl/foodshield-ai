@@ -83,8 +83,6 @@ ITEMS = {
     "offal":        ("Offal", [868], "edible bovine offal"),
     "procgrains":   ("Flour", [16, 58], "wheat and maize flour"),
 }
-IMPORTER_KEYS = ["wheat", "maize", "rice", "soybeans", "barley", "sorghum", "vegoils", "palmoil",
-                 "sugar", "pulses", "poultry", "beef", "dairy"]
 ITEM_TO_KEY = {code: key for key, (_, codes, _) in ITEMS.items() for code in codes}
 IMPORT_EL, EXPORT_EL = "5610", "5910"
 # FAO aggregates that would double count their members
@@ -230,30 +228,41 @@ def build():
             "totals_by_year_t": {str(y): round(t) for y, t in sorted(totals.items())},
         }
         print(f"[ok] {key:12s} {year}  world {world/1e6:8.2f} Mt  corridors {len(flows):5d}  mirror {100*mirror_share:4.1f}%")
-    # Per-importer view for the country panel and the Country tab: every importer's top five
-    # suppliers of the staples the score and the supplier cards talk about.
-    by_importer = {}
-    for key in IMPORTER_KEYS:
+    # Per-country view for the country panel and the Country tab: for every commodity, each
+    # importer's total and top eight suppliers, and each exporter's total and top eight buyers.
+    by_country = {}
+    for key in ITEMS:
         if key not in vals:
             continue
         year = out[key]["year"]
         flows = corridor_values(vals[key][year])
-        per = defaultdict(list)
+        imp, exp = defaultdict(list), defaultdict(list)
         for (e, i), (v, b) in flows.items():
-            per[i].append((e, v, b))
-        for i, lst in per.items():
-            tot = sum(v for _, v, _ in lst)
-            lst.sort(key=lambda x: -x[1])
-            by_importer.setdefault(i, {})[key] = {
-                "year": year, "imports_t": round(tot),
-                "suppliers": [{"iso": e, "t": round(v), "share_pct": round(100 * v / tot, 1), "basis": b}
-                              for e, v, b in lst[:5]],
-            }
-    write_json("trade_matrix_importers.json", by_importer,
-               source="FAOSTAT Detailed Trade Matrix (TM), bulk normalized download: " + BULK_URL,
-               notes=("Per importer and commodity: total imports (t) and the top five suppliers with their share. "
-                      "Importer-reported quantity, exporter-reported mirror where the importer did not report (basis). "
-                      "Commodities: " + ", ".join(IMPORTER_KEYS) + "."))
+            imp[i].append((e, v, b))
+            exp[e].append((i, v, b))
+        for side, table in (("imp", imp), ("exp", exp)):
+            for iso, lst in table.items():
+                tot = sum(v for _, v, _ in lst)
+                lst.sort(key=lambda x: -x[1])
+                by_country.setdefault(iso, {"imp": {}, "exp": {}})[side][key] = {
+                    "year": year, "t": round(tot), "n": len(lst),
+                    "partners": [{"iso": p, "t": round(v), "share_pct": round(100 * v / tot, 1), "basis": b}
+                                 for p, v, b in lst[:8]],
+                }
+    # One compact file per country (data/tm/EGY.json, a few kB), fetched only when that country
+    # is opened: the whole set is ~5 MB and no page needs it at once.
+    tm_dir = Path(__file__).resolve().parent.parent / "data" / "tm"
+    tm_dir.mkdir(exist_ok=True)
+    for old in tm_dir.glob("*.json"):
+        old.unlink()
+    stamp = datetime.now(timezone.utc).isoformat()
+    for iso, payload in by_country.items():
+        (tm_dir / f"{iso}.json").write_text(json.dumps({
+            "_meta": {"generated_at": stamp, "source": "FAOSTAT Detailed Trade Matrix (TM)", "source_url": BULK_URL,
+                      "notes": "imp/exp per commodity: tonnes, partner count, top eight partners with share and basis "
+                               "(reported = importer's declaration; mirror = exporter's, importer did not report)."},
+            "data": payload}, separators=(",", ":")))
+    print(f"[OK] wrote {len(by_country)} per-country files to data/tm/")
     method = ("Corridor tonnes = importer-reported import quantity (FAO element 5610); where the importer did not "
               "report, the exporter-reported export quantity (5910) to it, flagged basis='mirror'. Items summed on "
               "a product-weight basis per commodity. Year = latest with a reported world total >= 85% of the year "
