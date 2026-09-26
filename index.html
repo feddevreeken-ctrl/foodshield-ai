@@ -10040,6 +10040,7 @@ body::before {
 .enso-pw-more summary { cursor:pointer; color:var(--t3); font:11px 'Geist Mono',monospace; }
 .enso-pw-more p { margin:6px 0 0; color:var(--t2); }
 .enso-lane-evidence-fold > summary { cursor:pointer; margin:8px 0 24px; color:var(--t2); font-size:13px; }
+.enso-tier-sw { display:inline-block; width:18px; height:0; margin-right:8px; vertical-align:middle; }
 .enso-wp-more > summary { cursor:pointer; margin:12px 0; color:var(--t2); font-size:13px; }
 .enso-share-b { background:none; border:1px solid var(--b2); color:var(--t2); font:11px 'Geist Mono',monospace; padding:5px 9px; cursor:pointer; }
 .enso-share-b:hover, .enso-share-b:focus-visible { color:var(--t1); border-color:var(--t2); }
@@ -48774,7 +48775,7 @@ function showCommodityDetail(key) {
       var g = G.gatun, am = (g && g.analog_min) || {}, low = Object.keys(am).map(function (k) { var d = new Date(am[k].date); return r1(am[k].ft) + ' ft (' + (isNaN(d) ? k : d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' })) + ')'; });
       return { level: strong ? 'elevated' : 'watch', text: 'Past El Niño lake lows: ' + (low.length ? low.join(', ') : 'see the lake plate') + '. Slot and draft cuts in force. Next test: the January–April dry season.' };
     }
-    if (ln.id === 'amazon') return { level: strong ? 'elevated' : 'watch', text: (strong ? 'Elevated by the ONI rule, not by today’s gauge. ' : '') + 'At risk in the October–November low-water season. El Niño and warming both cut rainfall in the 2023 record drought; the 2024 low came after El Niño had ended.' };
+    if (ln.id === 'amazon') return { level: strong ? 'elevated' : 'watch', text: 'Manaus has no long-term reference in this feed; the published risk is the October–November low-water season. El Niño and warming both cut rainfall in the 2023 record drought; the 2024 low came after El Niño had ended.' };
     if (ln.id === 'malacca') return { level: 'watch', text: 'Haze from peat fires can cut visibility in an El Niño dry season; weak attribution.' };
     /* Measured water outranks the phase tag: a lane restricted now is named
        as restricted, whatever the Pacific is doing. */
@@ -48860,13 +48861,13 @@ function showCommodityDetail(key) {
     var dG = Date.parse(metaDate('gauges') || 0) || 0, dP = Date.parse(metaDate('portwatch') || 0) || 0;
     if (dG || dP) readOn = stamp(new Date(Math.max(dG, dP)));
     var order = {el_nino:0,la_nina:1,none:2};
-    return '<figure class="enso-plate enso-lane-board">' + plateHead('Which grain lanes are restricted now, and which are at risk', 'Gauge or AIS now · Elevated: El Niño lane, strong or moderate attribution, ONI ≥ 1.5 (this site’s threshold, not a CPC class); Watch: weak attribution; Restricted now: gauge below its navigation reference', readOn, 'reported') +
+    return '<figure class="enso-plate enso-lane-board">' + plateHead('Which grain lanes are restricted now, and which are at risk', 'Gauges and IMF PortWatch AIS now · published ENSO links · “Restricted now”: a gauge below its navigation reference', readOn, 'reported') +
       '<div class="plate-body"><table class="enso-status-table"><thead><tr><th scope="col">Lane</th><th scope="col">ENSO link</th><th scope="col">Measured now<span class="enso-live-sub">transits: IMF PortWatch AIS, 28-day mean, % on a year earlier</span></th><th scope="col">Outlook for this event</th></tr></thead><tbody>' +
       lanes.slice().sort(function (a,b) { return order[a.phase] - order[b.phase]; }).map(function (ln) {
         return '<tr data-board-lane="' + esc(ln.id) + '"><th scope="row"><button type="button" data-open-lane="' + esc(ln.id) + '" aria-controls="enso-lane-record-' + esc(ln.id) + '">' + esc(laneName(ln)) + '</button></th>' +
-          '<td data-label="ENSO link">' + (ln.phase === 'el_nino' ? 'El Niño' + '<span class="enso-live-sub">' + esc(ln.attribution) + ' attribution</span>' : ln.phase === 'la_nina' ? 'La Niña' + '<span class="enso-live-sub">' + esc(ln.attribution) + ' attribution</span>' : 'No published ENSO link') + '</td>' +
+          '<td data-label="ENSO link"><i class="enso-tier-sw" style="border-top:' + (laneTier(ln) === 1 ? 2.2 : 1.2) + 'px dashed ' + (laneTier(ln) === 3 ? '#7b8491' : phaseInk(ln)) + '"></i>' + (ln.phase === 'el_nino' ? 'El Niño' + '<span class="enso-live-sub">' + esc(ln.attribution) + ' attribution</span>' : ln.phase === 'la_nina' ? 'La Niña' + '<span class="enso-live-sub">' + esc(ln.attribution) + ' attribution</span>' : 'No published ENSO link') + '</td>' +
           '<td data-label="Measured now" class="enso-lane-now">' + bulletList(laneNowParts(ln).map(esc)) + '</td>' +
-          (function () { var v = laneVerdict(ln); return '<td data-label="Outlook" class="enso-lane-verdict is-' + v.level + '"><b>' + esc({ elevated: 'Elevated', watch: 'Watch', eases: 'Usually eases', other: 'Other causes', restricted: 'Restricted now · not ENSO' }[v.level]) + '</b>' + bulletList(bulletsOf(v.text, 3).map(esc), 'is-sub') + '</td>'; })() + '</tr>';
+          (function () { var v = laneVerdict(ln); return '<td data-label="Outlook" class="enso-lane-verdict is-' + v.level + '"><b>' + esc({ elevated: 'In phase: El Niño under way', watch: 'Weak link', eases: 'Usually eases in El Niño', other: 'No ENSO link', restricted: 'Restricted now · not ENSO' }[v.level]) + '</b>' + bulletList(bulletsOf(v.text, 3).map(esc), 'is-sub') + '</td>'; })() + '</tr>';
       }).join('') + '</tbody></table></div></figure>';
   }
 
