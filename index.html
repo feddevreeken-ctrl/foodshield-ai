@@ -9926,7 +9926,15 @@ body::before {
 .enso-grat-lab {
   font-family:'Geist Mono',monospace; font-size:var(--enso-fs-chip); letter-spacing:.16em;
   color:#8aa6c4; opacity:.85; white-space:nowrap; pointer-events:none;
+  text-shadow:0 0 3px #0b1017,0 0 3px #0b1017,0 0 6px #0b1017;
 }
+/* The sticky lens bar is ~40px tall: anything scrolled to the map lands below it, tools included. */
+#enso-mapwrap, #enso-map { scroll-margin-top: 56px; }
+.enso-selcard{position:absolute;left:10px;bottom:10px;z-index:800;max-width:300px;background:rgba(11,16,23,.94);border:1px solid var(--b2);border-radius:4px;padding:10px 12px;font-size:12px;color:var(--t2);line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,.4);}
+.enso-selcard b{color:var(--t1);}
+.enso-selcard-btns{display:flex;gap:6px;margin-top:8px;}
+#tab-elnino .enso-selcard-btns button{background:none;border:1px solid var(--b2);color:var(--t2);border-radius:3px;padding:3px 9px;font-size:11px;font-family:inherit;cursor:pointer;min-height:0;min-width:0;height:auto;line-height:1.5;}
+#tab-elnino .enso-selcard-btns button:hover{border-color:var(--accent);color:var(--t1);}
 .enso-anno { pointer-events:none; width:188px; }
 .enso-anno b {
   display:block; font-family:'Geist Mono',monospace; font-size:var(--enso-fs-chip);
@@ -47177,7 +47185,7 @@ function showCommodityDetail(key) {
        Climate Program Office finding recorded in enso_regions.json under
        us_southern_plains, and it says so now. The yield slope beside it is the
        fit, and stays labelled as such. */
-    { at: [38.5, -98.4], label: [40, -128], side: 'left', t: 'Kansas', lens: ['ensoharvest'],
+    { at: [38.5, -98.4], label: [26, -150], side: 'right', t: 'Kansas', lens: ['ensoharvest'],
       d: function () { var v = atMapOni('USA', 'wheat'); return (v ? 'Wheat ' + num(v.pct, 0) + '% at ONI ' + num(v.oni, 1) + ' in the fit. ' : '') + 'Abandoned area −3 percentage points (NOAA CPO).'; } },
     { at: [-28.6, 26.2], label: [-33, 58], side: 'right', t: 'Free State', lens: ['ensoharvest'],
       d: function () { var z = atMapOni('ZAF', 'corn'), w = atMapOni('ZWE', 'corn'); return (z ? 'Maize ' + num(z.pct, 0) + '%' : '') + (w ? '; Zimbabwe ' + num(w.pct, 0) + '%' : '') + (z || w ? ' at ONI ' + num((z || w).oni, 1) + ' in the fit.' : ''); } },
@@ -47437,6 +47445,15 @@ function showCommodityDetail(key) {
     renderDetail(); syncCountrySelect(); paint();
     var st = document.getElementById('enso-status');
     if (st && iso) st.textContent = nameFor(iso) + ' selected.' + (S.mode === 'rtfp' ? ' ' + rtfpReadout(iso).replace(/<[^>]*>/g, ' ') : S.mode === 'asap' ? ' ' + ((asapFor(iso) || {}).hotspot_label || 'No assessment') : ' Details below the map.');
+    /* The full detail renders below the map; a card on the map says what was picked and links to it. */
+    try {
+      var host = document.getElementById('enso-map'), card = document.getElementById('enso-selcard');
+      if (host && iso) {
+        if (!card) { card = document.createElement('div'); card.id = 'enso-selcard'; card.className = 'enso-selcard'; card.setAttribute('role', 'status'); host.appendChild(card);
+          ['click', 'dblclick', 'wheel', 'mousedown', 'touchstart'].forEach(function (ev) { card.addEventListener(ev, function (e) { e.stopPropagation(); }); }); }
+        card.innerHTML = tooltipFor(iso, nameFor(iso)) + '<div class="enso-selcard-btns"><button type="button" onclick="var d=document.getElementById(\'enso-detail\');if(d)d.scrollIntoView({behavior:\'smooth\',block:\'start\'})">Full detail ↓</button><button type="button" aria-label="Clear the selection" onclick="this.closest(\'.enso-selcard\').remove()">×</button></div>';
+      } else if (card) card.remove();
+    } catch (e) {}
     if (opts && opts.fly) flyTo(iso);
   }
 
