@@ -45100,7 +45100,7 @@ function showCommodityDetail(key) {
           '<div class="enso-ol-skill' + (rough ? ' is-warn' : '') + '" role="cell">' + (h ? h.sign_right + '/' + h.events + ' right' + (rough ? '<span>size rough</span>' : '') : '—') + '</div></div>';
       }).join('') +
       '<div class="enso-ol-row enso-ol-axisrow" aria-hidden="true"><span></span><div class="enso-ol-axis">' + tickVals.map(function (t) { return '<b style="left:' + P(t) + '">' + (t > 0 ? '+' : '') + t + '%</b>'; }).join('') + '</div><span></span><span></span><span></span><span></span></div>' +
-      '<p class="enso-ol-fine enso-hindcast-note">“Today”: the same model at today’s ONI ' + num(S.oniLive, 1) + ', as on the map. “Past El Niños”: in how many El Niño winters left out of the fit the model called the direction right. “Size rough”: the El Niño term sized the change no better than the same fit without it. Read as direction and order of magnitude.</p>' +
+      '<p class="enso-ol-fine enso-hindcast-note">“Today”: the model at today’s ONI ' + num(S.oniLive, 1) + '. “Past El Niños”: winters left out of the fit where it called the direction right. “Size rough”: the El Niño term sized the change no better than the fit without it.</p>' +
       '</div>' : '';
     /* A pair that got the direction wrong in most past El Niños is not quoted in prose; the table keeps it, flagged. */
     var nowOk = now.filter(function (f) { var h = hindcastOf(f.iso, f.crop); return !h || h.sign_right * 2 > h.events; });
@@ -45179,7 +45179,7 @@ function showCommodityDetail(key) {
       '<svg class="enso-hw" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Regional impact windows, ' + rows.length + ' regions">' + ticks +
       '<line x1="' + px + '" x2="' + px + '" y1="' + (top - 4) + '" y2="' + (H - 8) + '" stroke="#e0673c" stroke-width="1" stroke-dasharray="3 3"/><text x="' + px + '" y="' + (H - 1) + '" text-anchor="middle" class="enso-hw-t" fill="#e0673c">' + MON3[pk % 12] + ' ' + Math.floor(pk / 12) + ' reference</text>' +
       body + '<line x1="' + tx + '" x2="' + tx + '" y1="' + (top - 4) + '" y2="' + (H - 8) + '" stroke="#ebe9e2" stroke-width="1.2"/><text x="' + tx + '" y="' + (H - 1) + '" text-anchor="middle" class="enso-hw-t" fill="#ebe9e2">today</text></svg>' +
-      '<p class="enso-hw-cap">Published regional windows aligned to a ' + monTxt(pk) + ' reference. Dashed: window ahead; filled: current; grey: elapsed. Chips give the recorded output direction (ochre falls, blue rises). These are approximate seasonal windows, not observations of harvest progress or forecasts of losses. The anchoveta region is left out.</p></div>';
+      '<p class="enso-hw-cap">Each region’s published lag after a ' + monTxt(pk) + ' reference. Dashed: ahead; filled: under way; grey: over. Chip: output usually falls (ochre) or rises (blue). Seasonal windows, not a forecast of losses.</p></div>';
   }
   function renderPubfx() {
     var el = document.getElementById('enso-pubfx'); if (!el) return;
@@ -45196,7 +45196,7 @@ function showCommodityDetail(key) {
       '<div class="enso-sec-h"><span>What studies found beyond the fitted model</span> past events and published sensitivities</div>' +
       '<table class="enso-live-table enso-pubfx-table"><thead><tr><th scope="col">Country · crop</th><th scope="col">Past El Niño effect</th><th scope="col">Source</th></tr></thead><tbody>' +
       R.slice(0, 4).map(pubRow).join('') + '</tbody></table>' +
-      (R.length > 4 ? '<details class="enso-ol-more"><summary>' + (R.length - 4) + ' more published studies</summary><table class="enso-live-table enso-pubfx-table"><tbody>' + R.slice(4).map(pubRow).join('') + '</tbody></table></details>' : '') + '</div><figcaption class="enso-log">Past events and published sensitivities, not this site’s model and not a forecast for 2026-27. Hover a source for its quote, a confidence note for its reason.</figcaption></figure>';
+      (R.length > 4 ? '<details class="enso-ol-more"><summary>' + (R.length - 4) + ' more published studies</summary><table class="enso-live-table enso-pubfx-table"><tbody>' + R.slice(4).map(pubRow).join('') + '</tbody></table></details>' : '') + '</div><figcaption class="enso-log">Past events and published sensitivities, not this site’s model. Hover a source for its quote.</figcaption></figure>';
     el.querySelectorAll('[data-map-country]').forEach(function (b) { b.onclick = function () { ensoFocus(b.getAttribute('data-map-country')); }; });
   }
   function renderCalendar() {
@@ -45584,10 +45584,8 @@ function showCommodityDetail(key) {
     var peak = function (s) { var best = null; T.classes.forEach(function (c) { if (!best || s.classes[c] > s.classes[best]) best = c; }); return best; };
     var firstNeutral = T.seasons.filter(function (s) { return peak(s) === 'neutral'; })[0];
     var veryDjf = T.seasons.filter(function (s) { return s.season === 'DJF'; })[0];
-    var lead = '<p class="enso-plate-lede">' + esc('NOAA CPC, ' + T.issued + ': ') +
-      T.seasons.filter(function (s) { return s.classes['very strong El Niño'] >= 90; }).map(function (s) { return s.season; }).join(', ') + ' very strong (RONI ≥ +2.0 °C) at 90% or more' +
-      (veryDjf ? '; DJF ' + veryDjf.classes['very strong El Niño'] + '%' : '') +
-      (firstNeutral ? '; neutral becomes the most likely state by ' + esc(firstNeutral.season) + ' (' + firstNeutral.classes.neutral + '%), with La Niña at ' + firstNeutral.classes['La Niña'] + '%' : '') + '.</p>';
+    var lead = '<p class="enso-plate-lede">' + (firstNeutral ? 'The event fades by ' + esc(firstNeutral.season) + ': neutral becomes most likely (' + firstNeutral.classes.neutral + '%), La Niña ' + firstNeutral.classes['La Niña'] + '%. ' : '') +
+      esc('NOAA CPC, ' + T.issued + '.') + '</p>';
     var shade = function (v) { return 'background:rgba(224,134,74,' + (v / 100 * 0.85).toFixed(3) + ')'; };
     el.innerHTML = '<figure class="enso-plate is-published enso-strength-plate" data-kind="published">' +
       plateHead('How strong, and for how long', 'NOAA CPC ENSO strength probabilities · RONI, overlapping three-month seasons', T.issued, 'published') +
@@ -46356,7 +46354,7 @@ function showCommodityDetail(key) {
       vb('fits', discSwatch('#c47a3c', 'fits'), 'fits the usual pattern: a possible early sign, or unrelated') +
       vb('against', discSwatch('#4a7ab3', 'against'), 'runs against it') +
       vb('none', discSwatch('#4a8a9b'), 'not assessed: no rainfall expectation for this hazard or place') +
-      '<div class="enso-legend-caveat">Fitting the pattern is not attribution. The comparison is by country and direction only; the season is not tested. Published studies link El Niño to these conditions in these regions; they do not explain any single event.</div></div>';
+      '<div class="enso-legend-caveat">Fitting the pattern is not attribution: compared by country and direction only, season not tested.</div></div>';
     var ol = function (col, w) { return '<svg aria-hidden="true" width="18" height="12" viewBox="0 0 18 12" style="flex:none"><rect x="1" y="1" width="16" height="10" fill="none" stroke="' + col + '" stroke-width="' + w + '"/></svg>'; };
     var crisis = '<div class="enso-legend-block"><div class="enso-legend-t">Food crisis classification (IPC / FEWS NET, in force)</div>' +
       row(ol('#e67800', 1.6), 'Phase 3, crisis') + row(ol('#c80000', 2.4), 'Phase 4, emergency') + row(ol('#640000', 3), 'Phase 5, catastrophe') + '</div>';
@@ -46997,7 +46995,7 @@ function showCommodityDetail(key) {
         '<div class="enso-legend-row">' + sc(12, { ring: 'ahead' }) + ' <span>dashed outer ring: the exposed harvest window is still ahead; prices may anticipate it</span></div>' +
         '<div class="enso-legend-row">' + sc(12, { ring: 'fits' }) + ' <span>fits: up where output usually falls, down where it rises (5%+)</span></div>' +
         '<div class="enso-legend-row">' + sc(-8, { ring: 'against' }) + ' <span>runs against the usual pattern</span></div>') +
-        '<div class="enso-legend-caveat">Windows from each region’s published lag after the ' + (pk == null ? 'December' : monTxt(pk)) + ' reference; not a forecast. Every region’s window: Harvests › Published El Niño effects. Fitting is not attribution.</div></div>' +
+        '<div class="enso-legend-caveat">Windows: each region’s published lag after a ' + (pk == null ? 'December' : monTxt(pk)) + ' reference. All regions: Harvests › Published El Niño effects.</div></div>' +
         '<div class="ctr-note enso-legend-wide">' + esc(priceVerdict()) + ' The anchoveta region is left out: it acts on fishmeal, not staple prices.</div>' +
         (S.showImports ? importLegend() : '') + '</div>';
       compactLegend(); return;
