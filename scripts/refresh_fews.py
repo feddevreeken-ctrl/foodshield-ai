@@ -134,6 +134,8 @@ def _period_label(start, end):
         b = date.fromisoformat(end[:10])
     except Exception:
         return None
+    if (a.year, a.month) == (b.year, b.month):
+        return b.strftime('%b %Y')   # a single analysis month, not "Jul–Jul 2026"
     if a.year == b.year:
         return f"{a.strftime('%b')}–{b.strftime('%b %Y')}"
     return f"{a.strftime('%b %Y')} – {b.strftime('%b %Y')}"

@@ -124,6 +124,9 @@ def main():
     # None.
     high_ipc = []
     for iso, row in ipc.items():
+        # Palestine appears three times (PSE plus the Gaza/West Bank analyses PSG, PSW); count it once.
+        if iso in ("PSG", "PSW"):
+            continue
         pct = (row or {}).get("phase3plus_pct") or 0
         if pct >= 25:
             high_ipc.append((iso, pct, name_of(iso)))
@@ -177,8 +180,8 @@ def main():
 
     if fx_count >= 1:
         bullets.append({
-            "text": f"{fx_count} countries with currency shock flag (>10% drop vs USD in 90d).",
-            "source": "WFP HungerMap per-country FX",
+            "text": f"{fx_count} countries with a currency shock (US-dollar rate up more than 10% in 90 days).",
+            "source": "open.er-api.com + Frankfurter FX (derived)",
         })
 
     # Top INFORM-risk countries (slow-moving but worth surfacing)

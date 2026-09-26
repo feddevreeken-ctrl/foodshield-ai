@@ -4468,6 +4468,8 @@ abbr.ac:hover, .ac:hover {
 @media (max-width: 860px) {
   .dist-grid { grid-template-columns: minmax(0, 1fr); }
   .dist-grid #dist-sidebar { max-height: none; }
+  #dist-sidebar { order: -1; }
+  #dist-event-list { max-height: none !important; overflow: visible !important; }
 }
 
 /* v79 — Commodity concentration LEDGER (replaces the boxed 5-col card grid).
@@ -6264,7 +6266,7 @@ button.scn-bar-row:focus-visible { outline: 2px solid var(--accent); outline-off
 }
 .co-callout-title em { font-style: italic; color: var(--accent); }
 .co-callout-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 12px;
 }
 .co-callout-card {
   padding: 14px 16px;
@@ -9373,8 +9375,10 @@ button.scn-bar-row:focus-visible { outline: 2px solid var(--accent); outline-off
   display: flex; align-items: center; gap: 10px; padding: 5px 0;
   border-bottom: 1px solid var(--b1);
 }
-.company-exp-country { flex: 1; font-size:12px; color: var(--t1); }
-.company-exp-commodity { font-size:12px; color: var(--t3); width: 80px; }
+.company-exp-country { flex: 1; min-width: 0; font-size:12px; color: var(--t1); }
+.company-result-card { min-width: 0; }
+@media (max-width: 600px) { #tab-companies .content-page { padding-left: 16px; padding-right: 16px; } }
+.company-exp-commodity { font-size:12px; color: var(--t3); width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .company-exp-risk-dot {
   width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
 }
@@ -13155,7 +13159,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
           Live Feed
         </div>
         <div class="page-title">Live <em>Disturbances</em></div>
-        <div class="page-sub">Food security disruptions as they are reported: droughts, conflicts, price shocks and humanitarian crises. Refreshed every six hours from GDACS, ReliefWeb, IPC/Cadre Harmonisé phase analyses (via WFP), and the FEWS NET FDW API (IPC-style outlook for ~35 crisis countries); baseline events curated from FAO/WFP/IPC reports.</div>
+        <div class="page-sub">Hazard alerts, crisis classifications and supply shocks, rebuilt every six hours from GDACS, ReliefWeb, IPC/CH (via WFP), FEWS NET (28 countries), Open-Meteo weather and river flow, USGS gauges, IMF PortWatch and FX rates. Curated baseline events are marked BASELINE; wire headlines are marked CLAIM.</div>
       </div>
       <div id="disturbances-body" class="fade-in"></div>
     </div>
@@ -13305,11 +13309,11 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
       <div class="editorial-header">
         <div class="editorial-dateline">
           <span class="dot"></span>
-          <span>Companies · 12 majors · 248 company–country disclosures · 46 countries</span>
+          <span>Companies · 11 majors · 222 cited claims · 44 countries · filings FY2024–25</span>
         </div>
-        <div class="editorial-headline">Where the twelve largest traders source, <em>in their own filings</em>.</div>
+        <div class="editorial-headline">Where eleven major food and fertilizer companies say they source, <em>in their own filings</em>.</div>
         <div class="editorial-standfirst">
-          Twelve major traders and fertilizer producers we have researched: <b>Cargill, ADM, Bunge, Wilmar, Olam, LDC, JBS, Tyson, COFCO, Nutrien, Yara</b>, and <b>Viterra</b> (acquired by Bunge in July 2025; retained here as a pre-merger record, not a live trader): each with a country list drawn from their own published disclosures. Not a ranking of the largest: Mosaic, OCP, CF Industries, EuroChem, WH Group and CP Group are all comparably systemic and are not covered here. <b>248 cited company–country disclosures</b> across <b>46 countries</b> (each company’s own published country list), every claim citation-linked to the source document. Below the majors, the full modeled company index (drawn from the commodity trade atlas) is listed by exposure: these are inferred from trade flows, not disclosure-sourced, and are labelled accordingly.
+          Eleven traders and fertilizer producers, <b>Cargill, ADM, Bunge, Wilmar, Olam, LDC, JBS, Tyson, COFCO, Nutrien</b> and <b>Yara</b>, each with a country list taken from their own annual reports, ESG reports and filings: <b>222 cited claims across 44 countries</b>. Only Nutrien’s file is fully verified; the rest are provisional. Viterra, part of Bunge since July 2025, is kept as a pre-merger record and is searchable. Mosaic, OCP, CF Industries, EuroChem, WH Group and CP Group are not covered yet. Below the majors, other firms are listed by commodity overlap: inferred, not disclosed.
         </div>
         <div class="editorial-colophon">
           <span class="src">Sources</span>
@@ -13340,11 +13344,11 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
       <!-- Top exposure callout — auto-computed -->
       <div id="company-exposure-callout" class="co-callout"></div>
       <div class="companies-search-wrap" style="margin:0 0 18px;">
-        <input id="company-search-input" type="text" placeholder="Search a trader (e.g. Cargill, Bunge, COFCO…)"
+        <input id="company-search-input" type="search" aria-label="Search companies" placeholder="Search a trader (e.g. Cargill, Bunge, COFCO…)"
           oninput="onCompanySearch(this.value)"
           style="width:100%;max-width:480px;padding:11px 16px;border-radius:0;border:1px solid var(--b2);background:var(--bg1);color:var(--t1);font-size:13px;outline:none;font-family:inherit;">
       </div>
-      <div id="company-results" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:0;border-top:1px solid var(--b1);border-left:1px solid var(--b1);"></div>
+      <div id="company-results" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:0;border-top:1px solid var(--b1);border-left:1px solid var(--b1);"></div>
     </div>
   </div>
 
@@ -30743,7 +30747,7 @@ function renderCountryTab() {
     </details>
 
     <details class="ctr-more">
-      <summary>Trading companies active in ${c.name} <span class="ctr-more-count">modeled exposure · curated sourcing footprints</span></summary>
+      <summary>Traders in the commodities ${c.name} trades <span class="ctr-more-count">commodity overlap, not disclosed presence</span></summary>
       <div class="ctr-more-body">
         <div id="ct-companies-${c.iso}">${renderTopCompaniesForCountry(c)}</div>
         ${chartSourceFooter('Curated · per-trader sourcing footprints + commodity overlap', chartSourceTime('companies'))}
@@ -36545,7 +36549,7 @@ function _commodityKey(name){
 // Also: never return the empty array bug from the v20.27 'apparel: []' issue —
 // the map no longer contains empty arrays; we fall through to food as the
 // absolute last resort.
-function _companiesFor(name){
+function _companiesFor(name, opts){
   const k = _commodityKey(name);
   if (COMMODITY_COMPANIES[k] && COMMODITY_COMPANIES[k].length) {
     return COMMODITY_COMPANIES[k].slice();
@@ -36566,6 +36570,9 @@ function _companiesFor(name){
   if (typeof isFoodTradeItem === 'function' && !isFoodTradeItem(name)) {
     return COMMODITY_COMPANIES._nonfood.slice();
   }
+  /* strict: no catch-all. The generic "food" list tied seven grain majors to every unmatched label (electricity,
+     LNG, arms) and scored all of them at the global mean. */
+  if (opts && opts.strict) return [];
   return COMMODITY_COMPANIES.food.slice();
 }
 
@@ -38288,6 +38295,8 @@ const EV_TYPE = {
   restriction: { label:'Export restriction', color:'#c9683c', icon:'⛔', bgColor:'rgba(201,104,60,0.12)' },
   earthquake:  { label:'Earthquake', color:'#6b5a8a', icon:'🌍', bgColor:'rgba(107,90,138,0.12)' },
   cyclone:     { label:'Cyclone', color:'#4a8a9b', icon:'🌀', bgColor:'rgba(74,138,155,0.12)' },
+  other:       { label:'Other hazard', color:'#7a7a86', icon:'•', bgColor:'rgba(122,122,134,0.12)' },
+  claim:       { label:'Headline claim', color:'#c9a957', icon:'❝', bgColor:'rgba(201,169,87,0.12)' },
 };
 
 const SEV_COLOR = { critical:'#c44b3c', high:'#d27a3e', medium:'#c9a957', low:'#6ba36b' };
@@ -38374,7 +38383,7 @@ async function renderDisturbancesTab() {
     <div class="dist-grid">
       <div>
         <div id="dist-filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
-          ${['all','famine','drought','flood','conflict','price_spike','earthquake','cyclone','chokepoint','other'].map(t=>
+          ${['all','famine','drought','flood','conflict','price_spike','earthquake','cyclone','chokepoint','other','restriction','claim'].map(t=>
             `<button onclick="filterDisturbances('${t}')" id="df-${t}"
                style="padding:5px 12px;border-radius:3px;border:1px solid var(--b2);background:${t===disturbanceFilter?'var(--accent)':'var(--bg2)'};
                       color:${t===disturbanceFilter?'#000':'var(--t2)'};font-size:11px;font-weight:500;cursor:pointer;transition:all .15s;">
@@ -38481,7 +38490,7 @@ async function loadDisturbanceData() {
     })();
     const res = _localGdacs
       ? { ok: true, json: async () => ({
-          features: Object.entries(_localGdacs).map(([id, r]) => ({
+          features: Object.entries(_localGdacs).filter(([, r]) => r.is_current !== false).map(([id, r]) => ({
             properties: {
               eventid: id, eventtype: r.event_type, alertlevel: r.alert_level,
               iso3: r.iso3, countryname: r.country, eventname: r.title,
@@ -38647,7 +38656,7 @@ async function loadDisturbanceData() {
         // COUNTRY_LL, which is more accurate than anything we could attach
         // here, and it hard-drops any event that stays at 0,0.
         lat: 0, lng: 0,
-          detail: `${sourceName === 'ReliefWeb' ? 'ReliefWeb report.' : sourceName + ' via ReliefWeb.'} ${resolvedName !== 'Unknown' ? 'Country: ' + resolvedName + '.' : ''} Food and Nutrition theme. Tap source for full report.`,
+          detail: `${sourceName === 'ReliefWeb' ? 'ReliefWeb report.' : sourceName + ' via ReliefWeb.'} ${resolvedName !== 'Unknown' ? 'Country: ' + resolvedName + '.' : ''} Filed under ReliefWeb's Food and Nutrition theme.`,
           source: 'ReliefWeb',
           date: dateStr,
           live: true,
@@ -38688,10 +38697,10 @@ async function loadDisturbanceData() {
       // a strong predictor even for big exporters (think 2022 US Plains).
       if (row.drought_flag) {
         events.push({
-          id: 'om_drought_' + iso, type: 'drought', severity: 'high',
+          id: 'om_drought_' + iso, type: 'drought', severity: 'medium',
           title: `Drought signal: ${co.name}`, country: co.name, iso,
           lat: ll[0], lng: ll[1],
-          detail: `7-day precipitation ${row.precip_anomaly_pct}% vs 30-day baseline at capital; surface soil moisture ${row.soil_moisture_7d}. Crop stress likely if persistent. Note: capital-city signal, not country-wide.`,
+          detail: `7-day precipitation ${row.precip_anomaly_pct}% vs 30-day baseline at capital; ${row.soil_moisture_7d != null ? 'surface soil moisture ' + row.soil_moisture_7d + '. ' : 'no soil-moisture reading. '}Crop stress likely if persistent. Note: capital-city signal, not country-wide.`,
           source: 'Open-Meteo', date: _snapDate('openmeteo'), live: true,
           url: 'https://open-meteo.com/',
         });
@@ -38818,11 +38827,12 @@ async function loadDisturbanceData() {
       const ll = (typeof COUNTRY_LL !== 'undefined') ? (COUNTRY_LL[iso] || [0,0]) : [0,0];
       if (row.fx_currency_shock && typeof row.fx_90d_change_pct === 'number') {
         events.push({
-          id: 'fx_' + iso, type: 'famine', severity: 'high',
+          id: 'fx_' + iso, type: 'price_spike', severity: 'high',
           title: `Currency shock: ${co.name}`, country: co.name, iso,
           lat: ll[0], lng: ll[1],
-          detail: `${row.fx_currency || 'Local currency'} fell ${Number(row.fx_90d_change_pct).toFixed(1)}% vs USD in last 90 days. Imported food becomes proportionally more expensive for households.`,
-          source: 'WFP HungerMap (FX)', date: _snapDate('wfp_country'), live: true,
+          /* fx_90d_change_pct is the negated rise in the USD rate; the currency's own loss is 1 − 1/(1 + rise). */
+          detail: `${row.fx_currency || 'Local currency'} lost ${(100*(1-1/(1-row.fx_90d_change_pct/100))).toFixed(1)}% of its US-dollar value in 90 days (the USD rate rose ${Math.abs(Number(row.fx_90d_change_pct)).toFixed(1)}%). Imported food costs more in local currency.`,
+          source: 'open.er-api.com + Frankfurter (FX, derived)', date: _snapDate('wfp_country'), live: true,
         });
       }
       if (row.inflation_shock && typeof row.food_inflation_pct === 'number') {
@@ -38849,6 +38859,9 @@ async function loadDisturbanceData() {
       const p5 = row.phase5_count ?? 0;
       const famine = p5 > 0;
       if (!famine && !(typeof p3 === 'number' && p3 >= 25)) continue;
+      /* Skip classifications whose validity period has ended ("Apr 2026 - Jun 2026 (Projection)"). */
+      const _pm = String(row.period || '').match(/([A-Z][a-z]{2}) (\d{4})\s*\(/);
+      if (_pm) { const _e = new Date(_pm[1] + ' 1, ' + _pm[2]); _e.setMonth(_e.getMonth() + 1); if (_e.getTime() < Date.now()) continue; }
       const ll = (typeof COUNTRY_LL !== 'undefined') ? (COUNTRY_LL[iso] || [0,0]) : [0,0];
       const p3People = row.phase3plus_count ?? null;
       const peopleTxt = p3People ? `${(p3People/1e6).toFixed(1)}M people in Phase 3+` : 'population share in Phase 3+';
@@ -38857,12 +38870,12 @@ async function loadDisturbanceData() {
         type: 'famine',
         severity: famine ? 'critical' : 'high',
         title: famine
-          ? `IPC famine conditions: ${co.name} (${p5.toLocaleString()} people in Phase 5)`
+          ? `IPC Phase 5 (Catastrophe): ${co.name}, ${p5.toLocaleString()} people`
           : `IPC acute crisis: ${co.name} (${p3.toFixed(0)}% in Phase 3+)`,
         country: co.name, iso, lat: ll[0], lng: ll[1],
         detail: `IPC/CH analysis${row.period ? ` (${row.period})` : ''}: ${typeof p3 === 'number' ? p3.toFixed(1) + '% of the analysed population' : peopleTxt} in Phase 3 (Crisis) or worse${p3People ? `: ${(p3People/1e6).toFixed(1)}M people` : ''}${p5 > 0 ? `, including ${p5.toLocaleString()} in Phase 5 (Catastrophe/Famine)` : ''}. Via the WFP HungerMap early-warning mirror.`,
         source: 'IPC / Cadre Harmonisé (via WFP)',
-        date: row.analysis_date || _snapDate('ipc'),
+        date: String(row.analysis_date || _snapDate('ipc')).slice(0, 10),
         live: true,
         url: 'https://www.ipcinfo.org/ipc-country-analysis/en/',
       });
@@ -38884,7 +38897,7 @@ async function loadDisturbanceData() {
         id: 'fews_' + iso,
         type: 'famine',
         severity: sev,
-        title: `FEWS NET Phase ${cur || proj}: ${co.name}`,
+        title: `FEWS NET Phase ${cur || proj}: ${co.name}${row.current_period ? ' (' + String(row.current_period).replace(/^(\w+)–\1 /, '$1 ') + ')' : ''}`,
         country: co.name, iso, lat: ll[0], lng: ll[1],
         detail: `FEWS NET classifies ${co.name} at IPC-style Phase ${cur || '—'} (${row.current_phase_label || 'current'})${arrow}. Country-level summary = worst phase observed across admin units.`,
         source: 'FEWS NET FDW (IPC-style outlook)',
@@ -38930,7 +38943,7 @@ async function loadDisturbanceData() {
   try {
     const cps = Array.isArray(LIVE.chokepoints) ? LIVE.chokepoints
               : (LIVE.chokepoints && LIVE.chokepoints.chokepoints) || [];
-    const _cpDate = _snapDate('chokepoints');
+    const _cpDate = Object.values(LIVE.portwatch || {}).map(r => r && r.latest_date).filter(Boolean).sort().pop() || '';
     // v83 — attach the measured transit counts to the curated infrastructure.
     // The curated file is hand-edited prose last touched in June and its
     // narrative had gone wrong in both directions: it framed Hormuz as "April
@@ -39077,7 +39090,7 @@ async function loadDisturbanceData() {
 
   // Sort: critical first, then high, then by date
   const sevOrder = { critical:0, high:1, medium:2, low:3 };
-  events.sort((a,b) => (sevOrder[a.severity]||3) - (sevOrder[b.severity]||3) || (b.date||'').localeCompare(a.date||''));
+  events.sort((a,b) => (sevOrder[a.severity]??3) - (sevOrder[b.severity]??3) || (b.date||'').localeCompare(a.date||''));
 
   // v40 security — HTML-escape the free-text feed fields (country, source) ONCE at the
   // source. These come from external feeds (GDACS/ReliefWeb/WFP/IPC) and were interpolated
@@ -39111,7 +39124,7 @@ async function loadDisturbanceData() {
       const exposed = (it.exposed || [])[0];
       if (!exposed) continue;
       const ts = it.published_at ? Date.parse(it.published_at) : NaN;
-      if (isFinite(ts) && ts < cutoff) continue;
+      if (!isFinite(ts) || ts < cutoff) continue;
       if (promoted >= 8) break;              // never let news dominate the board
       const c = (typeof byISO === 'function') ? byISO(exposed.iso) : null;
       // Route each promoted item to the map layer that MATCHES what it is.
@@ -39240,6 +39253,7 @@ function filterDisturbances(type) {
     btn.style.background = t === type ? 'var(--accent)' : 'var(--bg2)';
     btn.style.color = t === type ? '#000' : 'var(--t2)';
     btn.style.borderColor = t === type ? 'var(--accent)' : 'var(--b2)';
+    btn.setAttribute('aria-pressed', String(t === type));
   });
   renderDisturbanceList();
 }
@@ -39268,7 +39282,7 @@ function renderDisturbanceList() {
       : '';
 
     return `
-      <div class="dist-event-card" style="background:var(--bg2);border:1px solid var(--b2);border-left:3px solid ${sc};border-radius:3px;padding:15px 16px;cursor:pointer;transition:border-color .15s;"
+      <div class="dist-event-card" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" style="background:var(--bg2);border:1px solid var(--b2);border-left:3px solid ${sc};border-radius:3px;padding:15px 16px;cursor:pointer;transition:border-color .15s;"
            onclick="openDisturbanceDetail('${String(ev.id).replace(/[^\w\-:.]/g,'')}')"
            onmouseover="this.style.borderColor='${sc}';this.style.background='var(--bg3)'"
            onmouseout="this.style.borderColor='var(--b2)';this.style.borderLeftColor='${sc}';this.style.background='var(--bg2)'">
@@ -39375,7 +39389,7 @@ function openDisturbanceDetail(id) {
   modal.id = 'disturbance-modal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);padding:20px;';
   modal.innerHTML = `
-    <div class="disturbance-dialog" style="background:var(--bg1);border:1px solid var(--b2);border-radius:3px;width:100%;max-width:640px;max-height:88vh;overflow-y:auto;position:relative;">
+    <div class="disturbance-dialog" role="dialog" aria-modal="true" style="background:var(--bg1);border:1px solid var(--b2);border-radius:3px;width:100%;max-width:640px;max-height:88vh;overflow-y:auto;position:relative;">
 
       <div style="padding:22px 24px 16px;border-bottom:1px solid var(--b1);position:sticky;top:0;background:var(--bg1);z-index:1;border-radius:3px;">
         <button onclick="document.getElementById('disturbance-modal').remove()" style="position:absolute;top:14px;right:14px;background:var(--bg3);border:1px solid var(--b2);color:var(--t2);width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;">✕</button>
@@ -39401,16 +39415,17 @@ function openDisturbanceDetail(id) {
           <div style="font-size:12.5px;color:var(--t2);line-height:1.75;">${_escFeed(ev.detail)}</div>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-          <div style="background:var(--bg2);border:1px solid var(--b1);border-radius:3px;padding:14px;">
-            <div style="font-size:9.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;font-weight:600;margin-bottom:8px;">Expected Duration</div>
-            <div style="font-size:var(--fs-prose);color:var(--t1);line-height:1.6;">${ev.duration || 'Monitoring ongoing.'}</div>
-          </div>
-          <div style="background:var(--bg2);border:1px solid var(--b1);border-radius:3px;padding:14px;">
-            <div style="font-size:9.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;font-weight:600;margin-bottom:8px;">Food Security Impact</div>
-            <div style="font-size:var(--fs-prose);color:var(--t1);line-height:1.6;">${ev.foodImpact || 'Impact assessment pending.'}</div>
-          </div>
-        </div>
+        ${/* Only fields the event actually carries; no placeholder text. */''}
+        ${(ev.duration || ev.foodImpact) ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:10px;">
+          ${ev.duration ? `<div style="background:var(--bg2);border:1px solid var(--b1);border-radius:3px;padding:14px;">
+            <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;font-weight:600;margin-bottom:8px;">Expected Duration</div>
+            <div style="font-size:var(--fs-prose);color:var(--t1);line-height:1.6;">${ev.duration}</div>
+          </div>` : ''}
+          ${ev.foodImpact ? `<div style="background:var(--bg2);border:1px solid var(--b1);border-radius:3px;padding:14px;">
+            <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;font-weight:600;margin-bottom:8px;">Food Security Impact</div>
+            <div style="font-size:var(--fs-prose);color:var(--t1);line-height:1.6;">${ev.foodImpact}</div>
+          </div>` : ''}
+        </div>` : ''}
 
         ${(ev.type === 'chokepoint' && ev.transits) ? `<div style="margin-top:4px;background:linear-gradient(180deg,rgba(58,143,143,.10),transparent);border:1px solid rgba(58,143,143,.35);border-radius:3px;padding:14px 16px;">
           <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px;">
@@ -39603,14 +39618,14 @@ function renderDisturbanceSidebar() {
   if (sumEl) {
     const critical = disturbanceEvents.filter(e=>e.severity==='critical').length;
     const high = disturbanceEvents.filter(e=>e.severity==='high').length;
-    const affected = [...new Set(disturbanceEvents.map(e=>e.country).filter(c=>c!=='Multiple'))].length;
-    const liveCount = disturbanceEvents.filter(e=>e.live).length;
+    const affected = new Set(disturbanceEvents.filter(e=>e.iso && e.type!=='chokepoint').map(e=>e.iso)).size;
+    const liveCount = disturbanceEvents.filter(e=>e.live && !e.claim).length;
 
     sumEl.innerHTML = [
       {label:'Critical events', val:critical, col:'#c44b3c'},
       {label:'High severity', val:high, col:'#d27a3e'},
       {label:'Countries affected', val:affected, col:'var(--t1)'},
-      {label:'Live-monitored', val:liveCount, col:'#6ba36b'},
+      {label:'Live feed events', val:liveCount, col:'#6ba36b'},
     ].map(r=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--b1);">
         <span style="font-size:11.5px;color:var(--t2);">${r.label}</span>
@@ -40374,7 +40389,7 @@ function companyOpacity(name){
   const src = (window.LIVE && LIVE.companies) ? LIVE.companies[name] : null;
   if (!src) return null;
   const gaps = Array.isArray(src.evidence_gaps) ? src.evidence_gaps.length : 0;
-  const isPrivate = /private|wholly-owned|state-owned/i.test(String(src.ownership || ''));
+  const isPrivate = /^\s*private\b/i.test(String(src.ownership || ''));
   // Bands are deliberately coarse. The underlying count is a researcher's
   // judgement, not a measurement, so a fine-grained scale would overstate it.
   let band, color, label;
@@ -40418,7 +40433,7 @@ function _companyOwnershipLabel(raw){
     return m[2] ? `${kind} · ${m[2].trim()}` : kind;
   }
   // Unknown format — show as-is, just capitalised first letter.
-  const s = String(raw).trim();
+  const s = String(raw).split(/[.;(]/)[0].trim().slice(0, 48);
   return s ? s[0].toUpperCase() + s.slice(1) : null;
 }
 
@@ -40485,15 +40500,31 @@ function companyEvidenceSummary(claims){
 // Build a reverse index: company → [{country, iso, commodity, fdrs}]
 let _companyIndex = null;
 
+/* A company with its own researched file is scored on the countries it discloses (country_claims), not on
+   commodity overlap; everyone else falls back to the overlap index, labelled modeled. */
+function _companyEntries(name, idx) {
+  const rec = (typeof LIVE !== 'undefined' && LIVE.companies) ? LIVE.companies[name] : null;
+  if (rec && Array.isArray(rec.country_claims) && rec.country_claims.length) {
+    const out = [], seen = new Set();
+    rec.country_claims.forEach(cl => {
+      const c = byISO(cl.iso3); if (!c || typeof c.fdrs !== 'number') return;
+      const k = cl.iso3 + '|' + cl.commodity; if (seen.has(k)) return; seen.add(k);
+      out.push({ country: c.name, iso: c.iso, commodity: cl.commodity, fdrs: c.fdrs, region: c.region, riskLabel: riskLabel(c.fdrs), disclosed: true });
+    });
+    if (out.length) return out;
+  }
+  return (idx && idx[name]) || [];
+}
+
 function buildCompanyIndex() {
   if (_companyIndex) return _companyIndex;
   _companyIndex = {};
 
   COUNTRIES.forEach(c => {
-    if (!c.fdrs || !c.iso) return;
+    if (!c.fdrs || !c.iso || c.iso.startsWith('US-')) return;
     const allCommodities = [...displayImportList(c), ...displayExportList(c)];
     allCommodities.forEach(commo => {
-      const cos = _companiesFor(commo);
+      const cos = _companiesFor(commo, { strict: true });
       cos.forEach(company => {
         // v20.28 — never index the _nonfood placeholder; it's a UI fallback,
         // not an actual trading company. Also skip empty / null entries.
@@ -40615,7 +40646,7 @@ function renderCompanyExposureCallout(companyNames) {
   const idx = buildCompanyIndex();
   // Score each: weighted avg FDRS × number of vulnerable countries
   const scored = companyNames.map(name => {
-    const entries = idx[name] || [];
+    const entries = _companyEntries(name, idx);
     if (!entries.length) return null;
     const expScore = companyExposureScore(entries);
     const vuln = entries.filter(e => e.fdrs >= 76).map(e => e.country);
@@ -40625,20 +40656,20 @@ function renderCompanyExposureCallout(companyNames) {
 
   if (!scored.length) { host.innerHTML = ''; return; }
   host.innerHTML = `
-    <div class="co-callout-eyebrow">⚠ Highest modeled exposure</div>
-    <div class="co-callout-title">Three traders whose commodities <em>overlap</em> with the most vulnerable importers</div>
+    <div class="co-callout-eyebrow">⚠ Highest disclosed-origin exposure</div>
+    <div class="co-callout-title">The three majors whose <em>own</em> listed origins carry the most risk</div>
     <div class="co-callout-grid">
       ${scored.map(function (s) {
         var tied = scored.filter(function (other) { return Math.round(other.expScore) === Math.round(s.expScore); }).length > 1;
         return `
-        <div class="co-callout-card" onclick="showCompanyDetail('${s.name.replace(/'/g,"&#39;")}')">
+        <div class="co-callout-card" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="showCompanyDetail('${s.name.replace(/'/g,"&#39;")}')">
           <div class="co-callout-name">${s.name} ${companyProvBadge(s.name)}</div>
           <div class="co-callout-score-row">
             <div class="co-callout-score" style="color:${riskColor(s.expScore)}">${Math.round(s.expScore)}</div>
-            <div class="co-callout-score-lab">Modeled exposure / 100${tied ? '<span class="co-callout-tie">Tied at this score</span>' : ''}</div>
+            <div class="co-callout-score-lab">Disclosed-origin exposure / 100${tied ? '<span class="co-callout-tie">Tied at this score</span>' : ''}</div>
           </div>
           <div class="co-callout-meta">
-            <b style="color:#c44b3c">${s.vulnCount}</b> vulnerable-band importers
+            <b style="color:#c44b3c">${s.vulnCount}</b> vulnerable-band origins
             ${s.vulnNames.length ? ` · ${s.vulnNames.join(' · ')}` : ''}
           </div>
         </div>
@@ -40652,6 +40683,7 @@ function onCompanySearch(query) {
   if (!el) return;
 
   if (!query || query.length < 2) {
+    initCompaniesTab(); return;
     // v29 — show ALL indexed companies (Wave 1-8 curated + heritage), ranked by
     // modeled exposure (avg FDRS of the origins they source from), not a fixed 12.
     const all = Object.keys(_companyIndex)
@@ -40669,7 +40701,7 @@ function onCompanySearch(query) {
     .slice(0, 40);
 
   if (!matches.length) {
-    el.innerHTML = `<div style="color:var(--t3);padding:24px 0;text-align:center;">No companies found matching "${query}"</div>`;
+    el.innerHTML = `<div style="color:var(--t3);padding:24px 0;text-align:center;">No companies found matching "${_escFeed(query)}"</div>`;
     return;
   }
   renderCompanyList(matches, el);
@@ -40680,7 +40712,7 @@ function onCompanySearch(query) {
 // ~280px grid cell — the "it renders small" bug). These helpers flip the layout.
 function _companyGridMode(el) {
   if (!el) return;
-  el.style.gridTemplateColumns = 'repeat(auto-fill,minmax(280px,1fr))';
+  el.style.gridTemplateColumns = 'repeat(auto-fill,minmax(min(300px,100%),1fr))';
   el.style.display = 'grid';
 }
 function _companyDetailMode(el) {
@@ -40693,16 +40725,16 @@ function renderCompanyList(companies, el) {
   _companyGridMode(el);
   const idx = buildCompanyIndex();
   el.innerHTML = companies.map(company => {
-    const entries = (idx[company] || [])
+    const entries = _companyEntries(company, idx).slice()
       .sort((a,b) => b.fdrs - a.fdrs);
     const uniqueCountries = [...new Map(entries.map(e=>[e.iso, e])).values()];
     const expScore = companyExposureScore(entries);
     const expCol = riskColor(expScore);
     const uniqueCommodities = [...new Set(entries.map(e=>e.commodity))].slice(0,5);
-    const topHigh = uniqueCountries.filter(e=>e.fdrs>=70).length;
+    const topHigh = uniqueCountries.filter(e=>e.fdrs>=76).length;
 
     return `
-      <div class="company-result-card" onclick="showCompanyDetail('${company.replace(/'/g,"\\'")}')">
+      <div class="company-result-card" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="showCompanyDetail('${company.replace(/'/g,"\\'")}')">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
           <div>
             <div class="company-name">${company} ${companyProvBadge(company)}</div>
@@ -40723,11 +40755,11 @@ function renderCompanyList(companies, el) {
             })()} · ${uniqueCommodities.join(', ')}</div>
           </div>
           <div style="text-align:right;flex-shrink:0;">
-            <div style="font-size:10px;color:var(--t3);margin-bottom:4px;" title="Mean Food Disruption Risk across the countries that trade the commodities this company trades, derived from the trade atlas: NOT from the company's own disclosures. The disclosed-origin figure is computed separately in the detail view below and can differ.">Modeled exposure (commodity overlap)</div>
+            <div style="font-size:10px;color:var(--t3);margin-bottom:4px;" title="${entries.length && entries[0].disclosed ? 'Mean Food Disruption Risk across the countries this company lists in its own filings.' : 'Mean Food Disruption Risk across countries that trade the commodities this company trades (trade atlas), not its own disclosures.'}">${entries.length && entries[0].disclosed ? 'Disclosed-origin exposure' : 'Modeled exposure'}</div>
             <div class="company-risk-score" style="background:${expCol}18;color:${expCol};border:1px solid ${expCol}44">
               ${expScore}/100
             </div>
-            ${topHigh > 0 ? `<div style="font-size:10px;color:#c44b3c;margin-top:4px;">${topHigh} high-risk</div>` : ''}
+            ${topHigh > 0 ? `<div style="font-size:10px;color:#c44b3c;margin-top:4px;">${topHigh} vulnerable-band</div>` : ''}
             ${companyOpacityChip(company)}
           </div>
         </div>
@@ -40797,8 +40829,8 @@ function beefCompanyCard(name) {
    +   (co.metric ? '<div style="font-size:13px;color:var(--t1);margin-bottom:8px;"><b>'+co.metric+'</b></div>' : '')
    +   (co.hq ? '<div style="font-size:11.5px;color:var(--t3);margin-bottom:8px;">HQ · '+co.hq+'</div>' : '')
    +   (co.note ? '<div style="font-size:var(--fs-prose);color:var(--t2);line-height:1.55;margin-bottom:10px;">'+co.note+'</div>' : '')
-   +   (sourcing ? '<div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;">Beef operations / sourcing</div><div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;">'+sourcing+'</div>' : '')
-   +   (co.improve ? '<div style="background:var(--bg0);border:1px solid var(--b2);border-radius:3px;padding:10px 12px;"><div style="font-size:9.5px;color:#6ba36b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Where they could improve</div><div style="font-size:var(--fs-prose);color:var(--t2);line-height:1.55;">'+co.improve+'</div></div>' : '')
+   +   (sourcing ? '<div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;">Operations / sourcing</div><div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;">'+sourcing+'</div>' : '')
+   +   (co.improve ? '<div style="background:var(--bg0);border:1px solid var(--b2);border-radius:3px;padding:10px 12px;"><div style="font-size:9.5px;color:#6ba36b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Disclosure gaps (editorial)</div><div style="font-size:var(--fs-prose);color:var(--t2);line-height:1.55;">'+co.improve+'</div></div>' : '')
    + '</div>';
 }
 
@@ -41088,9 +41120,9 @@ function renderSourcedCompanyDetail(el, company, src) {
     ? Math.round(rows.reduce((s,r) => s + r.fdrs, 0) / rows.length)
     : null;
   const expCol = expBounded ? riskColor(expScore) : 'var(--t3)';
-  const highRisk = rows.filter(r => r.fdrs >= 70);
-  const medRisk  = rows.filter(r => r.fdrs >= 40 && r.fdrs < 70);
-  const lowRisk  = rows.filter(r => r.fdrs < 40);
+  const highRisk = rows.filter(r => r.fdrs >= 76);
+  const medRisk  = rows.filter(r => r.fdrs > 50 && r.fdrs < 76);
+  const lowRisk  = rows.filter(r => r.fdrs <= 50);
 
   el.innerHTML = `
     <div style="margin-bottom:10px;"><a href="#" onclick="event.preventDefault();onCompanySearch('');document.getElementById('company-search-input').value='';" style="font-size:12px;color:var(--accent);text-decoration:none;">← All traders</a></div>
@@ -41128,15 +41160,15 @@ function renderSourcedCompanyDetail(el, company, src) {
       <div class="cmpd-tierbar">
         <div class="cmpd-tier" style="border-left-color:var(--r3);">
           <div class="cmpd-tier-num" style="color:var(--r3)">${highRisk.length}</div>
-          <div class="cmpd-tier-lbl">High · ≥70</div>
+          <div class="cmpd-tier-lbl">Vulnerable+ · ≥76</div>
         </div>
         <div class="cmpd-tier" style="border-left-color:var(--r1);">
           <div class="cmpd-tier-num" style="color:var(--r1)">${medRisk.length}</div>
-          <div class="cmpd-tier-lbl">Medium · 40–69</div>
+          <div class="cmpd-tier-lbl">Dependent · 51–75</div>
         </div>
         <div class="cmpd-tier" style="border-left-color:var(--r0);">
           <div class="cmpd-tier-num" style="color:var(--r0)">${lowRisk.length}</div>
-          <div class="cmpd-tier-lbl">Low · &lt;40</div>
+          <div class="cmpd-tier-lbl">≤50</div>
         </div>
       </div>
 
@@ -41159,7 +41191,7 @@ function renderSourcedCompanyDetail(el, company, src) {
             const extraCites = (r.citations||[]).slice(1,3);
             const rc = riskColor(r.fdrs);
             const ev = r.evidence_strength || 'medium';
-            return `<div class="cmpd-row${high?' cmpd-row--high':''}" style="border-left-color:${rc};" title="${_evTitle(ev)}" onclick="showTab('country');setTimeout(()=>{const sel=document.getElementById('country-sel');if(sel){sel.value='${r.iso}';if(typeof renderCountryTab==='function')renderCountryTab();}},60)">
+            return `<div class="cmpd-row${high?' cmpd-row--high':''}" role="button" tabindex="0" onkeydown="if(event.key==='Enter'){this.click();}" style="border-left-color:${rc};" title="${_evTitle(ev)}" onclick="showTab('country');setTimeout(()=>{const sel=document.getElementById('country-sel');if(sel){sel.value='${r.iso}';if(typeof renderCountryTab==='function')renderCountryTab();}},60)">
               <div class="cmpd-row-body">
                 <div class="cmpd-row-top">
                   <span class="cmpd-row-country">${r.name}</span>
@@ -41206,7 +41238,7 @@ function renderSourcedCompanyDetail(el, company, src) {
           <div style="font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--t3);text-transform:uppercase;">Modeled origin context · USDA PSD</div>
           <span style="font-family:'Geist Mono',monospace;font-size:8.5px;color:#c47a3c;background:rgba(196,122,60,0.14);border:1px solid rgba(196,122,60,0.35);padding:1px 5px;border-radius:3px;letter-spacing:.06em;text-transform:uppercase;" title="Modeled: intersects this company's disclosed origin countries with USDA PSD observed top-exporter rankings for wheat/corn/rice/soybeans. Ranked context only: no tonnage or share attributed to the company.">modeled</span>
         </div>
-        <div style="font-size:var(--fs-prose);color:var(--t3);margin-bottom:10px;line-height:1.55;">Where a country this trader discloses is also a top global exporter of a staple (USDA PSD ${ov._psd_year || ''}). Directional origin context: not a customs-attributed company volume.</div>
+        <div style="font-size:var(--fs-prose);color:var(--t3);margin-bottom:10px;line-height:1.55;">Where a country this trader lists is also a ranked exporter of a staple (USDA PSD, ${ov._psd_year || 'latest marketing year'}). Directional origin context: not a customs-attributed company volume.</div>
         ${blocks}
       </div>`;
       })()}
