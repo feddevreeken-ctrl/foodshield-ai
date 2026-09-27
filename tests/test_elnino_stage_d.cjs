@@ -252,7 +252,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
  ctx.document.querySelectorAll=s=>s==='#enso-map svg'?[svg]:[];
  api.buildDefs();ctx.document.querySelectorAll=query;
  /* Harvest hatches first; then the Reported rain hatches, in the drought and flood hues (dry, wet, and both crossed). */
- assert.deepEqual(svg.querySelectorAll('line').map(n=>n.getAttribute('stroke')),['#c9773a','#6ba36b','#c47a3c','#4a7ab3','#c47a3c','#4a7ab3']);
+ assert.deepEqual(svg.querySelectorAll('line').map(n=>n.getAttribute('stroke')),['#c9773a','#6ba36b','#c47a3c','#4a7ab3','#c47a3c','#4a7ab3','#6ba36b']);  /* + the Harvests published-rises hatch, green like the fitted rises (2026-09-27) */
  S.mode='impact';S.showRegions=true;S.showSST=false;S.showLanes=false;api.renderLegend();
  const key=node('enso-legend').querySelector('.enso-legend').innerHTML;
  for(const c of ['#c9773a','#6ba36b'])assert(key.includes('repeating-linear-gradient(45deg,'+c));

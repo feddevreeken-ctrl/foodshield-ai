@@ -780,8 +780,9 @@ def main() -> int:
               calendar['actual'] == calendar['expected'] and calendar['actual'] > 0 and calendar['complete'], str(calendar))
         page.select_option('#enso-mode', 'impact')
         palette = page.eval_on_selector_all('#enso-legend .enso-ramp i', "els => els.map(e => getComputedStyle(e).backgroundColor)")
-        check("yield ramp has fixed ochre, warm grey and green anchors",
-              palette[0] == 'rgb(201, 119, 58)' and palette[len(palette)//2] == 'rgb(139, 137, 128)' and palette[-1] == 'rgb(107, 163, 107)', str(palette))
+        # 2026-09-27: zero is a dark neutral that recedes; falls step up in ochre, rises in green.
+        check("yield ramp has fixed ochre, dark neutral and green anchors",
+              palette[0] == 'rgb(224, 103, 60)' and palette[len(palette)//2] == 'rgb(78, 80, 84)' and palette[-1] == 'rgb(143, 199, 154)', str(palette))
         page.goto(f"{base}/index.html?tab=ensomoney&enso_level=-1.5&enso_mode=crop", wait_until='networkidle')
         page.wait_for_selector('#subview-ensomoney.active .enso-subview-meta')
         check("explicit URL scenario and mode override view defaults",

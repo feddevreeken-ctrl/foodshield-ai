@@ -9995,6 +9995,7 @@ body::before {
 .enso-rain-dry { fill:url(#ensoRainDry) !important; }
 .enso-rain-wet { fill:url(#ensoRainWet) !important; }
 .enso-rain-mixed { fill:url(#ensoRainMixed) !important; }
+.enso-rain-rise { fill:url(#ensoRainRise) !important; }
 #enso-map .leaflet-control.enso-bench { display:block !important; }
 #tab-elnino .enso-bench .enso-bench-chip { min-height:0 !important; min-width:0 !important; height:auto; padding:2px 0 !important; }
 .enso-bench { background:rgba(11,16,23,.86); border:1px solid #3a3d44; padding:7px 9px; max-width:480px; margin:0 0 10px 10px !important; }
@@ -45098,8 +45099,15 @@ function showCommodityDetail(key) {
   function impactColor(pct, coverage) {
     if (typeof pct !== 'number' || !isFinite(pct) || !coverage) return null;
     /* The exposure file is not production-ready and asks for banded steps: three each way, not a continuous scale. */
-    var a0 = Math.abs(pct), t = (S.meta.exp || {}).production_ready === false ? (a0 < .5 ? 0 : a0 < 5 ? .33 : a0 < 10 ? .66 : 1) : Math.min(1, a0 / 15), neutral = [139, 137, 128];
-    var end = pct < 0 ? [201, 119, 58] : [107, 163, 107];
+    /* 2026-09-27: zero is a dark neutral that recedes into the basemap; falls step up in ochre, rises in green. */
+    var a0 = Math.abs(pct);
+    if ((S.meta.exp || {}).production_ready === false) {
+      if (a0 < .5) return '#4e5054';
+      var k = a0 < 5 ? 0 : a0 < 10 ? 1 : 2;
+      return (pct < 0 ? ['#8f6f55', '#c47a3c', '#e0673c'] : ['#5f7f5f', '#6ba36b', '#8fc79a'])[k];
+    }
+    var t = Math.min(1, a0 / 15), neutral = [78, 80, 84];
+    var end = pct < 0 ? [224, 103, 60] : [143, 199, 154];
     return 'rgb(' + neutral.map(function (v, i) { return Math.round(v + (end[i] - v) * t); }).join(',') + ')';
   }
 
@@ -47693,7 +47701,7 @@ function showCommodityDetail(key) {
     var Ctl = L.Control.extend({ options: { position: 'bottomleft' }, onAdd: function () {
       var d = L.DomUtil.create('div', 'enso-bench');
       d.innerHTML = '<div class="enso-bench-row">' + chips.map(function (c) {
-        return '<button type="button" class="enso-bench-chip" data-bench="' + c.k + '" aria-label="' + c.l + ' world price ' + signedPct(c.y.v) + ' year on year"><i style="background:' + rtfpColor(Math.max(-10, c.y.v)) + '"></i>' + c.l + ' <b>' + signedPct(c.y.v) + '</b></button>';
+        return '<button type="button" class="enso-bench-chip" data-bench="' + c.k + '" aria-label="' + c.l + ' world price ' + signedPct(c.y.v) + ' year on year"><i style="background:' + STAPLE_COLS[stapleClass(c.y.v)] + '"></i>' + c.l + ' <b>' + signedPct(c.y.v) + '</b></button>';
       }).join('') + '</div><div class="enso-bench-cap">World prices, ' + monTxt(monIdx(chips[0].y.month)) + ' vs ' + monTxt(monIdx(chips[0].y.prev)) + ', nominal USD · World Bank Pink Sheet</div>';
       L.DomEvent.disableClickPropagation(d); L.DomEvent.disableScrollPropagation(d);
       d.querySelectorAll('[data-bench]').forEach(function (b) {
@@ -48191,7 +48199,7 @@ function showCommodityDetail(key) {
       '<div class="enso-legend">' +
         '<div class="enso-legend-block"><div class="enso-legend-t">' + esc(solidT) + ' · modelled here</div>' + solidBody + '</div>' +
         (S.mode === 'impact' || S.mode === 'crop' ? '<div class="enso-legend-block"><div class="enso-legend-t">Published El Niño effect, no fitted signal</div>' +
-          krow(hatchSwatch('dry'), 'Output usually falls', '') + krow(hatchSwatch('wet'), 'Output usually rises', '') + krow(hatchSwatch('mixed'), 'Both', 'depends on the season') +
+          krow(hatchSwatch('dry'), 'Output usually falls', '') + krow(hatchSwatch('rise'), 'Output usually rises', '') + krow(hatchSwatch('mixed'), 'Both', 'depends on the season') +
           '<p class="enso-key-cap">Hatching marks countries in published El Niño regions where the fit finds no signal; it never sits on a fitted colour.</p></div>' : '') +
         (S.showRegions ? regionLegend() : '') +
         (S.showSST !== false ? sstLegend() : '') + (S.showLanes ? laneLegend() : '') + (S.showAlerts ? alertLegend() : '') + (S.showImports ? importLegend() : '') +
@@ -48493,8 +48501,8 @@ function showCommodityDetail(key) {
         path.classList.toggle('enso-hotspot', !!assessment && assessment.hotspot_code === 1);
         path.classList.toggle('enso-major-hotspot', !!assessment && assessment.hotspot_code === 2);
         var pubOnly = !col && ((S.mode === 'staple' && S.stapleView === 'fit') || (S.sub === 'ensoharvest' && (S.mode === 'impact' || S.mode === 'crop')));
-        var rc = S.mode === 'rain' ? rainClass(iso) : pubOnly ? ({ fall: 'dry', rise: 'wet', mixed: 'mixed' }[outSign(iso)] || null) : null;
-        ['dry', 'wet', 'mixed'].forEach(function (k) { path.classList.toggle('enso-rain-' + k, rc === k); });
+        var rc = S.mode === 'rain' ? rainClass(iso) : pubOnly ? ({ fall: 'dry', rise: S.sub === 'ensoharvest' ? 'rise' : 'wet', mixed: 'mixed' }[outSign(iso)] || null) : null;
+        ['dry', 'wet', 'mixed', 'rise'].forEach(function (k) { path.classList.toggle('enso-rain-' + k, rc === k); });
       }
       var style = col
         ? { fillColor: col, fillOpacity: 1, color: LAND_TONE, opacity: .18, weight: .5, dashArray: null }
@@ -48955,7 +48963,7 @@ function showCommodityDetail(key) {
       });
       /* Rainfall expectation (Reported lens): ochre 45° where El Niño usually dries, blue 135° where it
          usually wets, both crossed where a country's regions disagree. Hues match the drought and flood marks. */
-      [['ensoRainDry', [['#c47a3c', 0]], 45], ['ensoRainWet', [['#4a7ab3', 0]], -45], ['ensoRainMixed', [['#c47a3c', 0], ['#4a7ab3', 90]], 45]].forEach(function (p) {
+      [['ensoRainDry', [['#c47a3c', 0]], 45], ['ensoRainWet', [['#4a7ab3', 0]], -45], ['ensoRainMixed', [['#c47a3c', 0], ['#4a7ab3', 90]], 45], ['ensoRainRise', [['#6ba36b', 0]], -45]].forEach(function (p) {
         var pat = document.createElementNS(ns, 'pattern');
         pat.setAttribute('id', p[0]); pat.setAttribute('width', '6'); pat.setAttribute('height', '6');
         pat.setAttribute('patternUnits', 'userSpaceOnUse'); pat.setAttribute('patternTransform', 'rotate(' + p[2] + ')');
