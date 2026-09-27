@@ -13368,7 +13368,18 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-wp-range::before, #tab-elnino .enso-wp-range::after { content:''; position:absolute; top:-4px; width:0; height:7px; border-left:1px solid var(--t1); }
 #tab-elnino .enso-wp-range::before { left:0; } #tab-elnino .enso-wp-range::after { right:0; }
 #tab-elnino .enso-wp-obs { position:absolute; top:0; width:8px; height:8px; margin-left:-4px; border:1.5px solid var(--t1); background:#0b1017; transform:rotate(45deg); }
-#tab-elnino .enso-wp-legend { display:grid; gap:2px; margin-top:6px; font:12.5px/1.45 'Geist',sans-serif; color:var(--t2); }
+#tab-elnino .enso-wp-legend { display:block; margin:6px 0 0; font:12px/1.5 'Geist',sans-serif; color:var(--t2); }
+#tab-elnino .enso-wp-legend i { margin-left:0; }
+#tab-elnino .enso-wp-row.is-flow, #tab-elnino .enso-wp-row.is-flow.enso-wp-head { grid-template-columns:minmax(140px,170px) 150px minmax(0,1fr) 112px !important; gap:6px 20px; }
+#tab-elnino .enso-wp-num { font:11px/1.45 'Geist Mono',monospace; color:var(--t3); white-space:nowrap; }
+#tab-elnino .enso-wp-num b { display:block; font:500 16px/1.2 'Geist Mono',monospace; color:#e0864a; }
+#tab-elnino .enso-wp-num.is-bill { text-align:right; } #tab-elnino .enso-wp-num.is-bill b { color:var(--t1); }
+#tab-elnino .enso-wp-num span { display:block; }
+#tab-elnino .enso-wp-head > div:last-child { text-align:right; }
+#tab-elnino .enso-wp-totals { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 22px; margin:2px 0 10px; font:13px/1.5 'Geist',sans-serif; color:var(--t2); }
+#tab-elnino .enso-wp-totals-k { font:11px 'Geist Mono',monospace; color:var(--t3); letter-spacing:.04em; }
+#tab-elnino .enso-wp-total b { font:500 14px 'Geist Mono',monospace; color:var(--t1); }
+@media (max-width:800px) { #tab-elnino .enso-wp-row.is-flow, #tab-elnino .enso-wp-row.is-flow.enso-wp-head { grid-template-columns:minmax(0,1fr) auto !important; } #tab-elnino .enso-wp-row.is-flow > .enso-wp-cell { grid-column:1 / -1; } #tab-elnino .enso-wp-row.is-flow > .is-bill { grid-column:2; } }
 #tab-elnino .enso-wp-legend b { font:500 13px 'Geist Mono',monospace; color:var(--t1); }
 #tab-elnino .enso-wp-legend i { display:inline-block; width:9px; height:9px; margin-right:6px; vertical-align:0; }
 #tab-elnino .enso-wp-legend .k-imp, #tab-elnino .enso-wp-head .k-imp { background:#c8622f; }
@@ -50478,9 +50489,8 @@ function showCommodityDetail(key) {
     /* A crop whose every shortfall comes from pairs the past-winter test could not size is flagged on its total. */
     var weakCrop = function (cr) { var rs = W.filter(function (c) { return c.crop === cr && c.balance !== 'not pulled'; }); return rs.length && rs.every(function (c) { var h = hindcastOf(c.iso, c.crop); return h && !h.beats_no_change; }); };
     var totals = (O.who_pays_totals || []).map(function (t) {
-      return '<div class="enso-wp-total"><div class="enso-ol-eyebrow">' + esc(crop(t.crop).replace(/^\w/, function (c) { return c.toUpperCase(); })) + '</div><b>' + (t.total_kt / 1000).toFixed(1) + ' Mt</b>' +
-        '<span>' + (t.priced ? fmtUsd(t.usd_m).replace('+', '') + ' at today’s price' : 'no price series') + (weakCrop(t.crop) ? ' · rough' : '') + '</span>' +
-        '<p>' + [t.extra_import_kt ? kt(t.extra_import_kt) + ' own imports' : '', t.replaced_kt ? kt(t.replaced_kt) + ' by buyers' : ''].filter(Boolean).join(' · ') + '</p></div>';
+      return '<span class="enso-wp-total"><b>' + esc(crop(t.crop).replace(/^\w/, function (c) { return c.toUpperCase(); })) + ' ' + (t.total_kt / 1000).toFixed(1) + ' Mt</b> ' +
+        (t.priced ? fmtUsd(t.usd_m).replace('+', '') : 'no price series') + (weakCrop(t.crop) ? ', rough' : '') + '</span>';
     }).join('');
     /* ── One bar per producer: the whole shortfall, split into what the producer imports itself and what its
        buyers must replace (one block per buyer). The 90% range of the modelled loss sits over it as a line, today's
@@ -50489,25 +50499,24 @@ function showCommodityDetail(key) {
     var pct = function (v) { return (Math.abs(v) / maxKt * 100).toFixed(2) + '%'; };
     var usd = function (v) { return fmtUsd(v).replace('+', '').replace('−', ''); };
     var row = function (c) {
-      var who = '<div class="enso-wp-who" role="rowheader"><button type="button" data-map-country="' + esc(c.iso) + '">' + esc(nameFor(c.iso)) + '</button> ' + esc(crop(c.crop)) +
-        '<span>harvest ' + esc(c.harvest) + '</span><span class="enso-wp-short"><b>' + kt(c.loss_kt) + '</b> short' + (c.stocks_weeks != null ? ' · stocks ' + c.stocks_weeks + ' weeks' : '') + '</span></div>';
+      var who = '<div class="enso-wp-who" role="rowheader"><button type="button" data-map-country="' + esc(c.iso) + '">' + esc(nameFor(c.iso)) + '</button> ' + esc(crop(c.crop)) + '<span>harvest ' + esc(c.harvest) + '</span></div>';
       var lo = Array.isArray(c.loss_kt_90) ? Math.min(Math.abs(c.loss_kt_90[0]), Math.abs(c.loss_kt_90[1])) : null, hi = Array.isArray(c.loss_kt_90) ? Math.max(Math.abs(c.loss_kt_90[0]), Math.abs(c.loss_kt_90[1])) : null;
+      var short = '<div class="enso-wp-num" role="cell"><b>' + kt(c.loss_kt) + '</b>' + (lo != null ? '<span>90%: ' + kt(lo) + '–' + kt(hi) + '</span>' : '') + (typeof c.loss_kt_observed === 'number' ? '<span>today’s ONI: ' + kt(Math.abs(c.loss_kt_observed)) + '</span>' : '') + '</div>';
+      var bill = '<div class="enso-wp-num is-bill" role="cell"><b>' + (c.extra_import_kt && c.extra_import_usd_m != null ? usd(c.extra_import_usd_m) : '—') + '</b>' + (c.stocks_weeks != null ? '<span>stocks ' + c.stocks_weeks + ' wk</span>' : '') + '</div>';
       var marks = (lo != null ? '<i class="enso-wp-range" style="left:' + pct(lo) + ';width:calc(' + pct(hi) + ' - ' + pct(lo) + ')" title="90% range ' + esc(kt(lo) + '–' + kt(hi)) + '"></i>' : '') +
         (typeof c.loss_kt_observed === 'number' ? '<i class="enso-wp-obs" style="left:' + pct(c.loss_kt_observed) + '" title="At today’s ONI: ' + esc(kt(Math.abs(c.loss_kt_observed))) + '"></i>' : '');
-      var range = lo != null ? '<span class="enso-wp-rangetxt">90% range ' + kt(lo) + '–' + kt(hi) + (typeof c.loss_kt_observed === 'number' ? ' · today’s ONI ' + kt(Math.abs(c.loss_kt_observed)) : '') + '</span>' : '';
-      if (c.balance === 'not pulled') return '<div class="enso-wp-row is-flow" role="row">' + who + '<div class="enso-wp-cell" role="cell"><div class="enso-wp-flow"><div class="enso-wp-stack"><span class="enso-wp-unsplit" style="width:' + pct(c.loss_kt) + '"></span></div>' + marks + '</div><p class="k-none">Not split: no USDA trade balance for this crop, so who pays is unknown.</p>' + range + '</div></div>';
-      var seg = function (cls, v, label, title) { var w = Math.abs(v) / maxKt * 100; return '<span class="' + cls + '" style="width:' + w.toFixed(2) + '%" title="' + esc(title) + '">' + (label && w >= 9 ? '<em>' + esc(label) + '</em>' : '') + '</span>'; };
-      var stack = (c.extra_import_kt ? seg('enso-wp-import', c.extra_import_kt, nameFor(c.iso), nameFor(c.iso) + ' imports ' + kt(c.extra_import_kt)) : '') +
+      if (c.balance === 'not pulled') return '<div class="enso-wp-row is-flow" role="row">' + who + short + '<div class="enso-wp-cell" role="cell"><div class="enso-wp-flow"><div class="enso-wp-stack"><span class="enso-wp-unsplit" style="width:' + pct(c.loss_kt) + '"></span></div>' + marks + '</div><p class="k-none">Not split: no USDA trade balance for this crop.</p></div>' + bill + '</div>';
+      var seg = function (cls, v, label, title) { var w = Math.abs(v) / maxKt * 100; return '<span class="' + cls + '" style="width:' + w.toFixed(2) + '%" title="' + esc(title) + '">' + (label && w >= 11 ? '<em>' + esc(label) + '</em>' : '') + '</span>'; };
+      var stack = (c.extra_import_kt ? seg('enso-wp-import', c.extra_import_kt, 'own imports', nameFor(c.iso) + ' imports ' + kt(c.extra_import_kt)) : '') +
         (c.buyers || []).map(function (b) { return seg('enso-wp-buyer', b.kt, nameFor(b.iso), nameFor(b.iso) + ' ' + kt(b.kt) + (b.capped_at_imports ? ', capped at its normal imports' : '')); }).join('') +
         (c.other_buyers_kt ? seg('enso-wp-buyer is-other', c.other_buyers_kt, 'others', 'Other buyers ' + kt(c.other_buyers_kt)) : '') +
         (!(c.buyers || []).length && c.lost_exports_kt ? seg('enso-wp-buyer', c.lost_exports_kt, 'buyers', 'Buyers ' + kt(c.lost_exports_kt)) : '');
-      var legend = '<div class="enso-wp-legend">' +
-        (c.extra_import_kt ? '<span><i class="k-imp"></i><b>' + kt(c.extra_import_kt) + '</b> own imports' + (c.extra_import_usd_m != null ? ' · ' + usd(c.extra_import_usd_m) : ' · no price series') + '</span>' : '') +
-        (c.lost_exports_kt ? '<span><i class="k-exp"></i><b>' + kt(c.lost_exports_kt) + '</b> buyers replace' +
-          ((c.buyers || []).length ? ': ' + (c.buyers || []).map(function (b) { return esc(nameFor(b.iso)) + ' ' + kt(b.kt) + (b.capped_at_imports ? '*' : ''); }).join(', ') + (c.other_buyers_kt ? ', others ' + kt(c.other_buyers_kt) : '') : ' (no UN Comtrade buyer split)') + '</span>'
-          : '<span class="k-none">No exports' + twice.filter(function (t) { return t.iso === c.iso && t.crop === c.crop; }).map(function (t) { return '; also ' + kt(t.supplierLoss) + ' less from ' + esc(nameFor(t.from)); }).join('') + '</span>') +
-        '</div>';
-      return '<div class="enso-wp-row is-flow" role="row">' + who + '<div class="enso-wp-cell" role="cell"><div class="enso-wp-flow"><div class="enso-wp-stack">' + stack + '</div>' + marks + '</div>' + legend + range + '</div></div>';
+      var legend = '<p class="enso-wp-legend">' + [
+        c.extra_import_kt ? '<i class="k-imp"></i>' + kt(c.extra_import_kt) + ' own imports' : '',
+        c.lost_exports_kt ? '<i class="k-exp"></i>' + kt(c.lost_exports_kt) + ' buyers replace' + ((c.buyers || []).length ? ': ' + (c.buyers || []).map(function (b) { return esc(nameFor(b.iso)) + ' ' + kt(b.kt) + (b.capped_at_imports ? '*' : ''); }).join(', ') + (c.other_buyers_kt ? ', others ' + kt(c.other_buyers_kt) : '') : ' (no buyer split)')
+          : 'no exports' + twice.filter(function (t) { return t.iso === c.iso && t.crop === c.crop; }).map(function (t) { return '; also ' + kt(t.supplierLoss) + ' less from ' + esc(nameFor(t.from)); }).join('')
+      ].filter(Boolean).join(' · ') + '</p>';
+      return '<div class="enso-wp-row is-flow" role="row">' + who + short + '<div class="enso-wp-cell" role="cell"><div class="enso-wp-flow"><div class="enso-wp-stack">' + stack + '</div>' + marks + '</div>' + legend + '</div>' + bill + '</div>';
     };
     var lede = (function () {
       var rec = O.cases.record.oni, djf = ((S.strengths && S.strengths.roni_outlook) || []).filter(function (x) { return x.season === 'DJF'; })[0];
@@ -50524,8 +50533,8 @@ function showCommodityDetail(key) {
     if (pk && pk.history && pk.history.length) { var last = pk.history[pk.history.length - 1], ya = pk.history.filter(function (p) { return p.month === (Number(pk.latest_month.slice(0, 4)) - 1) + pk.latest_month.slice(4); })[0]; if (ya) yy = (last.value / ya.value - 1) * 100; }
     el.innerHTML = '<figure class="enso-plate enso-whopays-plate is-modelled">' +
       plateHead('Who pays for the harvest changes', 'FoodShield model × USDA trade balances × UN Comtrade buyers × World Bank prices · at ONI ' + num(O.cases.record.oni, 1), stamp(metaDate('outlook')), 'modelled') +
-      '<div class="plate-body"><div class="enso-ol-eyebrow">To find from other exporters</div><div class="enso-wp-totals">' + totals + '</div>' + lede +
-      '<div class="enso-wp-table" role="table" aria-label="Who pays for each producer’s shortfall"><div class="enso-wp-row enso-wp-head is-flow" role="row"><div role="columnheader">Producer and shortfall</div><div role="columnheader">Where the shortfall goes · <i class="k-imp"></i>the producer imports · <i class="k-exp"></i>its buyers replace, one block each · <i class="k-range"></i>90% range · <i class="k-obs"></i>at today’s ONI</div></div>' +
+      '<div class="plate-body"><p class="enso-wp-totals"><span class="enso-wp-totals-k">To find from other exporters</span>' + totals + '</p>' + lede +
+      '<div class="enso-wp-table" role="table" aria-label="Who pays for each producer’s shortfall"><div class="enso-wp-row enso-wp-head is-flow" role="row"><div role="columnheader">Producer</div><div role="columnheader">Shortfall</div><div role="columnheader">Where it goes · <i class="k-imp"></i>own imports · <i class="k-exp"></i>buyers, one block each · <i class="k-range"></i>90% range · <i class="k-obs"></i>today’s ONI</div><div role="columnheader">Import bill</div></div>' +
       W.map(row).join('') + '</div></div>' +
       '<figcaption class="enso-log">' + bulletList(['<b>Order of magnitude.</b>' + (weak.length ? ' ' + esc(weak.join(', ')) + ': rough (the El Niño term did no better than leaving it out).' : ''),
         '* capped at its normal imports; one scale for every row, set by the widest 90% range (' + kt(maxKt) + ').',
