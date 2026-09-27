@@ -13225,6 +13225,43 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .pac-stack .enso-flow g { opacity:0; }
 #tab-elnino .pac-stack[data-state="moving"] .enso-flow { visibility:hidden; }
 #tab-elnino .pac-stack .enso-ruler-highlight { transition:transform 350ms cubic-bezier(0.77,0,0.175,1) !important; }
+/* Moving arrows for every step: warm water (step 3) and El Niño's capped upwelling (step 5) */
+#tab-elnino .enso-flow .flow-warm-east { animation:flowWarmEast 6s linear infinite; animation-delay:var(--flow-delay); stroke:#f2b08a; }
+#tab-elnino .enso-flow .flow-warm-west { animation:flowWarmWest 7s linear infinite; animation-delay:var(--flow-delay); stroke:#f2b08a; }
+#tab-elnino .enso-flow .flow-warm-west.flow-trades-fast { animation-duration:5s; }
+#tab-elnino .enso-flow .flow-up-capped { animation:flowUpCapped 3.2s linear infinite; animation-delay:var(--flow-delay); }
+#tab-elnino .pac-stack[data-step="2"] .f-warm { opacity:1; }
+@keyframes flowWarmEast {
+  0% { transform:translate(20px,43.5px); opacity:0; }
+  10% { transform:translate(25.6px,43.5px); opacity:1; }
+  85% { transform:translate(74.4px,43.5px); opacity:1; }
+  100% { transform:translate(80px,43.5px); opacity:0; }
+}
+@keyframes flowWarmWest {
+  0% { transform:translate(62px,42.5px); opacity:0; }
+  10% { transform:translate(58px,42.5px); opacity:1; }
+  85% { transform:translate(24px,42.5px); opacity:1; }
+  100% { transform:translate(20px,42.5px); opacity:0; }
+}
+@keyframes flowUpCapped {
+  0% { transform:translate(var(--flow-x),60px); opacity:0; }
+  15% { transform:translate(var(--flow-x),58px); opacity:.9; }
+  70% { transform:translate(var(--flow-x),50px); opacity:.9; }
+  100% { transform:translate(var(--flow-x),48.5px); opacity:0; }
+}
+/* Right column: ONI readout, then the step picked above or on the plate */
+#tab-elnino .pac-stepcard { margin-top:16px; padding-top:14px; border-top:1px solid var(--grid); }
+#tab-elnino .pac-stepcard .enso-step-panels h3 { margin:6px 0 8px; font:600 17px/1.35 'Geist',sans-serif; color:var(--t1); }
+#tab-elnino .pac-stepcard .enso-coordinate { font:10.5px 'Geist Mono',monospace; letter-spacing:.06em; text-transform:uppercase; color:var(--warm); }
+#tab-elnino .pac-stepcard .pac-at { margin:0 0 12px; font:14px/1.45 'Geist',sans-serif; color:var(--t1); }
+#tab-elnino .pac-stepcard .pac-at b { display:block; font:10.5px/1.4 'Geist Mono',monospace; letter-spacing:.06em; text-transform:uppercase; color:var(--t3); font-weight:400; margin-bottom:3px; }
+#tab-elnino .pac-stepcard .enso-step-columns { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; }
+#tab-elnino .pac-stepcard .enso-step-columns p { margin:0; font:13.5px/1.45 'Geist',sans-serif; color:var(--t2); }
+#tab-elnino .pac-stepcard .enso-step-columns b { display:block; font:10.5px/1.4 'Geist Mono',monospace; letter-spacing:.06em; text-transform:uppercase; color:var(--t3); font-weight:400; margin-bottom:3px; }
+#tab-elnino .pac-stepcard .enso-step-evidence span { font:11.5px/1.45 'Geist Mono',monospace; color:var(--t3); }
+#tab-elnino .pac-stepcard section:focus-visible { outline:1px solid var(--t2); outline-offset:4px; }
+#tab-elnino .pac-stepcard .enso-step-panels, #tab-elnino .pac-stepcard .enso-step-panels section { display:block; width:auto; max-width:none; padding:0; margin:0; }
+#tab-elnino .pac-stepcard .enso-step-panels section[hidden] { display:none; }
 </style>
 </head>
 <body>
@@ -45727,6 +45764,9 @@ function showCommodityDetail(key) {
       groups += '<g class="f-trades">' + flowGlyphs(3, 'flow-trades-east', eastHead, 7) + '</g>';
       groups += '<g class="f-soi"><path class="flow-out-west" d="' + westHead + '" vector-effect="non-scaling-stroke"/><path class="flow-out-east" d="' + eastHead + '" vector-effect="non-scaling-stroke"/></g>';
       groups += '<g class="f-rain">' + flowGlyphs(6, 'flow-rain', rain, 1.4, [54,57.2,60.4,63.6,66.8,70]) + '</g>';
+      /* Warm water runs east in the surface layer; off Peru the upwelling rises and stops under the warm lid. */
+      groups += '<g class="f-warm">' + flowGlyphs(4, 'flow-warm-east', eastHead, 6) + '</g>';
+      groups += '<g class="f-upwelling">' + flowGlyphs(3, 'flow-up-capped', upHead, 3.2, [84,86,88]) + '</g>';
     } else {
       var fast = state === 'lanina' ? ' flow-trades-fast' : '';
       var tradeCount = state === 'lanina' ? 6 : 5;
@@ -45734,6 +45774,7 @@ function showCommodityDetail(key) {
       groups += '<g class="f-trades">' + flowGlyphs(tradeCount, 'flow-trades-west' + fast, westHead, tradeSeconds) + '</g>';
       groups += '<g class="f-soi">' + flowGlyphs(4, 'flow-loop', eastHead, 9) + '</g>';
       groups += '<g class="f-rain">' + flowGlyphs(6, 'flow-rain', rain, 1.4, state === 'lanina' ? [8,10.4,12.8,15.2,17.6,20] : [14,16.8,19.6,22.4,25.2,28]) + '</g>';
+      groups += '<g class="f-warm">' + flowGlyphs(state === 'lanina' ? 4 : 3, 'flow-warm-west' + (state === 'lanina' ? ' flow-trades-fast' : ''), westHead, state === 'lanina' ? 5 : 7) + '</g>';
       groups += '<g class="f-upwelling">' + flowGlyphs(state === 'lanina' ? 5 : 3, state === 'lanina' ? 'flow-up-nina' : 'flow-up-normal', upHead, 3.2, state === 'lanina' ? [80,82,84,86,88] : [84,86,88]) + '</g>';
     }
     return '<svg class="enso-flow" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' + groups + '</svg>';
@@ -45950,6 +45991,7 @@ function showCommodityDetail(key) {
       trades: o >= 1.5 ? 'Weaker easterlies; westerly anomalies' : o >= .5 ? 'Weaken' : o > -.5 ? 'Blow east to west, piling warm water near Indonesia' : 'Strengthen',
       warm: o >= 1.5 ? 'Extends far east; the thermocline flattens' : o >= .5 ? 'Moves east past the date line' : o > -.5 ? 'Held in the west; the thermocline tilts up to the east' : 'Held further west; a cold tongue runs along the equator',
       rain: o >= 1.5 ? 'Moves east; drier odds for Indonesia and northern Australia' : o >= .5 ? 'Shifts toward the date line' : o > -.5 ? 'Over Indonesia and the western Pacific' : 'Concentrated over Indonesia; the central Pacific drier',
+      soi: o >= .5 ? 'Pressure rises at Darwin and falls at Tahiti: the SOI turns negative' : o > -.5 ? 'Higher at Tahiti than at Darwin; the SOI near zero' : 'Tahiti high, Darwin low: the SOI turns strongly positive',
       peru: o >= 1 ? 'Less cold, nutrient-rich water rises' : o >= .5 ? 'Upwelling brings less cold water' : o > -.5 ? 'Cold, nutrient-rich water rises' : 'Upwelling strengthens'
     };
   }
@@ -45993,12 +46035,11 @@ function showCommodityDetail(key) {
       '<ol class="pac-seasons" id="pac-seasons" aria-hidden="true" hidden>' + (A.seasons || []).map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ol>';
     var rk = E.historical_rank;
     var side = '<aside class="pac-read"><span class="enso-sr" id="pac-status" role="status" aria-live="polite"></span><span class="pac-k" id="pac-when"></span><div class="pac-big"><b id="pac-oni"></b><span id="pac-band"></span></div>' +
-      '<p class="pac-rank" id="pac-rank"></p><dl class="pac-lines" id="pac-lines"></dl><div class="pac-obs" id="pac-obs"></div></aside>';
+      '<p class="pac-rank" id="pac-rank"></p><div class="pac-stepcard">' + (MV.panels || '') + '</div></aside>';
     el.innerHTML = '<figure class="enso-plate pac-plate" data-kind="schematic">' +
       plateHead('What El Niño does to the Pacific', 'NOAA / BoM · cross-section along the equator, 120°E to 80°W · set by the ONI', stamp(metaDate('enso')), 'schematic') +
       (MV.tabs || '') +
       '<div class="pac-body"><div class="pac-main">' + stage + dial + replay + '</div>' + side + '</div>' +
-      '<div class="pac-steps">' + (MV.panels || '') + '</div>' +
       '<figcaption class="enso-log">Illustrations of three published states, not an ocean model: NOAA’s and BoM’s descriptions of La Niña, neutral and El Niño, drawn to one registration. The ONI sets how far the neutral plate gives way to either; in between they blend. At now the bars under the plate show NOAA’s weekly Niño-region means over each region’s bounds' + (wr ? ' (week of ' + esc(weeklyDate(wr.date)) + ')' : '') + '; replays step through CPC’s seasonal ONI, and the readout shows only those published values.</figcaption>' +
       (MV.evidence || '') + '</figure>';
 
@@ -46021,7 +46062,6 @@ function showCommodityDetail(key) {
       var box = (B.normal && far) ? B.normal.map(function (v, i) { return Math.round((v + (far[i] - v) * t) * 10) / 10; }) : (B[domState] || B.normal);
       rect.style.transform = 'translate(' + box[0] + 'px,' + box[1] + 'px) scale(' + ((box[2] - box[0]) / 100) + ',' + ((box[3] - box[1]) / 100) + ')';
     }
-    var lastLines = '';
     /* render(o, ctx): o drives the geometry, which may be mid-tween. The readout shows ctx.value, the
        published endpoint the drawing is moving to, so an interpolated frame never gets a season's label.
        Observed values appear only once the drawing has arrived at now. */
@@ -46043,21 +46083,11 @@ function showCommodityDetail(key) {
       q('pac-when').textContent = ctx.label || 'Dial · illustrative';
       q('pac-oni').textContent = 'ONI ' + num(ro, 2) + ' °C';
       q('pac-band').textContent = intervalBand(ro);
-      q('pac-rank').textContent = isNow && rk ? (rk.rank === 1 ? 'The highest ' + rk.season + ' reading in ' + rk.of + ' years of record (since 1950).' : rk.season + ' ' + L.year + ' ranks ' + rk.rank + ' of ' + rk.of + ' since 1950.') : '';
-      var lines = '<dt>Trade winds</dt><dd>' + st.trades + '</dd><dt>Warm water</dt><dd>' + st.warm + '</dd><dt>Rain</dt><dd>' + st.rain + '</dd><dt>Off Peru</dt><dd>' + st.peru + '</dd>';
-      if (lines !== lastLines) { q('pac-lines').innerHTML = '<p class="pac-k">The textbook pattern at this strength</p>' + lines; lastLines = lines; }
-      var obs = '';
-      if (isNow) {
-        var soi = link('soi'), ww = link('warm_water'), mon = (String(soi.unit || '').match(/(January|February|March|April|May|June|July|August|September|October|November|December)/) || [])[1];
-        var items = [];
-        if (/westerly anomal/i.test(link('trades').now || '')) items.push(['Winds', 'westerly anomalies (CPC)']);
-        if (typeof soi.metric === 'number') items.push(['SOI', num(soi.metric, 1) + (mon ? ', ' + mon : '') + ' (BoM)']);
-        if (typeof ww.metric === 'number') items.push(['At depth', num(ww.metric, 0) + ' °C peak anomaly']);
-        if (wr && typeof wr.nino34 === 'number') items.push(['Niño 3.4', num(wr.nino34, 1) + ' °C, weekly, ' + weeklyDate(wr.date).replace(/\s\d{4}$/, '')]);
-        if (wr && typeof wr.nino12 === 'number') items.push(['Niño 1+2', num(wr.nino12, 1) + ' °C off Peru']);
-        obs = items.length ? '<p class="pac-k">Observed now</p><dl>' + items.map(function (x) { return '<dt>' + x[0] + '</dt><dd>' + esc(x[1]) + '</dd>'; }).join('') + '</dl>' : '';
-      }
-      q('pac-obs').innerHTML = obs;
+      q('pac-rank').textContent = isNow && rk ? (rk.rank === 1 ? 'The highest ' + rk.season + ' reading in ' + rk.of + ' years of record (since 1950).' : rk.season + ' ' + L.year + ' ranks ' + rk.rank + ' of ' + rk.of + ' since 1950.') +
+        (wr && typeof wr.nino34 === 'number' ? ' Weekly Niño 3.4 ' + num(wr.nino34, 1) + ' °C (' + weeklyDate(wr.date).replace(/\s\d{4}$/, '') + ').' : '') : '';
+      /* The selected step's reading: what the textbook pattern does at this strength, then the observed now. */
+      var AT = { trades: st.trades, soi: st.soi, warm_water: st.warm, convection: st.rain, upwelling: st.peru }, atLbl = 'At ONI ' + num(ro, 2) + ' °C';
+      el.querySelectorAll('.pac-at').forEach(function (n) { var k = n.getAttribute('data-at'), t = atLbl + ': ' + (AT[k] || ''); if (n.textContent !== t) n.innerHTML = '<b>' + atLbl + '</b> ' + esc(AT[k] || ''); });
       stack.setAttribute('aria-label', 'Equatorial Pacific at ONI ' + num(ro, 2) + ' °C (' + intervalBand(ro) + '): trade winds ' + st.trades.toLowerCase() + '; warm water ' + st.warm.toLowerCase() + '; rain ' + st.rain.toLowerCase() + '.');
       thumb.style.left = pct(o);
       if (!ctx.fromDial) range.value = String(ro);
@@ -46139,12 +46169,25 @@ function showCommodityDetail(key) {
       placeBox(); if (focus) tabs[stepIdx].focus();
     }
     tabs.forEach(function (t, i) {
-      t.onclick = function () { stop(); selectStep(i, false); };
-      t.onkeydown = function (e) { stop(); var n = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : null; if (n !== null) { e.preventDefault(); selectStep(n, true); } };
+      /* Picking a step stops a story or replay and brings the plate back to now, where the step's observed reading applies. */
+      var back = function () { var was = !!(raf || timer); stop(); if (was) tween(now.o, 500, nowCtx()); };
+      t.onclick = function () { back(); selectStep(i, false); };
+      t.onkeydown = function (e) { back(); var n = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : null; if (n !== null) { e.preventDefault(); selectStep(n, true); } };
     });
     S.pacSelectStep = selectStep;
     var toMap = el.querySelector('[data-act="map"]'); if (toMap) toMap.onclick = function () { showTab('ensoharvest'); };
     selectStep(0, false);
+    var touched = false; el.addEventListener('pointerdown', function () { touched = true; }, true); el.addEventListener('keydown', function () { touched = true; }, true);
+    if (window.IntersectionObserver && storyBtn && !S.pacAutoplayed) {
+      var io = new IntersectionObserver(function (en) {
+        if (!en[0].isIntersecting || en[0].intersectionRatio < .45) return;
+        io.disconnect(); S.pacAutoplayed = true;
+        /* Automated browsers (the test suite) get a still plate, so their readings are deterministic. */
+        if (!touched && !reduce && S.sub === 'elnino' && !navigator.webdriver) story(storyBtn);
+      }, { threshold: [0, .45, .6] });
+      io.observe(stack);
+      var prevStop = S.pacStop; S.pacStop = function () { io.disconnect(); if (prevStop) prevStop(); };
+    }
     render(now.o, nowCtx());
   }
   function renderMechanism() {
@@ -46224,7 +46267,8 @@ function showCommodityDetail(key) {
     var panels = '<div class="enso-step-panels">' + S.rulerStops.map(function (p,i) {
         var c = copy[p[0]];
         return '<section id="enso-step-' + p[0] + '" role="tabpanel" aria-labelledby="enso-ruler-' + p[0] + '" tabindex="0"' + (i ? ' hidden' : '') + '><div class="enso-coordinate">' + (i+1) + ' of 5 · ' + esc(p[2]) + '</div><h3>' + c[0] + '</h3>' +
-          '<div class="enso-step-columns"><p><b>Normal</b> ' + c[1] + '</p><p><b>Now</b> ' + c[2] + '</p><p class="enso-step-evidence"><b>Evidence</b> <span>' + c[3] + '</span></p></div></section>';
+          '<p class="pac-at" data-at="' + p[0] + '"></p>' +
+          '<div class="enso-step-columns"><p><b>Normal</b> ' + c[1] + '</p><p><b>Observed now</b> ' + c[2] + '</p><p class="enso-step-evidence"><b>Evidence</b> <span>' + c[3] + '</span></p></div></section>';
       }).join('') + '</div>';
     var evid = '<details class="enso-evidence-note enso-mechanism-evidence"><summary>Mechanism evidence and sources</summary><div class="enso-evidence-columns">' + chain.map(function (c) {
         return '<section><h3>' + esc(c.title) + '</h3><p>' + esc(mechanismEvidence(c)) + '</p></section>';

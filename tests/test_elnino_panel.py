@@ -640,12 +640,12 @@ def main() -> int:
         page.emulate_media(reduced_motion='no-preference')
         for width, height in ((1440, 900), (1280, 800)):
             page.set_viewport_size({"width": width, "height": height})
-            check(f"Pacific explainer fits a laptop at {width}px: illustration and readout side by side, steps below",
+            check(f"Pacific explainer fits a laptop at {width}px: illustration beside the readout and the selected step",
                   page.evaluate("""() => {
                     const stack = document.getElementById('pac-stack').getBoundingClientRect();
                     const side = document.querySelector('.pac-read').getBoundingClientRect();
-                    const steps = document.querySelector('.pac-steps').getBoundingClientRect();
-                    return stack.height <= 620 && side.left >= stack.right && steps.top >= stack.bottom
+                    const card = document.querySelector('.pac-stepcard').getBoundingClientRect();
+                    return stack.height <= 620 && side.left >= stack.right && card.left >= stack.right && card.height > 0
                         && document.getElementById('enso-view-nav').getBoundingClientRect().height === 40;
                   }"""))
         page.set_viewport_size({"width":390,"height":844})
