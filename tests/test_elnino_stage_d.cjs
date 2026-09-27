@@ -193,7 +193,7 @@ test('Reported draws every hazard in El Niño countries, rings the verdict, and 
  assert(fit.tooltip.includes('Fits the usual pattern'));assert(fit.tooltip.includes('do not attribute causes'));
  assert(S.alertPins.find(m=>m.options.ensoVerdict==='against').tooltip.includes('Runs against the usual pattern'));
  assert.equal(c.headlines,2,'both El Niño-country headlines are counted; only the one naming one to three countries gets a map tab');
- const oldShow=S.showAlerts;S.showAlerts=true;const leg=api.alertLegend();S.showAlerts=oldShow;assert(leg.includes('<b>1</b> against'));assert(leg.includes('Fitting is not attribution'));
+ const oldShow=S.showAlerts;S.showAlerts=true;const leg=api.alertLegend();S.showAlerts=oldShow;assert(leg.includes('<b>3</b> reports'));assert(leg.includes('Fitting is not attribution'));
  S.alertPins=oldPins;ctx.window.disturbanceEvents=oldEv;S.news=oldNews;S._hl=oldHl;S.gdacs=oldG;
 });
 test('Shipping keeps one unboxed SVG label per chokepoint, with no corridor chips',()=>{

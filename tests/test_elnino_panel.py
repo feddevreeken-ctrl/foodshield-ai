@@ -1055,10 +1055,10 @@ def main() -> int:
                     return a.left >= m.right - 1 && isos.length === tele.length && tele.every(i => isos.includes(i)) && title.includes(tele.length + ' El Niño countries');
                 }
                 if (feed === 'reported') {
-                    // 2026-09-26: the Reported rail lists El Niño countries with a report, a crisis in force or a
-                    // headline, sorted by fits, then IPC phase, then report count; the title counts the rows.
+                    // 2026-09-27: the Reported rail lists El Niño countries with a report, a crisis classification or a
+                    // headline, sorted by severity (crisis phase), then report count, then fits; the title counts the rows.
                     const b = [...document.querySelectorAll('#enso-map-ranking button')];
-                    const k = x => [+x.dataset.fits, +x.dataset.phase, +x.dataset.total];
+                    const k = x => [+x.dataset.phase, +x.dataset.total, +x.dataset.fits];
                     const sorted = b.every((x, i) => { if (!i) return true; const p = k(b[i-1]), q = k(x);
                         for (let j = 0; j < 3; j++) { if (p[j] !== q[j]) return p[j] > q[j]; } return true; });
                     const m = document.getElementById('enso-map').getBoundingClientRect();
