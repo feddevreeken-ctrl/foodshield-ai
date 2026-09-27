@@ -23,11 +23,22 @@ What the Gatún record adds is a climatology: for today's day of year, the
 1966-2025 median and 10th/90th percentiles, and the same calendar path in the
 El Nino years 1997-98, 2015-16 and 2023-24, so this year's lake can be read
 against both normal and the events that forced slot and draft cuts.
+
+The dry-season outlook (gatun.outlook) is this site's model, not the Canal's:
+for every year since 1965, the lake on today's calendar day and the El Nino part
+of the following December-February ONI, fitted by least squares to the lowest
+level the lake reached between 1 January and 15 June. It is scored leave-one-out
+against the historical average, driven by NOAA CPC's December-February forecast,
+and published with its range. It adds no number the record does not support:
+every input is a file in data/ or the Canal's own history.
 """
 from __future__ import annotations
 
 import csv
 import io
+import json
+import math
+import random
 import re
 import statistics
 import sys
@@ -124,6 +135,11 @@ def gatun(today: date) -> dict:
                 continue
         proj.sort(key=lambda p: p["date"])
     now_clim = clim(last_day) or {}
+    try:
+        outlook = gatun_outlook(rows, last_day, last_ft)
+    except Exception as e:  # noqa: BLE001 -- the model must never cost the reading
+        outlook = None
+        print(f"  gatun outlook skipped: {type(e).__name__}: {e}")
     return {
         "name": "Gatún Lake", "unit": "ft", "source": "Panama Canal Authority", "url": GATUN_HIST,
         "latest": {"date": last_day.isoformat(), "value": last_ft},
@@ -132,7 +148,155 @@ def gatun(today: date) -> dict:
         "window_start": start.isoformat(), "band": band, "this_year": this, "analogs": analogs, "analog_min": analog_min,
         "projection": proj, "projection_url": GATUN_PROJ,
         "projection_note": "ACP's own estimate; official drafts are set only by Advisories to Shipping.",
+        "outlook": outlook, "monthly_2019": lake_monthly(rows),
     }
+
+
+DATA = Path(__file__).resolve().parent.parent / "data"
+
+
+def _read(name: str) -> dict:
+    try:
+        d = json.loads((DATA / name).read_text())
+        return d.get("data", d) if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _solve(A: list[list[float]], b: list[float]) -> list[float]:
+    """Gaussian elimination for the small normal equations below."""
+    n = len(b)
+    M = [row[:] + [b[i]] for i, row in enumerate(A)]
+    for c in range(n):
+        p = max(range(c, n), key=lambda r: abs(M[r][c]))
+        M[c], M[p] = M[p], M[c]
+        for r in range(n):
+            if r != c:
+                f = M[r][c] / M[c][c]
+                M[r] = [x - f * y for x, y in zip(M[r], M[c])]
+    return [M[i][n] / M[i][i] for i in range(n)]
+
+
+def _inv(A: list[list[float]]) -> list[list[float]]:
+    n = len(A)
+    cols = [_solve(A, [1.0 if i == j else 0.0 for i in range(n)]) for j in range(n)]
+    return [[cols[j][i] for j in range(n)] for i in range(n)]
+
+
+def _ols(X: list[list[float]], y: list[float]):
+    k = len(X[0])
+    XtX = [[sum(r[i] * r[j] for r in X) for j in range(k)] for i in range(k)]
+    Xty = [sum(r[i] * v for r, v in zip(X, y)) for i in range(k)]
+    b = _solve(XtX, Xty)
+    res = [v - sum(bi * xi for bi, xi in zip(b, r)) for r, v in zip(X, y)]
+    s2 = sum(e * e for e in res) / (len(y) - k)
+    inv = _inv(XtX)
+    return b, [[s2 * inv[i][j] for j in range(k)] for i in range(k)], math.sqrt(s2), res
+
+
+def _chol(C: list[list[float]]) -> list[list[float]]:
+    n = len(C)
+    Lm = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(i + 1):
+            t = C[i][j] - sum(Lm[i][k] * Lm[j][k] for k in range(j))
+            Lm[i][j] = math.sqrt(max(t, 1e-12)) if i == j else t / Lm[j][j]
+    return Lm
+
+
+def gatun_outlook(rows: list[tuple[date, float]], last_day: date, last_ft: float) -> dict | None:
+    """How low the lake may go next dry season, from its own record and the winter ENSO forecast."""
+    if not (8 <= last_day.month <= 12):
+        return None   # the fit is made before the dry season, not during it
+    by = dict(rows)
+    djf = {h["year"]: h["anom"] for h in _read("enso.json").get("history", []) if isinstance(h.get("anom"), (int, float))}
+    pts = []
+    for y in range(1965, last_day.year):
+        d0 = _same_day(last_day, y)
+        season = [v for d, v in rows if date(y + 1, 1, 1) <= d <= date(y + 1, 6, 15)]
+        if d0 in by and len(season) >= 150 and (y + 1) in djf:
+            pts.append({"season": y + 1, "level_then": by[d0], "oni_djf": djf[y + 1], "low": min(season)})
+    if len(pts) < 40:
+        return None
+    X = [[1.0, p["level_then"], max(p["oni_djf"], 0.0)] for p in pts]
+    Y = [p["low"] for p in pts]
+    b, cov, sd, res = _ols(X, Y)
+    # Leave-one-out: the fit against the historical average, each season predicted without itself.
+    loo, loo_clim = [], []
+    for i in range(len(pts)):
+        Xi, Yi = X[:i] + X[i + 1:], Y[:i] + Y[i + 1:]
+        bi, _, _, _ = _ols(Xi, Yi)
+        loo.append(Y[i] - sum(a * c for a, c in zip(bi, X[i])))
+        loo_clim.append(Y[i] - sum(Yi) / len(Yi))
+    rmse = lambda e: math.sqrt(sum(x * x for x in e) / len(e))
+    for p, e in zip(pts, res):
+        p["fit"] = round(p["low"] - e, 2)
+    recent = [e for p, e in zip(pts, res) if p["season"] >= 2017]
+    # The driver: CPC's December-February forecast on RONI, moved to ONI by this year's ONI-RONI gap.
+    ro = next((r for r in _read("enso_strengths.json").get("roni_outlook", []) if r.get("season") == "DJF"), None)
+    idx = {r.get("key"): r for r in _read("enso_indices.json").get("indices", [])}
+    gap = (idx["oni"]["value"] - idx["roni"]["value"]) if "oni" in idx and "roni" in idx else None
+    scen = []
+    latest = _read("enso.json").get("latest", {})
+    if isinstance(latest.get("anom"), (int, float)):
+        scen.append({"key": "today", "label": f"ONI stays at today's {latest['anom']:+.1f}", "oni": latest["anom"]})
+    fc = None
+    if ro and gap is not None:
+        fc = {"median": ro["median"] + gap, "p05": ro["p05"] + gap, "p95": ro["p95"] + gap,
+              "roni_median": ro["median"], "roni_p05": ro["p05"], "roni_p95": ro["p95"], "gap": round(gap, 2),
+              "issued": ro.get("issued"), "label": ro.get("label")}
+        scen.append({"key": "cpc", "label": f"CPC's median for {ro.get('label', 'DJF')} (about ONI {fc['median']:+.1f})", "oni": fc["median"]})
+    for sc in scen:
+        sc["low"] = round(b[0] + b[1] * last_ft + b[2] * max(sc["oni"], 0.0), 2)
+        sc["oni"] = round(sc["oni"], 2)
+    record = min(pts, key=lambda p: p["low"])
+    dist = None
+    if fc:
+        # Monte Carlo over the coefficients, the residual and CPC's forecast spread (5th-95th percentile as +-1.645 sd).
+        rng, Lc = random.Random(20260927), _chol(cov)
+        mu, sdo = fc["median"], (fc["p95"] - fc["p05"]) / 3.29
+        draws = []
+        for _ in range(20000):
+            z = [rng.gauss(0, 1) for _ in range(3)]
+            bb = [b[i] + sum(Lc[i][k] * z[k] for k in range(3)) for i in range(3)]
+            o = rng.gauss(mu, sdo)
+            draws.append(bb[0] + bb[1] * last_ft + bb[2] * max(o, 0.0) + rng.gauss(0, sd))
+        draws.sort()
+        q = lambda f: round(draws[int(f * (len(draws) - 1))], 2)
+        dist = {"p05": q(.05), "p10": q(.10), "p50": q(.50), "p90": q(.90), "p95": q(.95),
+                "p_below_record": round(sum(1 for v in draws if v < record["low"]) / len(draws), 3),
+                "record_ft": record["low"], "record_season": record["season"]}
+    # The last El Nino's slot cuts, each read against the lake level on its date.
+    lanes = _read("enso_lanes.json").get("lanes", [])
+    pan = next((ln for ln in lanes if ln.get("id") == "panama"), {})
+    ladder = []
+    for st in ((pan.get("precedent_2023") or {}).get("steps") or []):
+        try:
+            d = date.fromisoformat(st["date"])
+        except (KeyError, ValueError):
+            continue
+        if d in by:
+            ladder.append({"date": st["date"], "slots": st.get("total"), "lake_ft": by[d]})
+    return {
+        "method": "Least squares on the Canal's daily record: lowest level 1 Jan-15 Jun against the level on "
+                  f"{last_day.strftime('%d %b')} the previous year and max(0, December-February ONI).",
+        "n_seasons": len(pts), "first_season": pts[0]["season"], "last_season": pts[-1]["season"],
+        "coef": {"intercept": round(b[0], 3), "level_then": round(b[1], 3), "el_nino_oni": round(b[2], 3)},
+        "se": {"level_then": round(math.sqrt(cov[1][1]), 3), "el_nino_oni": round(math.sqrt(cov[2][2]), 3)},
+        "resid_sd_ft": round(sd, 2), "loo_rmse_ft": round(rmse(loo), 2), "loo_rmse_average_ft": round(rmse(loo_clim), 2),
+        "recent_mean_resid_ft": round(sum(recent) / len(recent), 2) if recent else None, "recent_from": 2017,
+        "level_now": last_ft, "level_date": last_day.isoformat(), "forecast": fc, "scenarios": scen,
+        "distribution": dist, "points": pts, "ladder_2023": ladder,
+    }
+
+
+def lake_monthly(rows: list[tuple[date, float]], since: int = 2019) -> list[dict]:
+    """Monthly mean lake level, for reading the canal's transits against the water behind them."""
+    acc: dict[str, list[float]] = {}
+    for d, v in rows:
+        if d.year >= since:
+            acc.setdefault(d.strftime("%Y-%m"), []).append(v)
+    return [{"month": m, "ft": round(sum(v) / len(v), 2)} for m, v in sorted(acc.items())]
 
 
 def stlouis() -> dict:

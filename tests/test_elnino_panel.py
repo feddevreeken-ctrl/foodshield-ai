@@ -870,6 +870,19 @@ def main() -> int:
                 && ['1997-98', '2015-16', '2023-24', '2026'].every(l => labels.includes(l))
                 && document.getElementById('enso-lane-record-panama').textContent.includes('Japan maize');
         }"""))
+        # 2026-09-27: Panama through the last El Niño (observed) and the Gatún dry-season outlook (this site's model).
+        check("Shipping shows Panama since 2019 and a scored Gatún outlook that prints its file's numbers", page.evaluate("""async () => {
+            const g = (await (await fetch('data/enso_gauges.json')).json()).data.gauges.gatun, O = g.outlook;
+            const pm = (await (await fetch('data/portwatch_history.json')).json()).data.panama_monthly || [];
+            const since = document.querySelector('.enso-pansince-plate'), fit = document.querySelector('.enso-gatunfit-plate');
+            if (!O || !since || !fit || pm.length < 24) return false;
+            const D = O.distribution, t = fit.textContent;
+            return fit.dataset.kind === 'modelled' && getComputedStyle(fit).borderTopStyle === 'dashed'
+                && D.p10 <= D.p50 && D.p50 <= D.p90 && O.loo_rmse_ft < O.loo_rmse_average_ft && O.n_seasons >= 40
+                && t.includes(D.p50.toFixed(1) + ' ft') && t.includes(D.p10.toFixed(1) + '–' + D.p90.toFixed(1))
+                && fit.querySelectorAll('.enso-gatun-fit circle').length === O.points.length
+                && since.querySelectorAll('svg path').length >= 3;
+        }"""))
         # 2026-09-24: the import end of the chain, from PortWatch's daily ports feed.
         check("Shipping measures the gateway import ports, one row per port in the feed", page.evaluate("""async () => {
             const P = (await (await fetch('data/enso_ports.json')).json()).data.ports;

@@ -13430,6 +13430,15 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 @media (max-width:700px) { #tab-elnino .enso-ledger td[data-l]::before { content:attr(data-l); display:block; font:10.5px 'Geist Mono',monospace; color:var(--t3); } }
 #tab-elnino #enso-live-lead .enso-live-lead { margin:0; font:15px/1.5 'Geist',sans-serif; color:var(--t2); }
 #tab-elnino #enso-live-lead .enso-live-lead b { color:var(--t1); font-weight:500; }
+/* Shipping: Panama since 2019 and the Gatún dry-season outlook */
+#tab-elnino .enso-pan-since { width:100%; height:auto; display:block; margin-top:8px; }
+#tab-elnino .enso-gfit { display:grid; grid-template-columns:minmax(0, 1.6fr) minmax(220px, 1fr); gap:28px; align-items:start; margin-top:8px; }
+#tab-elnino .enso-gatun-fit { width:100%; height:auto; display:block; }
+#tab-elnino .enso-gfit-facts { margin:0; display:grid; gap:4px; }
+#tab-elnino .enso-gfit-facts dt { font:10.5px/1.4 'Geist Mono',monospace; letter-spacing:.04em; text-transform:uppercase; color:var(--t3); margin-top:10px; }
+#tab-elnino .enso-gfit-facts dt:first-child { margin-top:0; }
+#tab-elnino .enso-gfit-facts dd { margin:0; font:13.5px/1.45 'Geist',sans-serif; color:var(--t1); }
+@media (max-width:900px) { #tab-elnino .enso-gfit { grid-template-columns:minmax(0,1fr); } }
 </style>
 </head>
 <body>
@@ -49573,7 +49582,7 @@ function showCommodityDetail(key) {
     if (ln.id === 'panama') {
       var g = G.gatun, am = (g && g.analog_min) || {}, low = Object.keys(am).map(function (k) { var d = new Date(am[k].date); return r1(am[k].ft) + ' ft (' + (isNaN(d) ? k : d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' })) + ')'; });
       var lv2 = ln.live_2026 || {};
-      return { level: strong ? 'elevated' : 'watch', text: (typeof lv2.rainfall_deficit_pct === 'number' ? 'The Canal Authority cites watershed rain ' + Math.abs(lv2.rainfall_deficit_pct) + '% below average (' + esc(lv2.deficit_period || '') + ')' + (lv2.el_nino_quote ? ' and warns El Niño could cut it further' : '') + ' (' + esc(lv2.advisory || '') + '). ' : '') + 'Past El Niño lake lows: ' + (low.length ? low.join(', ') : 'see the lake plate') + '. Slot and draft cuts in force. Next test: the January–April dry season.' };
+      return { level: strong ? 'elevated' : 'watch', text: (typeof lv2.rainfall_deficit_pct === 'number' ? 'The Canal Authority cites watershed rain ' + Math.abs(lv2.rainfall_deficit_pct) + '% below average (' + esc(lv2.deficit_period || '') + ')' + (lv2.el_nino_quote ? ' and warns El Niño could cut it further' : '') + ' (' + esc(lv2.advisory || '') + '). ' : '') + 'Past El Niño lake lows: ' + (low.length ? low.join(', ') : 'see the lake plate') + '. Slot and draft cuts in force. Next test: the January–April dry season' + (g && g.outlook && g.outlook.distribution ? '; this site’s fit puts its low at ' + g.outlook.distribution.p50.toFixed(1) + ' ft (80% range ' + g.outlook.distribution.p10.toFixed(1) + '–' + g.outlook.distribution.p90.toFixed(1) + ')' : '') + '.' };
     }
     if (ln.id === 'amazon') return { level: strong ? 'elevated' : 'watch', text: (function () {
       /* The agency's latest words and the dated past low, read from the lane record; nothing typed here. */
@@ -49693,6 +49702,102 @@ function showCommodityDetail(key) {
 
   /* ── §3 THE WATER ────────────────────────────────────────────────────── */
   /* One computed sentence: what is restricted now, and why. */
+
+  /* ── Panama since 2019: the canal's traffic and the water behind it, month by month ─────────────
+     Both series observed (IMF PortWatch AIS; Panama Canal Authority lake record), on one time axis, with
+     the months when the ONI stood at +0.5 or above shaded from CPC's own seasonal values. */
+  function panamaSincePlate() {
+    var PM = (S.pwhist && S.pwhist.panama_monthly) || [], G = ((S.gauges || {}).gauges || {}).gatun || {}, LM = G.monthly_2019 || [];
+    if (PM.length < 24 || LM.length < 24) return '';
+    var lake = {}; LM.forEach(function (x) { lake[x.month] = x.ft; });
+    var months = PM.map(function (x) { return x.month; }), n = months.length;
+    /* El Niño months: the centre month of each CPC season at or above +0.5, from the 2023-24 path and this year's trajectory. */
+    var SEAS = ['DJF','JFM','FMA','MAM','AMJ','MJJ','JJA','JAS','ASO','SON','OND','NDJ'], warm = {};
+    var mark = function (season, year, v) { var k = SEAS.indexOf(season); if (k < 0 || typeof v !== 'number' || v < 0.5) return; var m = k, y = year; warm[y + '-' + String(m + 1).padStart(2, '0')] = 1; };
+    var A = (S.enso || {}).analogs || {}, ev = (A.events || []).filter(function (e) { return e.label === '2023-24'; })[0];
+    if (ev) (A.seasons || []).forEach(function (sn, i) { var yr = i >= 7 ? ev.peak_djf_year : ev.peak_djf_year - 1; mark(sn, sn === 'DJF' ? yr : yr, ev.path[i]); });
+    ((S.enso || {}).trajectory || []).forEach(function (t) { mark(t.season, t.year, t.anom); });
+    var W = 880, L0 = 56, R0 = 860, x = function (i) { return L0 + i / (n - 1) * (R0 - L0); };
+    var panel = function (top, h, vals, lo, hi, fmt, lines) {
+      var y = function (v) { return top + h - (v - lo) / (hi - lo) * h; }, out = '';
+      [lo, (lo + hi) / 2, hi].forEach(function (t) { out += '<line x1="' + L0 + '" x2="' + R0 + '" y1="' + y(t).toFixed(1) + '" y2="' + y(t).toFixed(1) + '" stroke="#2a323c"/><text x="' + (L0 - 8) + '" y="' + (y(t) + 4).toFixed(1) + '" text-anchor="end" class="enso-hw-t">' + fmt(t) + '</text>'; });
+      lines.forEach(function (ln) {
+        var d = '', last = null;
+        ln.v.forEach(function (v, i) { if (typeof v !== 'number') { last = null; return; } d += (last === null ? 'M' : 'L') + x(i).toFixed(1) + ',' + y(v).toFixed(1); last = v; });
+        out += '<path d="' + d + '" fill="none" stroke="' + ln.c + '" stroke-width="' + (ln.w || 1.6) + '"/>';
+        var li = ln.v.length - 1; while (li > 0 && typeof ln.v[li] !== 'number') li--;
+        out += '<text x="' + (R0 + 4) + '" y="' + (y(ln.v[li]) + 4).toFixed(1) + '" class="enso-hw-t" fill="' + ln.c + '">' + ln.label + '</text>';
+      });
+      return out;
+    };
+    var shade = months.map(function (m, i) { return warm[m] ? '<rect x="' + (x(i) - (R0 - L0) / (n - 1) / 2).toFixed(1) + '" y="24" width="' + ((R0 - L0) / (n - 1)).toFixed(1) + '" height="282" fill="rgba(224,134,74,.12)"/>' : ''; }).join('');
+    var yrs = months.map(function (m, i) { return m.slice(5) === '01' ? '<text x="' + x(i).toFixed(1) + '" y="328" text-anchor="middle" class="enso-hw-t">' + m.slice(0, 4) + '</text><line x1="' + x(i).toFixed(1) + '" x2="' + x(i).toFixed(1) + '" y1="308" y2="312" stroke="#56606b"/>' : ''; }).join('');
+    var tot = PM.map(function (r) { return r.total; }), db = PM.map(function (r) { return r.dry_bulk; }), lk = months.map(function (m) { return lake[m]; });
+    var tHi = Math.ceil(Math.max.apply(null, tot) / 10) * 10, lkv = lk.filter(function (v) { return typeof v === 'number'; });
+    var lLo = Math.floor(Math.min.apply(null, lkv)), lHi = Math.ceil(Math.max.apply(null, lkv));
+    var svg = '<svg class="enso-hw enso-pan-since" viewBox="0 0 ' + (W + 40) + ' 334" role="img" aria-label="Panama transits a day and Gatún Lake level by month since ' + esc(months[0]) + ', El Niño months shaded">' + shade +
+      panel(28, 122, null, 0, tHi, function (t) { return Math.round(t); }, [{ v: tot, c: '#8b8980', label: 'all', w: 1.2 }, { v: db, c: '#ebe9e2', label: 'dry bulk', w: 1.8 }]) +
+      panel(186, 118, null, lLo, lHi, function (t) { return t.toFixed(0) + ' ft'; }, [{ v: lk, c: '#8fb1cf', label: 'lake', w: 1.8 }]) +
+      '<text x="' + L0 + '" y="12" class="enso-hw-t">Transits a day, monthly mean</text><text x="' + L0 + '" y="174" class="enso-hw-t">Gatún Lake, monthly mean</text>' + yrs + '</svg>';
+    /* The lede: the last El Niño's traffic against the years before it, and where the canal is now. */
+    var before = PM.filter(function (r) { return r.month >= '2019-01' && r.month <= '2022-12'; }), avg = function (a, k) { return a.reduce(function (s, r) { return s + r[k]; }, 0) / (a.length || 1); };
+    var ep = PM.filter(function (r) { return r.month >= '2023-06' && r.month <= '2024-06'; }), low = ep.slice().sort(function (a, b) { return a.dry_bulk - b.dry_bulk; })[0];
+    var lakeEp = LM.filter(function (r) { return r.month >= '2023-06' && r.month <= '2024-06'; }).sort(function (a, b) { return a.ft - b.ft; })[0], last = PM[PM.length - 1];
+    var mn = function (m) { return MON3[+m.slice(5) - 1] + ' ' + m.slice(0, 4); };
+    var lede = before.length && low ? '<p class="enso-plate-lede"><b>In the last El Niño, dry-bulk transits fell from ' + avg(before, 'dry_bulk').toFixed(1) + ' a day (2019–2022 average) to ' + low.dry_bulk.toFixed(1) + ' in ' + mn(low.month) + '</b>, as the lake’s monthly mean fell to ' + (lakeEp ? lakeEp.ft.toFixed(1) + ' ft (' + mn(lakeEp.month) + ')' : 'its low') + '. ' +
+      mn(last.month) + (last.days < 28 ? ' so far' : '') + ': ' + last.dry_bulk.toFixed(1) + ' dry bulk and ' + last.total.toFixed(1) + ' in all a day, the lake at ' + (lake[last.month] != null ? lake[last.month].toFixed(1) + ' ft' : 'its latest reading') + '.</p>' : '';
+    return '<figure class="enso-plate enso-pansince-plate" data-kind="observed">' + plateHead('Panama through the last El Niño and now', 'IMF PortWatch AIS transits · Panama Canal Authority lake record · monthly means since ' + mn(months[0]), stamp(metaDate('portwatch')), 'observed') +
+      '<div class="plate-body">' + lede + svg + '</div><figcaption class="enso-log">Shaded: months whose CPC season had ONI +0.5 or above. AIS counts run lower than the Canal’s own transit tally; the shape, not the level, is the comparison.</figcaption></figure>';
+  }
+  /* ── How low could Gatún go this dry season: this site's model ───────────────────────────────────
+     Fitted in the gauges collector (refresh_shipping_gauges.gatun_outlook): the lowest level between 1 Jan
+     and 15 Jun against the level on this calendar day and the El Niño part of the Dec-Feb ONI, 1966 onward,
+     scored leave-one-out; driven by CPC's Dec-Feb forecast. Nothing here is computed in the page except the
+     plotting positions. */
+  function gatunOutlookPlate() {
+    var G = ((S.gauges || {}).gauges || {}).gatun || {}, O = G.outlook;
+    if (!O || !O.points || !O.distribution) return '';
+    var D = O.distribution, fc = O.forecast || {}, cpc = (O.scenarios || []).filter(function (x) { return x.key === 'cpc'; })[0], tdy = (O.scenarios || []).filter(function (x) { return x.key === 'today'; })[0];
+    var b = O.coef, lvNow = O.level_now, dNow = new Date(O.level_date + 'T12:00:00Z'), dTxt = dNow.getUTCDate() + ' ' + MON3[dNow.getUTCMonth()];
+    var fitAt = function (oni) { return b.intercept + b.level_then * lvNow + b.el_nino_oni * Math.max(oni, 0); };
+    /* Each past season shifted to start from this year's level, so it sits against the one line drawn. */
+    var adj = O.points.map(function (p) { return { s: p.season, o: p.oni_djf, v: p.low - b.level_then * (p.level_then - lvNow), raw: p.low }; });
+    var xs = adj.map(function (p) { return p.o; }).concat([fc.p95 || 3]), ys = adj.map(function (p) { return p.v; }).concat([D.p05, D.p95]);
+    var xLo = Math.floor(Math.min.apply(null, xs)), xHi = Math.ceil(Math.max.apply(null, xs) * 2) / 2, yLo = Math.floor(Math.min.apply(null, ys)) - 0.5, yHi = Math.ceil(Math.max.apply(null, ys));
+    var W = 620, H = 330, L0 = 50, R0 = 600, T0 = 16, B0 = 290;
+    var X = function (v) { return L0 + (v - xLo) / (xHi - xLo) * (R0 - L0); }, Y = function (v) { return B0 - (v - yLo) / (yHi - yLo) * (B0 - T0); };
+    var grid = '';
+    for (var yv = Math.ceil(yLo); yv <= yHi; yv += 1) grid += '<line x1="' + L0 + '" x2="' + R0 + '" y1="' + Y(yv).toFixed(1) + '" y2="' + Y(yv).toFixed(1) + '" stroke="#232a33"/>' + (yv % 2 === 0 ? '<text x="' + (L0 - 6) + '" y="' + (Y(yv) + 4).toFixed(1) + '" text-anchor="end" class="enso-hw-t">' + yv + ' ft</text>' : '');
+    for (var xv = Math.ceil(xLo); xv <= xHi; xv += 1) grid += '<text x="' + X(xv).toFixed(1) + '" y="' + (B0 + 16) + '" text-anchor="middle" class="enso-hw-t">' + (xv > 0 ? '+' : xv < 0 ? '−' : '') + Math.abs(xv) + '</text>';
+    /* The 2023-24 band: the lake levels at which the Canal ran 22-25 booking slots a day. */
+    var lad = (O.ladder_2023 || []).filter(function (r) { return r.slots <= 25; }), band = '';
+    if (lad.length) { var lo = Math.min.apply(null, lad.map(function (r) { return r.lake_ft; })), hi = Math.max.apply(null, lad.map(function (r) { return r.lake_ft; }));
+      band = '<rect x="' + L0 + '" y="' + Y(hi).toFixed(1) + '" width="' + (R0 - L0) + '" height="' + Math.max(2, Y(lo) - Y(hi)).toFixed(1) + '" fill="rgba(143,177,207,.12)"/><text x="' + (L0 + 6) + '" y="' + (Y(hi) - 4).toFixed(1) + '" class="enso-hw-t" fill="#8fb1cf">2023-24: 22–25 slots a day at these levels</text>'; }
+    var rec = '<line x1="' + L0 + '" x2="' + R0 + '" y1="' + Y(D.record_ft).toFixed(1) + '" y2="' + Y(D.record_ft).toFixed(1) + '" stroke="#8b8980" stroke-dasharray="3 3"/><text x="' + (R0 - 4) + '" y="' + (Y(D.record_ft) + 13).toFixed(1) + '" text-anchor="end" class="enso-hw-t">record low ' + D.record_ft.toFixed(1) + ' ft (' + D.record_season + ')</text>';
+    var fit = '<path d="M' + X(xLo).toFixed(1) + ',' + Y(fitAt(xLo)).toFixed(1) + ' L' + X(0).toFixed(1) + ',' + Y(fitAt(0)).toFixed(1) + ' L' + X(xHi).toFixed(1) + ',' + Y(fitAt(xHi)).toFixed(1) + '" fill="none" stroke="#e0864a" stroke-width="1.6" stroke-dasharray="6 4"/>';
+    var named = { 1983: 1, 1998: 1, 2016: 1, 2024: 1 };
+    var dots = adj.map(function (p) { var big = p.o >= 1.5; return '<circle cx="' + X(p.o).toFixed(1) + '" cy="' + Y(p.v).toFixed(1) + '" r="' + (big ? 3.6 : 2.6) + '" fill="' + (big ? '#ebe9e2' : '#56606b') + '"><title>' + (p.s - 1) + '-' + String(p.s).slice(2) + ': Dec-Feb ONI ' + num(p.o, 2) + ', low ' + p.raw.toFixed(2) + ' ft</title></circle>' +
+      (named[p.s] ? '<text x="' + (X(p.o) + 6).toFixed(1) + '" y="' + (Y(p.v) + 4).toFixed(1) + '" class="enso-hw-t">' + (p.s - 1) + '-' + String(p.s).slice(2) + '</text>' : ''); }).join('');
+    var px = X(fc.median || (cpc ? cpc.oni : 2.5));
+    var proj = '<line x1="' + px.toFixed(1) + '" x2="' + px.toFixed(1) + '" y1="' + Y(D.p95).toFixed(1) + '" y2="' + Y(D.p05).toFixed(1) + '" stroke="#e0864a" stroke-width="1.2"/>' +
+      '<rect x="' + (px - 5).toFixed(1) + '" y="' + Y(D.p90).toFixed(1) + '" width="10" height="' + (Y(D.p10) - Y(D.p90)).toFixed(1) + '" fill="rgba(224,134,74,.35)" stroke="#e0864a"/>' +
+      '<rect x="' + (px - 4).toFixed(1) + '" y="' + (Y(D.p50) - 4).toFixed(1) + '" width="8" height="8" fill="#e0864a" transform="rotate(45 ' + px.toFixed(1) + ' ' + Y(D.p50).toFixed(1) + ')"/>' +
+      '<text x="' + (px + 10).toFixed(1) + '" y="' + (Y(D.p50) + 4).toFixed(1) + '" class="enso-hw-t" fill="#e0864a">2027: ' + D.p50.toFixed(1) + ' ft</text>';
+    var svg = '<svg class="enso-hw enso-gatun-fit" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Past dry-season lows of Gatún Lake against the December–February ONI, the fitted line at this year’s level and the 2027 projection">' +
+      grid + band + rec + fit + dots + proj +
+      '<text x="' + ((L0 + R0) / 2) + '" y="' + (H - 4) + '" text-anchor="middle" class="enso-hw-t">December–February ONI, °C</text></svg>';
+    var slots = lad.length ? ' In 2023-24 the Canal ran ' + Math.min.apply(null, lad.map(function (r) { return r.slots; })) + '–' + Math.max.apply(null, lad.map(function (r) { return r.slots; })) + ' booking slots a day with the lake between ' + Math.min.apply(null, lad.map(function (r) { return r.lake_ft; })).toFixed(1) + ' and ' + Math.max.apply(null, lad.map(function (r) { return r.lake_ft; })).toFixed(1) + ' ft.' : '';
+    var lede = '<p class="enso-plate-lede"><b>This site’s fit puts the lowest level between January and mid-June 2027 at ' + D.p50.toFixed(1) + ' ft (80% range ' + D.p10.toFixed(1) + '–' + D.p90.toFixed(1) + ')</b>, from the lake at ' + lvNow.toFixed(2) + ' ft on ' + dTxt + ' and CPC’s ' + esc(fc.label || 'December–February') + ' forecast (about ONI ' + num(fc.median, 1) + '). Chance of going below the ' + D.record_season + ' record, ' + D.record_ft.toFixed(1) + ' ft: ' + Math.round(D.p_below_record * 100) + '%.' + slots + '</p>';
+    var facts = '<dl class="enso-gfit-facts">' +
+      '<dt>Each +1 °C of El Niño</dt><dd>' + num(b.el_nino_oni, 1) + ' ft on the low (± ' + O.se.el_nino_oni.toFixed(1) + ')</dd>' +
+      '<dt>Each foot higher now</dt><dd>' + num(b.level_then, 2) + ' ft on the low (± ' + O.se.level_then.toFixed(2) + ')</dd>' +
+      '<dt>Tested on each season left out</dt><dd>' + O.loo_rmse_ft.toFixed(2) + ' ft typical miss, against ' + O.loo_rmse_average_ft.toFixed(2) + ' ft for the historical average (' + O.n_seasons + ' seasons, ' + O.first_season + '–' + O.last_season + ')</dd>' +
+      (tdy ? '<dt>If ONI stays at ' + num(tdy.oni, 1) + '</dt><dd>' + tdy.low.toFixed(1) + ' ft</dd>' : '') +
+      (O.recent_mean_resid_ft != null ? '<dt>Since ' + O.recent_from + '</dt><dd>the lake has ended the dry season ' + Math.abs(O.recent_mean_resid_ft).toFixed(1) + ' ft ' + (O.recent_mean_resid_ft < 0 ? 'below' : 'above') + ' the fit on average, so the risk leans lower</dd>' : '') + '</dl>';
+    return '<figure class="enso-plate enso-gatunfit-plate is-modelled" data-kind="modelled">' + plateHead('How low could Gatún go by mid-2027', 'This site’s fit on the Canal’s daily record since 1965 · NOAA CPC Dec–Feb forecast', stamp(metaDate('gauges')), 'modelled') +
+      '<div class="plate-body">' + lede + '<div class="enso-gfit">' + svg + facts + '</div></div>' +
+      '<figcaption class="enso-log">A statistical fit, not a water-balance model: rain, water demand and the Canal’s own management move the lake too, and drafts and slots are set only by its advisories. Dots: every dry season since 1966, shifted to start from this year’s ' + dTxt + ' level; bright dots: winters at ONI +1.5 or above. Diamond and bar: median, 80% and 90% range over the coefficients, the residual and CPC’s forecast spread (RONI moved to ONI by this year’s ' + num(fc.gap, 1) + ' °C gap).</figcaption></figure>';
+  }
   function shippingPlates(lanes) {
     var G = (S.gauges && S.gauges.gauges) || {}, out = '', gd = stamp(metaDate('gauges'));
     var g = G.gatun;
@@ -49711,7 +49816,7 @@ function showCommodityDetail(key) {
           return cmp + (lows.length ? 'Past El Niño lows came in ' + [dry.length ? dry.map(nm).join(' and ') + ' (dry season)' : '', wet.length ? wet.map(nm).join(' and ') + ' (wet)' : ''].filter(Boolean).join(' and ') + '.' : '');
         })() + '</p>' +
         '<div class="enso-chart enso-gatun-chart"><canvas id="enso-c-gatun"></canvas></div></div>' +
-        '<figcaption class="enso-log">The Canal’s projection is its own estimate; drafts are set only by Advisories to Shipping.</figcaption></figure>';
+        '<figcaption class="enso-log">The Canal’s projection is its own estimate; drafts are set only by Advisories to Shipping.</figcaption></figure>' + gatunOutlookPlate();
     }
     /* The Panama/Suez/Cape dry-bulk chart could not show a reroute in a 12-month window and redrew
        Panama's dry bulk; Panama's dry bulk sits on the Panama chart, Suez and the Cape on the lane board. */
@@ -49905,6 +50010,7 @@ function showCommodityDetail(key) {
       }
     }
     if (pan) out += '</section>';
+    out += panamaSincePlate();
     out += shippingPlates(lanes);
     out += '<details class="enso-lane-evidence-fold"><summary>Lane evidence and attribution: mechanism, record and sources for all ' + lanes.length + ' lanes</summary><figure class="enso-plate is-published">' + plateHead('Lane evidence and attribution', 'Regulatory advisories · attribution literature · IMF PortWatch AIS', readOn, 'published') +
       '<div class="enso-tblwrap enso-lane-records" role="region" aria-label="Lane records" tabindex="0"><table class="enso-tbl enso-lanes-table"><thead><tr><th scope="col">Lane / phase</th><th scope="col">What the record shows</th></tr></thead><tbody>' + lanes.map(function (ln,i) {

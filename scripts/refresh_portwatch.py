@@ -308,7 +308,35 @@ def build_history(latest):
             v = r.get(f)
             s[k].append(int(v) if isinstance(v, (int, float)) else None)
     return {"days": HISTORY_DAYS, "start": start.isoformat(), "end": latest.isoformat(),
-            "segments": [k for k, _ in SEGMENTS], "chokepoints": series}
+            "segments": [k for k, _ in SEGMENTS], "chokepoints": series,
+            "panama_monthly": panama_monthly(latest)}
+
+
+# Panama since the start of the archive (Jan 2019), as monthly means of the daily
+# counts: long enough to hold the whole 2023-24 El Nino and the months either side,
+# small enough (about 90 rows) to ship. Months with fewer than 20 observed days are
+# dropped rather than averaged over a gap.
+def panama_monthly(latest):
+    pid = next(p for p, slug in SLUGS.items() if slug == "panama")
+    where = f"date >= DATE '2019-01-01' AND date <= DATE '{latest}' AND portid = '{pid}'"
+    fields = "date,portid," + ",".join(f for _, f in SEGMENTS)
+    rows = _paged(DAILY_URL, where, fields, "date")
+    acc = {}
+    for r in rows:
+        d = _day(r)
+        if d is None:
+            continue
+        a = acc.setdefault(d[:7], {"days": 0, **{k: 0 for k, _ in SEGMENTS}})
+        a["days"] += 1
+        for k, f in SEGMENTS:
+            v = r.get(f)
+            a[k] += v if isinstance(v, (int, float)) else 0
+    out = []
+    for m in sorted(acc):
+        a = acc[m]
+        if a["days"] >= 20:
+            out.append({"month": m, "days": a["days"], **{k: round(a[k] / a["days"], 1) for k, _ in SEGMENTS}})
+    return out
 
 
 def main_history():
