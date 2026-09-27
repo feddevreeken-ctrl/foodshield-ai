@@ -571,8 +571,9 @@ def main() -> int:
         check("mechanism alias activates Ocean and scrolls to the mechanism",
               page.locator('#viewbtn-elnino').get_attribute('aria-selected') == 'true'
               and page.locator('#subview-elnino').evaluate("e => e.classList.contains('active')")
-              and abs(page.locator('#enso-mech').bounding_box()['y']
-                      - page.locator('#tab-elnino .content-page').bounding_box()['y'] - 120) < 5)
+              and abs(page.locator('#enso-pacific').bounding_box()['y']
+                      - page.locator('#tab-elnino .content-page').bounding_box()['y'] - 120) < 5
+              and page.locator('#enso-mech-fold').evaluate('e => e.open'))
         ticks = page.locator('#enso-mech [data-ruler]')
         check("five named longitude ticks replace the scroll tour", ticks.count() == 5
               and page.locator('.tour-step').count() == 0
@@ -658,13 +659,14 @@ def main() -> int:
         page.emulate_media(reduced_motion='no-preference')
         for width, height in ((1440, 900), (1280, 800)):
             page.set_viewport_size({"width": width, "height": height})
+            # 2026-09-27: +40px for the fold summary; the explainer above now leads, this plate is the deep dive.
             check(f"mechanism fits a laptop plate at {width}px with reading below the pair",
                   page.evaluate("""() => {
                     const plate = document.querySelector('.enso-mechanism-plate').getBoundingClientRect();
                     const left = document.getElementById('enso-ruler-normal').getBoundingClientRect();
                     const right = document.getElementById('enso-ruler-figure').getBoundingClientRect();
                     const text = document.querySelector('.enso-mechanism-reading').getBoundingClientRect();
-                    return plate.height <= 820 && right.left >= left.right && Math.abs(left.top-right.top) < 2
+                    return plate.height <= 860 && right.left >= left.right && Math.abs(left.top-right.top) < 2
                         && text.top >= right.bottom && document.getElementById('enso-view-nav').getBoundingClientRect().height === 40;
                   }"""))
         page.set_viewport_size({"width":390,"height":844})
@@ -740,9 +742,9 @@ def main() -> int:
             const first = document.querySelector('#subview-elnino > *:not([hidden])');
             const harv = O.rows_all.filter(r => r.status === 'shown' && !r.in_season && Math.abs(r.change_kt_record || 0) >= 150);
             const text = document.querySelector('.enso-next12').textContent;
-            // 2026-09-27: the map opens Ocean, then the ONI record and the CPC odds; the dated calendar follows.
-            const second = first && first.nextElementSibling;
-            return first && first.classList.contains('enso-mapgrid') && second && second.classList.contains('enso-oni-plate') && !!document.querySelector('#subview-elnino > #enso-next12')
+            // 2026-09-27: the map opens Ocean, then the Pacific explainer, then the ONI record and the CPC odds; the dated calendar follows.
+            const second = first && first.nextElementSibling, third = second && second.nextElementSibling;
+            return first && first.classList.contains('enso-mapgrid') && second && second.id === 'enso-pacific' && third && third.classList.contains('enso-oni-plate') && !!document.querySelector('#subview-elnino > #enso-next12')
                 && items.length >= 6 && items.every(li => /^is-(forecast|published|modelled|precedent)$/.test(li.className) && li.querySelector('[data-goto-lens]'))
                 // 2026-09-27: the fitted harvests are one pointer row naming each (sizes live on Harvests).
                 && harv.every(r => text.includes(r.iso === 'USA' ? 'United States' : r.iso === 'ZAF' ? 'South Africa' : ''))
