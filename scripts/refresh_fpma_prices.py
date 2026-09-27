@@ -122,18 +122,20 @@ def main():
             print(f"[FPMA] soft budget reached after {i} of {len(ids)} series; stopping")
             break
         chunk = ids[i:i + BATCH]
-        try:
-            body = http_get(f"{API}/FpmaSeriePrice/",
-                            params={"uuid__in": ",".join(chunk), "periodicity": "monthly",
-                                    "format": "json"},
-                            timeout=90).json()
-        except Exception as e:
-            print(f"[FPMA] batch {i // BATCH} failed: {e}")
-            truncated = True
-            continue
-        for row in (body.get("results") if isinstance(body, dict) else body) or []:
-            if isinstance(row, dict) and row.get("uuid") in keep:
-                prices[row["uuid"]] = row.get("datapoints") or []
+        # The API pages its results ("next"); follow every page (2026-09-27: before this, most series in
+        # a batch past the first page were silently dropped).
+        url, params = f"{API}/FpmaSeriePrice/", {"uuid__in": ",".join(chunk), "periodicity": "monthly", "format": "json"}
+        while url:
+            try:
+                body = http_get(url, params=params, timeout=90).json()
+            except Exception as e:
+                print(f"[FPMA] batch {i // BATCH} failed: {e}")
+                truncated = True
+                break
+            for row in (body.get("results") if isinstance(body, dict) else body) or []:
+                if isinstance(row, dict) and row.get("uuid") in keep:
+                    prices[row["uuid"]] = row.get("datapoints") or []
+            url, params = (body.get("next") if isinstance(body, dict) else None), None
 
     per_country = defaultdict(list)
     for uid, dps in prices.items():

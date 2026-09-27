@@ -1365,10 +1365,10 @@ def main() -> int:
         for width, height in ((1280, 800), (1440, 900)):
             page.set_viewport_size({'width': width, 'height': height})
             for tab, labels in (
-                ('ensowater', ['No land layer', 'Shipping', 'Change nowEl Niño link']),
-                ('ensomoney', ['Staple prices', 'Grain imports', 'After inflationLocal currency', 'Price changeAgainst the usual pattern']),
+                ('ensowater', ['No land layer', 'Shipping', 'El Niño timeline', 'Change nowEl Niño link']),
+                ('ensomoney', ['Staple prices', 'Grain imports', 'El Niño timeline', 'RealNominal', 'Price changeAgainst pattern']),
                 ('elnino', ['Sea-surface']),
-                ('ensoharvest', ['Production shock', 'Strongest crop', 'Coverage', 'Crop stress now', 'Teleconnections']),
+                ('ensoharvest', ['Production shock', 'Strongest crop', 'Coverage', 'Crop stress now', 'Teleconnections', 'El Niño timeline']),
                 ('ensolive', ['Rain pattern', 'Hotspots', 'IPC', 'Hazards', 'Headlines', 'Elsewhere'])):
                 page.evaluate('tab => showTab(tab)', tab)
                 page.wait_for_timeout(150)
@@ -1405,6 +1405,26 @@ def main() -> int:
                     && pane.querySelectorAll('.enso-grat-lab').length === 3
                     && document.querySelectorAll('.enso-price-lbl').length >= 3;
             }"""))
+
+        # 2026-09-27: one El Niño month slider for Prices, Harvests and Shipping. Past the latest observed month the
+        # Prices map shows only estimates (dashed), and a month with nothing knowable is left blank.
+        page.set_viewport_size({'width': 1440, 'height': 1000})
+        page.evaluate("showTab('ensomoney')")
+        page.wait_for_selector('[data-tl]')
+        page.locator('[data-tl]').click()
+        page.wait_for_selector('#enso-tl:not([hidden]) input[type=range]')
+        page.evaluate("(()=>{const r=document.querySelector('#enso-tl input[type=range]'); r.value=String(2027*12+1); r.dispatchEvent(new Event('input'));})()")
+        page.wait_for_timeout(600)
+        check("the El Niño timeline shows only dashed estimates past the latest month, from the timeline file", page.evaluate("""async () => {
+            const C = (await (await fetch('data/enso_price_timeline.json')).json()).data.countries;
+            let est = 0, solid = 0;
+            _stageHMap.eachLayer(l => { const p = l.feature && l.feature.properties; if (!p || !l.options.fillColor || l.options.fillOpacity < .3) return;
+                const iso = p.ISO_A3 || p.ADM0_A3 || p.iso_a3 || p.id; if (!C[iso]) return;
+                if (l.options.dashArray === '4 3') est++; else solid++; });
+            return est >= 5 && solid === 0 && document.querySelector('#enso-tl .enso-tl-lab').textContent === 'Feb 2027';
+        }"""))
+        page.locator('[data-tl]').click()
+        page.wait_for_timeout(300)
 
         print("\nTier 1: figures come from the feeds (court 2026-09-23)")
         src = (ROOT / "index.html").read_text()

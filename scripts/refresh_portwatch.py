@@ -309,15 +309,34 @@ def build_history(latest):
             s[k].append(int(v) if isinstance(v, (int, float)) else None)
     return {"days": HISTORY_DAYS, "start": start.isoformat(), "end": latest.isoformat(),
             "segments": [k for k, _ in SEGMENTS], "chokepoints": series,
-            "panama_monthly": panama_monthly(latest)}
+            "panama_monthly": panama_monthly(latest),
+            "monthly": chokepoint_monthly(latest)}
 
 
 # Panama since the start of the archive (Jan 2019), as monthly means of the daily
 # counts: long enough to hold the whole 2023-24 El Nino and the months either side,
 # small enough (about 90 rows) to ship. Months with fewer than 20 observed days are
 # dropped rather than averaged over a gap.
-def panama_monthly(latest):
-    pid = next(p for p, slug in SLUGS.items() if slug == "panama")
+# The chokepoints the El Niño Shipping map draws (lane chokepoints and the other grain-route rings).
+MAP_SLUGS = {"panama", "suez", "bab_el_mandeb", "bosporus", "malacca", "hormuz", "cape_of_good_hope", "gibraltar", "yucatan"}
+
+
+def chokepoint_monthly(latest):
+    """Monthly means for every mapped chokepoint since 2019, for the El Niño map timeline. A month counts
+    only with 20 or more days; the page pairs each month with the same month a year earlier."""
+    out = {}
+    for pid, slug in SLUGS.items():
+        if slug not in MAP_SLUGS:
+            continue
+        try:
+            out[slug] = [{"month": r["month"], "days": r["days"], "total": r["total"], "dry_bulk": r["dry_bulk"]} for r in panama_monthly(latest, pid)]
+        except Exception as e:  # one chokepoint failing must not cost the others
+            print(f"[WARN] PortWatch monthly {slug}: {e}")
+    return out
+
+
+def panama_monthly(latest, pid=None):
+    pid = pid or next(p for p, slug in SLUGS.items() if slug == "panama")
     where = f"date >= DATE '2019-01-01' AND date <= DATE '{latest}' AND portid = '{pid}'"
     fields = "date,portid," + ",".join(f for _, f in SEGMENTS)
     rows = _paged(DAILY_URL, where, fields, "date")
