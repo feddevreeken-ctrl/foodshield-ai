@@ -566,78 +566,63 @@ def main() -> int:
         check("every element in the El Niño tab has square corners", not rounded, str(rounded))
         page.set_viewport_size({"width": 1440, "height": 1000})
         open_panel(page, base, "ensomech")
-        page.wait_for_selector('.enso-xsec-lead')
+        page.wait_for_selector('#pac-stack')
         page.wait_for_timeout(300)
-        check("mechanism alias activates Ocean and scrolls to the mechanism",
+        # 2026-09-27: the engraved states live inside the Pacific explainer, blended by the ONI; the five
+        # steps, their readings and the evidence are in the same plate.
+        check("mechanism alias activates Ocean and scrolls to the Pacific explainer",
               page.locator('#viewbtn-elnino').get_attribute('aria-selected') == 'true'
               and page.locator('#subview-elnino').evaluate("e => e.classList.contains('active')")
               and abs(page.locator('#enso-pacific').bounding_box()['y']
                       - page.locator('#tab-elnino .content-page').bounding_box()['y'] - 120) < 5)
-        ticks = page.locator('#enso-mech [data-ruler]')
-        check("five named longitude ticks replace the scroll tour", ticks.count() == 5
-              and page.locator('.tour-step').count() == 0
+        ticks = page.locator('#enso-pacific [data-ruler]')
+        check("five named longitude tabs replace the scroll tour", ticks.count() == 5
+              and page.locator('.tour-step').count() == 0 and page.locator('.enso-mechanism-plate').count() == 0
               and ticks.evaluate_all("els => els.every(e => e.title && e.querySelector('.enso-ruler-longitude') && e.querySelector('.enso-ruler-name'))"))
         ticks.first.focus()
         page.keyboard.press('ArrowRight')
-        check("ruler arrow key updates focus and visible text",
+        check("step arrow key updates focus and visible text",
               ticks.nth(1).get_attribute('aria-selected') == 'true'
               and page.locator('#enso-step-soi').is_visible()
               and not page.locator('#enso-step-trades').is_visible())
         page.keyboard.press('End')
-        check("ruler End key selects eastern upwelling",
+        check("step End key selects eastern upwelling, the plate showing today's El Niño state",
               ticks.last.get_attribute('aria-selected') == 'true'
               and page.locator('#enso-step-upwelling').is_visible()
-              and page.locator('#enso-ruler-figure').get_attribute('data-state') == 'elnino')
-        check("two engravings are visible at 1440px: Normal and El Niño", page.evaluate("""() => {
-            const visible = [...document.querySelectorAll('.enso-pacific-pair .enso-raster')]
-                .filter(r => getComputedStyle(r).opacity === '1').map(r => r.querySelector('img'));
-            return visible.length === 2 && visible[0].src.includes('walker') && visible[1].src.includes('elnino')
-                && visible.every(img => img.complete && img.naturalWidth > 0 && img.loading === 'eager'
-                    && img.width / img.height > 1.49 && img.width / img.height < 1.51
+              and page.locator('#pac-stack').get_attribute('data-state') == 'elnino')
+        check("three registered illustrations are stacked; at today's ONI the El Niño plate is the one shown", page.evaluate("""() => {
+            const layers = [...document.querySelectorAll('#pac-stack > .enso-raster')];
+            const imgs = layers.map(l => l.querySelector('img'));
+            const el = document.querySelector('#pac-stack [data-pacific-state="elnino"]');
+            return layers.length === 3 && ['walker', 'elnino', 'lanina'].every((n, i) => imgs[i].src.includes(n))
+                && getComputedStyle(el).opacity === '1' && el.classList.contains('is-dom') && el.getAttribute('aria-hidden') === 'false'
+                && imgs.every(img => img.complete && img.naturalWidth > 0 && img.loading === 'eager'
                     && img.getAttribute('width') === '1536' && img.getAttribute('height') === '1024');
         }"""))
         labels = []
-        for state in ('elnino', 'lanina'):
-            page.locator(f'[data-ruler-state="{state}"]').click()
-            page.wait_for_timeout(650)
-            raster = page.locator('#enso-ruler-figure .enso-raster[aria-hidden="false"]')
-            labels.append(raster.get_attribute('aria-label'))
-            check(f"{state} engraving becomes visible after choosing its Pacific state", raster.evaluate("""(r, state) =>
-                getComputedStyle(r).opacity === '1' && r.querySelector('img').src.includes(state)
-                    && r.querySelector('img').complete && r.querySelector('img').naturalWidth > 0
-                    && [...r.parentElement.querySelectorAll('.enso-raster[aria-hidden="true"]')]
-                        .every(other => getComputedStyle(other).opacity === '0')""", state))
-        check("Normal stays beside two distinct comparison states",
-              len(set(labels)) == 2 and all(labels)
-              and page.locator('.enso-pacific-pair img').count() == 3
-              and page.locator('#enso-ruler-normal > b').inner_text() == 'Normal')
+        for button, state in (('[data-pac-set="0"]', 'normal'), ('[data-pac-set]:not([data-pac-set="0"]):not([data-pac-set="now"])', 'lanina')):
+            page.locator(button).click()
+            page.wait_for_timeout(1100)
+            layer = page.locator(f'#pac-stack [data-pacific-state="{state}"]')
+            labels.append(layer.get_attribute('aria-label'))
+            check(f"{state} illustration takes over when the dial moves there", layer.evaluate("""(r, state) =>
+                r.classList.contains('is-dom') && getComputedStyle(r.querySelector('.enso-raster-label')).visibility === 'visible'
+                    && [...r.parentElement.querySelectorAll('.enso-raster:not(.is-dom)')].every(o => getComputedStyle(o.querySelector('.enso-raster-label')).visibility === 'hidden')
+                    && (state === 'normal' ? [...r.parentElement.querySelectorAll('.enso-raster:not(.is-dom)')].every(o => getComputedStyle(o).opacity === '0')
+                        : getComputedStyle(r).opacity === '1')""", state))
+        check("each state carries its own description", len(set(labels)) == 2 and all(labels))
         for i in range(5):
             ticks.nth(i).click()
-            check(f"step {i + 1} moves the rectangle on both engravings", page.evaluate("""i => {
-                const rects = [...document.querySelectorAll('.enso-pacific-pair .enso-ruler-highlight')];
-                const neutral = [[26,34,92,42],[5,6,88,40],[10,38,62,50],[5,5,42,38],[78,36,92,60]];
+            check(f"step {i + 1} moves the rectangle to its place on the La Niña plate", page.evaluate("""i => {
+                const rect = document.querySelector('#pac-stack .enso-ruler-highlight');
                 const lanina = [[18,34,92,42],[5,6,88,40],[10,38,42,50],[3,5,32,38],[78,38,92,62]];
-                const values = rect => rect.style.transform.match(/-?\\d*\\.?\\d+/g).map(Number);
-                const transform = box => [box[0], box[1], (box[2] - box[0]) / 100, (box[3] - box[1]) / 100];
-                return rects.length === 2 && rects.every(r => r.dataset.step === String(i))
-                    && JSON.stringify(values(rects[0])) === JSON.stringify(transform(neutral[i]))
-                    && JSON.stringify(values(rects[1])) === JSON.stringify(transform(lanina[i]));
+                const values = rect.style.transform.match(/-?\\d*\\.?\\d+/g).map(Number);
+                const box = lanina[i];
+                return JSON.stringify(values) === JSON.stringify([box[0], box[1], (box[2] - box[0]) / 100, (box[3] - box[1]) / 100])
+                    && document.getElementById('pac-stack').dataset.step === String(i);
             }""", i))
-        ticks.nth(2).click()
-        page.wait_for_timeout(300)
-        check("step three highlights each engraving's warm water", page.evaluate("""() => {
-            const rects = [...document.querySelectorAll('.enso-pacific-pair .enso-ruler-highlight')];
-            const values = rect => rect.style.transform.match(/-?\\d*\\.?\\d+/g).map(Number);
-            return rects.length === 2 && rects.every(r => r.dataset.step === '2')
-                && JSON.stringify(values(rects[0])) === JSON.stringify([10,38,.52,.12])
-                && JSON.stringify(values(rects[1])) === JSON.stringify([10,38,.32,.12]);
-        }"""))
-        ticks.first.click()
-        check("a manual Pacific state survives step selection and updates the caption",
-              page.locator('#enso-ruler-figure').get_attribute('data-state') == 'lanina'
-              and 'La Niña:' in page.locator('#enso-ruler-caption').inner_text())
-        check("engraving overlays run only transform and opacity animations", page.evaluate("""() => {
-            const animations = document.querySelector('.enso-mechanism-plate').getAnimations({subtree:true})
+        check("illustration overlays run only transform and opacity animations", page.evaluate("""() => {
+            const animations = document.querySelector('.pac-plate').getAnimations({subtree:true})
                 .filter(a => a instanceof CSSAnimation && a.playState === 'running'
                     && a.effect.target && a.effect.target.closest('.enso-flow'));
             const metadata = new Set(['offset', 'computedOffset', 'easing', 'composite']);
@@ -648,30 +633,26 @@ def main() -> int:
         }"""))
         page.emulate_media(reduced_motion='reduce')
         ticks.nth(2).click()
-        # Reduced motion keeps the 200ms opacity crossfade (it aids comprehension)
-        # and makes rectangle movement instant, so CSS animations are counted after
-        # the crossfade has finished.
         page.wait_for_timeout(700)
-        check("reduced motion leaves no running animations in the mechanism", page.evaluate("""() =>
-            document.querySelector('.enso-mechanism-plate').getAnimations({subtree:true})
+        check("reduced motion leaves no running animations in the Pacific explainer", page.evaluate("""() =>
+            document.querySelector('.pac-plate').getAnimations({subtree:true})
               .filter(a => a instanceof CSSAnimation && a.playState === 'running').length === 0"""))
         page.emulate_media(reduced_motion='no-preference')
         for width, height in ((1440, 900), (1280, 800)):
             page.set_viewport_size({"width": width, "height": height})
-            check(f"mechanism fits a laptop plate at {width}px with reading below the pair",
+            check(f"Pacific explainer fits a laptop at {width}px: illustration and readout side by side, steps below",
                   page.evaluate("""() => {
-                    const plate = document.querySelector('.enso-mechanism-plate').getBoundingClientRect();
-                    const left = document.getElementById('enso-ruler-normal').getBoundingClientRect();
-                    const right = document.getElementById('enso-ruler-figure').getBoundingClientRect();
-                    const text = document.querySelector('.enso-mechanism-reading').getBoundingClientRect();
-                    return plate.height <= 820 && right.left >= left.right && Math.abs(left.top-right.top) < 2
-                        && text.top >= right.bottom && document.getElementById('enso-view-nav').getBoundingClientRect().height === 40;
+                    const stack = document.getElementById('pac-stack').getBoundingClientRect();
+                    const side = document.querySelector('.pac-read').getBoundingClientRect();
+                    const steps = document.querySelector('.pac-steps').getBoundingClientRect();
+                    return stack.height <= 620 && side.left >= stack.right && steps.top >= stack.bottom
+                        && document.getElementById('enso-view-nav').getBoundingClientRect().height === 40;
                   }"""))
         page.set_viewport_size({"width":390,"height":844})
-        check("phone switcher stays one 36px row and the pair stacks without overflow", page.evaluate("""() => {
+        check("phone switcher stays one 36px row and the explainer stacks without overflow", page.evaluate("""() => {
             const root = document.querySelector('#tab-elnino .content-page'), bar = document.getElementById('enso-view-nav');
-            const left = document.getElementById('enso-ruler-normal').getBoundingClientRect(), right = document.getElementById('enso-ruler-figure').getBoundingClientRect();
-            return bar.getBoundingClientRect().height === 36 && right.top >= left.bottom && root.scrollWidth <= root.clientWidth;
+            const stack = document.getElementById('pac-stack').getBoundingClientRect(), side = document.querySelector('.pac-read').getBoundingClientRect();
+            return bar.getBoundingClientRect().height === 36 && side.top >= stack.bottom && root.scrollWidth <= root.clientWidth;
         }"""))
         page.set_viewport_size({"width": 1440, "height": 1000})
         page.locator('#viewbtn-ensowater').click()
@@ -729,8 +710,8 @@ def main() -> int:
         # heights at 1440x1000 on 24 Sep 2026; adding a plate means removing or folding another.
         # Lowered 24 Sep after the duplicate displays were removed (Ocean 4.2k, Shipping 6.9k, Prices 4.9k at 1440x900).
         # 2026-09-24: Harvests gains the published-estimates plate, Shipping the freight plate.
-        # 2026-09-27: Ocean gains the Pacific explainer; Fedde asked to keep the engraved cross-sections visible too.
-        CEIL = {'elnino': 5500, 'ensoharvest': 5000, 'ensowater': 7800, 'ensomoney': 5500, 'ensolive': 6100}
+        # 2026-09-27: Ocean gains the Pacific explainer, which now carries the engraved states and the five steps (5.0k).
+        CEIL = {'elnino': 5250, 'ensoharvest': 5000, 'ensowater': 7800, 'ensomoney': 5500, 'ensolive': 6100}
         check("no lens grows past its height ceiling", all(heights.get(k, 0) <= v for k, v in CEIL.items()), str(heights))
         # 2026-09-24: the Ocean lens leads with a dated calendar joined from the other lenses' data.
         page.evaluate("showTab('elnino')")
