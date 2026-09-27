@@ -38,8 +38,8 @@ test('mechanism parts feed the Pacific explainer: live Niño 1+2, five tabs and 
  for(const label of ['Indonesia','Date line','Peru','Thermocline','Walker circulation','Rain over the warm pool','Cold water in reach','Rain follows the warm water','Upwelling capped'])assert(all.includes(label));
  const w=api.pacWeights;
  assert.deepEqual([w(0).elnino,w(0).lanina],[0,0]);
- assert.equal(w(.45).elnino,0);assert.equal(w(.85).elnino,1);assert.equal(w(1.8).elnino,1);assert.equal(w(-1.87).lanina,1);assert.equal(w(1.8).lanina,0);
- assert(w(.6).elnino>0&&w(.6).elnino<w(.7).elnino&&w(.7).elnino<1);
+ assert.equal(w(.5).elnino,0);assert.equal(w(1.5).elnino,1);assert.equal(w(1.8).elnino,1);assert.equal(w(-1.87).lanina,1);assert.equal(w(1.8).lanina,0);
+ assert(w(.8).elnino>0&&w(.8).elnino<w(1.1).elnino&&w(1.1).elnino<1);
  assert(!html.includes('function pacificSVG('));
  assert(!html.includes('@keyframes enso-'));
  assert(html.includes('transition:transform 250ms cubic-bezier(0.23,1,0.32,1)'));

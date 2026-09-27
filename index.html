@@ -13215,12 +13215,16 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .pac-plate > .enso-mechanism-evidence { margin:0 24px 8px; }
 @media (max-width:700px) { #tab-elnino .pac-steps .enso-step-columns { grid-template-columns:minmax(0,1fr); gap:10px; } #tab-elnino .pac-steps, #tab-elnino .pac-plate > .enso-ruler { padding-left:16px; padding-right:16px; } }
 @media (max-width:700px) {
-  #tab-elnino .pac-plate > .enso-ruler { display:flex; overflow-x:auto; gap:4px; padding-bottom:6px; scrollbar-width:none; }
+  #tab-elnino .pac-plate > .enso-ruler { display:flex; overflow-x:auto; overflow-y:hidden; gap:4px; padding-bottom:6px; scrollbar-width:none; }
   #tab-elnino .pac-plate > .enso-ruler::-webkit-scrollbar { display:none; }
   #tab-elnino .pac-plate > .enso-ruler button { flex:0 0 auto; min-width:0; padding:6px 10px; white-space:nowrap; word-break:normal; overflow-wrap:normal; }
   #tab-elnino .pac-plate > .enso-ruler :is(.enso-ruler-longitude, .enso-ruler-name) { white-space:nowrap; }
   #tab-elnino .pac-body { padding-top:0; }
 }
+/* Moving arrows: only the selected step's, only on a whole plate (the static arrows are drawn in the plates). */
+#tab-elnino .pac-stack .enso-flow g { opacity:0; }
+#tab-elnino .pac-stack[data-state="moving"] .enso-flow { visibility:hidden; }
+#tab-elnino .pac-stack .enso-ruler-highlight { transition:transform 350ms cubic-bezier(0.77,0,0.175,1) !important; }
 </style>
 </head>
 <body>
@@ -45742,9 +45746,9 @@ function showCommodityDetail(key) {
       nina ? 'La Niña Pacific state: stronger easterly trades, western warm pool and stronger eastern upwelling' :
       'El Niño Pacific state: weaker trades, warm water and rainfall farther east, and capped eastern upwelling';
     var labels = {
-      normal: [['Indonesia',3,91],['Date line',46,91],['Peru',89,91],['Walker circulation',44,21],['Thermocline',40,60],['Rain over the warm pool',43,29],['Cold water in reach',64,62]],
-      elnino: [['Indonesia',3,91],['Date line',46,91],['Peru',89,91],['Walker circulation',82,12],['Thermocline',40,60],['Rain follows the warm water',10,15],['Upwelling capped',64,62]],
-      lanina: [['Indonesia',3,91],['Date line',46,91],['Peru',89,91],['Walker circulation',40,22],['Thermocline',40,60],['Rain over the warm pool',34,28],['Cold water in reach',64,62]]
+      normal: [['Indonesia',3,91],['Date line',38,91],['Peru',89,91],['Walker circulation',44,21],['Thermocline',40,60],['Rain over the warm pool',43,29],['Cold water in reach',64,62]],
+      elnino: [['Indonesia',3,91],['Date line',38,91],['Peru',89,91],['Walker circulation',82,12],['Thermocline',40,60],['Rain follows the warm water',10,15],['Upwelling capped',64,62]],
+      lanina: [['Indonesia',3,91],['Date line',38,91],['Peru',89,91],['Walker circulation',40,22],['Thermocline',40,60],['Rain over the warm pool',34,28],['Cold water in reach',64,62]]
     }[state];
     var leaders = {
       normal: 'M50,24 L66,15 M49,61 L57,49 M43,32 L29,29 M73,63 L86,49',
@@ -45926,6 +45930,9 @@ function showCommodityDetail(key) {
      readings and the side panel the observed values from the mechanism feed. Every number on
      the plate comes from enso.json or enso_mechanism.json. */
   var PAC = { lo: -2.5, hi: 3.0, W: 1000, H: 430 };
+  /* In the plates the sea surface meets the Indonesian coast (120°E) at 11.4% of the width and Peru (80°W) at
+     89.5%, measured on walker3/elnino3/lanina3; axis, step spans and Niño bars use this one mapping. */
+  function pacLon(lonE) { return 11.4 + (lonE - 120) / 160 * 78.1; }
   function pacInk(v) {
     var t = Math.max(-1, Math.min(1, v / 3)), n = [38, 47, 58], w = [214, 92, 54], c = [86, 136, 190], e = t >= 0 ? w : c, k = Math.abs(t);
     return 'rgb(' + n.map(function (x, i) { return Math.round(x + (e[i] - x) * k); }).join(',') + ')';
@@ -45946,11 +45953,12 @@ function showCommodityDetail(key) {
       peru: o >= 1 ? 'Less cold, nutrient-rich water rises' : o >= .5 ? 'Upwelling brings less cold water' : o > -.5 ? 'Cold, nutrient-rich water rises' : 'Upwelling strengthens'
     };
   }
-  /* Blend weights: the neutral plate inside ±0.45 °C, the full El Niño or La Niña plate from ±0.85 (CPC's event
-     threshold is ±0.5), smoothstep in the narrow band between so a double exposure only passes by. */
+  /* How far the El Niño (or La Niña) plate has replaced the neutral one: nothing inside CPC's ±0.5 °C threshold,
+     all of it from ±1.5 (strong), smoothstep between. It is revealed as a front moving west from Peru, so every
+     pixel comes from one plate (no double exposure) and a replay visibly moves. */
   function pacWeights(o) {
     var sm = function (t) { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); };
-    return { elnino: sm((o - .45) / .4), lanina: sm((-o - .45) / .4) };
+    return { elnino: sm(o - .5), lanina: sm(-o - .5) };
   }
   function renderPacific() {
     var el = document.getElementById('enso-pacific'); if (!el) return;
@@ -45961,7 +45969,7 @@ function showCommodityDetail(key) {
     var now = { o: L.anom, label: L.season + ' ' + L.year + ' · now' };
     var pct = function (v) { return ((Math.max(PAC.lo, Math.min(PAC.hi, v)) - PAC.lo) / (PAC.hi - PAC.lo) * 100).toFixed(2) + '%'; };
     var MV = S.mechView || {};
-    var XL = function (lon) { return ((lon - 120) / 160 * 100).toFixed(2) + '%'; };
+    var XL = function (lon) { return pacLon(lon).toFixed(2) + '%'; };
     /* The Niño regions on the same longitude scale as the illustration, 120°E at its left edge to 80°W at its right. */
     var BOX = [['nino4', 'Niño 4', 160, 210], ['nino34', 'Niño 3.4', 190, 240], ['nino3', 'Niño 3', 210, 270], ['nino12', 'Niño 1+2', 270, 280]];
     var lane = '<div class="pac-lane" aria-hidden="true">' + BOX.map(function (b, i) {
@@ -45980,7 +45988,7 @@ function showCommodityDetail(key) {
       marks + '<i class="pac-now" style="left:' + pct(now.o) + '"><b>now ' + esc(L.season + ' ' + L.year) + '</b></i><span class="pac-thumb" id="pac-thumb"></span></div></div>';
     var cur = A.current && (A.current.path || []).filter(function (v) { return typeof v === 'number'; }).length ? A.current : null;
     var plays = events.slice().reverse().map(function (ev, i) { return '<button type="button" data-pac-play="' + i + '">' + esc(String(ev.label).replace(/-(\d\d)$/, '–$1')) + '</button>'; }).join('');
-    var replay = '<div class="pac-replay"><div class="pac-row"><span class="pac-k">Replay</span>' + (cur ? '<button type="button" class="is-lead" data-pac-play="cur">Normal to now</button>' : '') + plays + '</div>' +
+    var replay = '<div class="pac-replay"><div class="pac-row"><span class="pac-k">Replay</span>' + '<button type="button" class="is-lead" data-pac-story>Watch it build: five steps</button>' + plays + '</div>' +
       '<div class="pac-row"><span class="pac-k">Set</span><button type="button" data-pac-set="0">Neutral</button>' + (nina ? '<button type="button" data-pac-set="' + nina.anom + '" data-pac-label="DJF ' + nina.year + ' · lowest DJF since 1950">La Niña ' + (nina.year - 1) + '–' + String(nina.year).slice(2) + '</button>' : '') + '<button type="button" data-pac-set="now">Now</button><span class="pac-hint">or drag the scale</span><button type="button" class="pac-still" id="pac-still" aria-pressed="false">Pause flow arrows</button></div></div>' +
       '<ol class="pac-seasons" id="pac-seasons" aria-hidden="true" hidden>' + (A.seasons || []).map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ol>';
     var rk = E.historical_rank;
@@ -45997,10 +46005,20 @@ function showCommodityDetail(key) {
     var q = function (id) { return document.getElementById(id); };
     var stack = q('pac-stack'), range = q('pac-range'), thumb = q('pac-thumb');
     var layers = { normal: stack.querySelector('[data-pacific-state="normal"]'), elnino: stack.querySelector('[data-pacific-state="elnino"]'), lanina: stack.querySelector('[data-pacific-state="lanina"]') };
-    var stepIdx = 0, domState = 'elnino';
+    var stepIdx = 0, domState = 'elnino', curW = { elnino: 1, lanina: 0 };
+    /* A soft-edged front from the east: r = 0 hides the plate, 1 shows all of it. */
+    function reveal(layer, r) {
+      if (r <= 0) { layer.style.opacity = '0'; layer.style.webkitMaskImage = layer.style.maskImage = ''; return; }
+      layer.style.opacity = '1';
+      if (r >= 1) { layer.style.webkitMaskImage = layer.style.maskImage = ''; return; }
+      var edge = (-8 + r * 116).toFixed(1);
+      layer.style.webkitMaskImage = layer.style.maskImage = 'linear-gradient(to left, #000 calc(' + edge + '% - 7%), transparent calc(' + edge + '% + 7%))';
+    }
+    /* The step box sits where the step is on the plate showing, and glides between plates as the front moves. */
     function placeBox() {
       var stop = (S.rulerStops || [])[stepIdx], rect = stack.querySelector('.enso-ruler-highlight'); if (!stop || !rect) return;
-      var box = stop[3][domState] || stop[3].normal;
+      var B = stop[3], t = curW.elnino > 0 ? curW.elnino : curW.lanina, far = curW.elnino > 0 ? B.elnino : B.lanina;
+      var box = (B.normal && far) ? B.normal.map(function (v, i) { return Math.round((v + (far[i] - v) * t) * 10) / 10; }) : (B[domState] || B.normal);
       rect.style.transform = 'translate(' + box[0] + 'px,' + box[1] + 'px) scale(' + ((box[2] - box[0]) / 100) + ',' + ((box[3] - box[1]) / 100) + ')';
     }
     var lastLines = '';
@@ -46010,10 +46028,13 @@ function showCommodityDetail(key) {
     function render(o, ctx) {
       ctx = ctx || {};
       var ro = typeof ctx.value === 'number' ? ctx.value : o, isNow = !!ctx.now && ctx.arrived !== false;
-      var w = pacWeights(o), dom = w.elnino >= .5 ? 'elnino' : w.lanina >= .5 ? 'lanina' : 'normal';
-      layers.elnino.style.opacity = w.elnino.toFixed(3); layers.lanina.style.opacity = w.lanina.toFixed(3); layers.normal.style.opacity = '1';
-      Object.keys(layers).forEach(function (k) { layers[k].classList.toggle('is-dom', k === dom); layers[k].setAttribute('aria-hidden', String(k !== dom)); });
-      if (dom !== domState) { domState = dom; stack.setAttribute('data-state', dom); placeBox(); }
+      var w = pacWeights(o);
+      reveal(layers.elnino, w.elnino); reveal(layers.lanina, w.lanina); layers.normal.style.opacity = '1';
+      /* Labels, leader lines and moving arrows belong to a whole plate: shown only when one plate fills the frame. */
+      var dom = w.elnino >= 1 ? 'elnino' : w.lanina >= 1 ? 'lanina' : !w.elnino && !w.lanina ? 'normal' : '';
+      var lead = dom || (w.elnino > 0 ? 'elnino' : 'lanina');
+      Object.keys(layers).forEach(function (k) { layers[k].classList.toggle('is-dom', k === dom); layers[k].setAttribute('aria-hidden', String(k !== lead)); });
+      stack.setAttribute('data-state', dom || 'moving'); curW = w; domState = lead; placeBox();
       el.querySelectorAll('.pac-box').forEach(function (bx) { var k = bx.getAttribute('data-box'), v = isNow && wr ? wr[k] : null;
         bx.querySelector('i').style.background = typeof v === 'number' ? pacInk(v) : ''; bx.classList.toggle('is-val', typeof v === 'number');
         var nm = BOX.filter(function (x) { return x[0] === k; })[0][1]; bx.querySelector('em').textContent = nm + (typeof v === 'number' ? ' ' + num(v, 1) : ''); });
@@ -46051,7 +46072,7 @@ function showCommodityDetail(key) {
     var seasonsEl = q('pac-seasons'), seasonLis = seasonsEl ? seasonsEl.querySelectorAll('li') : [];
     var say = function (t) { var n = q('pac-status'); if (n) n.textContent = t; };
     var nowCtx = function () { return { now: true, value: now.o, label: now.label }; };
-    function stop() { if (raf) cancelAnimationFrame(raf); raf = null; clearTimeout(timer); timer = null; el.querySelectorAll('[data-pac-play]').forEach(function (b) { b.setAttribute('aria-pressed', 'false'); }); }
+    function stop() { if (raf) cancelAnimationFrame(raf); raf = null; clearTimeout(timer); timer = null; el.querySelectorAll('[data-pac-play],[data-pac-story]').forEach(function (b) { b.setAttribute('aria-pressed', 'false'); }); }
     S.pacStop = function () { stop(); if (mql.removeEventListener) mql.removeEventListener('change', onMotion); };
     function tween(to, dur, ctx, done) {
       var from = typeof S.pacO === 'number' ? S.pacO : 0, c = Object.assign({ value: to }, ctx);
@@ -46077,6 +46098,21 @@ function showCommodityDetail(key) {
       };
       if (ev === cur) { render(0, { label: 'Neutral · illustrative start', value: 0 }); timer = setTimeout(next, reduce ? 600 : 350); } else next();
     }
+    /* Illustrative ONI for the first four steps (the dial says so); the fifth lands on the published now. */
+    var STORY = [.5, .9, 1.2, 1.45];
+    function story(btn) {
+      stop(); btn.setAttribute('aria-pressed', 'true'); if (seasonsEl) seasonsEl.hidden = true;
+      render(0, { label: 'Neutral · illustrative start', value: 0 }); selectStep(0, false);
+      var i = -1;
+      var next = function () {
+        i++;
+        if (i >= tabs.length) { btn.setAttribute('aria-pressed', 'false'); say('Played the five steps, ending at now: ONI ' + num(now.o, 2) + ' °C.'); return; }
+        selectStep(i, false);
+        var last = i === tabs.length - 1, to = last ? now.o : STORY[i];
+        tween(to, 1400, last ? nowCtx() : { label: 'Step ' + (i + 1) + ' of 5 · illustrative', value: to }, function () { timer = setTimeout(next, reduce ? 3200 : 2400); });
+      };
+      timer = setTimeout(next, reduce ? 900 : 700);
+    }
     var fromDial = function (commit) {
       stop(); if (seasonsEl) seasonsEl.hidden = true;
       var v = +range.value, snap = Math.abs(v - now.o) < .015;
@@ -46085,7 +46121,8 @@ function showCommodityDetail(key) {
     };
     range.addEventListener('input', function () { fromDial(false); });
     range.addEventListener('change', function () { fromDial(true); });
-    el.querySelectorAll('[data-pac-play]').forEach(function (b) { b.onclick = function () { var k = b.getAttribute('data-pac-play'); play(k === 'cur' ? cur : events.slice().reverse()[+k], b); }; });
+    el.querySelectorAll('[data-pac-play]').forEach(function (b) { b.onclick = function () { play(events.slice().reverse()[+b.getAttribute('data-pac-play')], b); }; });
+    var storyBtn = el.querySelector('[data-pac-story]'); if (storyBtn) storyBtn.onclick = function () { story(storyBtn); };
     el.querySelectorAll('[data-pac-set]').forEach(function (b) { b.onclick = function () { stop(); if (seasonsEl) seasonsEl.hidden = true; var k = b.getAttribute('data-pac-set');
       if (k === 'now') { tween(now.o, 700, nowCtx()); say('Now: ONI ' + num(now.o, 2) + ' °C, ' + intervalBand(now.o) + '.'); }
       else { var lbl = b.getAttribute('data-pac-label') || 'Neutral'; tween(+k, 700, { label: lbl }); say(lbl + ': ONI ' + num(+k, 2) + ' °C, ' + intervalBand(+k) + '.'); } }; });
@@ -46102,8 +46139,8 @@ function showCommodityDetail(key) {
       placeBox(); if (focus) tabs[stepIdx].focus();
     }
     tabs.forEach(function (t, i) {
-      t.onclick = function () { selectStep(i, false); };
-      t.onkeydown = function (e) { var n = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : null; if (n !== null) { e.preventDefault(); selectStep(n, true); } };
+      t.onclick = function () { stop(); selectStep(i, false); };
+      t.onkeydown = function (e) { stop(); var n = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : null; if (n !== null) { e.preventDefault(); selectStep(n, true); } };
     });
     S.pacSelectStep = selectStep;
     var toMap = el.querySelector('[data-act="map"]'); if (toMap) toMap.onclick = function () { showTab('ensoharvest'); };
@@ -46165,7 +46202,7 @@ function showCommodityDetail(key) {
     var rulerAxis = function () {
       /* HTML, not SVG, so labels keep their size at every panel width. Positions are true longitude,
          120°E (left edge of the engraving) to 80°W (right edge). */
-      var X = function (lonE) { return ((lonE - 120) / 160 * 100).toFixed(2); };
+      var X = function (lonE) { return pacLon(lonE).toFixed(2); };
       var ticks = [[120,'120°E'],[150,'150°E'],[180,'180°'],[210,'150°W'],[240,'120°W'],[280,'80°W']];
       var spans = { trades: [[120, 280]], soi: [[131, 131], [210, 210]], warm_water: [[160, 180]], convection: [[160, 180]], upwelling: [[270, 280]] };
       return '<div class="enso-lonaxis" aria-hidden="true"><div class="enso-lonaxis-track">' +
