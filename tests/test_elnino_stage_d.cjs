@@ -73,7 +73,7 @@ test('lane geometry is data-only, validated and phase coloured',()=>{
  api.drawLanes();assert.deepEqual(S.laneLines.map(l=>l.options.color),['#e0673c','#5b9bd0','#7b8491']);
  assert(S.laneLines.every(l=>l.options.weight>=3&&!l.options.dashArray));assert.equal(S.laneLines[0].coords[0][0],20);
  assert.equal(api.laneGeometry({geometry:{type:'LineString',coordinates:[[999,20],[0,0]]}}).length,0);
- S.lanes=original;S.lanePins=[];S.laneLines=[];api.drawLanes();
+ S.lanes=original;S.lanePins=[];S.laneLines=[];S.shipView='enso';api.drawLanes();  /* 2026-09-27: link inks live in the El Niño link view */
 });
 test('Shipping draws nine corridors weighted by published ENSO link, with names in tooltips',()=>{
  assert.equal(S.corridorLines.length,9);assert.equal(S.corridorLabels.length,0);assert.equal(S.corridorArrows.length,0);
@@ -315,7 +315,8 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    if(view==='ensowater')for(const l of S.lanes.lanes)assert(legend.querySelector('details').textContent.includes(l.name));
    /* 2026-09-26: prices are circles (area = size of the change, solid RTFP, hollow CPI) over El Niño countries only. */
    /* 2026-09-26: staple prices (FAO GIEWS FPMA) over El Niño's published harvest effect, with the tab's verdict rings. */
-   if(view==='ensomoney')for(const label of ['Area grows with the change','Blue falling','red 30%+','Output usually falls','Output usually rises','Window ahead','Runs against','no staple series'])assert(key.includes(label),label);
+   /* 2026-09-27 (map research): prices are a signed seven-class choropleth; the verdict and the harvest hatching are the second view. */
+   if(view==='ensomoney')for(const label of ['Staple price, year on year','Blue falling','ochre to red rising','Dashed outline','No staple series'])assert(key.includes(label),label);
    if(cycle||view!=='elnino')assert.equal(node('scroller').scrollTop,0);
   });
  }

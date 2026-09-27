@@ -691,9 +691,8 @@ def main() -> int:
                     return [has.length, tele.length, tele.filter(i => !has.includes(i)).sort().join(', ')];
                 }""")
                 check("staple legend states sizes, the harvest encoding and the countries without a series",
-                      all(t in legend for t in ('Area grows with the change', 'Output usually falls', 'Output usually rises', '+30%'))
-                      and ('no staple series: ' in legend) == bool(counts[2])
-                      and (not counts[2] or legend.split('no staple series: ')[1].split('Harvest effect')[0].count(',') == counts[2].count(',')), str(counts))
+                      all(t in legend for t in ('Staple price, year on year', 'Blue falling', 'ochre to red rising', 'Dashed outline'))
+                      and ('No staple series' in legend) == bool(counts[2]), str(counts))
                 check("staple map tag counts the countries with a series from the data", tag.startswith(f"{counts[0]} of {counts[1]} El Niño countries have staple prices"), tag)
             headings.append(page.locator('#tab-elnino h2:visible').count())
             # 2026-09-24: a no-wrap table once pushed the Reported ledger 557px past its plate.
@@ -1243,6 +1242,8 @@ def main() -> int:
                 });
         }"""))
         # 2026-09-26: corridors are weighted by the lane's published ENSO link (tier 1 phase ink 2px, tier 2 1.25px, tier 3 grey 1px).
+        page.locator('[data-sview="enso"]').click()  # the link inks are the El Niño link view (2026-09-27)
+        page.wait_for_timeout(400)
         check("Stage I nine routes are focusable, weighted by ENSO link, with corridor names in tooltips", page.evaluate("""async () => {
             const feed = (await (await fetch('data/enso_corridors.json')).json()).data.corridors;
             const lanes = (await (await fetch('data/enso_lanes.json')).json()).data.lanes;
@@ -1274,6 +1275,9 @@ def main() -> int:
         check("Stage I hovering a route reveals its corridor name", hovered and page.locator('.enso-corridor-tip').count() == 0)
         # Rings are orange on lanes with a published ENSO link and blue-grey where
         # the change has other causes (2026-09-23), so a war ring is not read as El Niño.
+        # 2026-09-27 (map research): the map opens on the change now; the driver inks are the El Niño link view.
+        page.locator('[data-sview="enso"]').click()
+        page.wait_for_timeout(400)
         check("Stage I corridors have no destination triangles and chokepoint rings are coloured by driver", page.evaluate("""async () => {
             const lanes = (await (await fetch('data/enso_lanes.json')).json()).data.lanes;
             // 2026-09-26: rings take the phase ink (weak links keep it, thinner); no ENSO link is neutral grey.
@@ -1361,8 +1365,8 @@ def main() -> int:
         for width, height in ((1280, 800), (1440, 900)):
             page.set_viewport_size({'width': width, 'height': height})
             for tab, labels in (
-                ('ensowater', ['No land layer', 'Shipping']),
-                ('ensomoney', ['Staple prices', 'Grain imports', 'After inflationLocal currency']),
+                ('ensowater', ['No land layer', 'Shipping', 'Change nowEl Niño link']),
+                ('ensomoney', ['Staple prices', 'Grain imports', 'After inflationLocal currency', 'Price changeAgainst the usual pattern']),
                 ('elnino', ['Sea-surface']),
                 ('ensoharvest', ['Production shock', 'Strongest crop', 'Coverage', 'Teleconnections']),
                 ('ensolive', ['Rain pattern', 'Hotspots', 'IPC', 'Hazards', 'Headlines', 'Elsewhere'])):
@@ -1384,7 +1388,7 @@ def main() -> int:
                 }""", labels))
             page.evaluate("showTab('ensomoney')")
             page.wait_for_timeout(150)
-            check(f"Prices at {width}: teleconnection outlines, one circle per valued country, nothing else filled", page.evaluate("""async () => {
+            check(f"Prices at {width}: El Niño countries shaded by their staple price class, labels on the largest moves", page.evaluate("""async () => {
                 const regions = (await (await fetch('data/enso_regions.json')).json()).data.regions;
                 const tele = new Set(regions.flatMap(r => r.iso3)), seen = new Set();
                 let good = true;
@@ -1393,9 +1397,11 @@ def main() -> int:
                     if (!iso) return;
                     if (tele.has(iso) && l.options.fillColor) { seen.add(iso); good = good && l.options.opacity >= .6 && l.options.weight >= .7; }
                 });
-                let circles = 0; _stageHMap.eachLayer(l => { if (l instanceof L.CircleMarker && !l.feature && l.options.radius >= 4 && (l.options.fillOpacity === .9 || l.options.dashArray === '3 2')) circles++; });
+                // 2026-09-27 (map research): a signed seven-class choropleth replaces the circles.
+                const classes = ['#3f6f9c', '#8fb1cf', '#77797d', '#d9b27c', '#dd8a45', '#cc5a2e', '#9e2f1c'];
+                let shaded = 0, circles = 0; _stageHMap.eachLayer(l => { if (l.feature && classes.includes(l.options.fillColor)) shaded++; if (l instanceof L.CircleMarker && !l.feature && l.options.radius >= 4) circles++; });
                 const pane = _stageHMap.getPane('ensoGraticule');
-                return good && seen.size === tele.size && circles >= 10 && pane.style.zIndex === '210'
+                return good && seen.size === tele.size && shaded >= 10 && circles === 0 && pane.style.zIndex === '210'
                     && pane.querySelectorAll('.enso-grat-lab').length === 3
                     && document.querySelectorAll('.enso-price-lbl').length >= 3;
             }"""))

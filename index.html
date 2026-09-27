@@ -47213,8 +47213,12 @@ function showCommodityDetail(key) {
     if (previousSearch) previousSearch.remove();
     el.innerHTML = '<div class="enso-control-deck" role="group" aria-label="Map instruments">' +
       '<div class="enso-instrument-row enso-layer-row">' + layerChoices(true) +
+      (S.sub === 'ensowater' ? '<span class="enso-basis" role="group" aria-label="Colour by">' + [['now', 'Change now'], ['enso', 'El Niño link']].map(function (b) {
+        return '<button type="button" class="enso-basis-b" data-sview="' + b[0] + '" aria-pressed="' + ((S.shipView || 'now') === b[0]) + '">' + b[1] + '</button>'; }).join('') + '</span>' : '') +
       (S.mode === 'staple' ? '<span class="enso-basis" role="group" aria-label="Price basis">' + [['real', 'After inflation'], ['nominal', 'Local currency']].map(function (b) {
-        return '<button type="button" class="enso-basis-b" data-basis="' + b[0] + '" aria-pressed="' + ((S.priceBasis || 'real') === b[0]) + '">' + b[1] + '</button>'; }).join('') + '</span>' : '') +
+        return '<button type="button" class="enso-basis-b" data-basis="' + b[0] + '" aria-pressed="' + ((S.priceBasis || 'real') === b[0]) + '">' + b[1] + '</button>'; }).join('') + '</span>' +
+        '<span class="enso-basis" role="group" aria-label="Colour by">' + [['change', 'Price change'], ['fit', 'Against the usual pattern']].map(function (b) {
+        return '<button type="button" class="enso-basis-b" data-pview="' + b[0] + '" aria-pressed="' + ((S.stapleView || 'change') === b[0]) + '">' + b[1] + '</button>'; }).join('') + '</span>' : '') +
       '<details class="enso-all-layers"><summary>All layers</summary><div class="enso-extra-layers">' + layerChoices(false) + '</div>' +
       '<div class="enso-scenario"' + (S.sub === 'ensoharvest' ? '' : ' hidden') + '>' +
       '<button type="button" id="enso-scenario-toggle" class="enso-scenario-note" aria-controls="enso-scenario-rungs" aria-expanded="' + scenarioOpen + '"' + (modelledPaint ? ' hidden' : '') + '>Scenario</button>' +
@@ -47260,6 +47264,16 @@ function showCommodityDetail(key) {
       b.onclick = function () {
         var native = document.getElementById(b.getAttribute('data-native'));
         native.value = b.getAttribute('data-value'); native.dispatchEvent(new Event('change', { bubbles: true })); syncInstruments();
+      };
+    });
+    el.querySelectorAll('[data-sview]').forEach(function (b) {
+      b.onclick = function () { S.shipView = b.getAttribute('data-sview'); drawLanes(); toggleLanes(); renderControls(); renderLegend(); };
+    });
+    el.querySelectorAll('[data-pview]').forEach(function (b) {
+      b.onclick = function () {
+        S.stapleView = b.getAttribute('data-pview');
+        (S.pricePins || []).forEach(function (m) { try { S.map.removeLayer(m); } catch (e) {} }); S.pricePins = [];
+        paint(); renderControls(); renderLegend();
       };
     });
     el.querySelectorAll('[data-basis]').forEach(function (b) {
@@ -47337,6 +47351,11 @@ function showCommodityDetail(key) {
       esc(((S.lanes && S.lanes.lanes) || []).map(function (ln) { return ln.name; }).join('; ')) + '.</div>' +
       '<div class="ctr-note">Corridors reviewed ' + esc(stamp(metaDate('corridors'))) + '. ' + esc((S.meta.corridors || {}).source || 'Corridor feed unavailable.') + ' Hover a route for its evidence; all corridors are listed here.</div>' +
       corridors.map(function (c) { return '<div class="ctr-note"><b>' + esc(c.name) + '</b>: ' + esc(c.basis) + ' Sources: ' + esc((c.sources || []).join('; ')) + '.</div>'; }).join('') + '</div>';
+    if ((S.shipView || 'now') === 'now') {
+      var disc = function (c) { return '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="' + c + '" fill-opacity=".55" stroke="#ebe9e2" stroke-opacity=".7"/></svg>'; };
+      tiers = '<div class="enso-legend-block"><div class="enso-legend-t">Dry-bulk transits against a year earlier · observed</div>' +
+        [[-30, '25%+ fewer'], [-15, '10–25% fewer'], [-5, '3–10% fewer'], [0, 'within ±3%'], [5, '3–10% more'], [15, '10%+ more']].map(function (x) { return krow(disc(transitFill(x[0])), x[1], ''); }).join('') + '</div>';
+    }
     return tiers + transit + water;
   }
   function hatchSwatch(kind) {
@@ -47657,9 +47676,9 @@ function showCommodityDetail(key) {
       L.DomEvent.disableClickPropagation(d); L.DomEvent.disableScrollPropagation(d);
       d.querySelectorAll('[data-bench]').forEach(function (b) {
         var k = b.getAttribute('data-bench'), rx = k === 'maize' ? /maize|corn/i : k === 'palm_oil' ? /palm/i : new RegExp(k, 'i');
-        var on = function () { (S.pricePins || []).forEach(function (m) { if (!m._fpma) return; var hit = (m._fpma.commodities || []).some(function (c) { return rx.test(c); });
-          m.setStyle({ opacity: hit ? 1 : .2, fillOpacity: hit ? .95 : .2, weight: hit ? 2 : 1 }); }); };
-        var off = function () { (S.pricePins || []).forEach(function (m) { if (m._base) m.setStyle(m._base); }); };
+        var on = function () { if (!S.layerBase) return; S.layerBase.eachLayer(function (lyr) { var iso = isoOf(lyr.feature), f = S.fpma && S.fpma[iso]; if (!isTele(iso) || !f) return;
+          var hit = (f.commodities || []).some(function (c) { return rx.test(c); }); lyr.setStyle({ fillOpacity: hit ? .95 : .15 }); }); };
+        var off = function () { paint(); };
         b.onmouseenter = b.onfocus = on; b.onmouseleave = b.onblur = off;
       });
       return d; } });
@@ -48034,27 +48053,26 @@ function showCommodityDetail(key) {
           (o.ring === 'ahead' ? '<circle cx="' + c + '" cy="' + c + '" r="' + (r + 3) + '" fill="none" stroke="#d8c9a8" stroke-width="1.2" stroke-dasharray="2 3"/>' : o.ring === 'fits' ? '<circle cx="' + c + '" cy="' + c + '" r="' + (r + 3.2) + '" fill="none" stroke="#f2efe6" stroke-width="2"/>' : o.ring === 'against' ? '<circle cx="' + c + '" cy="' + c + '" r="' + (r + 1.6) + '" fill="none" stroke="#8b8980" stroke-width="1"/>' : '') +
           (o.none ? '<circle cx="' + c + '" cy="' + c + '" r="3" fill="none" stroke="#8a8578" stroke-width="1"/>' :
           '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="' + rtfpColor(Math.max(-10, v)) + '" fill-opacity="' + (o.faded ? .45 : .9) + '" stroke="#ebe9e2" stroke-opacity=".55" stroke-width="1"/>' + (o.dot ? '<circle cx="' + c + '" cy="' + c + '" r="1.3" fill="#ebe9e2"/>' : '')) + '</svg>'; };
-      var q0 = stapleSummary(), pk = peakIdx();
-      var sizes = '<span class="enso-krow-sizes">' + [5, 15, 30].map(function (v) { return '<span>' + sc(v) + v + '%</span>'; }).join('') + '</span>';
-      var scale = '<div class="enso-key-scale">' + [-8, 0, 15, 30].map(function (v) {
-        return '<span>' + sc(v) + '<em>' + (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + '%</em></span>'; }).join('') + '</div>';
-      el.innerHTML = '<div class="enso-legend">' +
-        '<div class="enso-legend-block"><div class="enso-legend-t">Staple price, year on year · ' + ((S.priceBasis || 'real') === 'real' ? 'after inflation' : 'local currency') + '</div>' +
-        scale + '<p class="enso-key-cap">Area grows with the change; 40% and above drawn alike. Blue falling, grey flat, ochre rising, red 30%+.</p>' +
-        '<div class="enso-krow-inline">' + krow(sc(5, { faded: true }), 'Faded', 'over 3 months old') +
-        krow(sc(5, { dot: true }), 'Centre dot', 'local currency only') +
-        (q0.none.length ? krow(sc(0, { none: true }), 'Grey ring', 'no staple series: ' + esc(q0.none.map(nameFor).join(', '))) : '') + '</div></div>' +
-        '<div class="enso-legend-block"><div class="enso-legend-t">Harvest effect in El Niño years · published</div>' +
-        krow(hatchSwatch('dry'), 'Output usually falls', '') +
-        krow(hatchSwatch('wet'), 'Output usually rises', '') +
-        krow(hatchSwatch('mixed'), 'Both', 'depends on the season') +
-        '<p class="enso-key-cap">Paler hatching: lower confidence in the source. The anchoveta region is left out: it moves fishmeal, not staple prices.</p></div>' +
-        '<div class="enso-legend-block"><div class="enso-legend-t">Does the price fit the usual pattern?</div>' +
-        (pk == null ? '<p class="enso-key-cap">No El Niño under way, so no harvest window is drawn.</p>' :
-        krow(sc(5, { ring: 'fits' }), 'Fits', 'up where output usually falls, down where it rises (5%+)') +
-        krow(sc(-5, { ring: 'against' }), 'Runs against', 'moves the other way') +
-        krow(sc(5, { ring: 'ahead' }), 'Window ahead', 'the exposed harvest is still to come; prices may anticipate it')) +
-        '<p class="enso-key-cap">Windows: each region’s published lag after a ' + (pk == null ? 'December' : monTxt(pk)) + ' reference. All regions: Harvests › Published El Niño effects.</p></div>' +
+      var q0 = stapleSummary(), pk = peakIdx(), fitView = S.stapleView === 'fit';
+      /* A stepped bar that reads like a number line: seven classes, the breaks between them. */
+      var steps = '<svg class="enso-key-steps" aria-hidden="true" width="' + (STAPLE_COLS.length * 30 + 8) + '" height="26" viewBox="0 0 ' + (STAPLE_COLS.length * 30 + 8) + ' 26">' +
+        STAPLE_COLS.map(function (c, k) { return '<rect x="' + (4 + k * 30) + '" y="2" width="29" height="10" fill="' + c + '"/>'; }).join('') +
+        STAPLE_BREAKS.map(function (b, k) { return '<text x="' + (4 + (k + 1) * 30 - .5) + '" y="24" text-anchor="middle" font-size="9.5" fill="#9a978d" font-family="Geist Mono, monospace">' + (b > 0 ? '+' : b < 0 ? '−' : '') + Math.abs(b) + '</text>'; }).join('') + '</svg>';
+      var outline = function (dash, c) { return '<svg aria-hidden="true" width="18" height="12" viewBox="0 0 18 12"><rect x="1" y="1" width="16" height="10" fill="none" stroke="' + c + '" stroke-width="1.2" stroke-dasharray="' + dash + '"/></svg>'; };
+      var fill = function (c) { return '<svg aria-hidden="true" width="18" height="12" viewBox="0 0 18 12"><rect x="1" y="1" width="16" height="10" fill="' + c + '"/></svg>'; };
+      el.innerHTML = '<div class="enso-legend">' + (fitView
+        ? '<div class="enso-legend-block"><div class="enso-legend-t">Staple price against El Niño’s usual pattern</div>' +
+            krow(fill(FIT_COLS.fits), 'Consistent', 'up 5%+ where output usually falls, or down where it rises') +
+            krow(fill(FIT_COLS.against), 'Runs against', 'moves 5%+ the other way') +
+            krow(fill(FIT_COLS.other), 'Flat or not assessed', 'under 5%, a mixed region, or no stated window') +
+            (q0.none.length ? krow(outline('1 3', '#8a8578'), 'No staple series', esc(q0.none.map(nameFor).join(', '))) : '') + '</div>' +
+          '<div class="enso-legend-block"><div class="enso-legend-t">Harvest effect in El Niño years · published</div>' +
+            krow(hatchSwatch('dry'), 'Output usually falls', '') + krow(hatchSwatch('wet'), 'Output usually rises', '') + krow(hatchSwatch('mixed'), 'Both', 'depends on the season') +
+            '<p class="enso-key-cap">Hatching marks countries with no staple series; paler: lower confidence in the source. The anchoveta region is left out: it moves fishmeal, not staple prices. Windows: each region’s published lag after a ' + (pk == null ? 'December' : monTxt(pk)) + ' reference.</p></div>'
+        : '<div class="enso-legend-block"><div class="enso-legend-t">Staple price, year on year · ' + ((S.priceBasis || 'real') === 'real' ? 'after inflation' : 'local currency') + ', %</div>' + steps +
+            krow(outline('3 3', '#ebe9e2'), 'Dashed outline', 'reading 3+ months old') +
+            (q0.none.length ? krow(outline('1 3', '#8a8578'), 'No staple series', esc(q0.none.map(nameFor).join(', '))) : '') +
+            '<p class="enso-key-cap">Blue falling, grey flat (within ±3%), ochre to red rising. FAO GIEWS FPMA staple series, median per country; local-currency-only countries say so in the list and on hover.</p></div>') +
         (S.showImports ? importLegend() : '') + '</div>';
       compactLegend(); return;
     }
@@ -48212,12 +48230,24 @@ function showCommodityDetail(key) {
     return best || bestShared;
   }
 
+  /* Prices map (2026-09-27, from the map research): colour has one job, the signed staple price change, on seven
+     fixed classes centred on zero; the verdict against El Niño's usual pattern is its own view. */
+  var STAPLE_BREAKS = [-10, -3, 3, 10, 20, 30], STAPLE_COLS = ['#3f6f9c', '#8fb1cf', '#77797d', '#d9b27c', '#dd8a45', '#cc5a2e', '#9e2f1c'];
+  var FIT_COLS = { fits: '#d8a25e', against: '#6f8aa3', other: '#4a4f57' };
+  function stapleClass(v) { for (var i = 0; i < STAPLE_BREAKS.length; i++) if (v < STAPLE_BREAKS[i]) return i; return STAPLE_BREAKS.length; }
+  function isTele(iso) { if (!S._teleSet) { S._teleSet = {}; ensoTeleIsos().forEach(function (i) { S._teleSet[i] = 1; }); } return !!S._teleSet[iso]; }
+  function stapleFill(iso) {
+    if (!isTele(iso)) return null;
+    var sp = stapleOf(iso); if (!sp) return null;
+    if ((S.stapleView || 'change') === 'fit') { var k = priceVerdictOf(iso, sp.v); return FIT_COLS[k === 'fits' || k === 'against' ? k : 'other']; }
+    return STAPLE_COLS[stapleClass(sp.v)];
+  }
   function fillFor(iso) {
     /* The ocean is the observation on this layer; land stays unfilled so the
        modelled colours cannot be read against it. */
     if (S.mode === 'sst' || S.mode === 'none') return null;
     if (S.mode === 'rtfp') return (S.isoIndex || {})[iso] ? '#2b2e34' : null;
-    if (S.mode === 'staple') return landRegs(iso).length ? '#e6e3da' : null;
+    if (S.mode === 'staple') return stapleFill(iso);
     /* Rain pattern: members get a base fill that the hatch class replaces; the hatch is the expectation. */
     if (S.mode === 'rain') return (S.isoIndex || {})[iso] ? '#e6e3da' : null;
     if (S.mode === 'asap') {
@@ -48364,56 +48394,30 @@ function showCommodityDetail(key) {
   function syncStapleMarks() {
     if (S.pricePins && S.pricePins.length) return;
     S.pricePins = [];
-    var rows = ensoTeleIsos().map(function (iso) { return { iso: iso, sp: stapleOf(iso) }; });
-    rows.sort(function (a, b) { return (b.sp ? Math.abs(b.sp.v) : -1) - (a.sp ? Math.abs(a.sp.v) : -1); });
-    rows.forEach(function (r) {
-      var ll = (typeof COUNTRY_LL !== 'undefined' && COUNTRY_LL[r.iso]) || centroidOf(r.iso); if (!ll) return;
-      if (!r.sp) {
-        var nm = L.circleMarker(ll, { radius: 3, color: '#8a8578', weight: 1, fill: false, className: 'enso-price-none' });
-        nm.bindTooltip('<b>' + esc(nameFor(r.iso)) + '</b><br>No FAO GIEWS staple price series', { direction: 'top', opacity: .96 });
-        nm.on('click', function () { selectCountry(r.iso, { fly: false }); });
-        S.pricePins.push(nm); return;
-      }
-      var v = r.sp.v, rad = priceRadius(v), k = priceVerdictOf(r.iso, v), w = windowOf(r.iso);
-      if (k === 'fits' || k === 'against') {
-        S.pricePins.push(L.circleMarker(ll, k === 'fits' ? { radius: rad + 3.2, color: '#f2efe6', weight: 2, fill: false, interactive: false, className: 'enso-price-ring is-fits' } :
-          { radius: rad + 1.6, color: '#8b8980', weight: 1, fill: false, interactive: false, className: 'enso-price-ring is-against' }));
-      }
-      /* Timing ring, outside the verdict ring: the exposed harvest window is still ahead at the price date. */
-      if (w && w.state === 'ahead') S.pricePins.push(L.circleMarker(ll, { radius: rad + 6.5, color: '#d8c9a8', weight: 1.1, dashArray: '2 3', fill: false, interactive: false, className: 'enso-price-ring is-ahead' }));
-      var base = { radius: rad, color: '#ebe9e2', opacity: .55, weight: 1, fillColor: rtfpColor(Math.max(-10, v)), fillOpacity: r.sp.stale ? .45 : .9, className: 'enso-price-dot' };
-      var m = L.circleMarker(ll, base); m._base = base; m._fpma = r.sp.f; m._iso = r.iso; m._sp = r.sp;
-      m._tip = tooltipFor(r.iso, nameFor(r.iso));
-      m.on('click', function () { selectCountry(r.iso, { fly: false }); });
-      S.pricePins.push(m);
-      if (r.sp.nominalOnly) S.pricePins.push(L.circleMarker(ll, { radius: 1.3, stroke: false, fillColor: '#ebe9e2', fillOpacity: 1, interactive: false }));
-    });
-    S.pricePins.forEach(function (m) { m.addTo(S.map); });
-    /* Labels: at most eight (three on a phone): the selected country, then readable fits, then size.
-       A labelled circle carries its detail in a popup; the rest in a hover tooltip. */
-    var dots = S.pricePins.filter(function (m) { return m._sp; });
-    var pri = function (m) { var k = priceVerdictOf(m._iso, m._sp.v); return (m._iso === S.sel ? 1000 : 0) + (k === 'fits' ? 100 : 0) + Math.abs(m._sp.v); };
-    dots.sort(function (a, b) { return pri(b) - pri(a); });
-    var max = (window.innerWidth || 1440) < 600 ? (S.sel ? 1 : 0) : 8, boxes = [], size = S.map.getSize ? S.map.getSize() : { x: 1e4, y: 1e4 };
+    /* Countries carry the colour; marks here are only label anchors: the selected country, then the largest
+       moves, at most six (none on a phone unless selected). Labels never cover one another or the inset. */
+    var rows = ensoTeleIsos().map(function (iso) { return { iso: iso, sp: stapleOf(iso) }; }).filter(function (r) { return r.sp; });
+    rows.sort(function (a, b) { return (b.iso === S.sel ? 1e6 : 0) + Math.abs(b.sp.v) - ((a.iso === S.sel ? 1e6 : 0) + Math.abs(a.sp.v)); });
+    var max = (window.innerWidth || 1440) < 600 ? (S.sel ? 1 : 0) : 6, boxes = [], size = S.map.getSize ? S.map.getSize() : { x: 1e4, y: 1e4 };
     var inset = document.querySelector && document.querySelector('#enso-map .enso-bench');
     if (inset && inset.getBoundingClientRect && S.map.getContainer) { var ib = inset.getBoundingClientRect(), mb = S.map.getContainer().getBoundingClientRect(); boxes.push({ x: ib.left - mb.left, y: ib.top - mb.top, w: ib.width, h: ib.height }); }
-    dots.forEach(function (m) {
-      var placed = false;
-      if (max > 0) {
-        var sp = m._sp, txt = nameFor(m._iso) + ' ' + sp.staple + ' ' + signedPct(sp.v) + (sp.stale ? ' · ' + MON3[sp.month % 12] : '') + (sp.nominalOnly ? ' · nominal' : '');
-        var pt = S.map.latLngToContainerPoint(m.getLatLng()), r = m.getRadius() + 3, w = txt.length * 6.2 + 6, h = 14;
-        var cand = [['right', pt.x + r + 2, pt.y - h / 2], ['left', pt.x - r - 2 - w, pt.y - h / 2], ['top', pt.x - w / 2, pt.y - r - h - 2], ['bottom', pt.x - w / 2, pt.y + r + 2]];
-        var hit = function (b) { return b.x < 0 || b.y < 0 || b.x + b.w > size.x || b.y + b.h > size.y || boxes.some(function (o) { return b.x < o.x + o.w && b.x + b.w > o.x && b.y < o.y + o.h && b.y + b.h > o.y; }); };
-        for (var i = 0; i < cand.length && !placed; i++) {
-          var b = { x: cand[i][1], y: cand[i][2], w: w, h: h, dir: cand[i][0] }; if (hit(b)) continue;
-          boxes.push(b); max--; placed = true;
-          var off = b.dir === 'right' ? [r - 2, 0] : b.dir === 'left' ? [2 - r, 0] : b.dir === 'top' ? [0, 2 - r] : [0, r - 2];
-          m.bindTooltip(esc(txt), { permanent: true, direction: b.dir, offset: off, className: 'enso-price-lbl', interactive: false });
-          m.bindPopup(m._tip);
-        }
+    rows.forEach(function (r) {
+      if (max <= 0) return;
+      var ll = (typeof COUNTRY_LL !== 'undefined' && COUNTRY_LL[r.iso]) || centroidOf(r.iso); if (!ll) return;
+      var txt = nameFor(r.iso) + ' ' + signedPct(r.sp.v) + (r.sp.stale ? ' · ' + MON3[r.sp.month % 12] : '');
+      var pt = S.map.latLngToContainerPoint(ll), w = txt.length * 6.2 + 6, h = 14;
+      var cand = [['right', pt.x + 4, pt.y - h / 2], ['left', pt.x - 4 - w, pt.y - h / 2], ['top', pt.x - w / 2, pt.y - h - 4], ['bottom', pt.x - w / 2, pt.y + 4]];
+      var hit = function (b) { return b.x < 0 || b.y < 0 || b.x + b.w > size.x || b.y + b.h > size.y || boxes.some(function (o) { return b.x < o.x + o.w && b.x + b.w > o.x && b.y < o.y + o.h && b.y + b.h > o.y; }); };
+      for (var i = 0; i < cand.length; i++) {
+        var b = { x: cand[i][1], y: cand[i][2], w: w, h: h, dir: cand[i][0] }; if (hit(b)) continue;
+        boxes.push(b); max--;
+        var m = L.circleMarker(ll, { radius: 2, stroke: false, fillColor: '#ebe9e2', fillOpacity: .9, interactive: false, className: 'enso-price-anchor' });
+        m._iso = r.iso; m._sp = r.sp;
+        m.bindTooltip(esc(txt), { permanent: true, direction: b.dir, offset: b.dir === 'right' ? [2, 0] : b.dir === 'left' ? [-2, 0] : b.dir === 'top' ? [0, -2] : [0, 2], className: 'enso-price-lbl', interactive: false });
+        S.pricePins.push(m); break;
       }
-      if (!placed) m.bindTooltip(m._tip, { direction: 'top', opacity: .97 });
     });
+    S.pricePins.forEach(function (m) { m.addTo(S.map); });
   }
   function paint() {
     syncInstruments();
@@ -48439,16 +48443,19 @@ function showCommodityDetail(key) {
         var assessment = S.mode === 'asap' && asapFor(iso);
         path.classList.toggle('enso-hotspot', !!assessment && assessment.hotspot_code === 1);
         path.classList.toggle('enso-major-hotspot', !!assessment && assessment.hotspot_code === 2);
-        var rc = S.mode === 'rain' ? rainClass(iso) : S.mode === 'staple' ? ({ fall: 'dry', rise: 'wet', mixed: 'mixed' }[outSign(iso)] || null) : null;
+        var rc = S.mode === 'rain' ? rainClass(iso) : S.mode === 'staple' && S.stapleView === 'fit' && !col ? ({ fall: 'dry', rise: 'wet', mixed: 'mixed' }[outSign(iso)] || null) : null;
         ['dry', 'wet', 'mixed'].forEach(function (k) { path.classList.toggle('enso-rain-' + k, rc === k); });
       }
       var style = col
-        ? { fillColor: col, fillOpacity: 1, color: LAND_TONE, opacity: .18, weight: .5 }
-        : { fillColor: LAND_TONE, fillOpacity: .06, color: LAND_TONE, opacity: .18, weight: .5 };
+        ? { fillColor: col, fillOpacity: 1, color: LAND_TONE, opacity: .18, weight: .5, dashArray: null }
+        : { fillColor: LAND_TONE, fillOpacity: .06, color: LAND_TONE, opacity: .18, weight: .5, dashArray: null };
       if (S.mode === 'rtfp' && (S.isoIndex[iso] || []).length) { style.color = '#8a8578'; style.opacity = .8; style.weight = .8; }
-      if (S.mode === 'staple' && landRegs(iso).length) {
-        var cf = landRegs(iso).reduce(function (a, r) { return Math.max(a, { high: 1, medium: .7, low: .45 }[r.confidence] || .45); }, 0);
-        style.color = '#8a8578'; style.opacity = .8; style.weight = .8; style.fillOpacity = .75 * cf;
+      if (S.mode === 'staple' && isTele(iso)) {
+        /* No series: a dotted outline, no fill. A reading 3+ months old keeps its colour under a dashed outline. */
+        var spS = stapleOf(iso);
+        style.color = '#8a8578'; style.opacity = .75; style.weight = .7; style.fillOpacity = col ? .92 : .04;
+        if (!spS) { style.dashArray = '1 3'; style.opacity = .9; }
+        else if (spS.stale) { style.color = '#ebe9e2'; style.dashArray = '3 3'; style.weight = 1.1; style.opacity = .9; }
       }
       if (S.mode === 'rain' && (S.isoIndex || {})[iso]) { style.color = '#8b8980'; style.opacity = .7; style.weight = rainClass(iso) === 'outline' ? 1 : .6; }
       /* Food-crisis classification in force (IPC / FEWS NET): an outline in the IPC phase colour, not a point. */
@@ -48550,11 +48557,16 @@ function showCommodityDetail(key) {
   function ringStroke(ln) { return laneTier(ln) === 3 ? '#7b8491' : phaseInk(ln); }
   function signedYoY(v) { return (v < 0 ? '▼ \u2212' : v > 0 ? '▲ +' : '') + Math.abs(v).toFixed(1) + '% y/y'; }
   /* A transit ring: no fill (the sign is in the label), a dotted circle at the size of zero change inside. */
+  /* 2026-09-27 (map research): the Shipping map opens on the change now. A ring is filled by the transit change
+     (fewer ships warm, more ships blue, within ±3% grey) under a neutral outline; the El Niño link view keeps the
+     published link as the outline ink and leaves the fill empty. */
+  function transitFill(pct) { return pct <= -25 ? '#b8452a' : pct <= -10 ? '#d9824a' : pct < -3 ? '#e2b27c' : pct <= 3 ? '#77797d' : pct < 10 ? '#a9c3da' : '#5f8fbf'; }
   function transitRingSVG(m, stroke, w, op, cls) {
-    var d = m.radius * 2, z = transitRadius(0);
+    var d = m.radius * 2, z = transitRadius(0), now = (S.shipView || 'now') === 'now';
     return '<svg class="' + cls + '" aria-hidden="true" data-yoy="' + m.pct + '" style="width:' + d + 'px;height:' + d + 'px" viewBox="0 0 ' + d + ' ' + d + '">' +
+      (now ? '<circle cx="' + m.radius + '" cy="' + m.radius + '" r="' + (m.radius - 1) + '" fill="' + transitFill(m.pct) + '" fill-opacity=".55"/>' : '') +
       '<circle cx="' + m.radius + '" cy="' + m.radius + '" r="' + (z - .5) + '" fill="none" stroke="#56606b" stroke-width=".8" stroke-dasharray="1.2 2"/>' +
-      '<circle cx="' + m.radius + '" cy="' + m.radius + '" r="' + (m.radius - w / 2) + '" fill="none" stroke="' + stroke + '" stroke-opacity="' + op + '" stroke-width="' + w + '"/></svg>';
+      '<circle cx="' + m.radius + '" cy="' + m.radius + '" r="' + (m.radius - w / 2) + '" fill="none" stroke="' + (now ? '#ebe9e2' : stroke) + '" stroke-opacity="' + (now ? .7 : op) + '" stroke-width="' + (now ? 1 : w) + '"/></svg>';
   }
   /* Staff gauge beside a lane whose water has a published reference (Gatún, Kaub only): the level (bar)
      against the gauge's own band and reference tick; a dashed tick is the operator's projection. */
@@ -48745,7 +48757,8 @@ function showCommodityDetail(key) {
         layer.on('blur', function () { layer.closeTooltip(); });
         return layer;
       }
-      var line = explain(L.polyline(geometry, {color: tier === 3 ? '#7b8491' : stroke, weight: tier === 1 ? 2 : tier === 2 ? 1.25 : 1, opacity: tier === 1 ? .85 : tier === 2 ? .55 : .35,
+      var ensoView = S.shipView === 'enso';
+      var line = explain(L.polyline(geometry, {color: !ensoView || tier === 3 ? '#7b8491' : stroke, weight: !ensoView ? 1 : tier === 1 ? 2 : tier === 2 ? 1.25 : 1, opacity: !ensoView ? .45 : tier === 1 ? .85 : tier === 2 ? .55 : .35,
         dashArray:'6 4',className:'enso-corridor',ensoCorridorId:c.id,ensoPhase:c.phase,ensoTier:tier}));
       S.corridorLines.push(line);
       line.on('add', function () {
@@ -50096,6 +50109,7 @@ function showCommodityDetail(key) {
       (tdy ? '<dt>If ONI stays at ' + num(tdy.oni, 1) + '</dt><dd>' + tdy.low.toFixed(1) + ' ft</dd>' : '') +
       (O.recent_mean_resid_ft != null ? '<dt>Since ' + O.recent_from + '</dt><dd>the lake has ended the dry season ' + Math.abs(O.recent_mean_resid_ft).toFixed(1) + ' ft ' + (O.recent_mean_resid_ft < 0 ? 'below' : 'above') + ' the fit on average, so the risk leans lower</dd>' : '') + '</dl>';
     return '<figure class="enso-plate enso-gatunfit-plate is-modelled" data-kind="modelled">' + plateHead('How low could Gatún go by mid-2027', 'FoodShield model on the Canal’s daily record since 1965 · NOAA CPC Dec–Feb forecast', stamp(metaDate('gauges')), 'modelled') +
+      plateKey([['is-dot', '#56606b', 'Past dry-season lows'], ['is-dot', '#ebe9e2', 'Winters at ONI +1.5 or above'], ['is-dash', '#e0864a', 'Fitted line at this year’s level'], ['is-diamond', '#e0864a', '2027: median, 80% box, 90% bar'], ['is-band', 'rgba(143,177,207,.35)', 'Lake levels of 22–25 slots in 2023-24'], ['is-dash', '#8b8980', 'Record low']]) +
       '<div class="plate-body">' + lede + '<div class="enso-gfit">' + svg + facts + '</div></div>' +
       '<figcaption class="enso-log">' + bulletList(['A statistical fit, not a water-balance model; drafts and slots are set only by the Canal’s advisories.',
         'Dots: every dry season since 1966, shifted to start from this year’s ' + dTxt + ' level; bright: winters at ONI +1.5 or above.',
