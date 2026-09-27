@@ -45510,8 +45510,8 @@ function showCommodityDetail(key) {
     var P = Object.keys(H).map(function (k) { return H[k]; }), sr = 0, ev = 0, beat = P.filter(function (p) { return p.beats_no_change; });
     P.forEach(function (p) { sr += p.sign_right; ev += p.events; });
     var miss = P.filter(function (p) { return !p.beats_no_change; }).map(function (p) { return nameFor(p.iso) + ' ' + ({ corn: 'maize' }[p.crop] || p.crop); });
-    return 'Tested on past El Niño winters it was not fitted on (each winter of ONI +1.0 or more held out in turn, detrended on earlier harvests only): the harvest landed on the side the El Niño term pointed to for ' + sr + ' of ' + ev + ' held-out harvests, and the El Niño term brought the forecast closer for ' + beat.length + ' of ' + P.length + ' pairs, against the same fit without it' +
-      (miss.length ? '; it did not for ' + miss.join(', ') : '') + '. Nine winters at most per pair, none above ONI +2.5.' +
+    return 'Each winter of ONI +1.0 or more was held out in turn and the fit rerun without it, detrended on earlier harvests only. The harvest moved the way the El Niño term pointed in ' + sr + ' of ' + ev + ' held-out harvests. Against the same fit without that term, it brought the forecast closer in ' + beat.length + ' of ' + P.length + ' pairs' +
+      (miss.length ? ', not in ' + miss.join(', ') : '') + '. Nine winters at most per pair, none above ONI +2.5.' +
       (function () {
         /* The stricter test: each winter scored with a fit on earlier harvests only. Pairs were chosen on the full
            record and the winter's observed ONI is used, so this is a conditional hindcast, not a forecast record. */
@@ -45519,7 +45519,7 @@ function showCommodityDetail(key) {
         if (!F.length) return '';
         var fs = 0, fe = 0, fb = 0, ab = 0; F.forEach(function (f) { fs += f.sign_right; fe += f.events; if (f.beats_no_change) fb++; });
         P.forEach(function (p) { ab += ((p.forward || {}).abstained_years || []).length; });
-        return ' Stricter, fitted only on harvests before each winter: sign right for ' + fs + ' of ' + fe + ', and the El Niño term helped in ' + fb + ' of ' + F.length + ' pairs' +
+        return ' A stricter test fits only on harvests before each winter: direction right in ' + fs + ' of ' + fe + ', and the El Niño term helped in ' + fb + ' of ' + F.length + ' pairs' +
           (ab ? ' (' + ab + ' early winters had too little history to score)' : '') + '. The pairs were chosen on the full record, so even this flatters the fit.';
       })();
   }
@@ -45576,7 +45576,7 @@ function showCommodityDetail(key) {
         (seg.length ? '<div class="enso-ol-odds"><div class="enso-ol-eyebrow">NOAA CPC odds for this December–February</div>' +
           '<div class="enso-ol-oddsbar" role="img" aria-label="' + esc(seg.map(function (x) { return x.k + ' ' + x.v + '%'; }).join(', ')) + '">' +
           seg.map(function (x, i) { return '<span class="is-' + i + '" style="flex:' + x.v + '" title="' + esc(x.k + ' ' + x.v + '%') + '"><b>' + x.v + '%</b>' + (x.v >= 12 ? ' ' + esc(x.k) : '') + '</span>'; }).join('') + '</div>' +
-          '<p class="enso-ol-fine">' + (med ? 'CPC’s ' + med.season + ' median is RONI ' + esc(med.med) + ' °C (5th–95th percentile ' + esc(med.lo) + ' to ' + esc(med.hi) + ')' + (gap != null ? '; ONI has run about ' + num(gap, 1).replace('+', '') + ' °C above RONI this year, so roughly ONI ' + num(med.v + gap, 1) + (med.v + gap > rec.oni + 0.05 ? ', a little above the ONI ' + num(rec.oni, 1) + ' the model stops at' : med.v + gap < rec.oni - 0.05 ? ', below the ONI ' + num(rec.oni, 1) + ' used here' : ', about the ONI ' + num(rec.oni, 1) + ' used here') : '') + '. ' : '') +
+          '<p class="enso-ol-fine">' + (med ? 'CPC’s ' + med.season + ' median is RONI ' + esc(med.med) + ' °C (5th–95th percentile ' + esc(med.lo) + ' to ' + esc(med.hi) + ')' + (gap != null ? '; ONI has run about ' + num(gap, 1).replace('+', '') + ' °C above RONI this year, so roughly ONI ' + num(med.v + gap, 1) + (med.v + gap > rec.oni + 0.05 ? ', a little above the ONI ' + num(rec.oni, 1) + ' the model stops at; changes could run larger' : med.v + gap < rec.oni - 0.05 ? ', below the ONI ' + num(rec.oni, 1) + ' used here' : ', about the ONI ' + num(rec.oni, 1) + ' used here') : '') + '. ' : '') +
           'Odds are on RONI, so the match is approximate.</p></div>' : '') +
         '<div class="enso-ol-net"><div class="enso-ol-eyebrow">The ' + chartRows.length + ' harvests shown, at ONI ' + num(CASE.oni, 1) + ' · losses and gains not netted</div>' +
           '<div class="enso-ol-netrow is-falls"><b>' + fmtKt(tot.lossKt) + '</b><span>lost' + (tot.lossUsd ? ', ' + fmtUsd(tot.lossUsd).replace('−', '') + ' at today’s price' : '') + '</span></div>' +
@@ -45651,12 +45651,12 @@ function showCommodityDetail(key) {
     });
     var iod = S.indices && S.indices.iod;
     el.innerHTML = '<figure class="enso-plate enso-outlook-plate is-modelled">' +
-      plateHead('Which 2027 harvests fall or rise, and by how much', 'This site’s model: FAOSTAT yields 1961–2024 × USDA 2026/27 production (FAOSTAT mean where USDA has none) × World Bank prices ' + esc((function (m) { m = String(m || ''); return /^\d{4}-\d{2}$/.test(m) ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m.slice(5) - 1] + ' ' + m.slice(0, 4) : m; })(((shown[0] || {}).price || {}).month)), stamp(metaDate('outlook')), 'modelled') +
+      plateHead('Which 2027 harvests fall or rise, and by how much', 'FoodShield model: FAOSTAT yields 1961–2024 × USDA 2026/27 production (FAOSTAT mean where USDA has none) × World Bank prices ' + esc((function (m) { m = String(m || ''); return /^\d{4}-\d{2}$/.test(m) ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m.slice(5) - 1] + ' ' + m.slice(0, 4) : m; })(((shown[0] || {}).price || {}).month)), stamp(metaDate('outlook')), 'modelled') +
       '<div class="plate-body">' + lead + '</div>' +
       '<details class="enso-evidence-note enso-ol-tablefold"><summary>Full table, coverage limits and method</summary>' + table +
       (gaps.length ? '<p class="enso-outlook-gap"><b>Where the fit is silent or partial.</b> ' + gaps.join('; ') + '.</p>' : '') +
       (iod && typeof iod.value === 'number' ? '<p class="enso-outlook-gap"><b>Also in play: the Indian Ocean Dipole</b> is on its ' + esc(iod.state) + ' side (' + num(iod.value, 2) + ' °C, ' + esc(iod.agency) + ', ' + esc(iod.window) + '; it counts as an event only after about eight weeks). A positive IOD alongside El Niño usually means a wetter East African short-rains season and a drier Australian winter crop.</p>' : '') +
-      '<p>Each pair was fitted on detrended log-yield against winter ONI with Newey–West errors; a row is shown only when its El Niño slope survives Benjamini–Hochberg control on its own (q &lt; 0.10 across ' + O.rows_all.length + ' flagged pairs’ El Niño tests). The change at an ONI value is exp(b·ONI) − 1; the 90% band comes from the standard error. Tonnes = yield change × the production named in the table; dollars = tonnes × today’s World Bank price, not a price forecast. ' + hindcastSummary() + ' ' + esc(O.honesty) + '</p>' +
+      '<p>Each pair was fitted on detrended log-yield against winter ONI with Newey–West errors; a row is shown only when its El Niño slope survives Benjamini–Hochberg control on its own (q &lt; 0.10 across ' + O.rows_all.length + ' flagged pairs’ El Niño tests). The change at an ONI value is exp(b·ONI) − 1; the 90% band comes from the standard error. Tonnes = yield change × the production named in the table; dollars = tonnes × today’s World Bank price, not a price forecast. ' + hindcastSummary() + '</p>' +
       (excluded ? '<ul class="enso-ol-excluded">' + excluded + '</ul>' : '') + '</details>' +
       '</figure>';
     el.querySelectorAll('[data-map-country]').forEach(function (b) { b.onclick = function () { ensoFocus(b.getAttribute('data-map-country')); }; });
@@ -45724,19 +45724,19 @@ function showCommodityDetail(key) {
           '<span class="pf-bar is-' + st + (q.hi + 1 > x1 ? ' is-cut' : '') + '" style="left:' + P(clip(q.lo)) + ';width:' + W(clip(q.lo), clip(q.hi + 1)) + '"></span>' +
           model.map(function (mm, k) { return '<span class="pf-model ' + (mm.r['change_pct_' + K] < 0 ? 'is-fall' : 'is-rise') + '" style="left:' + P(clip(mm.s)) + ';width:' + W(clip(mm.s), clip(mm.e + 1)) + ';margin-top:' + (k * 4) + 'px"></span>'; }).join('') + '</div>' +
         '<div class="pf-ev">' + q.studies.slice(0, 2).map(study).join('') +
-          (model.length ? '<p class="pf-mod">' + model.map(function (mm) { return '<b class="' + (mm.r['change_pct_' + K] < 0 ? 'is-fall' : 'is-rise') + '">' + esc(nameFor(mm.r.iso) + ' ' + crop(mm.r.crop) + ' ' + num(mm.r['change_pct_' + K], 0) + '%') + '</b>'; }).join(' · ') + ' <span>this site’s model, ONI ' + oniRec + '</span></p>' : '') +
+          (model.length ? '<p class="pf-mod">' + model.map(function (mm) { return '<b class="' + (mm.r['change_pct_' + K] < 0 ? 'is-fall' : 'is-rise') + '">' + esc(nameFor(mm.r.iso) + ' ' + crop(mm.r.crop) + ' ' + num(mm.r['change_pct_' + K], 0) + '%') + '</b>'; }).join(' · ') + ' <span>FoodShield model, ONI ' + oniRec + '</span></p>' : '') +
           (!q.studies.length && !model.length ? '<p class="pf-none">sign and timing published; no size on file</p>' : '') + '</div></div>';
     };
     var withEv = rows.filter(function (q) { return q.studies.length || q.model.length; }).length;
     el.innerHTML = '<figure class="enso-plate is-published enso-pubfx-plate" data-kind="published">' +
-      plateHead('Published El Niño effects: where and when', 'Published teleconnection regions · peer-reviewed papers and institutional reports · this site’s fitted harvests', stamp(metaDate('pubfx')), 'published') +
+      plateHead('Published El Niño effects: where and when', 'Published teleconnection regions · peer-reviewed papers and institutional reports · FoodShield’s fitted harvests', stamp(metaDate('pubfx')), 'published') +
       '<div class="plate-body">' + reviewDue('pubfx', 120) +
-      (rows.length ? '<div class="pf-key"><span>' + hatchSwatch('dry') + ' output usually falls</span><span>' + hatchSwatch('rise') + ' rises</span><span><i class="pf-k-bar is-ahead"></i> window ahead</span><span><i class="pf-k-bar is-now"></i> under way</span><span><i class="pf-k-bar is-over"></i> over</span><span><i class="pf-k-mod"></i> this site’s fitted harvest</span><span><i class="pf-k-today"></i> today</span><span><i class="pf-k-peak"></i> ' + (pk != null ? monTxt(pk) : 'December') + ' reference</span><span>click a row for the full evidence</span></div>' +
+      (rows.length ? '<div class="pf-key"><span>' + hatchSwatch('dry') + ' output usually falls</span><span>' + hatchSwatch('rise') + ' rises</span><span><i class="pf-k-bar is-ahead"></i> window ahead</span><span><i class="pf-k-bar is-now"></i> under way</span><span><i class="pf-k-bar is-over"></i> over</span><span><i class="pf-k-mod"></i> FoodShield fitted harvest</span><span><i class="pf-k-today"></i> today</span><span><i class="pf-k-peak"></i> ' + (pk != null ? monTxt(pk) : 'December') + ' reference</span><span>click a row for the full evidence</span></div>' +
         '<div class="pf-grid"><div class="pf-row pf-head"><div class="pf-name">' + rows.length + ' regions</div><div class="pf-track pf-axis">' + axis + '</div><div class="pf-ev">Evidence · ' + withEv + ' with a study or fitted harvest</div></div>' +
         rows.map(rowHTML).join('') + '</div>' : '') +
       (other.length ? '<div class="enso-sec-h"><span>Other published studies</span> outside the regions above</div><div class="pf-other">' + other.map(function (st) {
           return '<div class="pf-orow">' + study(st) + '</div>'; }).join('') + '</div>' : '') +
-      '</div><figcaption class="enso-log">Windows: each region’s published lag after a ' + (pk != null ? monTxt(pk) : 'December') + ' reference; seasonal, not a forecast of losses. Studies are past events and published sensitivities, not this site’s model; click a row for the full text.</figcaption></figure>';
+      '</div><figcaption class="enso-log">Windows: each region’s published lag after a ' + (pk != null ? monTxt(pk) : 'December') + ' reference; seasonal, not a forecast of losses. Studies are past events and published sensitivities; click a row for the full text.</figcaption></figure>';
     el.querySelectorAll('[data-map-country]').forEach(function (b) { b.onclick = function () { ensoFocus(b.getAttribute('data-map-country')); }; });
     /* Rows stay one line; a click or Enter opens the full evidence. */
     el.querySelectorAll('.pf-row[role="button"]').forEach(function (r) {
@@ -46128,12 +46128,12 @@ function showCommodityDetail(key) {
     var grid = months.map(function () { return '<i></i>'; }).join('');
     var today = pct(Date.now());
     el.innerHTML = '<figure class="enso-plate enso-next12-plate" data-kind="published">' +
-      plateHead('The next twelve months', 'CPC, FEWS NET, IPC, the Panama Canal record, this site’s fit and export measures', stamp(metaDate('outlook')), 'published') +
-      plateKey([['is-line', '#8fb1cf', 'Forecast'], ['is-dash', '#e0864a', 'Modelled (this site’s fit)'], ['is-line', 'var(--t3)', 'Published or precedent'], ['is-line', 'var(--t1)', 'Today']]) +
+      plateHead('The next twelve months', 'CPC, FEWS NET, IPC, the Panama Canal record, the FoodShield model and export measures', stamp(metaDate('outlook')), 'published') +
+      plateKey([['is-line', '#8fb1cf', 'Forecast'], ['is-dash', '#e0864a', 'Modelled (FoodShield)'], ['is-line', 'var(--t3)', 'Published or precedent'], ['is-line', 'var(--t1)', 'Today']]) +
       '<div class="plate-body"><div class="enso-next12-timeline" style="--rows:' + items.length + ';--months:' + months.length + ';--today:' + today + '" role="group" aria-label="Timeline of the next twelve months"><div class="enso-next12-labels" aria-hidden="true"><i></i>' + labels + '</div><div class="enso-next12-plot"><div class="enso-next12-axis" aria-hidden="true">' + axis + '</div><div class="enso-next12-grid" aria-hidden="true">' + grid + '</div><div class="enso-next12-rows">' + bars + '</div><div class="enso-next12-today" aria-hidden="true"><span>today</span></div></div></div><details class="enso-next12-fold"><summary>Every line in words, with its source (' + items.length + ')</summary><ol class="enso-next12">' + items.map(function (it, i) {
         return '<li id="enso-next12-item-' + i + '" class="is-' + it.kind + '"><span class="enso-next12-when">' + esc(it.when) + '</span><span class="enso-next12-kind">' + KIND[it.kind] + '</span><p>' + it.text + ' <button type="button" class="enso-inline-link" data-goto-lens="' + it.tab + '">' + LENS[it.tab] + ' →</button></p></li>';
       }).join('') + '</ol></details></div>' +
-      '<figcaption class="enso-log">Modelled: this site’s fit at its strongest winter, not a forecast. Export measures checked by hand (last ' + esc(stamp(metaDate('restrictions'))) + ').</figcaption></figure>';
+      '<figcaption class="enso-log">Modelled: the FoodShield fit at its strongest winter, not a forecast. Export measures checked by hand (last ' + esc(stamp(metaDate('restrictions'))) + ').</figcaption></figure>';
     el.querySelectorAll('[data-goto-lens]').forEach(function (b) { b.onclick = function () { showTab(b.getAttribute('data-goto-lens')); }; });
     el.querySelectorAll('[data-next12-item]').forEach(function (b) { var reveal = function () { var li = document.getElementById(b.getAttribute('data-next12-item')); if (!li) return; var fold = li.closest('details'); if (fold && !fold.open) fold.open = true; el.querySelectorAll('.enso-next12 li.is-target').forEach(function (x) { x.classList.remove('is-target'); }); li.classList.add('is-target'); li.scrollIntoView({ block: 'center' }); clearTimeout(li._next12Timer); li._next12Timer = setTimeout(function () { li.classList.remove('is-target'); }, 1600); }; b.onclick = reveal; });
   }
@@ -46274,7 +46274,7 @@ function showCommodityDetail(key) {
     el.innerHTML = '<figure class="enso-plate pac-plate" data-kind="schematic">' +
       plateHead('What El Niño does to the Pacific', 'NOAA / BoM · cross-section along the equator, 120°E to 80°W · set by the ONI', stamp(metaDate('enso')), 'schematic') +
       '<div class="pac-body"><div class="pac-main">' + lead + (MV.tabs || '') + stage + '<p class="pac-cap" id="pac-cap" aria-hidden="true"></p>' + dial + replay + '</div>' + side + '</div>' +
-      '<figcaption class="enso-log">Illustrations of three published states, not an ocean model: NOAA’s and BoM’s descriptions of La Niña, neutral and El Niño, drawn to one registration. The El Niño or La Niña plate wipes in between ONI ±0.5 and ±1.5; the rain cloud keeps moving east until +2.0, where the El Niño plate draws it. Part-way frames are a transition, not a state of the ocean. At now the bars under the plate show NOAA’s weekly Niño-region anomalies over each region’s bounds' + (wr ? ' (week of ' + esc(weeklyDate(wr.date)) + ')' : '') + '; replays step through CPC’s seasonal ONI, and the readout shows only those published values.</figcaption>' +
+      '<figcaption class="enso-log">Illustrations, not an ocean model: NOAA’s and BoM’s descriptions of La Niña, neutral and El Niño, drawn to one registration. The El Niño or La Niña plate wipes in between ONI ±0.5 and ±1.5 and the rain cloud moves east until +2.0; frames in between are transitions. At now, the bars under the plate are NOAA’s weekly Niño-region anomalies' + (wr ? ' (week of ' + esc(weeklyDate(wr.date)) + ')' : '') + '. Replays step through CPC’s seasonal ONI, and the readout shows only those published values.</figcaption>' +
       (MV.evidence || '') + '</figure>';
 
     var q = function (id) { return document.getElementById(id); };
@@ -47097,7 +47097,7 @@ function showCommodityDetail(key) {
       '<div class="ctr-note">Gateway ports are those of the FEWS NET concern regions; dry bulk includes grain, fertiliser, coal and ore, and small ports keep a minimum square size. Year on year: Red Sea routes were already diverted in 2025, so their baseline is low.</div>' +
       '<div class="ctr-note">Diamonds: chokepoint locations; IMF PortWatch transits where available, collected ' + esc(stamp(metaDate('portwatch'))) + '. Inland waterways have no PortWatch transit count. Published lane phases reviewed ' + esc(stamp(metaDate('lanes'))) + ': ' +
       esc(((S.lanes && S.lanes.lanes) || []).map(function (ln) { return ln.name; }).join('; ')) + '.</div>' +
-      '<div class="ctr-note">Published schematic corridors reviewed ' + esc(stamp(metaDate('corridors'))) + '. ' + esc((S.meta.corridors || {}).source || 'Corridor feed unavailable.') + ' Hover a route for its evidence; all corridors are listed here.</div>' +
+      '<div class="ctr-note">Corridors reviewed ' + esc(stamp(metaDate('corridors'))) + '. ' + esc((S.meta.corridors || {}).source || 'Corridor feed unavailable.') + ' Hover a route for its evidence; all corridors are listed here.</div>' +
       corridors.map(function (c) { return '<div class="ctr-note"><b>' + esc(c.name) + '</b>: ' + esc(c.basis) + ' Sources: ' + esc((c.sources || []).join('; ')) + '.</div>'; }).join('') + '</div>';
     return tiers + transit + water;
   }
@@ -49582,7 +49582,7 @@ function showCommodityDetail(key) {
     if (ln.id === 'panama') {
       var g = G.gatun, am = (g && g.analog_min) || {}, low = Object.keys(am).map(function (k) { var d = new Date(am[k].date); return r1(am[k].ft) + ' ft (' + (isNaN(d) ? k : d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' })) + ')'; });
       var lv2 = ln.live_2026 || {};
-      return { level: strong ? 'elevated' : 'watch', text: (typeof lv2.rainfall_deficit_pct === 'number' ? 'The Canal Authority cites watershed rain ' + Math.abs(lv2.rainfall_deficit_pct) + '% below average (' + esc(lv2.deficit_period || '') + ')' + (lv2.el_nino_quote ? ' and warns El Niño could cut it further' : '') + ' (' + esc(lv2.advisory || '') + '). ' : '') + 'Past El Niño lake lows: ' + (low.length ? low.join(', ') : 'see the lake plate') + '. Slot and draft cuts in force. Next test: the January–April dry season' + (g && g.outlook && g.outlook.distribution ? '; this site’s fit puts its low at ' + g.outlook.distribution.p50.toFixed(1) + ' ft (80% range ' + g.outlook.distribution.p10.toFixed(1) + '–' + g.outlook.distribution.p90.toFixed(1) + ')' : '') + '.' };
+      return { level: strong ? 'elevated' : 'watch', text: (typeof lv2.rainfall_deficit_pct === 'number' ? 'The Canal Authority cites watershed rain ' + Math.abs(lv2.rainfall_deficit_pct) + '% below average (' + esc(lv2.deficit_period || '') + ')' + (lv2.el_nino_quote ? ' and warns El Niño could cut it further' : '') + ' (' + esc(lv2.advisory || '') + '). ' : '') + 'Past El Niño lake lows: ' + (low.length ? low.join(', ') : 'see the lake plate') + '. Slot and draft cuts in force. Next test: the January–April dry season' + (g && g.outlook && g.outlook.distribution ? '; the FoodShield model puts its low at ' + g.outlook.distribution.p50.toFixed(1) + ' ft (80% range ' + g.outlook.distribution.p10.toFixed(1) + '–' + g.outlook.distribution.p90.toFixed(1) + ')' : '') + '.' };
     }
     if (ln.id === 'amazon') return { level: strong ? 'elevated' : 'watch', text: (function () {
       /* The agency's latest words and the dated past low, read from the lane record; nothing typed here. */
@@ -49787,14 +49787,14 @@ function showCommodityDetail(key) {
       grid + band + rec + fit + dots + proj +
       '<text x="' + ((L0 + R0) / 2) + '" y="' + (H - 4) + '" text-anchor="middle" class="enso-hw-t">December–February ONI, °C</text></svg>';
     var slots = lad.length ? ' In 2023-24 the Canal ran ' + Math.min.apply(null, lad.map(function (r) { return r.slots; })) + '–' + Math.max.apply(null, lad.map(function (r) { return r.slots; })) + ' booking slots a day with the lake between ' + Math.min.apply(null, lad.map(function (r) { return r.lake_ft; })).toFixed(1) + ' and ' + Math.max.apply(null, lad.map(function (r) { return r.lake_ft; })).toFixed(1) + ' ft.' : '';
-    var lede = '<p class="enso-plate-lede"><b>This site’s fit puts the lowest level between January and mid-June 2027 at ' + D.p50.toFixed(1) + ' ft (80% range ' + D.p10.toFixed(1) + '–' + D.p90.toFixed(1) + ')</b>, from the lake at ' + lvNow.toFixed(2) + ' ft on ' + dTxt + ' and CPC’s ' + esc(fc.label || 'December–February') + ' forecast (about ONI ' + num(fc.median, 1) + '). Chance of going below the ' + D.record_season + ' record, ' + D.record_ft.toFixed(1) + ' ft: ' + Math.round(D.p_below_record * 100) + '%.' + slots + '</p>';
+    var lede = '<p class="enso-plate-lede"><b>The FoodShield model puts the lowest level between January and mid-June 2027 at ' + D.p50.toFixed(1) + ' ft (80% range ' + D.p10.toFixed(1) + '–' + D.p90.toFixed(1) + ')</b>, from the lake at ' + lvNow.toFixed(2) + ' ft on ' + dTxt + ' and CPC’s ' + esc(fc.label || 'December–February') + ' forecast (about ONI ' + num(fc.median, 1) + '). Chance of going below the ' + D.record_season + ' record, ' + D.record_ft.toFixed(1) + ' ft: ' + Math.round(D.p_below_record * 100) + '%.' + slots + '</p>';
     var facts = '<dl class="enso-gfit-facts">' +
       '<dt>Each +1 °C of El Niño</dt><dd>' + num(b.el_nino_oni, 1) + ' ft on the low (± ' + O.se.el_nino_oni.toFixed(1) + ')</dd>' +
       '<dt>Each foot higher now</dt><dd>' + num(b.level_then, 2) + ' ft on the low (± ' + O.se.level_then.toFixed(2) + ')</dd>' +
       '<dt>Tested on each season left out</dt><dd>' + O.loo_rmse_ft.toFixed(2) + ' ft typical miss, against ' + O.loo_rmse_average_ft.toFixed(2) + ' ft for the historical average (' + O.n_seasons + ' seasons, ' + O.first_season + '–' + O.last_season + ')</dd>' +
       (tdy ? '<dt>If ONI stays at ' + num(tdy.oni, 1) + '</dt><dd>' + tdy.low.toFixed(1) + ' ft</dd>' : '') +
       (O.recent_mean_resid_ft != null ? '<dt>Since ' + O.recent_from + '</dt><dd>the lake has ended the dry season ' + Math.abs(O.recent_mean_resid_ft).toFixed(1) + ' ft ' + (O.recent_mean_resid_ft < 0 ? 'below' : 'above') + ' the fit on average, so the risk leans lower</dd>' : '') + '</dl>';
-    return '<figure class="enso-plate enso-gatunfit-plate is-modelled" data-kind="modelled">' + plateHead('How low could Gatún go by mid-2027', 'This site’s fit on the Canal’s daily record since 1965 · NOAA CPC Dec–Feb forecast', stamp(metaDate('gauges')), 'modelled') +
+    return '<figure class="enso-plate enso-gatunfit-plate is-modelled" data-kind="modelled">' + plateHead('How low could Gatún go by mid-2027', 'FoodShield model on the Canal’s daily record since 1965 · NOAA CPC Dec–Feb forecast', stamp(metaDate('gauges')), 'modelled') +
       '<div class="plate-body">' + lede + '<div class="enso-gfit">' + svg + facts + '</div></div>' +
       '<figcaption class="enso-log">A statistical fit, not a water-balance model: rain, water demand and the Canal’s own management move the lake too, and drafts and slots are set only by its advisories. Dots: every dry season since 1966, shifted to start from this year’s ' + dTxt + ' level; bright dots: winters at ONI +1.5 or above. Diamond and bar: median, 80% and 90% range over the coefficients, the residual and CPC’s forecast spread (RONI moved to ONI by this year’s ' + num(fc.gap, 1) + ' °C gap).</figcaption></figure>';
   }
@@ -49877,9 +49877,10 @@ function showCommodityDetail(key) {
         '<div class="plate-body"><p class="enso-plate-lede">' + (function () {
           var up = P.filter(function (p) { return p.vs_mean_pct >= 10; }).length, dn = P.filter(function (p) { return p.vs_mean_pct <= -10; }).length;
           return '<b>' + up + ' of ' + P.length + ' ports are 10% or more above their ' + esc(P[0].prior_years || '') + ' average for these weeks; ' + dn + ' are 10% or more below.</b> ';
-        })() + (zafRow ? 'Why these ports: at ONI ' + num(((S.outlook || {}).cases || { record: { oni: 2.5 } }).record.oni, 1) + ' the model puts South Africa’s maize at ' + num(zafRow.change_pct_record, 0) + '% (harvest ' + esc(zafRow.harvest) + '), so these readings predate it. ' : '') +
+        })() + (zafRow ? 'At ONI ' + num(((S.outlook || {}).cases || { record: { oni: 2.5 } }).record.oni, 1) + ' the model puts South Africa’s maize at ' + num(zafRow.change_pct_record, 0) + '% (harvest ' + esc(zafRow.harvest) + '), so today’s readings come before any shortfall. ' : '') +
           (function () { var R = {}; ((S.regions && S.regions.regions) || []).forEach(function (r) { R[r.id] = r; }); var sa = R.southern_africa_maize, ho = R.horn_of_africa_ond;
-            return (sa ? 'Southern Africa: El Niño usually brings ' + esc(sa.rain || '') + ' conditions (' + esc(sa.damage_season || '') + '). ' : '') + (ho ? 'East Africa: El Niño usually brings ' + esc(ho.rain || '') + ' ' + esc(String(ho.damage_season || '').replace(/^\w/, function (c) { return c.toLowerCase(); })) + '.' : ''); })() + '</p>' +
+            var bits = (sa ? [esc(sa.rain || '') + ' conditions to southern Africa (' + esc(sa.damage_season || '') + ')'] : []).concat(ho ? [esc(ho.rain || '') + ' ' + esc(ho.damage_season || '') + ' to East Africa'] : []);
+            return bits.length ? 'El Niño usually brings ' + bits.join(' and ') + '.' : ''; })() + '</p>' +
         /* One dot per port on a shared, zero-centred axis: dry-bulk intake against its own average for these weeks.
            Ring: against the same weeks a year earlier. Right: tonnes. */
         (function () {
@@ -50112,7 +50113,7 @@ function showCommodityDetail(key) {
     var pk = S.pink && S.pink.series && S.pink.series.maize, yy = null;
     if (pk && pk.history && pk.history.length) { var last = pk.history[pk.history.length - 1], ya = pk.history.filter(function (p) { return p.month === (Number(pk.latest_month.slice(0, 4)) - 1) + pk.latest_month.slice(4); })[0]; if (ya) yy = (last.value / ya.value - 1) * 100; }
     el.innerHTML = '<figure class="enso-plate enso-whopays-plate is-modelled">' +
-      plateHead('Who pays for the harvest changes', 'This site’s model × USDA trade balances × UN Comtrade buyers × World Bank prices · at ONI ' + num(O.cases.record.oni, 1), stamp(metaDate('outlook')), 'modelled') +
+      plateHead('Who pays for the harvest changes', 'FoodShield model × USDA trade balances × UN Comtrade buyers × World Bank prices · at ONI ' + num(O.cases.record.oni, 1), stamp(metaDate('outlook')), 'modelled') +
       '<div class="plate-body"><div class="enso-wp-totals">' + totals + '</div>' + lede +
       '<div class="enso-wp-table" role="table" aria-label="Who pays for each producer’s shortfall"><div class="enso-wp-row enso-wp-head is-flow" role="row"><div role="columnheader">Producer and shortfall</div><div role="columnheader">Where the shortfall goes · <i class="k-imp"></i>the producer imports · <i class="k-exp"></i>its buyers replace, one block each · <i class="k-range"></i>90% range · <i class="k-obs"></i>at today’s ONI</div></div>' +
       W.map(row).join('') + '</div></div>' +
@@ -50197,15 +50198,15 @@ function showCommodityDetail(key) {
     (function () { var all = []; items.forEach(function (x) { if (x.p) dev(x.p.history).forEach(function (q) { all.push(q.value); }); }); if (all.length) sparkRange = [Math.min.apply(null, all), Math.max.apply(null, all)]; })();
     if (!items.length) { el.innerHTML = ''; return; }
     el.innerHTML = '<figure class="enso-plate enso-pricewatch-plate is-published" data-kind="published">' +
-      plateHead('Which prices to watch, and when', 'This site’s fit · curated local-price precedents · World Bank Pink Sheet · export measures in force', stamp(metaDate('outlook')), 'published') +
-      '<div class="plate-body"><table class="enso-live-table"><thead><tr><th scope="col">Commodity</th><th scope="col">Harvest change if ONI reaches ' + num(((S.outlook || {}).cases || { record: { oni: 2.5 } }).record.oni, 1) + ' (this site’s model)</th><th scope="col">World price, five years</th><th scope="col">Policy in force</th></tr></thead><tbody>' +
+      plateHead('Which prices to watch, and when', 'FoodShield model · local-price precedents · World Bank Pink Sheet · export measures in force', stamp(metaDate('outlook')), 'published') +
+      '<div class="plate-body"><table class="enso-live-table"><thead><tr><th scope="col">Commodity</th><th scope="col">Harvest change if ONI reaches ' + num(((S.outlook || {}).cases || { record: { oni: 2.5 } }).record.oni, 1) + ' (FoodShield model)</th><th scope="col">World price, five years</th><th scope="col">Policy in force</th></tr></thead><tbody>' +
       items.map(function (x) {
         /* Precedent and published estimates are the reference behind a row, so they fold under the commodity. */
-        return '<tr><th scope="row">' + esc(x.k) + (x.prec || x.lit ? '<details class="enso-pw-more"><summary>' + (x.prec ? 'Last time' : 'Published estimates') + '</summary>' + (x.prec ? '<p>' + x.prec + '</p>' : '') + (x.lit ? '<p class="enso-live-sub">Published estimates: ' + esc(x.lit) + '</p>' : '') + '</details>' : '') + '</th><td class="is-model" data-label="Harvest change (this site’s model)">' + (x.fit.length ? line(x.fit) : '<span class="enso-ol-na">' + (inSeason(x.crop) ? 'harvest in now · see Harvests' : 'none in the fit') + '</span>') + '</td>' +
+        return '<tr><th scope="row">' + esc(x.k) + (x.prec || x.lit ? '<details class="enso-pw-more"><summary>' + (x.prec ? 'Last time' : 'Published estimates') + '</summary>' + (x.prec ? '<p>' + x.prec + '</p>' : '') + (x.lit ? '<p class="enso-live-sub">Published estimates: ' + esc(x.lit) + '</p>' : '') + '</details>' : '') + '</th><td class="is-model" data-label="Harvest change (FoodShield model)">' + (x.fit.length ? line(x.fit) : '<span class="enso-ol-na">' + (inSeason(x.crop) ? 'harvest in now · see Harvests' : 'none in the fit') + '</span>') + '</td>' +
           '<td class="enso-ol-v" data-label="World price">' + (x.p ? priceSpark(x.p.history) + '$' + Math.round(x.p.usd_per_t).toLocaleString('en-US') + '/t <span class="enso-live-sub">' + esc(x.p.series) + ', ' + esc(/^\d{4}-\d{2}$/.test(x.p.month) ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+x.p.month.slice(5) - 1] + ' ' + x.p.month.slice(0, 4) : x.p.month) + (x.p.mom != null ? ' · ' + (x.p.coarse ? '≈' : '') + pct(x.p.mom) + ' m/m' : '') + (x.p.yoy != null ? ' · ' + (x.p.coarse ? '≈' : '') + pct(x.p.yoy) + ' y/y' : '') + (x.p.coarse ? ' (approximate)' : '') + '</span>' : '<span class="enso-ol-na">—</span>') + (x.now ? '<span class="enso-live-sub">FAO: ' + x.now + '</span>' : '') + '</td>' +
           '<td data-label="Policy in force">' + (x.pol || '<span class="enso-ol-na">' + ((S.restrictions || []).some(function (r) { return x.polRe.test(r.commodity || ''); }) ? 'none in force' : 'not tracked') + '</span>') + '</td></tr>';
       }).join('') + '</tbody></table></div>' +
-      '<figcaption class="enso-log">Dashed rule: this site’s model. Local prices can diverge from world prices: in early 2024 South African white maize rose more than a third while world grain prices were soft. Sparklines: five years, % against the five-year mean (dotted); shaded: the 2023-24 El Niño. ' + (function () {
+      '<figcaption class="enso-log">Dashed rule: FoodShield model. Local prices can diverge from world prices: in early 2024 South African white maize rose more than a third while world grain prices were soft. Sparklines: five years, % against the five-year mean (dotted); shaded: the 2023-24 El Niño. ' + (function () {
         var cs = []; (S.restrictions || []).forEach(function (r) { if (r.country && cs.indexOf(r.country) < 0) cs.push(r.country); });
         return cs.length ? 'Export measures are tracked for ' + esc(cs.join(', ')) + ' only.' : '';
       })() + '</figcaption></figure>';
@@ -50503,7 +50504,7 @@ function showCommodityDetail(key) {
       /* An observed signal only: a crop condition, a hotspot, a hazard alert, a map report or a crisis phase. Appeal membership is not one. */
       var obs = function (x) { var rp = REP[x.iso] || {}; return (x.cm || []).length || (x.a && x.a.hotspot_code) || (x.al || []).length || (rp.events || []).length || rp.crisis; };
       var sig = ledger.filter(function (x) { return isos.indexOf(x.iso) >= 0 && obs(x); });
-      var cell = sig.length ? (standin.length ? '<span class="enso-live-sub">FEWS NET names no countries here; this site’s ENSO regions stand in</span>' : '') +
+      var cell = sig.length ? (standin.length ? '<span class="enso-live-sub">FEWS NET names no countries here; FoodShield’s ENSO regions stand in</span>' : '') +
           '<b>' + sig.length + '</b> of ' + isos.length + ': ' + sig.map(function (x) { return esc(nameFor(x.iso)); }).join(', ')
         : '<span class="enso-ol-na">' + (!isos.length ? 'FEWS NET names no countries here, so nothing is joined' : seasonAhead(r.windows) ? 'season not yet under way (starts ' + esc(seasonAhead(r.windows)) + '); no seasonal hazard observed yet' : 'no observed signal in these countries today') + '</span>';
       return '<tr class="is-' + esc(String(r.concern).replace(/\s+/g, '-')) + '"><th scope="row">' + esc(r.region) + '</th><td><span class="enso-concern">' + esc(r.concern) + '</span></td>' +

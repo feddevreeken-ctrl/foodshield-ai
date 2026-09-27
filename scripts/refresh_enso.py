@@ -127,7 +127,7 @@ def main() -> int:
     payload = {
         "index": "ONI (CPC oni.ascii.txt)",
         "index_note": (
-            "ONI as published by CPC. CPC's OFFICIAL headline index is now RONI, and BoM "
+            "ONI as published by CPC. CPC's official headline index is now RONI, and BoM "
             "uses a relative Ni\u00f1o 3.4 with a higher threshold: the same ocean reads "
             "differently on each. Do not compare this value against another agency's."),
         "latest": {
