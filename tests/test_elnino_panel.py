@@ -1368,7 +1368,7 @@ def main() -> int:
                 ('ensowater', ['No land layer', 'Shipping', 'Change nowEl Niño link']),
                 ('ensomoney', ['Staple prices', 'Grain imports', 'After inflationLocal currency', 'Price changeAgainst the usual pattern']),
                 ('elnino', ['Sea-surface']),
-                ('ensoharvest', ['Production shock', 'Strongest crop', 'Coverage', 'Teleconnections']),
+                ('ensoharvest', ['Production shock', 'Strongest crop', 'Coverage', 'Crop stress now', 'Teleconnections']),
                 ('ensolive', ['Rain pattern', 'Hotspots', 'IPC', 'Hazards', 'Headlines', 'Elsewhere'])):
                 page.evaluate('tab => showTab(tab)', tab)
                 page.wait_for_timeout(150)

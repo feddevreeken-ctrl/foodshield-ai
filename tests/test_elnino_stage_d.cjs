@@ -293,7 +293,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
   test('cycle '+(cycle+1)+' '+view+' clears inactive overlays and keeps its visible key',()=>{
    assert.equal(S.mode,mode);
    for(const l of [S.nino34,S.ninoLabel,S.sstLayer])assert.equal(S.map.hasLayer(l),view==='elnino');
-   assert.equal(S.map.hasLayer(S.layerRegions),view==='ensoharvest');
+   assert.equal(S.map.hasLayer(S.layerRegions),false);  /* 2026-09-27: published regions are an opt-in toggle on every lens */
    for(const l of S.lanePins.concat(S.laneLines,S.corridorLines,S.corridorLabels,S.corridorArrows,S.corridorEdges))assert.equal(S.map.hasLayer(l),view==='ensowater');
    for(const l of S.alertPins)assert.equal(S.map.hasLayer(l),view==='ensolive');
    /* Shipping has no callout any more: the Gatun card was the largest object on a map whose subject is the marks under it, and its numbers moved into the fold. Harvests keeps its two (three layers each). */
@@ -303,8 +303,9 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    const legend=node('enso-legend'),visible=legend.querySelector('.enso-legend'),key=visible.textContent;
    assert.equal(legend.querySelectorAll('details').length,1);assert.equal(visible.querySelectorAll('details').length,0);
    assert.equal(key.includes('Niño 3.4 box'),view==='elnino');
-   assert.equal(key.includes('El Niño reduces output here'),view==='ensoharvest');
-   assert.equal(key.includes('El Niño raises output here'),view==='ensoharvest');
+   /* 2026-09-27: the published regions are an opt-in toggle, so their key rows appear only when it is on. */
+   assert.equal(key.includes('El Niño reduces output here'),S.showRegions&&view==='ensoharvest');
+   assert.equal(key.includes('El Niño raises output here'),S.showRegions&&view==='ensoharvest');
    assert.equal(key.includes('a published link, moderate or strong'),view==='ensowater');
    /* The solid-line swatch keyed a mark the map never draws: no lane in enso_lanes.json carries a geometry, so S.laneLines is always empty. The observed mark is the diamond and its ring. */
    assert.equal(key.includes('diamond and ring: observed, measured at the chokepoint'),view==='ensowater');

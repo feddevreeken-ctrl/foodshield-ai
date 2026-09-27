@@ -47187,7 +47187,8 @@ function showCommodityDetail(key) {
     var modelledPaint = MODES_MODELLED.indexOf(S.mode) >= 0;
     var scenarioOpen = modelledPaint || !!S.scenarioExpanded;
     var buttons = function (items) { return items.map(function (m) {
-      return '<button type="button" data-native="enso-mode" data-value="' + m[0] + '" aria-pressed="' + (S.mode === m[0]) + '">' + esc(m[1]) + '</button>';
+      var label = S.sub === 'ensoharvest' && m[0] === 'asap' ? 'Crop stress now' : m[1];
+      return '<button type="button" data-native="enso-mode" data-value="' + m[0] + '" aria-pressed="' + (S.mode === m[0]) + '">' + esc(label) + '</button>';
     }).join(''); };
     var overlays = [['regions', 'Teleconnections', 'var(--warm)', S.showRegions],
       ['lanes', 'Shipping', '#d2693a', S.showLanes], ['alerts', 'Hazards', '#c44b3c', S.showAlerts],
@@ -47197,7 +47198,7 @@ function showCommodityDetail(key) {
       ensowater: {modes:['none'], overlays:['lanes']},
       ensomoney: {modes:['staple'], overlays:['imports']},
       elnino: {modes:['sst'], overlays:[]},
-      ensoharvest: {modes:['impact','crop','coverage'], overlays:['regions']},
+      ensoharvest: {modes:['impact','crop','asap','coverage'], overlays:['regions']},
       ensolive: {modes:['rain','asap','ipc'], overlays:['alerts','headlines','elsewhere']}
     }[S.sub] || {modes:['sst'], overlays:[]};
     var layers = [['rain','Rain pattern'],['impact','Production shock'],['crop','Strongest crop'],['coverage','Coverage'],
@@ -47213,6 +47214,8 @@ function showCommodityDetail(key) {
     if (previousSearch) previousSearch.remove();
     el.innerHTML = '<div class="enso-control-deck" role="group" aria-label="Map instruments">' +
       '<div class="enso-instrument-row enso-layer-row">' + layerChoices(true) +
+      (S.sub === 'ensoharvest' && S.mode === 'crop' ? '<span class="enso-basis" role="group" aria-label="Crop">' + [['best', 'Strongest'], ['corn', 'Maize'], ['rice', 'Rice'], ['wheat', 'Wheat'], ['soybeans', 'Soy']].map(function (b) {
+        return '<button type="button" class="enso-basis-b" data-croppick="' + b[0] + '" aria-pressed="' + ((S.cropPick || 'best') === b[0]) + '">' + b[1] + '</button>'; }).join('') + '</span>' : '') +
       (S.sub === 'ensowater' ? '<span class="enso-basis" role="group" aria-label="Colour by">' + [['now', 'Change now'], ['enso', 'El Niño link']].map(function (b) {
         return '<button type="button" class="enso-basis-b" data-sview="' + b[0] + '" aria-pressed="' + ((S.shipView || 'now') === b[0]) + '">' + b[1] + '</button>'; }).join('') + '</span>' : '') +
       (S.mode === 'staple' ? '<span class="enso-basis" role="group" aria-label="Price basis">' + [['real', 'After inflation'], ['nominal', 'Local currency']].map(function (b) {
@@ -47246,6 +47249,7 @@ function showCommodityDetail(key) {
       S.mode = this.value;
       if (S.mode === 'sst') { S.showSST = true; toggleSST(); var tg = document.getElementById('enso-tog-sst'); if (tg) tg.checked = true; }
       writeEnsoQuery(); paint(); renderLegend();
+      if (S.sub === 'ensoharvest') renderControls();  /* the crop picker belongs to the crop layer */
     };
     if (cn) cn.onchange = function () { selectCountry(this.value || null, { fly: true }); };
     if (tr) tr.onchange = function () { S.showRegions = this.checked; toggleRegions(); renderLegend(); };
@@ -47265,6 +47269,9 @@ function showCommodityDetail(key) {
         var native = document.getElementById(b.getAttribute('data-native'));
         native.value = b.getAttribute('data-value'); native.dispatchEvent(new Event('change', { bubbles: true })); syncInstruments();
       };
+    });
+    el.querySelectorAll('[data-croppick]').forEach(function (b) {
+      b.onclick = function () { S.cropPick = b.getAttribute('data-croppick'); paint(); renderControls(); renderLegend(); };
     });
     el.querySelectorAll('[data-sview]').forEach(function (b) {
       b.onclick = function () { S.shipView = b.getAttribute('data-sview'); drawLanes(); toggleLanes(); renderControls(); renderLegend(); };
@@ -47789,6 +47796,7 @@ function showCommodityDetail(key) {
     var title = { staple: 'Staple prices where El Niño reaches', rain: 'What is being reported in El Niño countries', impact: 'Modelled production shock', crop: 'Strongest fitted crop', coverage: 'Model coverage', asap: 'Where crops are under stress this season',
       gdacs: 'Drought and flood alerts', ipc: 'Food insecurity, IPC 3+', rtfp: 'Food inflation, year on year', sst: 'Sea-surface anomaly',
       none: S.showLanes ? 'Grain lanes and chokepoints' : 'No land layer' }[S.mode];
+    if (S.mode === 'crop' && S.cropPick && S.cropPick !== 'best') title = ({ corn: 'Maize', rice: 'Rice', wheat: 'Wheat', soybeans: 'Soybeans' }[S.cropPick] || S.cropPick) + ': fitted yield change';
     var key = {impact:'exp',crop:'model',coverage:'model'}[S.mode] || S.mode;
     /* RTFP fills and extends market prices with a model, so it is an estimate, not a reading. */
     var kind = modelled ? 'modelled' : S.mode === 'sst' ? 'observed' : S.mode === 'rtfp' ? 'estimated' : S.mode === 'staple' ? 'observed' : S.mode === 'none' ? (S.showLanes ? 'published' : 'reference') : 'reported';
@@ -48123,15 +48131,15 @@ function showCommodityDetail(key) {
        scenario — so the label has to move with it, or the legend describes a
        quantity the map no longer paints. */
     var solidT = S.mode === 'coverage' ? 'Model coverage' :
-                 S.mode === 'crop' ? 'Strongest fitted crop, % yield change'
+                 S.mode === 'crop' ? (S.cropPick && S.cropPick !== 'best' ? ({ corn: 'Maize', rice: 'Rice', wheat: 'Wheat', soybeans: 'Soybeans' }[S.cropPick] || S.cropPick) + ', fitted % yield change' : 'Strongest fitted crop, % yield change')
                                    : 'Modelled production shock';
     var coverageRamp = '';
     for (var c = 0; c <= 20; c++) coverageRamp += '<i style="background:' + (coverageColor(c / 20) || '#1c1c22') + '"></i>';
     var solidBody = S.mode === 'coverage'
       ? '<div class="enso-ramp enso-coverage-ramp">' + coverageRamp + '</div><div class="enso-key-anchors"><span>0%</span><span>50%</span><span>100%</span></div><div class="ctr-note" style="max-width:34ch">Share of national production covered by fitted ENSO responses. Dark: no fitted signal.</div>'
-      : '<div class="enso-ramp">' + ramp + '</div>' +
+      : '<div class="enso-ramp-unit"><div class="enso-ramp">' + ramp + '</div>' +
         '<div style="display:flex;justify-content:space-between;font-family:\'Geist Mono\',monospace;font-size:9px;color:var(--t3);width:150px;margin-top:3px;">' +
-        '<span>falls</span><span>0</span><span>rises</span></div>' +
+        '<span>falls</span><span>0</span><span>rises</span></div></div>' +
         /* The ramp clamps at 15%, so Zimbabwe at −34% and South Africa at −25%
            take the same paint as −15%. Every other ramp on this tab says where
            it stops; this one did not, so the darkest ochre read as a value
@@ -48215,6 +48223,8 @@ function showCommodityDetail(key) {
      ENSO-specific crop and only falls back to a shared one, flagged. */
   function strongestCrop(iso) {
     var m = S.model && S.model[iso]; if (!m) return null;
+    /* 2026-09-27 (map research): a named crop from the picker, else each country's strongest. */
+    if (S.cropPick && S.cropPick !== 'best') { var cp = m[S.cropPick]; return cp && cp.signal ? { crop: S.cropPick, c: cp, shared: cp.enso_specific === false } : null; }
     var best = null, bestShared = null;
     for (var crop in m) {
       var c = m[crop];
@@ -48988,7 +48998,7 @@ function showCommodityDetail(key) {
        else. Filtering on the lens alone left them floating over Food inflation
        and Sea-surface, modelled numbers in a solid frame over observed paint,
        and over a La Niña rung whose slope is the other one. */
-    var modelled = MODES_MODELLED.indexOf(S.mode) >= 0 && modelOni() > 0;
+    var modelled = MODES_MODELLED.indexOf(S.mode) >= 0 && modelOni() > 0 && !(S.mode === 'crop' && S.cropPick && S.cropPick !== 'best');  /* callouts name a crop: off when another crop is picked */
     ANNOTATIONS.filter(function (a) {
       return (!a.lens || a.lens.indexOf(S.sub) >= 0) && modelled;
     }).forEach(function (a) {
@@ -51645,7 +51655,7 @@ function showCommodityDetail(key) {
     applyEnsoQuery(!viewChanged);
     if (viewChanged) writeEnsoQuery();
     S.showSST = S.mode === 'sst';
-    S.showRegions = S.sub === 'ensoharvest';
+    S.showRegions = false;  /* 2026-09-27 (map research): published regions are a toggle, not hatching over the banded fill */
     S.showLanes = S.sub === 'ensowater';
     S.showAlerts = S.sub === 'ensolive';
     S.showHeadlines = S.showElsewhere = S.sub === 'ensolive';
