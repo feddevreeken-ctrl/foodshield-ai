@@ -41,7 +41,7 @@ test('paired longitude ruler supports arrow wrap, Home/End, per-state highlighti
  const pair=markup.slice(markup.indexOf('<div class="enso-pacific-pair">'),markup.indexOf('<div class="enso-mechanism-reading">'));
  const imgs=[...pair.matchAll(/<img [^>]+>/g)].map(m=>m[0]);
  assert.equal(imgs.length,3);
- ['walker2','elnino2','lanina2'].forEach((name,i)=>{
+ ['walker3','elnino3','lanina3'].forEach((name,i)=>{
   assert(imgs[i].includes('src="img/enso/'+name+'.webp"'));
   assert(imgs[i].includes(name+'-768.webp 768w'));
   assert(imgs[i].includes('width="1536" height="1024"'));
