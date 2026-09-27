@@ -299,7 +299,7 @@ def main() -> int:
               [...h.querySelectorAll('.enso-threshold-label')].some(e => e.textContent.includes('+0.5 El Niño threshold')) &&
               [...h.querySelectorAll('.enso-threshold-label')].some(e => e.textContent.includes('−0.5 La Niña threshold'));
         }""")
-        check("analog plate has fixed anchors and both labelled thresholds", axis and marker["ticks"] == ["−3", "0", "+3"])
+        check("analog plate has fixed anchors and both labelled thresholds", axis and marker["ticks"] == ["−1", "0", "+4"])  # 2026-09-27: −1/+4 hold the CPC band
 
         # Inject an out-of-range current value: preserve fixed anchors and
         # historical geometry while printing the true value and overflow.
@@ -307,7 +307,7 @@ def main() -> int:
         hist_max = page.evaluate(
             "async () => Math.max(...(await (await fetch('data/enso.json')).json())"
             ".data.history.map(r => Math.abs(r.anom)))")
-        spike = round(hist_max + 1.5, 2)
+        spike = round(hist_max + 2.5, 2)  # beyond the +4 anchor
 
         def spike_enso(route):
             # The page's freshness poll sends HEAD requests; they carry no body to rewrite.
@@ -335,7 +335,7 @@ def main() -> int:
               f'rule at {spiked and spiked["ruleY"]}px')
         check("fixed anchors retain historical geometry and disclose overflow",
               bool(spiked) and spiked["past"] == base_past
-              and spiked["ticks"] == ["−3", "0", "+3"]
+              and spiked["ticks"] == ["−1", "0", "+4"]
               and ("%.2f" % spike) in spiked["overflow"] and 'exceed' in spiked["overflow"],
               str(spiked))
 
@@ -1188,7 +1188,7 @@ def main() -> int:
                 && l.getElement().getAttribute('stroke-dasharray') === '6 4')
                 && lanes.every(l => !l.options.dashArray && !l.getElement().hasAttribute('stroke-dasharray'));
         }"""))
-        visible_key = page.locator('#enso-legend > .enso-legend').inner_text()
+        visible_key = page.locator('#enso-legend').text_content()  # 2026-09-27: meanings sit in the key's fold
         # The key used to show a solid-line swatch for "observed transits". No
         # lane in enso_lanes.json carries a geometry, so that line is never
         # drawn and the key described a mark the map does not have. The observed
@@ -1200,7 +1200,7 @@ def main() -> int:
             const lanes = (await (await fetch('data/enso_lanes.json')).json()).data.lanes;
             const feed = await (await fetch('data/portwatch.json')).json();
             const rings = document.querySelectorAll('.enso-choke .enso-transit-ring');
-            const key = document.querySelector('#enso-legend > .enso-legend').innerText;
+            const key = document.getElementById('enso-legend').textContent;
             const date = s => new Date(s).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
             let measured = 0, missing = 0;
             return lanes.every(ln => {
