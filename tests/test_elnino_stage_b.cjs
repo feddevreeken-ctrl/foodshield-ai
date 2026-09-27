@@ -90,13 +90,13 @@ test('shipping opens with the nine-lane board, then Panama month by month with i
  assert.equal((out.match(/data-board-lane=/g)||[]).length,9);
  const pan=S.lanes.lanes.find(l=>l.id==='panama');assert(out.includes(pan.live_2026.steps.at(-1).total+' slots/day for transits from'));
  for (const id of ['amazon','rhine','mississippi']) { const row=out.match(new RegExp('data-board-lane="'+id+'"[\\s\\S]*?</tr>'))[0]; assert(row.includes('2026'),id+' has a dated September observation'); }
- assert(out.includes('Booking slots a day, from the Canal’s dated advisories'));assert(out.includes('Advisories and operating context'));assert(out.includes('Sep 2025'));assert(out.includes('Sep 2026'));
+ assert(out.includes('Booking slots a day, Canal advisories'));assert(out.includes('Advisories and operating context'));assert(out.includes('Sep 2025'));assert(out.includes('Sep 2026'));
  assert.equal((out.match(/data-lane=/g)||[]).length,S.lanes.lanes.length);
  for(const l of S.lanes.lanes){if(l.counter_evidence) assert(out.includes(l.counter_evidence.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')));}
 });
 test('Panama monthly chart draws every dated slot advisory as a step in true time',()=>{
  api.renderWater();const out=nodes['enso-water'].innerHTML,p=S.lanes.lanes.find(l=>l.id==='panama');
- const svg=out.match(/<svg class="enso-hw enso-pan-since"[\s\S]*?<\/svg>/)[0],paths=svg.match(/<path d="[^"]+" fill="none" stroke="#e0864a" stroke-width="1.4" stroke-dasharray="4 3"\/>/g)||[];
+ const svg=out.match(/<svg class="enso-hw enso-pan-since"[\s\S]*?<\/svg>/)[0],paths=svg.match(/<path class="pan-slot" d="[^"]+"[^>]*\/>/g)||[];
  assert.equal(paths.length,2);assert.equal(paths.join('').split('H').length-1,p.precedent_2023.steps.length+p.live_2026.steps.length);
  const low=Math.min(...p.precedent_2023.steps.map(x=>x.total));assert(svg.includes('>'+low+'</text>'));assert(svg.includes('>'+p.live_2026.steps.at(-1).total+' slots</text>'));
  api.drawCharts('ensowater');assert(!ctx.charts['enso-c-panama']);

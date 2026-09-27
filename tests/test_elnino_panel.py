@@ -43,10 +43,10 @@ PANAMA_PROBE = """async () => {
     const svg = document.querySelector('.enso-pan-since');
     if (!svg) return null;
     const p = (await (await fetch('data/enso_lanes.json')).json()).data.lanes.find(l => l.id === 'panama');
-    const d = [...svg.querySelectorAll('path[stroke="#e0864a"]')].map(x => x.getAttribute('d')).join('');
+    const d = [...svg.querySelectorAll('path.pan-slot')].map(x => x.getAttribute('d')).join('');
     const cap = svg.closest('.enso-plate').querySelector('.enso-log');
     return {steps: d.split('H').length - 1, want: p.precedent_2023.steps.length + p.live_2026.steps.length,
-            years: [...svg.querySelectorAll('text')].map(t => t.textContent).filter(t => /^20\\d\\d$/.test(t)), cap: cap ? cap.textContent : ''};
+            years: [...svg.querySelectorAll('text')].map(t => t.textContent).filter(t => /^20\\d\\d(-\\d\\d)?$/.test(t)), cap: cap ? cap.textContent : ''};
 }"""
 
 NOW_PROBE = """() => {
@@ -500,8 +500,8 @@ def main() -> int:
         pan = page.evaluate(PANAMA_PROBE)
         check("every dated slot advisory is a step on the monthly chart",
               bool(pan) and pan["steps"] == pan["want"], str(pan and (pan["steps"], pan["want"])))
-        check("the monthly chart's time axis runs by calendar year through 2026",
-              bool(pan) and "2023" in pan["years"] and "2026" in pan["years"], str(pan and pan["years"]))
+        check("the Panama chart sets the last El Niño against this one",
+              bool(pan) and "2023-24" in pan["years"] and "2026" in pan["years"], str(pan and pan["years"]))
         check("the caption says where the 2023-24 line stops",
               bool(pan) and "last one it dates" in (pan["cap"] or ""), (pan or {}).get("cap", "")[:160])
 
@@ -1301,7 +1301,7 @@ def main() -> int:
                     && r.top >= box.top && r.bottom <= box.bottom;
             });
         }"""))
-        check("Stage J Panama has dated advisories and no ordinal slot chart", page.evaluate("""() => !document.getElementById('enso-c-panama') && !!document.querySelector('.enso-pan-since path[stroke="#e0864a"]')"""))
+        check("Stage J Panama has dated advisories and no ordinal slot chart", page.evaluate("""() => !document.getElementById('enso-c-panama') && !!document.querySelector('.enso-pan-since path.pan-slot')"""))
         page.set_viewport_size({"width": 1440, "height": 1000})
         page.locator('#enso-mapwrap [data-z="0"]').click()
         page.wait_for_timeout(350)
