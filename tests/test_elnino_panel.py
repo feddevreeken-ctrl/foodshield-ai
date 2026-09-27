@@ -572,8 +572,7 @@ def main() -> int:
               page.locator('#viewbtn-elnino').get_attribute('aria-selected') == 'true'
               and page.locator('#subview-elnino').evaluate("e => e.classList.contains('active')")
               and abs(page.locator('#enso-pacific').bounding_box()['y']
-                      - page.locator('#tab-elnino .content-page').bounding_box()['y'] - 120) < 5
-              and page.locator('#enso-mech-fold').evaluate('e => e.open'))
+                      - page.locator('#tab-elnino .content-page').bounding_box()['y'] - 120) < 5)
         ticks = page.locator('#enso-mech [data-ruler]')
         check("five named longitude ticks replace the scroll tour", ticks.count() == 5
               and page.locator('.tour-step').count() == 0
@@ -659,14 +658,13 @@ def main() -> int:
         page.emulate_media(reduced_motion='no-preference')
         for width, height in ((1440, 900), (1280, 800)):
             page.set_viewport_size({"width": width, "height": height})
-            # 2026-09-27: +40px for the fold summary; the explainer above now leads, this plate is the deep dive.
             check(f"mechanism fits a laptop plate at {width}px with reading below the pair",
                   page.evaluate("""() => {
                     const plate = document.querySelector('.enso-mechanism-plate').getBoundingClientRect();
                     const left = document.getElementById('enso-ruler-normal').getBoundingClientRect();
                     const right = document.getElementById('enso-ruler-figure').getBoundingClientRect();
                     const text = document.querySelector('.enso-mechanism-reading').getBoundingClientRect();
-                    return plate.height <= 860 && right.left >= left.right && Math.abs(left.top-right.top) < 2
+                    return plate.height <= 820 && right.left >= left.right && Math.abs(left.top-right.top) < 2
                         && text.top >= right.bottom && document.getElementById('enso-view-nav').getBoundingClientRect().height === 40;
                   }"""))
         page.set_viewport_size({"width":390,"height":844})
@@ -731,7 +729,8 @@ def main() -> int:
         # heights at 1440x1000 on 24 Sep 2026; adding a plate means removing or folding another.
         # Lowered 24 Sep after the duplicate displays were removed (Ocean 4.2k, Shipping 6.9k, Prices 4.9k at 1440x900).
         # 2026-09-24: Harvests gains the published-estimates plate, Shipping the freight plate.
-        CEIL = {'elnino': 4600, 'ensoharvest': 5000, 'ensowater': 7800, 'ensomoney': 5500, 'ensolive': 6100}
+        # 2026-09-27: Ocean gains the Pacific explainer; Fedde asked to keep the engraved cross-sections visible too.
+        CEIL = {'elnino': 5500, 'ensoharvest': 5000, 'ensowater': 7800, 'ensomoney': 5500, 'ensolive': 6100}
         check("no lens grows past its height ceiling", all(heights.get(k, 0) <= v for k, v in CEIL.items()), str(heights))
         # 2026-09-24: the Ocean lens leads with a dated calendar joined from the other lenses' data.
         page.evaluate("showTab('elnino')")
