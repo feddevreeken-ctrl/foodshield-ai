@@ -345,7 +345,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
  });
  test('diagram keys describe actual marks, windows and dated series',()=>{
   const analog=api.analogPlate();for(const label of ['five strongest past events','last published season','±0.5','five marked analog winters'])assert(analog.includes(label));
-  api.renderCalendar();for(const label of ['Hatched: planting','Solid: harvest','El Niño slope falls','El Niño slope rises','Tinted band: DJF','Vertical rule: this month','grows through DJF'])assert(node('enso-calendar').textContent.includes(label));
+  api.renderCalendar();for(const label of ['Outlined: planting','Filled: harvest','El Niño slope falls','El Niño slope rises','Tinted band: DJF','Vertical rule: this month','grows through DJF'])assert(node('enso-calendar').textContent.includes(label));
   assert(node('enso-calendar').innerHTML.indexOf('cal-key')<node('enso-calendar').innerHTML.indexOf('class="enso-cal"'));
   // The sign rule moved into renderDetail (stubbed in this harness); the browser gate reads it from #enso-detail.
   S.sel='ZWE';api.renderCoeffs();assert(node('enso-coeffs').textContent.includes('Fitted crop responses'));assert(node('enso-coeffs').querySelector('#enso-detail'));
