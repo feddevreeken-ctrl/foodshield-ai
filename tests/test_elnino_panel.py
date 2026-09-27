@@ -711,7 +711,8 @@ def main() -> int:
         # Lowered 24 Sep after the duplicate displays were removed (Ocean 4.2k, Shipping 6.9k, Prices 4.9k at 1440x900).
         # 2026-09-24: Harvests gains the published-estimates plate, Shipping the freight plate.
         # 2026-09-27: Ocean gains the Pacific explainer, which now carries the engraved states and the five steps (5.0k).
-        CEIL = {'elnino': 5250, 'ensoharvest': 5000, 'ensowater': 7800, 'ensomoney': 5500, 'ensolive': 6100}
+        # 2026-09-27: Prices folds the published models into the past-price plate (5.5k -> 4.7k); its cap drops to 5000.
+        CEIL = {'elnino': 5250, 'ensoharvest': 5000, 'ensowater': 7800, 'ensomoney': 5000, 'ensolive': 6100}
         check("no lens grows past its height ceiling", all(heights.get(k, 0) <= v for k, v in CEIL.items()), str(heights))
         # 2026-09-24: the Ocean lens leads with a dated calendar joined from the other lenses' data.
         page.evaluate("showTab('elnino')")
@@ -930,11 +931,11 @@ def main() -> int:
               and page.locator('#enso-c-record .enso-pp-prev').count() == 7
               and page.locator('#enso-c-ffpi, #enso-c-rtfp, #enso-c-ffpilive, #enso-money-story').count() == 0
               and page.locator('.enso-pricewatch-plate .enso-price-spark').count() >= 4)
-        # 2026-09-22: the humanitarian record sits inside the local-prices plate
-        # (#enso-people-evidence), where the damage it describes lands.
-        check("reported humanitarian need sits in the estimates plate",
-              page.locator('#subview-ensomoney figure #enso-people-evidence tr').count() >= 5
-              and 'humanitarian' in page.locator('#enso-people-evidence').inner_text().lower())
+        # 2026-09-27: the humanitarian record is its own fold at the end of Prices; the estimates fold into the past-price plate.
+        check("reported humanitarian need is its own fold; the published models sit inside the past-price plate",
+              page.locator('#subview-ensomoney #enso-people tr').count() >= 5
+              and 'humanitarian' in page.locator('#enso-people').inner_text().lower()
+              and page.locator('.enso-pastprice-plate .enso-estimates-fold tr').count() >= 5)
         page.evaluate("showTab('ensolive')")
         check("Reported board distinguishes published stories and reported assessments",
               'Everything on this board is observed' not in page.locator('#enso-live').inner_text()
