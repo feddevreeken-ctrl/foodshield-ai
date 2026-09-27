@@ -28,7 +28,7 @@ test('mechanism parts feed the Pacific explainer: live Niño 1+2, five tabs and 
  assert(V.axis.includes('120°E')&&V.axis.includes('80°W'));
  assert.equal(nodes['enso-mech'].innerHTML,'');
  const layers=['normal','elnino','lanina'].map(st=>api.crossSection(st,true));
- ['walker3','elnino3','lanina3'].forEach((name,i)=>{
+ ['walker4','elnino4','lanina3'].forEach((name,i)=>{
   assert(layers[i].includes('src="img/enso/'+name+'.webp"'));
   assert(layers[i].includes(name+'-768.webp 768w'));
   assert(layers[i].includes('width="1536" height="1024"'));
