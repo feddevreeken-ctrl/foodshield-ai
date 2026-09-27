@@ -11830,6 +11830,13 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
    min-content, and max-content pins the box to the text it holds. */
 #tab-elnino .leaflet-tooltip.enso-corridor-tip { background:rgba(11,16,23,.96); color:var(--t1); border:1px solid var(--grid); border-radius:0; padding:8px 10px; width:max-content; max-width:320px; white-space:normal; overflow-wrap:break-word; font:11.5px/1.5 'Geist',sans-serif; box-shadow:none; }
 #tab-elnino .leaflet-tooltip.enso-corridor-tip::before { display:none; }
+/* Corridor flow: dashes run origin → destination (period of the 6 4 dash is 10 px). Three cycles when the
+   Shipping lens opens, and while a corridor is hovered or keyboard-focused. */
+@keyframes corridorFlow { to { stroke-dashoffset:-20; } }
+#tab-elnino path.enso-corridor.is-flowing { animation:corridorFlow 1.6s linear 3; }
+@media (hover:hover) and (pointer:fine) { #tab-elnino path.enso-corridor:hover { animation:corridorFlow 1.6s linear infinite; } }
+#tab-elnino path.enso-corridor:focus-visible { animation:corridorFlow 1.6s linear infinite; }
+@media (prefers-reduced-motion: reduce) { #tab-elnino path.enso-corridor { animation:none !important; } }
 #tab-elnino #enso-map .leaflet-tooltip { background:rgba(11,16,23,.97); color:var(--t1); border:1px solid var(--grid); border-radius:0; box-shadow:none; padding:8px 10px; white-space:normal; width:max-content; max-width:300px; font:12px/1.45 'Geist',sans-serif; }
 #tab-elnino #enso-map .leaflet-tooltip::before { display:none; }
 #tab-elnino .leaflet-tooltip.enso-corridor-tip b { display:block; margin-bottom:3px; }
@@ -12766,7 +12773,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-ol-track { position:relative; height:22px; }
 #tab-elnino .enso-ol-track i { position:absolute; top:50%; }
 #tab-elnino .enso-ol-zero { top:0 !important; bottom:0; border-left:1px solid var(--t3); }
-#tab-elnino .enso-ol-band { height:8px; margin-top:-4px; background:rgba(235,233,226,.14); }
+#tab-elnino .enso-ol-band { height:8px; margin-top:-4px; background:rgba(235,233,226,.14); transform-origin:left center; }
 #tab-elnino .enso-ol-row.is-falls .enso-ol-band { background:rgba(201,119,58,.28); }
 #tab-elnino .enso-ol-row.is-rises .enso-ol-band { background:rgba(107,163,107,.28); }
 #tab-elnino .enso-ol-dot { width:11px; height:11px; margin:-5.5px 0 0 -5.5px; background:var(--t1); transform:rotate(45deg); }
@@ -44877,6 +44884,101 @@ function showCommodityDetail(key) {
     catch (e) { return false; }
   };
 
+  /* ── Motion that explains a plate. It plays once, when the chart first scrolls into view. Reduced motion and
+     automated browsers (the Playwright gates measure boxes) get the final state at once. The hidden start comes
+     from the animation itself (fill: backwards), never from CSS, so a chart that never plays is simply drawn. */
+  var noMotion = function () { return reduced() || !!(typeof navigator !== 'undefined' && navigator.webdriver); };
+  var EASE_OUT = 'cubic-bezier(0.23,1,0.32,1)', EASE_IO = 'cubic-bezier(0.77,0,0.175,1)';
+  var WIPE = [{ clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0% 0 0)' }], FADE = [{ opacity: 0 }, { opacity: 1 }];
+  var motionPlayed = {}, motionWatch = {};
+  function playOnce(el, key, fn) {
+    if (motionWatch[key]) { motionWatch[key].disconnect(); delete motionWatch[key]; }
+    if (!el || motionPlayed[key] || noMotion() || typeof IntersectionObserver !== 'function' || typeof el.animate !== 'function') return;
+    var io = new IntersectionObserver(function (es) {
+      if (!es.some(function (x) { return x.isIntersecting; })) return;
+      io.disconnect(); delete motionWatch[key];
+      if (motionPlayed[key] || !el.isConnected) return;
+      motionPlayed[key] = true; fn(el);
+    }, { rootMargin: '0px 0px -20% 0px' });
+    motionWatch[key] = io; io.observe(el);
+  }
+  function ensoAnim(node, frames, opts) { if (node && typeof node.animate === 'function') node.animate(frames, Object.assign({ fill: 'backwards' }, opts)); }
+  var each = function (root, sel, fn) { if (root && typeof root.querySelectorAll === 'function') Array.prototype.forEach.call(root.querySelectorAll(sel), fn); };
+  var one = function (root, sel) { return root && typeof root.querySelector === 'function' ? root.querySelector(sel) : null; };
+  /* Gatún: every past dry season starts at its own low, then slides to where it sits once shifted to this
+     year's level (what the caption says was done); then the fitted line, then the 2027 projection. */
+  function animGatun(root) {
+    var svg = one(root, '.enso-gatun-fit'); if (!svg) return;
+    playOnce(svg, 'gatunfit', function () {
+      each(svg, '[data-dy]', function (n, i) {
+        var dy = parseFloat(n.getAttribute('data-dy')) || 0;
+        ensoAnim(n, [{ transform: 'translate(0px,' + dy + 'px)' }, { transform: 'translate(0px,0px)' }], { duration: 700, delay: Math.min(i * 5, 400), easing: EASE_IO });
+      });
+      ensoAnim(one(svg, '.enso-gfit-line'), WIPE, { duration: 500, delay: 1000, easing: EASE_OUT });
+      ensoAnim(one(svg, '.enso-gfit-proj'), FADE, { duration: 200, delay: 1450, easing: EASE_OUT });
+    });
+  }
+  /* Published effects: the peak first, then each region's window from its start, in order of lag. */
+  function animPubfx(root) {
+    var fig = one(root, '.enso-pubfx-plate'); if (!fig) return;
+    playOnce(fig, 'pubfx', function () {
+      each(fig, '.pf-peak', function (n) { ensoAnim(n, FADE, { duration: 150, easing: EASE_OUT }); });
+      each(fig, '.pf-row', function (r, i) {
+        var d = 150 + Math.min(i * 50, 800);
+        ensoAnim(one(r, '.pf-bar'), WIPE, { duration: 450, delay: d, easing: EASE_OUT });
+        each(r, '.pf-model', function (m) { ensoAnim(m, WIPE, { duration: 450, delay: d + 120, easing: EASE_OUT }); });
+      });
+    });
+  }
+  /* Who pays: each producer's shortfall fills at one speed on the shared scale (a bigger shortfall takes
+     longer), crossing from its own imports into each buyer's share; the range marks follow. */
+  function animWhoPays(root) {
+    var tbl = one(root, '.enso-wp-table'); if (!tbl) return;
+    playOnce(tbl, 'whopays', function () {
+      each(tbl, '.enso-wp-row.is-flow:not(.enso-wp-head)', function (r, i) {
+        var at = Math.min(i * 80, 640);
+        each(r, '.enso-wp-stack > span', function (n) {
+          var d = Math.max(40, 9 * (parseFloat(n.style.width) || 0));
+          ensoAnim(n, WIPE, { duration: d, delay: at, easing: 'linear' }); at += d;
+        });
+        each(r, '.enso-wp-range, .enso-wp-obs', function (m) { ensoAnim(m, FADE, { duration: 180, delay: at, easing: EASE_OUT }); });
+      });
+    });
+  }
+  /* Flipping the outlook's scenario moves each harvest's diamond, ring and 90% band from the old case to the
+     new one instead of redrawing them in place. Runs on every flip. */
+  var OL_MARKS = ['.enso-ol-dot', '.enso-ol-ring', '.enso-ol-band'];
+  function olSnap(el) {
+    var snap = {}; if (noMotion()) return snap;
+    each(el, '.enso-ol-row[data-k]', function (r) { OL_MARKS.forEach(function (s) { var n = one(r, s); if (n) snap[r.getAttribute('data-k') + s] = n.getBoundingClientRect(); }); });
+    return snap;
+  }
+  function olMorph(el, snap) {
+    if (noMotion() || typeof getComputedStyle !== 'function') return;
+    each(el, '.enso-ol-row[data-k]', function (r) {
+      OL_MARKS.forEach(function (s) {
+        var n = one(r, s), a = snap[r.getAttribute('data-k') + s]; if (!n || !a || typeof n.animate !== 'function') return;
+        var b = n.getBoundingClientRect(); if (!b.width) return;
+        var base = getComputedStyle(n).transform; base = base && base !== 'none' ? base : '';
+        var from = s === '.enso-ol-band' ? 'translateX(' + (a.left - b.left).toFixed(1) + 'px) scaleX(' + (a.width / b.width).toFixed(3) + ')'
+          : 'translateX(' + ((a.left + a.width / 2) - (b.left + b.width / 2)).toFixed(1) + 'px) ' + base;
+        n.animate([{ transform: from }, { transform: base || 'none' }], { duration: 240, easing: EASE_OUT });
+      });
+    });
+  }
+  /* Opening the Shipping lens runs each corridor's dashes toward its destination for three cycles (under 5 s). */
+  function flowCorridors() {
+    if (S.corridorFlowed || noMotion()) return;
+    var els = S.corridorLines.map(function (l) { return typeof l.getElement === 'function' ? l.getElement() : null; }).filter(function (p) { return p && p.classList && p.addEventListener; });
+    if (!els.length) return;
+    S.corridorFlowed = true;
+    els.forEach(function (p) {
+      p.classList.remove('is-flowing'); p.getBoundingClientRect();
+      p.classList.add('is-flowing');
+      p.addEventListener('animationend', function () { p.classList.remove('is-flowing'); }, { once: true });
+    });
+  }
+
   var keyFor = function (oni) {
     var best = publishedLevels()[0] || [null, null, 'Unavailable'];
     for (var i = 0; i < publishedLevels().length; i++)
@@ -45529,7 +45631,7 @@ function showCommodityDetail(key) {
   }
   function renderOutlook() {
     var el = document.getElementById('enso-outlook'); if (!el) return;
-    if (!el._olWired && el.addEventListener) { el._olWired = true; el.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('[data-ol-scen]'); if (!b) return; S.olScen = b.getAttribute('data-ol-scen'); renderOutlook(); var nb = el.querySelector('[data-ol-scen="' + S.olScen + '"]'); if (nb) nb.focus(); }); }
+    if (!el._olWired && el.addEventListener) { el._olWired = true; el.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('[data-ol-scen]'); if (!b) return; var snap = olSnap(el); S.olScen = b.getAttribute('data-ol-scen'); renderOutlook(); olMorph(el, snap); var nb = el.querySelector('[data-ol-scen="' + S.olScen + '"]'); if (nb) nb.focus(); }); }
     var O = S.outlook;
     if (!O || !O.rows_all) { el.innerHTML = ''; return; }
     var obs = O.cases.observed, rec = O.cases.record;
@@ -45595,7 +45697,7 @@ function showCommodityDetail(key) {
       chartRows.map(function (f) {
         var v = g(f, 'change_pct'), va = f['change_pct_' + ALT], b90 = f['change_pct_' + K + '_90'] || [v, v], h = hindcastOf(f.iso, f.crop);
         var rough = h && (h.sign_right * 2 <= h.events || !h.beats_no_change);
-        return '<div class="enso-ol-row' + (v < 0 ? ' is-falls' : ' is-rises') + '" role="row">' +
+        return '<div class="enso-ol-row' + (v < 0 ? ' is-falls' : ' is-rises') + '" role="row" data-k="' + esc(f.iso + '/' + f.crop) + '">' +
           '<div class="enso-ol-who" role="rowheader"><button type="button" data-map-country="' + esc(f.iso) + '">' + esc(nameFor(f.iso)) + '</button> ' + esc(crop(f.crop)) + '<span>' + esc(f.harvest) + '</span></div>' +
           '<div class="enso-ol-track" role="cell"><i class="enso-ol-zero" style="left:' + P(0) + '"></i><i class="enso-ol-band" style="left:' + P(b90[0]) + ';width:calc(' + P(b90[1]) + ' - ' + P(b90[0]) + ')"></i>' +
             (typeof va === 'number' ? '<i class="enso-ol-ring" style="left:' + P(va) + '"></i>' : '') + '<i class="enso-ol-dot" style="left:' + P(v) + '"></i></div>' +
@@ -45743,6 +45845,7 @@ function showCommodityDetail(key) {
       var t = function (e) { if (e.target.closest('a')) return; var o = !r.classList.contains('is-open'); r.classList.toggle('is-open', o); r.setAttribute('aria-expanded', String(o)); };
       r.onclick = t; r.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); t(e); } };
     });
+    animPubfx(el);
   }
   function renderCalendar() {
     var el = document.getElementById('enso-calendar'); if (!el) return;
@@ -48255,6 +48358,7 @@ function showCommodityDetail(key) {
       if (S.showLanes) o.addTo(S.map); else S.map.removeLayer(o);
     });
     placeChokepointLabels();
+    if (S.showLanes) flowCorridors();
   }
   function flyTo(iso) {
     if (!S.map || !iso || !S.layerBase) return;
@@ -49774,15 +49878,15 @@ function showCommodityDetail(key) {
     if (lad.length) { var lo = Math.min.apply(null, lad.map(function (r) { return r.lake_ft; })), hi = Math.max.apply(null, lad.map(function (r) { return r.lake_ft; }));
       band = '<rect x="' + L0 + '" y="' + Y(hi).toFixed(1) + '" width="' + (R0 - L0) + '" height="' + Math.max(2, Y(lo) - Y(hi)).toFixed(1) + '" fill="rgba(143,177,207,.12)"/><text x="' + (L0 + 6) + '" y="' + (Y(hi) - 4).toFixed(1) + '" class="enso-hw-t" fill="#8fb1cf">2023-24: 22–25 slots a day at these levels</text>'; }
     var rec = '<line x1="' + L0 + '" x2="' + R0 + '" y1="' + Y(D.record_ft).toFixed(1) + '" y2="' + Y(D.record_ft).toFixed(1) + '" stroke="#8b8980" stroke-dasharray="3 3"/><text x="' + (R0 - 4) + '" y="' + (Y(D.record_ft) + 13).toFixed(1) + '" text-anchor="end" class="enso-hw-t">record low ' + D.record_ft.toFixed(1) + ' ft (' + D.record_season + ')</text>';
-    var fit = '<path d="M' + X(xLo).toFixed(1) + ',' + Y(fitAt(xLo)).toFixed(1) + ' L' + X(0).toFixed(1) + ',' + Y(fitAt(0)).toFixed(1) + ' L' + X(xHi).toFixed(1) + ',' + Y(fitAt(xHi)).toFixed(1) + '" fill="none" stroke="#e0864a" stroke-width="1.6" stroke-dasharray="6 4"/>';
+    var fit = '<path class="enso-gfit-line" d="M' + X(xLo).toFixed(1) + ',' + Y(fitAt(xLo)).toFixed(1) + ' L' + X(0).toFixed(1) + ',' + Y(fitAt(0)).toFixed(1) + ' L' + X(xHi).toFixed(1) + ',' + Y(fitAt(xHi)).toFixed(1) + '" fill="none" stroke="#e0864a" stroke-width="1.6" stroke-dasharray="6 4"/>';
     var named = { 1983: 1, 1998: 1, 2016: 1, 2024: 1 };
-    var dots = adj.map(function (p) { var big = p.o >= 1.5; return '<circle cx="' + X(p.o).toFixed(1) + '" cy="' + Y(p.v).toFixed(1) + '" r="' + (big ? 3.6 : 2.6) + '" fill="' + (big ? '#ebe9e2' : '#56606b') + '"><title>' + (p.s - 1) + '-' + String(p.s).slice(2) + ': Dec-Feb ONI ' + num(p.o, 2) + ', low ' + p.raw.toFixed(2) + ' ft</title></circle>' +
-      (named[p.s] ? '<text x="' + (X(p.o) + 6).toFixed(1) + '" y="' + (Y(p.v) + 4).toFixed(1) + '" class="enso-hw-t">' + (p.s - 1) + '-' + String(p.s).slice(2) + '</text>' : ''); }).join('');
+    var dots = adj.map(function (p) { var big = p.o >= 1.5, dy = ' data-dy="' + (Y(p.raw) - Y(p.v)).toFixed(1) + '"'; return '<circle' + dy + ' cx="' + X(p.o).toFixed(1) + '" cy="' + Y(p.v).toFixed(1) + '" r="' + (big ? 3.6 : 2.6) + '" fill="' + (big ? '#ebe9e2' : '#56606b') + '"><title>' + (p.s - 1) + '-' + String(p.s).slice(2) + ': Dec-Feb ONI ' + num(p.o, 2) + ', low ' + p.raw.toFixed(2) + ' ft</title></circle>' +
+      (named[p.s] ? '<text' + dy + ' x="' + (X(p.o) + 6).toFixed(1) + '" y="' + (Y(p.v) + 4).toFixed(1) + '" class="enso-hw-t">' + (p.s - 1) + '-' + String(p.s).slice(2) + '</text>' : ''); }).join('');
     var px = X(fc.median || (cpc ? cpc.oni : 2.5));
-    var proj = '<line x1="' + px.toFixed(1) + '" x2="' + px.toFixed(1) + '" y1="' + Y(D.p95).toFixed(1) + '" y2="' + Y(D.p05).toFixed(1) + '" stroke="#e0864a" stroke-width="1.2"/>' +
+    var proj = '<g class="enso-gfit-proj"><line x1="' + px.toFixed(1) + '" x2="' + px.toFixed(1) + '" y1="' + Y(D.p95).toFixed(1) + '" y2="' + Y(D.p05).toFixed(1) + '" stroke="#e0864a" stroke-width="1.2"/>' +
       '<rect x="' + (px - 5).toFixed(1) + '" y="' + Y(D.p90).toFixed(1) + '" width="10" height="' + (Y(D.p10) - Y(D.p90)).toFixed(1) + '" fill="rgba(224,134,74,.35)" stroke="#e0864a"/>' +
       '<rect x="' + (px - 4).toFixed(1) + '" y="' + (Y(D.p50) - 4).toFixed(1) + '" width="8" height="8" fill="#e0864a" transform="rotate(45 ' + px.toFixed(1) + ' ' + Y(D.p50).toFixed(1) + ')"/>' +
-      '<text x="' + (px + 10).toFixed(1) + '" y="' + (Y(D.p50) + 4).toFixed(1) + '" class="enso-hw-t" fill="#e0864a">2027: ' + D.p50.toFixed(1) + ' ft</text>';
+      '<text x="' + (px + 10).toFixed(1) + '" y="' + (Y(D.p50) + 4).toFixed(1) + '" class="enso-hw-t" fill="#e0864a">2027: ' + D.p50.toFixed(1) + ' ft</text></g>';
     var svg = '<svg class="enso-hw enso-gatun-fit" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Past dry-season lows of Gatún Lake against the December–February ONI, the fitted line at this year’s level and the 2027 projection">' +
       grid + band + rec + fit + dots + proj +
       '<text x="' + ((L0 + R0) / 2) + '" y="' + (H - 4) + '" text-anchor="middle" class="enso-hw-t">December–February ONI, °C</text></svg>';
@@ -50036,6 +50140,7 @@ function showCommodityDetail(key) {
           (ln.sources || []).map(function (src) { return '<p><a href="' + esc(safeUrl(src.url)) + '" target="_blank" rel="noopener">' + esc(src.label) + '</a></p>'; }).join('') + '</div></div></details></td></tr>';
       }).join('') + '</tbody></table>' + (lanes.length > 3 ? '</details>' : '') + '</div><figcaption class="enso-log">Attribution describes each lane’s mechanism; today’s transit changes have several causes.</figcaption></figure></details>';
     el.innerHTML = laneBoard(lanes, readOn) + out;
+    animGatun(el);
     el.querySelectorAll('[data-board-lane]').forEach(function (row) {
       row.onclick = function () {
         var id = row.dataset.boardLane, lane = lanes.find(function (ln) { return ln.id === id; });
@@ -50123,6 +50228,7 @@ function showCommodityDetail(key) {
       '<p>Priced at the World Bank benchmark: ' + basis + '' + (yy != null ? '. World maize is already ' + Math.round(yy) + '% above a year earlier, which is not attributed here to El Niño' : '') +
       '. Published estimates of the El Niño effect on world grain prices run from none to small; at +9%, the upper published estimate for food commodities (ECB Economic Bulletin 6/2023), the bills rise by about a tenth.</p></details></figure>';
     el.querySelectorAll('[data-map-country]').forEach(function (b) { b.onclick = function () { ensoFocus(b.getAttribute('data-map-country')); }; });
+    animWhoPays(el);
   }
   /* ── Which prices to watch, and when ──────────────────────────────────
      Joins, not forecasts: for each commodity, the fit's shortfalls and their
@@ -51259,6 +51365,7 @@ function showCommodityDetail(key) {
   window.ensoInit = async function (sub) {
     var mechanismAlias = sub === 'ensomech', prevSub = S.sub;
     S.sub = mechanismAlias ? 'elnino' : sub || 'elnino';
+    if (prevSub !== S.sub) S.corridorFlowed = false;
     /* Like the other content tabs, .content-page owns scrolling; #main is
        clipped. Reset that scroller on view changes; the mechanism alias
        scrolls to its own target beneath the sticky instrument bar. */
