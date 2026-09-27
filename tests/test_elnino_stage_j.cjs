@@ -8,12 +8,12 @@ const node=id=>nodes[id]||(nodes[id]={innerHTML:'',style:{},setAttribute(){},que
 let plot=null;
 const ctx=vm.createContext({console,Date,URL,URLSearchParams,charts:{},window:{location:{href:'http://localhost',search:''}},document:{addEventListener(){},getElementById:node,querySelector(){return plot;}}});
 vm.runInContext(html.slice(start,end)+`
- globalThis.api={S,renderIndices,renderLegend,coverageColor,fillFor,placeChokepointLabels,analogPlate,alignAnalogLeaders,drawCharts,renderMoney,rtfpColor,oceanHeading};
+ globalThis.api={S,panamaSincePlate,renderIndices,renderLegend,coverageColor,fillFor,placeChokepointLabels,analogPlate,alignAnalogLeaders,drawCharts,renderMoney,rtfpColor,oceanHeading};
  mk=function(id,cfg){if(!S._chartFilter||S._chartFilter.indexOf(id)>=0)globalThis.charts[id]=cfg;};
  syncInstruments=renderMapRanking=renderMapTag=compactLegend=function(){};
 })();`,ctx);
 const api=ctx.api,S=api.S;
-for(const [key,file] of Object.entries({indices:'enso_indices',enso:'enso',regions:'enso_regions',lanes:'enso_lanes',rtfp:'rtfp',exp:'enso_exposure',econ:'enso_econ',mech:'enso_mechanism',bulletins:'enso_bulletins'})){
+for(const [key,file] of Object.entries({indices:'enso_indices',enso:'enso',regions:'enso_regions',lanes:'enso_lanes',rtfp:'rtfp',exp:'enso_exposure',econ:'enso_econ',mech:'enso_mechanism',bulletins:'enso_bulletins',pwhist:'portwatch_history',gauges:'enso_gauges'})){
  const feed=JSON.parse(fs.readFileSync('data/'+file+'.json'));S[key]=feed.data;S.meta[key]=feed._meta;
 }
 const tele=new Set(S.regions.regions.flatMap(r=>r.iso3));S.isoIndex={};tele.forEach(iso=>S.isoIndex[iso]=[{}]);
@@ -68,12 +68,12 @@ test('measured labels stay inside a phone plate and clear graticule text on repe
  }
  S.showLanes=false;
 });
-test('Panama plots every dated advisory and no empty normal category',()=>{
- api.drawCharts('ensowater');const c=ctx.charts['enso-c-panama'],p=S.lanes.lanes.find(l=>l.id==='panama');
+test('Panama plots every dated advisory and no undated normal step',()=>{
+ const p=S.lanes.lanes.find(l=>l.id==='panama');
  assert.equal(p.precedent_2023.normal_transits_per_day,undefined);
- assert.equal(c.data.labels.length,p.precedent_2023.steps.length+p.live_2026.steps.length);
- assert(c.data.labels.every((l,i)=>!l.includes('normal')&&c.data.datasets.some(ds=>ds.data[i]!=null)));
- assert.deepEqual(Array.from(c.data.datasets[0].data.slice(0,p.precedent_2023.steps.length)),p.precedent_2023.steps.map(s=>s.total));
+ const svg=(api.panamaSincePlate(p).match(/<svg class="enso-hw enso-pan-since"[\s\S]*?<\/svg>/)||[''])[0];
+ const d=(svg.match(/<path d="([^"]+)" fill="none" stroke="#e0864a"/g)||[]).join('');
+ assert.equal(d.split('H').length-1,p.precedent_2023.steps.length+p.live_2026.steps.length);
 });
 test('all five analog connectors end exactly at measured label edges after resize',()=>{
  const out=api.analogPlate();assert.equal((out.match(/class="enso-analog-past"/g)||[]).length,5);

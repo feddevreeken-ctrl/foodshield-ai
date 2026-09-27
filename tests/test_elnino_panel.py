@@ -39,12 +39,14 @@ STRIP_PROBE = """() => {
             textInSvg: svg.querySelectorAll('text').length};
 }"""
 
-PANAMA_PROBE = """() => {
-    const cv = document.getElementById('enso-c-panama');
-    const ch = cv && window.Chart && Chart.getChart ? Chart.getChart(cv) : null;
-    if (!ch) return null;
-    const cap = cv.closest('.enso-plate').querySelector('.enso-chart-notes');
-    return {labels: ch.data.labels, cap: cap ? cap.textContent : ''};
+PANAMA_PROBE = """async () => {
+    const svg = document.querySelector('.enso-pan-since');
+    if (!svg) return null;
+    const p = (await (await fetch('data/enso_lanes.json')).json()).data.lanes.find(l => l.id === 'panama');
+    const d = [...svg.querySelectorAll('path[stroke="#e0864a"]')].map(x => x.getAttribute('d')).join('');
+    const cap = svg.closest('.enso-plate').querySelector('.enso-log');
+    return {steps: d.split('H').length - 1, want: p.precedent_2023.steps.length + p.live_2026.steps.length,
+            years: [...svg.querySelectorAll('text')].map(t => t.textContent).filter(t => /^20\\d\\d$/.test(t)), cap: cap ? cap.textContent : ''};
 }"""
 
 NOW_PROBE = """() => {
@@ -491,17 +493,17 @@ def main() -> int:
         check("no feed link escapes the http(s) allow-list",
               all(h.startswith("http") for h in hrefs) if hrefs else True, str(hrefs[:3]))
 
-        print("\nthe Panama step chart does not fake elapsed time")
+        print("\nthe Panama slot limits sit in true time")
         page.goto(f"{base}/index.html?tab=ensowater", wait_until="networkidle")
-        page.wait_for_selector("#enso-c-panama", timeout=20_000)
+        page.wait_for_selector(".enso-pan-since", timeout=20_000)
         page.wait_for_timeout(2000)
         pan = page.evaluate(PANAMA_PROBE)
-        check("step labels show plain advisory dates",
-              bool(pan) and all("+" not in l and "yr" not in l for l in pan["labels"]), str(pan and pan["labels"]))
-        check("the latest advisory year remains explicit",
-              bool(pan) and "26" in pan["labels"][-1], str(pan and pan["labels"]))
-        check("the caption says the axis is ordinal",
-              bool(pan) and "not to scale in time" in (pan["cap"] or ""), (pan or {}).get("cap", "")[:120])
+        check("every dated slot advisory is a step on the monthly chart",
+              bool(pan) and pan["steps"] == pan["want"], str(pan and (pan["steps"], pan["want"])))
+        check("the monthly chart's time axis runs by calendar year through 2026",
+              bool(pan) and "2023" in pan["years"] and "2026" in pan["years"], str(pan and pan["years"]))
+        check("the caption says where the 2023-24 line stops",
+              bool(pan) and "last one it dates" in (pan["cap"] or ""), (pan or {}).get("cap", "")[:160])
 
         # Back to the view the layout checks below were written against — they
         # measure the news rail and bulletin strip, which only exist there.
@@ -656,7 +658,7 @@ def main() -> int:
         }"""))
         page.set_viewport_size({"width": 1440, "height": 1000})
         page.locator('#viewbtn-ensowater').click()
-        page.wait_for_selector('#subview-ensowater.active #enso-c-panama')
+        page.wait_for_selector('#subview-ensowater.active .enso-pan-since')
         page.locator('#viewbtn-ensowater').focus()
         page.keyboard.press('ArrowRight')
         page.wait_for_selector('#subview-ensomoney.active #enso-c-record')
@@ -712,7 +714,10 @@ def main() -> int:
         # 2026-09-24: Harvests gains the published-estimates plate, Shipping the freight plate.
         # 2026-09-27: Ocean gains the Pacific explainer, which now carries the engraved states and the five steps (5.0k).
         # 2026-09-27: Prices folds the published models into the past-price plate (5.5k -> 4.7k); its cap drops to 5000.
-        CEIL = {'elnino': 5250, 'ensoharvest': 5000, 'ensowater': 7800, 'ensomoney': 5000, 'ensolive': 6100}
+        # 2026-09-27 (later): Shipping folds the ordinal slot chart into the monthly Panama chart and the freight plate
+        # into the river chain (7.4k -> 6.9k), so its cap drops to 7300; Prices gains the southern-Africa maize analog
+        # from FPMA (+0.6k) and pays part of it back: prices beside their sparklines, a one-line map key (5.26k), cap 5400.
+        CEIL = {'elnino': 5250, 'ensoharvest': 5000, 'ensowater': 7300, 'ensomoney': 5400, 'ensolive': 6100}
         check("no lens grows past its height ceiling", all(heights.get(k, 0) <= v for k, v in CEIL.items()), str(heights))
         # 2026-09-24: the Ocean lens leads with a dated calendar joined from the other lenses' data.
         page.evaluate("showTab('elnino')")
@@ -836,32 +841,33 @@ def main() -> int:
               and page.locator('#enso-limits #enso-gate').count() == 1
               and 'How to read' in page.locator('#enso-limits summary').first.text_content())
         page.evaluate("showTab('ensowater')")
-        page.wait_for_selector('#subview-ensowater.active #enso-c-panama')
+        page.wait_for_selector('#subview-ensowater.active .enso-pan-since')
         water = page.evaluate("""() => {
-            const slot = document.getElementById('enso-c-panama'), ais = document.getElementById('enso-c-panama-daily');
+            const slot = document.querySelector('.enso-pan-since'), ais = document.getElementById('enso-c-panama-daily');
             return {lead: !!(slot.compareDocumentPosition(ais) & Node.DOCUMENT_POSITION_FOLLOWING),
                     slot: slot.closest('figure').dataset.kind, ais: ais.closest('figure').dataset.kind,
                     source: ais.closest('figure').querySelector('.enso-plate-sub').textContent};
         }""")
         history = page.evaluate("async () => (await (await fetch('data/portwatch_history.json')).json()).data.chokepoints.panama.dates")
         lane_count = page.evaluate("async () => (await (await fetch('data/enso_lanes.json')).json()).data.lanes.length")
-        check("published Panama limits lead observed AIS with its actual coverage",
-              water['lead'] and water['slot'] == 'published' and water['ais'] == 'observed'
+        check("the monthly Panama chart with its slot limits leads the daily AIS with its actual coverage",
+              water['lead'] and water['slot'] == 'observed' and water['ais'] == 'observed'
               and iso_text(history[0]) in water['source'] and iso_text(history[-1]) in water['source'])
         board_slots = page.evaluate("async () => (await (await fetch('data/enso_lanes.json')).json()).data.lanes.find(l => l.id === 'panama').live_2026.steps.at(-1).total")
         check("Shipping leads with nine lane answers sourced from the current JSON",
               page.locator('.enso-status-table tbody tr').count() == 9
               and f'{board_slots} slots/day' in page.locator('[data-board-lane="panama"]').inner_text())
-        check("Panama charts share one plate and sit side by side on laptop", page.evaluate("""() => {
-            const pair = document.querySelector('.enso-panama-pair'), panels = pair.querySelectorAll(':scope > figure');
-            return panels.length === 2 && panels[1].getBoundingClientRect().left >= panels[0].getBoundingClientRect().right;
+        check("Panama reads month by month with its slot limits, then day by day at full width", page.evaluate("""() => {
+            const a = document.querySelector('.enso-pansince-plate'), b = document.querySelector('.enso-panama-daily');
+            return !!a && !!b && a.getBoundingClientRect().bottom <= b.getBoundingClientRect().top + 1
+                && Math.abs(a.getBoundingClientRect().width - b.getBoundingClientRect().width) < 2 && !document.querySelector('.enso-panama-pair');
         }"""))
         # Shipping logic (2026-09-23): every lane gets a stated outlook, the gauges
         # print the agencies' own latest readings, and Gatún is read against its record.
         check("Shipping gives every lane an outlook and prints each gauge's latest reading", page.evaluate("""async () => {
             const G = (await (await fetch('data/enso_gauges.json')).json()).data.gauges;
             const verdicts = [...document.querySelectorAll('.enso-status-table .enso-lane-verdict b')].map(b => b.textContent);
-            const cards = [...document.querySelectorAll('.enso-gauge .enso-gauge-v b')].map(b => parseFloat(b.textContent));
+            const cards = [...document.querySelectorAll('.enso-gauge:not(.is-freight) .enso-gauge-v b')].map(b => parseFloat(b.textContent));
             const want = ['stlouis', 'barge_stlouis', 'gulf_loadings', 'kaub', 'rosario', 'manaus'].filter(k => G[k]).map(k => G[k].latest.value);
             const g = Chart.getChart(document.getElementById('enso-c-gatun'));
             const labels = g ? g.data.datasets.map(d => d.label) : [];
@@ -1295,12 +1301,7 @@ def main() -> int:
                     && r.top >= box.top && r.bottom <= box.bottom;
             });
         }"""))
-        check("Stage J Panama has dated advisories without an empty normal category", page.evaluate("""async () => {
-            const c = Chart.getChart(document.getElementById('enso-c-panama'));
-            const p = (await (await fetch('data/enso_lanes.json')).json()).data.lanes.find(l => l.id === 'panama');
-            return c.data.labels.length === p.precedent_2023.steps.length + p.live_2026.steps.length
-                && c.data.labels.every((label,i) => !label.includes('normal') && c.data.datasets.some(ds => ds.data[i] != null));
-        }"""))
+        check("Stage J Panama has dated advisories and no ordinal slot chart", page.evaluate("""() => !document.getElementById('enso-c-panama') && !!document.querySelector('.enso-pan-since path[stroke="#e0864a"]')"""))
         page.set_viewport_size({"width": 1440, "height": 1000})
         page.locator('#enso-mapwrap [data-z="0"]').click()
         page.wait_for_timeout(350)

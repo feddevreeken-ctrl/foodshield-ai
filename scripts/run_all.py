@@ -72,6 +72,7 @@ import refresh_fews
 import refresh_hapi_idps   # v43 — HDX HAPI internal displacement (new nowcast signal)
 import refresh_trade_restrictions
 import refresh_fpma_prices      # FAO GIEWS FPMA: staple-food price YoY, ~125 countries, monthly
+import refresh_enso_price_analogs  # FAO GIEWS FPMA: southern African maize, real prices, around past El Niños
 import refresh_giews_crea       # FAO GIEWS countries requiring external assistance (3x/yr list)
 import refresh_imf_food_cpi     # IMF CPI food (CP01) YoY, monthly, fresher than FAOSTAT's CPI
 import refresh_commodity_news   # v46 — GDELT + EC RSS commodity headlines (claims, not data)
@@ -149,6 +150,7 @@ STEPS = [
     # Official market-price and crisis-list feeds (2026-09). Keyless, fail-safe,
     # run before "Countries dataset" so a future consumer there sees this cycle's rows.
     ("FAO GIEWS FPMA prices",  refresh_fpma_prices.main,        "fpma_prices.json"),
+    ("FPMA El Niño analogs",   refresh_enso_price_analogs.main, "enso_price_analogs.json"),
     ("FAO GIEWS CREA list",    refresh_giews_crea.main,         "giews_crea.json"),
     ("IMF food CPI",           refresh_imf_food_cpi.main,       "imf_food_cpi.json"),
     ("FX rates (v23)",         refresh_fx.main,                 "fx_rates.json"),
