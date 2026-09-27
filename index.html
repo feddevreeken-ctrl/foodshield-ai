@@ -13018,6 +13018,8 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-pp-after > b { display:block; margin:14px 0 4px; font:500 13px 'Geist',sans-serif; color:var(--t1); }
 #tab-elnino .enso-pp-after .enso-bullets { font-size:13px; }
 #tab-elnino .plate-body > .enso-bullets + .enso-pp-legend, #tab-elnino .plate-body > .enso-bullets + [class*=legend] { margin-top:10px; }
+#tab-elnino .enso-rank-inline button { min-height:0 !important; min-width:0 !important; padding:0 !important; display:inline; }
+#tab-elnino .enso-rank-inline { line-height:1.7; }
 #tab-elnino .enso-pan-since .is-halo { paint-order:stroke; stroke:var(--plate, #10151c); stroke-width:4px; stroke-linejoin:round; }
 #tab-elnino .enso-hc-svg { display:block; width:100%; max-width:760px; height:auto; margin:8px 0; }
 #tab-elnino .enso-hc-body { padding:8px 0 4px; }
@@ -47709,7 +47711,8 @@ function showCommodityDetail(key) {
     if (!el || !body) return;
     var reported = S.sub === 'ensolive';
     var staple = !reported && S.mode === 'staple';
-    var prices = !reported && S.mode === 'rtfp', visible = prices || staple || reported || S.mode === 'asap';
+    var harvest = S.sub === 'ensoharvest' && (S.mode === 'impact' || S.mode === 'crop');
+    var prices = !reported && S.mode === 'rtfp', visible = prices || staple || reported || S.mode === 'asap' || harvest;
     var changed = body.classList.contains('has-ranking') !== visible;
     body.classList.toggle('has-ranking', visible); el.hidden = !visible;
     if (visible) {
@@ -47776,7 +47779,27 @@ function showCommodityDetail(key) {
             (isos.length > 8 ? '<details class="enso-rank-more"><summary>' + (isos.length - 8) + ' more countries</summary><ol class="enso-rank-list" start="9">' + isos.slice(8).map(rowOf).join('') + '</ol></details>' : '')
             : '<p class="enso-rank-note">No hazard report, crisis classification or headline for an El Niño country in the loaded feeds.</p>');
       }
-      if (!prices && !reported && !staple) {
+      if (harvest) {
+        /* Every country the layer colours, largest fitted change first; then the countries the published
+           regions name where the fit is silent (hatched on the map). */
+        var crop2 = function (c) { return { corn: 'maize' }[c] || c; };
+        var valOf = function (iso) {
+          if (S.mode === 'crop') { var b = strongestCrop(iso); return b ? { v: cropEffect(b.c), meta: crop2(b.crop) + (b.shared ? ' · shared with the IOD' : '') } : null; }
+          var d = rowFor(iso); if (!d || !d.cov || typeof d.lv.production_shock_pct !== 'number') return null;
+          var b2 = strongestCrop(iso); return { v: d.lv.production_shock_pct, meta: 'production' + (b2 ? ' · strongest: ' + crop2(b2.crop) + ' ' + num(Math.round(cropEffect(b2.c)), 0) + '%' : '') };
+        };
+        var fitted = Object.keys(S.model || {}).map(function (iso) { var x = valOf(iso); return x ? { iso: iso, v: x.v, meta: x.meta } : null; }).filter(Boolean)
+          .sort(function (a, b) { return Math.abs(b.v) - Math.abs(a.v); });
+        var fittedSet = {}; fitted.forEach(function (f) { fittedSet[f.iso] = 1; });
+        var pub = ensoTeleIsos().filter(function (i) { return !fittedSet[i] && outSign(i); });
+        var hrow = function (f) { var vv = Math.round(f.v);
+          return '<li><button type="button" data-map-country="' + esc(f.iso) + '" aria-pressed="' + (S.sel === f.iso) + '"><span class="enso-rank-main"><b>' + esc(nameFor(f.iso)) + '</b><span class="enso-rank-value" style="color:' + (vv < 0 ? '#e0864a' : vv > 0 ? '#8fc79a' : 'var(--t2)') + '">' + (vv > 0 ? '+' : vv < 0 ? '−' : '') + Math.abs(vv) + '%</span></span><span class="enso-rank-meta">' + esc(f.meta) + '</span></button></li>'; };
+        el.innerHTML = '<div class="enso-legend-t">' + (S.mode === 'crop' ? 'Fitted crop' : 'Fitted production') + ' at ONI ' + num(modelOni(), 1) + ' · ' + fitted.length + ' countries</div>' +
+          '<ol class="enso-rank-list">' + fitted.slice(0, 8).map(hrow).join('') + '</ol>' +
+          (fitted.length > 8 ? '<details class="enso-rank-more"><summary>' + (fitted.length - 8) + ' more</summary><ol class="enso-rank-list" start="9">' + fitted.slice(8).map(hrow).join('') + '</ol></details>' : '') +
+          (pub.length ? '<details class="enso-rank-more"><summary>Published effect only, no fitted signal · ' + pub.length + ' countries (hatched)</summary><p class="enso-rank-missing enso-rank-inline">' + pub.map(function (iso) { return '<button type="button" data-map-country="' + esc(iso) + '" aria-pressed="' + (S.sel === iso) + '">' + esc(nameFor(iso)) + '</button>'; }).join(', ') + '</p></details>' : '');
+      }
+      if (!prices && !reported && !staple && !harvest) {
         var hotspots = rankedHotspots();
         el.innerHTML = '<div class="enso-legend-t">ASAP hotspots (crops, rangeland) · ' + hotspots.length + ' countries</div>' +
           
@@ -48167,6 +48190,9 @@ function showCommodityDetail(key) {
     el.innerHTML =
       '<div class="enso-legend">' +
         '<div class="enso-legend-block"><div class="enso-legend-t">' + esc(solidT) + ' · modelled here</div>' + solidBody + '</div>' +
+        (S.mode === 'impact' || S.mode === 'crop' ? '<div class="enso-legend-block"><div class="enso-legend-t">Published El Niño effect, no fitted signal</div>' +
+          krow(hatchSwatch('dry'), 'Output usually falls', '') + krow(hatchSwatch('wet'), 'Output usually rises', '') + krow(hatchSwatch('mixed'), 'Both', 'depends on the season') +
+          '<p class="enso-key-cap">Hatching marks countries in published El Niño regions where the fit finds no signal; it never sits on a fitted colour.</p></div>' : '') +
         (S.showRegions ? regionLegend() : '') +
         (S.showSST !== false ? sstLegend() : '') + (S.showLanes ? laneLegend() : '') + (S.showAlerts ? alertLegend() : '') + (S.showImports ? importLegend() : '') +
       '</div>';
@@ -48466,13 +48492,16 @@ function showCommodityDetail(key) {
         var assessment = S.mode === 'asap' && asapFor(iso);
         path.classList.toggle('enso-hotspot', !!assessment && assessment.hotspot_code === 1);
         path.classList.toggle('enso-major-hotspot', !!assessment && assessment.hotspot_code === 2);
-        var rc = S.mode === 'rain' ? rainClass(iso) : S.mode === 'staple' && S.stapleView === 'fit' && !col ? ({ fall: 'dry', rise: 'wet', mixed: 'mixed' }[outSign(iso)] || null) : null;
+        var pubOnly = !col && ((S.mode === 'staple' && S.stapleView === 'fit') || (S.sub === 'ensoharvest' && (S.mode === 'impact' || S.mode === 'crop')));
+        var rc = S.mode === 'rain' ? rainClass(iso) : pubOnly ? ({ fall: 'dry', rise: 'wet', mixed: 'mixed' }[outSign(iso)] || null) : null;
         ['dry', 'wet', 'mixed'].forEach(function (k) { path.classList.toggle('enso-rain-' + k, rc === k); });
       }
       var style = col
         ? { fillColor: col, fillOpacity: 1, color: LAND_TONE, opacity: .18, weight: .5, dashArray: null }
         : { fillColor: LAND_TONE, fillOpacity: .06, color: LAND_TONE, opacity: .18, weight: .5, dashArray: null };
       if (S.mode === 'rtfp' && (S.isoIndex[iso] || []).length) { style.color = '#8a8578'; style.opacity = .8; style.weight = .8; }
+      /* Published-only hatching needs a visible fill for its pattern to show. */
+      if (pubOnly && outSign(iso)) { style.fillOpacity = .8; style.color = '#8a8578'; style.opacity = .5; style.weight = .6; }
       if (S.mode === 'staple' && isTele(iso)) {
         /* No series: a dotted outline, no fill. A reading 3+ months old keeps its colour under a dashed outline. */
         var spS = stapleOf(iso);
