@@ -845,7 +845,7 @@ def main() -> int:
             const slot = document.querySelector('.enso-pan-since'), ais = document.getElementById('enso-c-panama-daily');
             return {lead: !!(slot.compareDocumentPosition(ais) & Node.DOCUMENT_POSITION_FOLLOWING),
                     slot: slot.closest('figure').dataset.kind, ais: ais.closest('figure').dataset.kind,
-                    source: ais.closest('figure').querySelector('.enso-plate-sub').textContent};
+                    source: ais.closest('details').querySelector('summary').textContent};
         }""")
         history = page.evaluate("async () => (await (await fetch('data/portwatch_history.json')).json()).data.chokepoints.panama.dates")
         lane_count = page.evaluate("async () => (await (await fetch('data/enso_lanes.json')).json()).data.lanes.length")
@@ -856,10 +856,9 @@ def main() -> int:
         check("Shipping leads with nine lane answers sourced from the current JSON",
               page.locator('.enso-status-table tbody tr').count() == 9
               and f'{board_slots} slots/day' in page.locator('[data-board-lane="panama"]').inner_text())
-        check("Panama reads month by month with its slot limits, then day by day at full width", page.evaluate("""() => {
+        check("Panama reads month by month, with the last twelve months day by day in a fold of the same plate", page.evaluate("""() => {
             const a = document.querySelector('.enso-pansince-plate'), b = document.querySelector('.enso-panama-daily');
-            return !!a && !!b && a.getBoundingClientRect().bottom <= b.getBoundingClientRect().top + 1
-                && Math.abs(a.getBoundingClientRect().width - b.getBoundingClientRect().width) < 2 && !document.querySelector('.enso-panama-pair');
+            return !!a && !!b && a.contains(b) && b.tagName === 'DETAILS' && !document.querySelector('.enso-panama-pair');
         }"""))
         # Shipping logic (2026-09-23): every lane gets a stated outlook, the gauges
         # print the agencies' own latest readings, and Gatún is read against its record.

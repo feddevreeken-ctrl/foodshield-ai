@@ -50009,7 +50009,7 @@ function showCommodityDetail(key) {
           (lv.draft_advisory ? '<a href="' + esc(safeUrl(lv.draft_advisory.url)) + '" target="_blank" rel="noopener">' + esc(lv.draft_advisory.advisory) + ' · ' + esc(lv.draft_advisory.advisory_date) + '</a>' : '') : '') +
           '</details>';
   }
-  function panamaSincePlate(pan) {
+  function panamaSincePlate(pan, dailyFold) {
     var PM = (S.pwhist && S.pwhist.panama_monthly) || [], G = ((S.gauges || {}).gauges || {}).gatun || {}, LM = G.monthly_2019 || [];
     if (PM.length < 24 || LM.length < 24) return '';
     var lake = {}; LM.forEach(function (x) { lake[x.month] = x.ft; });
@@ -50082,7 +50082,7 @@ function showCommodityDetail(key) {
     ]) : '';
     return '<figure class="enso-plate enso-pansince-plate" data-kind="observed">' + plateHead('Panama: the last El Niño against this one', 'Panama Canal Authority lake record and advisories · IMF PortWatch AIS · by month from January of each El Niño year', stamp(metaDate('portwatch')), 'observed') +
       plateKey([['is-line', '#d8a25e', '2023-24'], ['is-line is-bold', '#ebe9e2', '2026'], ['is-dash', '#8b8980', '2019–2022 normal for the month'], ['is-rule', '#e0673c', 'December peak']]) +
-      '<div class="plate-body">' + lede + svg + panamaAdvisoryFold(pan) + '</div><figcaption class="enso-log">' + bulletList(['Slots: the Canal’s dated advisories; the 2023-24 line stops at the last one it dates, January 2024.', 'Capacity: the Canal’s stated maximum sustainable vessels a day (' + esc(capTxt || '') + ').', 'AIS counts run below the Canal’s own tally: compare the shape, not the level.'], 'is-fine') + '</figcaption></figure>';
+      '<div class="plate-body">' + lede + svg + (dailyFold || '') + panamaAdvisoryFold(pan) + '</div><figcaption class="enso-log">' + bulletList(['Slots: the Canal’s dated advisories; the 2023-24 line stops at the last one it dates, January 2024.', 'Capacity: the Canal’s stated maximum sustainable vessels a day (' + esc(capTxt || '') + ').', 'AIS counts run below the Canal’s own tally: compare the shape, not the level.'], 'is-fine') + '</figcaption></figure>';
   }
   /* ── How low could Gatún go this dry season: this site's model ───────────────────────────────────
      Fitted in the gauges collector (refresh_shipping_gauges.gatun_outlook): the lowest level between 1 Jan
@@ -50352,13 +50352,10 @@ function showCommodityDetail(key) {
     /* The phase and the Panama readings are the map tag now; the lane board closes the lens as its index. */
     /* Panama: the last El Niño against now, month by month with the published slot limits, then the last
        twelve months day by day. */
-    out += panamaSincePlate(pan);
+    /* The last twelve months day by day repeat the monthly chart at finer grain: a fold inside it (2026-09-27). */
     var h = S.pwhist && S.pwhist.chokepoints && S.pwhist.chokepoints.panama;
-    if (pan && h && h.dates && h.dates.length) {
-      out += '<figure class="enso-plate enso-panama-daily">' + plateHead('Panama day by day, last twelve months', 'IMF PortWatch · daily counts and seven-day means · ' + isoText(h.dates[0]) + ' to ' + isoText(h.dates[h.dates.length - 1]), stamp(metaDate('pwhist')), 'observed') +
-        '<div class="plate-body">' + dailyChartHTML('panama') +
-        '</div></figure>';
-    }
+    var dailyFold = pan && h && h.dates && h.dates.length ? '<details class="enso-evidence-note enso-panama-daily"><summary>Day by day, last twelve months · IMF PortWatch, ' + isoText(h.dates[0]) + ' to ' + isoText(h.dates[h.dates.length - 1]) + '</summary>' + dailyChartHTML('panama') + '</details>' : '';
+    out += panamaSincePlate(pan, dailyFold);
     out += shippingPlates(lanes);
     out += '<details class="enso-lane-evidence-fold"><summary>Lane evidence and attribution: mechanism, record and sources for all ' + lanes.length + ' lanes</summary><figure class="enso-plate is-published">' + plateHead('Lane evidence and attribution', 'Regulatory advisories · attribution literature · IMF PortWatch AIS', readOn, 'published') +
       '<div class="enso-tblwrap enso-lane-records" role="region" aria-label="Lane records" tabindex="0"><table class="enso-tbl enso-lanes-table"><thead><tr><th scope="col">Lane / phase</th><th scope="col">What the record shows</th></tr></thead><tbody>' + lanes.map(function (ln,i) {
@@ -50384,6 +50381,7 @@ function showCommodityDetail(key) {
       }).join('') + '</tbody></table>' + (lanes.length > 3 ? '</details>' : '') + '</div><figcaption class="enso-log">Attribution describes each lane’s mechanism; today’s transit changes have several causes.</figcaption></figure></details>';
     el.innerHTML = laneBoard(lanes, readOn) + out;
     animGatun(el);
+    each(el, 'details.enso-panama-daily', function (d) { d.addEventListener('toggle', function () { var c = S.charts && S.charts['enso-c-panama-daily']; if (d.open && c && c.resize) c.resize(); }); });
     el.querySelectorAll('[data-board-lane]').forEach(function (row) {
       row.onclick = function () {
         var id = row.dataset.boardLane, lane = lanes.find(function (ln) { return ln.id === id; });
@@ -51227,7 +51225,9 @@ function showCommodityDetail(key) {
       (cfg.keyNotes || []).forEach(function (t) {
         var n = document.createElement('span'); n.className = 'enso-key-note'; n.textContent = t; notes.appendChild(n);
       });
-      frame.querySelector('.enso-plate-h').after(legend);
+      /* A chart inside a fold keeps its key inside the fold, not under the plate's head. */
+      var foldIn = cv.closest && cv.closest('details');
+      if (foldIn && frame.contains(foldIn) && foldIn.querySelector('summary')) foldIn.querySelector('summary').after(legend); else frame.querySelector('.enso-plate-h').after(legend);
       var plot = cv.closest('.enso-chart');
       if (notes.childNodes.length && plot) plot.after(notes);
     }
