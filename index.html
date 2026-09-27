@@ -13375,6 +13375,8 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-wp-num b { display:block; font:500 16px/1.2 'Geist Mono',monospace; color:#e0864a; }
 #tab-elnino .enso-wp-num.is-bill { text-align:right; } #tab-elnino .enso-wp-num.is-bill b { color:var(--t1); }
 #tab-elnino .enso-wp-num span { display:block; }
+#tab-elnino .enso-ledger td p { margin:0 0 3px; }
+#tab-elnino .enso-ledger .enso-ledger-resp { color:var(--t3); font-size:12px; }
 #tab-elnino .enso-wp-head > div:last-child { text-align:right; }
 #tab-elnino .enso-wp-totals { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 22px; margin:2px 0 10px; font:13px/1.5 'Geist',sans-serif; color:var(--t2); }
 #tab-elnino .enso-wp-totals-k { font:11px 'Geist Mono',monospace; color:var(--t3); letter-spacing:.04em; }
@@ -47429,7 +47431,7 @@ function showCommodityDetail(key) {
       '<span>' + ol('#e67800', 1.6) + 'Phase 3 crisis</span><span>' + ol('#c80000', 2.4) + 'Phase 4 emergency</span><span>' + ol('#640000', 3) + 'Phase 5 catastrophe</span></div></div>';
     var hl = '<div class="enso-legend-block"><div class="enso-legend-t">Headlines · claims, not measurements</div>' +
       krow('<span class="enso-hl-tab" style="cursor:default">▤ n</span>', 'Headline count', 'items naming the country, last 30 days') +
-      krow('<span style="display:inline-block;width:0;border-left:1px solid #8b8980;height:16px"></span>', 'Callout', 'the largest recent stories, printed as published') + '</div>';
+'</div>';
     var st = function (n, t) { return '<span><b>' + n + '</b> ' + t + '</span>'; };
     var cnt = '<div class="enso-key-tally">' +
       '<span class="enso-key-tally-g">' + st(c.n || 0, 'reports') + st(c.countries || 0, 'countries') + '<i>last ' + ENSO_REPORT_DAYS + ' days + ongoing</i></span>' +
@@ -49518,7 +49520,8 @@ function showCommodityDetail(key) {
     (S.calloutPins || []).forEach(function (o) { try { S.map.removeLayer(o); } catch (e) {} });
     S.calloutPins = [];
     if (!S.map || !S.showHeadlines || S.sub !== 'ensolive' || typeof S.map.getBounds !== 'function') return;
-    var w = window.innerWidth || 1440, max = w >= 1280 ? 3 : w >= 1024 ? 2 : w > 768 ? 1 : 0;
+    /* 2026-09-27 (map research): stories stay in the headlines plate; the map keeps the counts, not the text. */
+    var max = 0;
     if (!max) return;
     var cut = Date.now() - 14 * 864e5, bounds = S.map.getBounds(), done = {};
     var cands = headlineItems().filter(function (h) {
@@ -50973,26 +50976,17 @@ function showCommodityDetail(key) {
     };
     /* Four columns by meaning, not by feed: what is growing badly, what hazard and response, how many people. */
     var ledgerRow = function (r) {
-      var crops = (r.cm.length ? r.cm.map(function (c) { return '<p><b>' + esc(c.crop) + '</b> ' + esc(c.status) + ' <span class="enso-live-src">Crop Monitor</span><span class="enso-live-sub">' + esc(c.driver) + '</span></p>'; }).join('') : '') +
-        (r.a && r.a.hotspot_code ? '<p><b>' + esc(r.a.hotspot_label) + '</b> <span class="enso-live-src">ASAP, ' + esc(assessmentMonth(r.a.assessment_date)) + '</span>' +
+      var crops = (r.cm.length ? r.cm.map(function (c) { return '<p><b>' + esc(c.crop) + '</b> ' + esc(c.status) + '<span class="enso-live-sub">' + esc(c.driver) + '</span></p>'; }).join('') : '') +
+        (r.a && r.a.hotspot_code ? '<p><b>' + esc(r.a.hotspot_label) + '</b> <span class="enso-live-src">JRC, ' + esc(assessmentMonth(r.a.assessment_date)) + '</span>' +
           (r.a.comment ? '<details class="enso-live-comment"><summary>ASAP note</summary><p>' + esc(firstSentence(r.a.comment)) + '</p></details>' : '') + '</p>' : '');
-      /* The map's own reading first: one disc per hazard type with the same verdict ring, then the headline count. */
-      var rp = REP[r.iso], mapLine = '';
-      if (rp && (rp.events.length || rp.crisis)) {
-        var seenT = {}, types = rp.events.filter(function (e) { var k = e.type + (e.weatherKind || ''); if (seenT[k]) return false; seenT[k] = 1; return true; });
-        var hl = headlinesFor(r.iso).length;
-        mapLine = '<p class="enso-ledger-map">' + types.slice(0, 4).map(function (e) { var v = fitVerdict(e), col = ensoTypeColor(e.type);
-            return '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14">' + (v === 'fits' ? '<circle cx="7" cy="7" r="6.2" fill="none" stroke="#f2efe6" stroke-width="1.4"/>' : v === 'against' ? '<circle cx="7" cy="7" r="5.4" fill="none" stroke="#8b8980"/>' : '') + '<circle cx="7" cy="7" r="4" fill="' + col + '"/></svg>'; }).join('') +
-          ' <span>' + (rp.events.length ? rp.events.length + ' report' + (rp.events.length === 1 ? '' : 's') + ': ' + rp.fits + ' fit' + (rp.against ? ', ' + rp.against + ' against' : '') : '') +
-          (rp.crisis ? (rp.events.length ? ' · ' : '') + esc(crisisLabel(r.iso)) : '') + (hl ? ' · ▤ ' + hl : '') + '</span> <span class="enso-live-src">on the map</span></p>';
-      }
-      var haz = mapLine + (r.al.length ? (function () {
+      /* The map carries the hazard discs and verdicts; the row keeps what the map cannot: alerts, response, people. */
+      var haz = (r.al.length ? (function () {
           /* Overlapping alerts of one type and level read as one, dated by the earliest. */
           var by = {}; r.al.forEach(function (e) { var k = e.event_type_label + '|' + e.alert_level; if (!by[k] || String(e.from_date) < String(by[k].from_date)) by[k] = e; });
           return Object.keys(by).map(function (k) { var e = by[k]; return '<p><span class="enso-live-alert is-' + esc(String(e.alert_level || '').toLowerCase()) + '">' + esc(e.event_type_label) + ' · ' + esc(e.alert_level) + '</span> <span class="enso-live-src">GDACS' + (e.from_date ? ', since ' + esc(fmtDate(e.from_date)) : '') + '</span></p>'; }).join('');
         })() : '') +
-        (aaTrig[r.iso] ? '<p><b>Anticipatory action triggered</b> <span class="enso-live-src">WFP, ' + esc(fmtDate(wfp.date)) + '</span></p>' : aaPri[r.iso] ? '<p>In the FAO–WFP appeal <span class="enso-live-src">' + esc(fmtDate(appeal.date)) + '</span></p>' : '') +
-        (fewsHigh[r.iso] ? '<p>FEWS NET high concern</p>' : '');
+        (function () { var bits = [aaTrig[r.iso] ? '<b>anticipatory action triggered</b> (WFP, ' + esc(fmtDate(wfp.date)) + ')' : aaPri[r.iso] ? 'in the FAO–WFP appeal' : '', fewsHigh[r.iso] ? 'FEWS NET high concern' : ''].filter(Boolean);
+          return bits.length ? '<p class="enso-ledger-resp">' + bits.join(' · ') + '</p>' : ''; })();
       return '<tr><th scope="row"><button type="button" data-map-country="' + esc(r.iso) + '">' + esc(nameFor(r.iso)) + '</button></th>' +
         '<td>' + (crops || '<span class="enso-ol-na">—</span>') + '</td><td>' + (haz || '<span class="enso-ol-na">—</span>') + '</td>' +
         (function () {
@@ -51009,7 +51003,7 @@ function showCommodityDetail(key) {
         })() +
         '</tr>';
     };
-    var lhead = '<thead><tr><th scope="col">Country</th><th scope="col">Crops and conditions · Crop Monitor ' + esc((cm.issue || '').replace(/^No\. \d+, /, '')) + ', JRC ASAP</th><th scope="col">Hazard and response · GDACS, WFP, FAO–WFP</th><th scope="col">People in Phase 3+ · IPC, CH or equivalent</th></tr></thead>';
+    var lhead = '<thead><tr><th scope="col">Country</th><th scope="col">Crops now · Crop Monitor ' + esc((cm.issue || '').replace(/^No\. \d+, /, '')) + ', JRC</th><th scope="col">Hazard and response · GDACS, WFP, FEWS NET</th><th scope="col">People in Phase 3+ · IPC, CH</th></tr></thead>';
     var regionTable = few.regions ? '<div class="enso-sec-h"><span>Published outlook</span> FEWS NET El Niño 2026–2027 regional table, reviewed ' + esc(fmtDate(few.reviewed)) + ' · <a href="' + esc(safeUrl(few.url)) + '" target="_blank" rel="noopener">FEWS NET El Niño page</a></div>' +
       '<table class="enso-live-table enso-region-table"><thead><tr><th scope="col">Region</th><th scope="col">Concern</th><th scope="col">Window</th><th scope="col">Hazard · where</th><th scope="col">Countries with a signal now</th></tr></thead><tbody>' +
       few.regions.map(regionRow).join('') + '</tbody></table>' : '';
@@ -51667,7 +51661,8 @@ function showCommodityDetail(key) {
     S.showRegions = false;  /* 2026-09-27 (map research): published regions are a toggle, not hatching over the banded fill */
     S.showLanes = S.sub === 'ensowater';
     S.showAlerts = S.sub === 'ensolive';
-    S.showHeadlines = S.showElsewhere = S.sub === 'ensolive';
+    S.showHeadlines = S.sub === 'ensolive';
+    S.showElsewhere = false;  /* grey dots for stories outside the El Niño regions: an opt-in */
     /* The NOAA index strip belongs to Ocean; the other lenses lead with their own map. */
     var wk = document.getElementById('enso-weekly'); if (wk) wk.hidden = S.sub !== 'elnino';
     S.showImports = false;
