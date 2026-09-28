@@ -1440,7 +1440,7 @@ def main() -> int:
             const strip = document.getElementById('enso-weekly').textContent, head = document.querySelector('#enso-mapwrap > .enso-plate-h').textContent;
             const cap = tag;  // 2026-09-28: the map description names the winters averaged
             return !!vs && tag.includes('not a forecast') && key.includes('average of ' + vs.n + ' past winters') && key.includes('Rain on land')
-                && vs.events.every(e => cap.includes(e.label)) && strip.includes('Very strong') && /very strong El Niño winters, Dec/.test(head)
+                && vs.events.every(e => cap.includes(e.label.replace('-', '–'))) && strip.includes('Very strong') && /very strong El Niños, Dec/.test(head)
                 && !!document.querySelector('.enso-rain-canvas') && document.querySelectorAll('#enso-scrub .sc-win').length === C.classes.reduce((n, c) => n + c.events.length, 0)
                 && document.querySelectorAll('#enso-scrub .sc-win.is-cls').length === vs.n;
         }"""))
@@ -1455,7 +1455,7 @@ def main() -> int:
         check("one past winter opens from its own observed file and says so", page.evaluate("""async () => {
             const W = (await (await fetch('data/sst_winters/2015-16.json')).json()).data, tag = document.getElementById('enso-maptag').textContent;
             const strip = document.getElementById('enso-weekly').textContent, n = W.box_means_c.DJF.nino34;
-            return W.label === '2015-16' && !!W.maps.DJF && tag.includes('2015-16') && tag.includes('Observed, not a forecast')
+            return W.label === '2015-16' && !!W.maps.DJF && tag.includes('2015–16') && tag.includes('Observed, not a forecast')
                 && strip.includes('Niño 3.4 ' + (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(1))
                 && document.querySelector('[data-sst-win="2015-16"]').classList.contains('is-pick') && !!document.querySelector('.enso-rain-canvas');
         }"""))
@@ -1463,7 +1463,7 @@ def main() -> int:
         # map, one https source each; the time bar's thumb sits on the pressed view.
         check("a past winter marks its sourced natural events, and the time bar thumb sits on Past", page.evaluate("""async () => {
             const E = (await (await fetch('data/enso_past_events.json')).json()).data.events.filter(e => e.winter === '2015-16');
-            const marks = document.querySelectorAll('#enso-map .enso-pev').length, sc = document.getElementById('enso-scrub'), hd = sc.querySelector('.sc-handle');
+            const marks = [...document.querySelectorAll('#enso-map .enso-pev')].reduce((n, m) => n + (+(m.querySelector('[data-n]') || {dataset: {n: 1}}).dataset.n), 0), sc = document.getElementById('enso-scrub'), hd = sc.querySelector('.sc-handle');
             return E.length > 0 && marks === E.length && E.every(e => /^https:\\/\\//.test(e.source.url))
                 && sc.dataset.v === 'past' && hd.getAttribute('aria-valuetext').startsWith('2015–16');
         }"""))
@@ -1529,7 +1529,7 @@ def main() -> int:
             check("the 7-day stop marks only the checked El Niño headlines of its own week, and the track counts them", page.evaluate("""async () => {
                 const E = (await (await fetch('data/enso_recent_events.json')).json()).data.events, w = (await (await fetch('data/rain_anomaly.json')).json()).data.week;
                 const n = E.filter(e => e.date_start <= w.end && e.date_end >= w.start).length;
-                const marks = document.querySelectorAll('#enso-map .enso-pev.is-now').length, col = document.querySelector('#enso-scrub [data-sst-now="7"] .sc-c').textContent;
+                const marks = [...document.querySelectorAll('#enso-map .enso-pev.is-now')].reduce((k, m) => k + (+(m.querySelector('[data-n]') || {dataset: {n: 1}}).dataset.n), 0), col = document.querySelector('#enso-scrub [data-sst-now="7"] .sc-c').textContent;
                 return n > 0 && marks === n && col === String(n) && E.every(e => ['attributed', 'consistent'].includes(e.enso_link) && /^https:\\/\\//.test(e.source.url));
             }"""))
         # 2026-09-28 (owner: "make wetter on 7 day and more drought be an overlay on 30 day"): the 7-day stop keeps the
