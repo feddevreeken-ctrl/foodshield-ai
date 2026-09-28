@@ -1532,6 +1532,19 @@ def main() -> int:
                 const marks = document.querySelectorAll('#enso-map .enso-pev.is-now').length, col = document.querySelector('#enso-scrub [data-sst-now="7"] .sc-c').textContent;
                 return n > 0 && marks === n && col === String(n) && E.every(e => ['attributed', 'consistent'].includes(e.enso_link) && /^https:\\/\\//.test(e.source.url));
             }"""))
+        # 2026-09-28 (owner: "make wetter on 7 day and more drought be an overlay on 30 day"): the 7-day stop keeps the
+        # 30-day picture as its base and stripes the week on top; the 30-day stop has no stripes. The Past El Niños
+        # button sits at the left end of the 2026 track.
+        check("the 7-day stop stripes the week over the 30-day picture, the 30-day stop does not, and Past El Niños sits left of the track", page.evaluate("""() => {
+            const over = !!document.querySelector('#enso-map .enso-rain-over'), key = document.getElementById('enso-legend').textContent;
+            const btn = document.querySelector('#enso-scrub .sc-end[data-sst-view="past"]'), track = document.querySelector('#enso-scrub .sc-track');
+            return over && /last 30 days/.test(key) && /striped where unusual/.test(key) && !!btn && btn.getBoundingClientRect().right <= track.getBoundingClientRect().left;
+        }"""))
+        page.click('[data-sst-now="30"]')
+        page.wait_for_timeout(400)
+        check("the 30-day stop has no week overlay", page.evaluate("() => !document.querySelector('#enso-map .enso-rain-over') && !/striped where unusual/.test(document.getElementById('enso-legend').textContent)"))
+        page.click('[data-sst-now="7"]')
+        page.wait_for_timeout(400)
         mons = page.evaluate("() => [...document.querySelectorAll('#enso-scrub [data-sst-mon]')].map(b => b.getAttribute('data-sst-mon'))")
         check("the 2026 track carries six past months, then 30 and 7 days, then the outlook", len(mons) == 6 and page.evaluate("""() => {
             const k = [...document.querySelectorAll('#enso-scrub .sc-track [data-i]')].map(b => b.dataset.sstMon ? 'm' : b.dataset.sstNow ? 'n' + b.dataset.sstNow : b.dataset.sstOl ? 'o' : '?').join('');
@@ -1548,6 +1561,20 @@ def main() -> int:
                     && new RegExp('last 30 days|' + name).test(document.getElementById('enso-legend').textContent)
                     && !document.querySelector('#enso-map .enso-pev:not(.is-now)');
             }""", mons[-1]))
+            # 2026-09-28 (owner: "this prompt is on all of the last couple look backs"): hover a headline, then step the
+            # scrubber with the keyboard: no tooltip may stay open on the next stops.
+            marks = page.locator('#enso-map .enso-pev.is-now')
+            if marks.count():
+                box = marks.first.bounding_box()
+                page.mouse.move(box['x'] + box['width'] / 2 - 6, box['y'] + box['height'] / 2 - 6)
+                page.mouse.move(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2, steps=3)
+                page.wait_for_timeout(250)
+                page.focus('#enso-scrub .sc-handle')
+                page.keyboard.press('ArrowLeft')
+                page.wait_for_timeout(400)
+                page.keyboard.press('ArrowLeft')
+                page.wait_for_timeout(400)
+                check("stepping the scrubber leaves no headline tooltip open", page.evaluate("() => ![...document.querySelectorAll('#enso-map .leaflet-tooltip')].some(t => t.offsetParent && !t.classList.contains('enso-price-lbl'))"))
             page.click('#enso-scrub [data-sst-view="now"]')
             page.wait_for_timeout(400)
 
