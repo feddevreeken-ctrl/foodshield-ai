@@ -11868,6 +11868,12 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-history-year { position:absolute; transform:translateX(-50%); }
 #tab-elnino .enso-weekly { display:flex; flex-wrap:wrap; gap:12px 24px; padding:16px 24px; font:12px/1.5 'Geist Mono',monospace; }
 #tab-elnino .enso-weekly b { font:inherit; color:var(--t1); }
+/* 2026-09-28 (owner: "redesign this too"): the Niño-box strip under the Ocean map is a caption line, then readings
+   as label + value pairs with the map's colour for each value. */
+#tab-elnino #enso-weekly.enso-weekly { align-items:baseline; gap:4px 28px; padding:12px var(--enso-inset,24px) 12px; font:11.5px/1.4 'Geist',sans-serif; color:var(--t2); border-top:1px solid var(--b1); }
+#tab-elnino #enso-weekly.enso-weekly > span:first-child { flex:0 0 100%; font:10.5px/1.4 'Geist Mono',monospace; letter-spacing:.04em; text-transform:uppercase; color:var(--t3); }
+#tab-elnino #enso-weekly.enso-weekly b { display:inline-flex; align-items:center; gap:6px; margin-left:6px; font:500 15px/1.2 'Geist Mono',monospace; color:var(--t1); }
+#tab-elnino .enso-wk-sw { display:inline-block; width:9px; height:9px; border:1px solid rgba(235,233,226,.25); }
 #tab-elnino .enso-how { margin-top:16px; border-top:1px solid var(--grid); }
 #tab-elnino .enso-how summary { display:flex; align-items:center; cursor:pointer; }
 #tab-elnino .enso-legend-explain { max-width:90ch; margin:12px 0; }
@@ -13043,23 +13049,59 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino #enso-sst-dock:has(.is-outlook) { border-top-style:dashed; border-top-color:#e0864a; }
 #tab-elnino .enso-sst-scale { grid-area:scale; } #tab-elnino .enso-sst-season { grid-area:season; }
 #tab-elnino .enso-sst-wins { grid-area:wins; } #tab-elnino .enso-sst-ctx { grid-area:ctx; } #tab-elnino .enso-sst-rain { grid-area:rain; justify-self:end; }
-/* 2026-09-28: the Ocean map's time bar. Three equal cells in time order; the thumb slides to the pressed one (--i);
-   the forecast cell and its thumb are dashed, the site's grammar for modelled. */
-#tab-elnino .enso-timebar { position:relative; display:inline-grid; grid-template-columns:repeat(3,minmax(0,1fr)); width:min(470px,calc(100% - 24px)); margin-left:12px; border:0; border-bottom:3px solid var(--b2); background:rgba(235,233,226,.035); }
-/* the track runs left to right, past to forecast: an arrowhead at its end */
-#tab-elnino .enso-timebar::after { content:''; position:absolute; right:-9px; bottom:-7px; border-left:9px solid var(--b2); border-top:5.5px solid transparent; border-bottom:5.5px solid transparent; }
-#tab-elnino .enso-timebar.is-two { grid-template-columns:repeat(2,minmax(0,1fr)); width:min(320px,calc(100% - 12px)); }
-#tab-elnino .enso-timebar-thumb { position:absolute; top:0; bottom:-3px; left:calc(var(--i,1) * 100% / 3); width:calc(100% / 3); background:rgba(201,119,58,.17); border-bottom:3px solid var(--warm); pointer-events:none; transition:left .34s cubic-bezier(.3,.7,.2,1); }
-#tab-elnino .enso-timebar.is-two .enso-timebar-thumb { left:calc(var(--i,1) * 50%); width:50%; }
-#tab-elnino .enso-timebar[data-v="outlook"] .enso-timebar-thumb { border-bottom-style:dashed; border-bottom-color:#e0864a; background:rgba(224,134,74,.11); }
-#tab-elnino .enso-timebar .enso-basis-b { position:relative; z-index:1; display:flex; flex-direction:column; justify-content:center; align-items:flex-start; gap:2px; min-width:0; min-height:32px !important; padding:2px 12px !important; border:0 !important; font:500 13px/1.1 'Geist',sans-serif; color:var(--t2); text-align:left; background:none; }
-#tab-elnino .enso-timebar .enso-basis-b::after { content:attr(data-when); font:400 10px/1.1 'Geist Mono',monospace; color:var(--t3); white-space:nowrap; }
-#tab-elnino .enso-timebar .enso-basis-b[data-sst-view="outlook"] { border-left:1px dashed #e0864a !important; }
-#tab-elnino .enso-timebar .enso-basis-b[aria-pressed="true"] { color:var(--t1); }
-#tab-elnino .enso-timebar .enso-basis-b[aria-pressed="true"]::after { color:var(--t2); }
-#tab-elnino .enso-timebar .enso-basis-b:hover:not([aria-pressed="true"]) { color:var(--t1); background:rgba(235,233,226,.04); }
-#tab-elnino .enso-timebar .enso-basis-b:focus-visible { outline:2px solid var(--warm); outline-offset:-2px; }
-@media (prefers-reduced-motion: reduce) { #tab-elnino .enso-timebar-thumb { transition:none; } }
+/* 2026-09-28 (owner: "a bar you can drag back n forth with months ... go back 6 months ... go back to historical when
+   clicking"): the Ocean map's time scrubber, under the map. Left: play and the track switch (2026 / past winters).
+   Right: the zone captions, then the track: baseline at 44px, bars rise from it (2026: Niño 3.4 box in the sea's own
+   colour, forecast dashed; past: peak ONI by CPC class), month labels under it, a line-and-square handle. */
+#tab-elnino .enso-scrub { display:flex; align-items:flex-start; gap:16px; padding:10px var(--enso-inset,24px) 2px; }
+#tab-elnino .sc-side { flex:none; width:122px; display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
+#tab-elnino .enso-scrub .sc-mode { padding:5px 10px; background:rgba(235,233,226,.06); border:1px solid var(--b2); color:var(--t1); font:500 11.5px/1.2 'Geist',sans-serif; white-space:nowrap; cursor:pointer; min-height:0 !important; }
+#tab-elnino .enso-scrub .sc-mode:hover { border-color:var(--warm); }
+#tab-elnino .enso-scrub .sc-play { width:30px; height:30px; display:grid; place-items:center; padding:0; background:rgba(235,233,226,.05); border:1px solid var(--b2); color:var(--t1); cursor:pointer; min-height:0 !important; }
+#tab-elnino .sc-play path { fill:currentColor; } #tab-elnino .sc-play .sc-i-pause, #tab-elnino .sc-play[aria-pressed="true"] .sc-i-play { display:none; } #tab-elnino .sc-play[aria-pressed="true"] .sc-i-pause { display:inline; }
+#tab-elnino .enso-scrub :is(.sc-play, .sc-mode):focus-visible { outline:2px solid var(--warm); outline-offset:2px; }
+#tab-elnino .sc-main { position:relative; flex:1; min-width:0; }
+#tab-elnino .sc-zones { position:relative; height:16px; }
+#tab-elnino .enso-scrub :is(.sc-zone, .sc-zone-t) { position:absolute; top:0; padding:0; background:none; border:0; font:500 10.5px/16px 'Geist Mono',monospace; letter-spacing:.04em; text-transform:uppercase; color:var(--t3); white-space:nowrap; min-height:0 !important; }
+#tab-elnino .sc-zone { cursor:pointer; } #tab-elnino .sc-zone i { font-style:normal; } #tab-elnino .sc-zone-t b { font-weight:500; color:var(--t2); } #tab-elnino .sc-zone-t b.is-fc { color:#c98a5e; }
+#tab-elnino .sc-zone[data-sst-view="now"] { transform:translateX(-50%); } #tab-elnino .sc-zone.is-fc { color:#b98a68; }
+#tab-elnino .sc-zone:hover, #tab-elnino .sc-zone[aria-pressed="true"] { color:var(--t1); } #tab-elnino .sc-zone.is-fc[aria-pressed="true"] { color:#f0a877; }
+#tab-elnino .sc-track { position:relative; height:72px; cursor:pointer; touch-action:none; user-select:none; -webkit-user-select:none; }
+#tab-elnino .sc-line { position:absolute; top:44px; height:2px; background:var(--b2); }
+#tab-elnino .sc-line.is-fc { background:repeating-linear-gradient(90deg, #e0864a 0 5px, transparent 5px 9px); opacity:.75; }
+#tab-elnino .sc-ref { position:absolute; left:0; right:0; height:0; border-top:1px solid rgba(235,233,226,.8); pointer-events:none; z-index:1; }
+#tab-elnino .sc-ref.is-fc { border-top:1px dashed #e0864a; }
+#tab-elnino .enso-scrub .sc-win { position:absolute; top:0; height:70px; width:18px; transform:translateX(-50%); padding:0; background:none; border:0; cursor:pointer; min-height:0 !important; }
+#tab-elnino .sc-win > i { position:absolute; left:5px; width:8px; bottom:26px; height:var(--h); background:var(--c, #93653f); }
+#tab-elnino .sc-win.is-weak { --c:#6e5b44; } #tab-elnino .sc-win.is-moderate { --c:#93653f; } #tab-elnino .sc-win.is-strong { --c:#bd6a39; } #tab-elnino .sc-win.is-very_strong { --c:#e07a40; }
+#tab-elnino .sc-win.is-ol > i { background:none; border:1.5px dashed #e0864a; box-sizing:border-box; }
+#tab-elnino .sc-win.is-ol.is-pick > i { background:rgba(224,134,74,.35); box-shadow:none; }
+#tab-elnino .sc-win.is-pre > i { opacity:.7; }
+#tab-elnino .sc-win.is-cls > i { box-shadow:0 0 0 1.5px #ebe9e2; } #tab-elnino .sc-win.is-pick > i { box-shadow:0 0 0 2px #ebe9e2; }
+#tab-elnino .sc-win:not(.is-mon):not(.is-now):not(.is-ol).is-pick > i { background:#ebe9e2; box-shadow:none; }
+#tab-elnino .sc-win:hover > i { filter:brightness(1.25); }
+#tab-elnino .sc-win > em { position:absolute; left:50%; bottom:calc(30px + var(--h)); transform:translateX(-50%); font:normal 9.5px/1 'Geist',sans-serif; color:#b98a68; white-space:nowrap; }
+#tab-elnino .sc-win.is-pick > em { color:#f6c29c; }
+#tab-elnino .enso-scrub .sc-win > span, #tab-elnino .sc-mon { position:absolute; top:57px; left:50%; transform:translateX(-50%); font:10px/1 'Geist Mono',monospace; color:var(--t3); white-space:nowrap; }
+#tab-elnino .enso-scrub .sc-win.is-pick > span, #tab-elnino .sc-win.is-cls > span { color:var(--t1); }
+#tab-elnino .enso-scrub .enso-num { font:inherit !important; }
+#tab-elnino .sc-handle { position:absolute; top:4px; bottom:6px; left:50%; width:0; transition:left .22s cubic-bezier(.3,.7,.2,1); outline:none; }
+#tab-elnino .sc-handle::before { content:''; position:absolute; top:0; height:40px; left:-1px; width:2px; background:#ebe9e2; pointer-events:none; }
+#tab-elnino .sc-knob { position:absolute; top:33px; left:-8px; width:16px; height:16px; background:#ebe9e2; border:2px solid #0b1017; box-shadow:0 1px 5px rgba(0,0,0,.55); }
+#tab-elnino .sc-handle:focus-visible .sc-knob { outline:2px solid var(--warm); outline-offset:2px; }
+#tab-elnino .enso-scrub.is-drag .sc-handle { transition:none; } #tab-elnino .enso-scrub.is-drag .sc-track { cursor:grabbing; }
+#tab-elnino .enso-sst-opts { display:flex; flex-wrap:wrap; align-items:center; gap:8px 18px; padding:4px var(--enso-inset,24px) 12px; }
+#tab-elnino .enso-sst-opts .enso-sst-ctx { flex:1 1 260px; min-width:0; }
+#tab-elnino .enso-sst-opts .enso-sst-togs { margin-left:auto; }
+#tab-elnino .enso-sst-opts .enso-num { font:inherit !important; margin:0 !important; padding:0 !important; letter-spacing:inherit !important; }
+#tab-elnino .enso-sst-opts.is-outlook .enso-sst-ctx { color:#c98a5e; }
+@media (max-width:700px) { #tab-elnino .sc-win > span { display:none; } #tab-elnino .sc-win.is-very_strong > span, #tab-elnino .sc-win.is-pick > span, #tab-elnino .sc-win.is-now > span { display:block; }
+  #tab-elnino .sc-zone i, #tab-elnino .sc-zone-t, #tab-elnino .sc-win > em { display:none; } #tab-elnino .enso-scrub { flex-direction:column; gap:6px; } #tab-elnino .sc-side { flex-direction:row; width:auto; } #tab-elnino .sc-main { width:100%; } }
+/* Map keys on the Ocean lens: each ramp carries its end labels in one box, so they sit under it and never wrap. */
+#tab-elnino .enso-rampbox { display:inline-flex; flex-direction:column; gap:3px; width:190px; vertical-align:middle; }
+#tab-elnino .enso-rampbox .enso-ramp { width:100%; height:9px; }
+#tab-elnino .enso-ramp-ends { display:flex; justify-content:space-between; gap:8px; font:9.5px/1.2 'Geist Mono',monospace; color:var(--t3); white-space:nowrap; }
+@media (prefers-reduced-motion: reduce) { #tab-elnino .sc-handle { transition:none; } }
 #tab-elnino .enso-sst-ctx { display:flex; align-items:center; justify-content:space-between; gap:10px; font:11px/1.35 'Geist Mono',monospace; color:var(--t2); }
 #tab-elnino .enso-sst-rain { display:inline-flex; align-items:center; gap:6px; flex:none; color:var(--t2); cursor:pointer; }
 #tab-elnino .enso-sst-togs { grid-area:rain; justify-self:end; display:inline-flex; flex-wrap:wrap; justify-content:flex-end; gap:6px 16px; }
@@ -45344,13 +45386,13 @@ function showCommodityDetail(key) {
                  'sst_anomaly', 'portwatch_history', 'crop_calendars',
                  'portwatch', 'rtfp', 'fao_ffpi',
                  'asap', 'gdacs', 'ipc', 'reliefweb_alerts',
-                 'enso_news', 'trade_restrictions', 'enso_outlook', 'enso_gauges', 'enso_situation', 'chokepoint_flows', 'enso_strengths', 'worldbank_pink_sheet', 'enso_ports', 'enso_hindcast', 'faostat_food', 'usda_psd', 'enso_freight', 'enso_price_analogs', 'enso_published_effects', 'fpma_prices', 'sst_composites', 'seasonal_outlook', 'rain_anomaly', 'enso_past_events'];
+                 'enso_news', 'trade_restrictions', 'enso_outlook', 'enso_gauges', 'enso_situation', 'chokepoint_flows', 'enso_strengths', 'worldbank_pink_sheet', 'enso_ports', 'enso_hindcast', 'faostat_food', 'usda_psd', 'enso_freight', 'enso_price_analogs', 'enso_published_effects', 'fpma_prices', 'sst_composites', 'seasonal_outlook', 'rain_anomaly', 'enso_past_events', 'sst_months'];
     var out = await Promise.all(names.map(get));
     var keys = ['enso', 'exp', 'model', 'regions', 'lanes', 'corridors', 'econ', 'mech', 'indices', 'bulletins',
                 'sst', 'pwhist', 'calendars',
                 'portwatch', 'rtfp', 'ffpi',
                 'asap', 'gdacs', 'ipc', 'relief',
-                'news', 'restrictions', 'outlook', 'gauges', 'situation', 'chokeflows', 'strengths', 'pink', 'ports', 'hindcast', 'fcpi', 'psd', 'freight', 'panalog', 'pubfx', 'fpma', 'sstcomp', 'seasonal', 'rainnow', 'pastev'];
+                'news', 'restrictions', 'outlook', 'gauges', 'situation', 'chokeflows', 'strengths', 'pink', 'ports', 'hindcast', 'fcpi', 'psd', 'freight', 'panalog', 'pubfx', 'fpma', 'sstcomp', 'seasonal', 'rainnow', 'pastev', 'sstmon'];
     S.feedNames = {};
     S.oniLive = null;
     keys.forEach(function (k, i) {
@@ -45540,12 +45582,20 @@ function showCommodityDetail(key) {
   }
   /* Rain on land in past El Niño winters: ochre where it rained less than the 1991–2020 season mean, teal where
      more, the dry and wet hues of the harvest lenses; near-normal cells stay faint. */
-  function rainColor(v) {
+  /* 2026-09-28 (owner: "live rain ... seems a little extreme"): the live layer is measured over 30 or 7 days, where
+     ordinary weather swings far more than in a season's average, so it gets its own scale. 'pct': a season against
+     its mean (past winters, outlook). 'live': 30 days, percent, with ±15% left clear as normal variation. 'mm': 7 days
+     in millimetres above or below normal, because a week's percent of a mean is extreme almost everywhere (in the
+     28 Sep 2026 run 40-49% of cells passed ±75% at every gauge density; rain falls in bursts). */
+  var RAIN_KIND = 'pct';
+  function rainColor(v, kind) {
     if (v == null || isNaN(v)) return null;
+    kind = kind || RAIN_KIND;
     var t = Math.min(80, Math.abs(v)), s = v < 0 ? [[224, 190, 140], [196, 122, 60], [128, 66, 18]] : [[160, 212, 206], [79, 159, 168], [20, 98, 106]];
     var a = t < 25 ? s[0] : s[1], b = t < 25 ? s[1] : s[2], f = t < 25 ? t / 25 : (t - 25) / 55;
     var c = a.map(function (x, i) { return Math.round(x + (b[i] - x) * f); });
-    return 'rgba(' + c.join(',') + ',' + (0.1 + 0.72 * Math.min(1, t / 40)).toFixed(3) + ')';
+    var clear = kind === 'live' ? 15 : kind === 'mm' ? 5 : 0, al = t <= clear && clear ? 0.03 : 0.1 + 0.72 * Math.min(1, (t - clear) / (kind === 'pct' ? 40 : kind === 'mm' ? 40 : 55));
+    return 'rgba(' + c.join(',') + ',' + al.toFixed(3) + ')';
   }
   var SSTLayer = gridLayer({ pane: 'ensoSST', z: 380, cls: 'enso-sst-canvas', keep: 'sea', min: -5, max: 5, res: 0.01, scale: 10, color: sstColor,
     /* The Explore tab paints the same layer class on its own map: it always shows this week. */
@@ -45577,7 +45627,15 @@ function showCommodityDetail(key) {
   function olMap() { var O = S.seasonal, q = olSeason(); return S.sstView === 'outlook' && O && O.maps && q ? O.maps[q.key] || null : null; }
   function sstSceneKey() { var w = sstWinter(); return olMap() ? 'ol/' + olSeason().key : (sstClass() || {}).key + '/' + (w ? w.label : 'avg') + '/' + sstSeason().key; }
   function gridOf(g, anom, extra) { var o = { lat0: g.lat0, lon0: g.lon0, step_deg: g.step_deg, nlat: g.nlat, nlon: g.nlon, anom: anom }; for (var k in extra) o[k] = extra[k]; return o; }
+  /* The sea half of the scrubber's Now stops: the last 7 days (data/sst_anomaly.json) or the last 30 (sst_months.last30). */
+  function seaNow() {
+    var L = S.sstmon && S.sstmon.last30, g = S.sst || {};
+    return S.rainWin === 30 && L && L.anom ? { days: 30, start: L.start, end: L.end, grid: L.grid, anom: L.anom, box: L.box_means_c || {}, pre: L.preliminary }
+      : { days: 7, start: g.time_start, end: g.time_end, box: g.box_means_c || {}, pre: g.preliminary };
+  }
   function sstGrid() {
+    var sn = sstView() === 'now' && seaNow(); if (sn && sn.anom) { S._sstG = S._sstG || {}; var k30 = 'now30/' + sn.end; return S._sstG[k30] || (S._sstG[k30] = gridOf(sn.grid, sn.anom, {})); }
+    var mo = monMap(); if (mo && mo.grid && mo.anom) { S._sstG = S._sstG || {}; return S._sstG['mon/' + mo.month] || (S._sstG['mon/' + mo.month] = gridOf(mo.grid, mo.anom, {})); }
     var ol = olMap(), m = ol || sstMap(), g = ol ? S.seasonal.grid : S.sstcomp && S.sstcomp.grid;
     if (!m || !m.sst || !g || (!ol && !sstClass())) return S.sst;
     var k = sstSceneKey(); S._sstG = S._sstG || {};
@@ -45586,13 +45644,18 @@ function showCommodityDetail(key) {
   /* Observed rain now: the last 30 days (the pattern) or the last 7 (what is falling now), from data/rain_anomaly.json. */
   function rainNow() {
     var R = S.rainnow; if (!R || !R.anom || !R.grid || !R.window) return null;
-    var wk = S.rainWin === 7 && R.week && R.week.anom ? R.week : null;
+    var wk = S.rainWin !== 30 && R.week && R.week.anom ? R.week : null;
     return wk ? { days: 7, anom: wk.anom, mm: wk.mm || null, nmm: wk.norm_mm || null, start: wk.start, end: wk.end } : { days: 30, anom: R.anom, mm: R.mm || null, nmm: R.norm_mm || null, start: R.window.start, end: R.window.end };
   }
   function rainGrid() {
     if (S.showRain === false) return null;
     if (!S.sstView || S.sstView === 'now') { var R = S.rainnow, w = rainNow(), k = w && w.days + '/' + w.end; S._rainNow = S._rainNow || {};
-      return w ? S._rainNow[k] || (S._rainNow[k] = gridOf(R.grid, w.anom, { mm: w.mm, nmm: w.nmm, days: w.days })) : null; }
+      if (!w) return null;
+      RAIN_KIND = w.days === 7 && w.mm && w.nmm ? 'mm' : 'live';
+      if (!S._rainNow[k]) S._rainNow[k] = RAIN_KIND === 'mm' ? gridOf(R.grid, w.mm.map(function (m, i) { var n = w.nmm[i]; return m == null || n == null ? null : m - n; }), { kind: 'mm', pct: w.anom, mm: w.mm, nmm: w.nmm, days: 7 })
+        : gridOf(R.grid, w.anom, { kind: 'live', mm: w.mm, nmm: w.nmm, days: w.days });
+      return S._rainNow[k]; }
+    RAIN_KIND = 'pct';
     var ol = olMap(), m = ol || sstMap(), g = ol ? S.seasonal.rain_grid : S.sstcomp && S.sstcomp.rain_grid;
     if (!m || !m.rain || !g || (!ol && !sstClass())) return null;
     var k = sstSceneKey(), avg = !ol && !sstWinter(); S._rainG = S._rainG || {};
@@ -45617,6 +45680,10 @@ function showCommodityDetail(key) {
   function olModels() { var n = ((S.seasonal || {}).models || []).length; return n ? n + ' models averaged' : 'ensemble mean'; }
   /* Every caption on the Ocean map reads what is painted from here: the view, its season, and the words for it. */
   function sstScene() {
+    var mo = monMap();
+    if (mo) { var ml = monLabel(mo.month); return { view: 'month', rain: false, season: ml, mon: mo, title: 'Sea surface, ' + ml + ' mean',
+      source: 'NOAA OISST v2.1 · monthly mean' + (mo.preliminary ? ' · preliminary' : ''), date: ml + ', ' + mo.days_averaged + ' daily fields · against 1971–2000',
+      what: 'Sea-surface anomaly, °C · ' + ml + ' mean' }; }
     var cl = sstClass(), w = sstWinter(), ol = olMap(), rg = !!rainGrid(), q = olSeason(), s = sstSeason();
     if (ol) return { view: 'outlook', rain: rg, season: q.label,
       title: 'Outlook for ' + q.label + ': ' + (rg ? 'sea and rain' : 'sea surface'),
@@ -45643,65 +45710,184 @@ function showCommodityDetail(key) {
      this year sits; then all of a class's winters averaged or one of them, and the season of the El Niño year. */
   function sstFcRange() { var x = ((S.strengths && S.strengths.roni_outlook) || []).filter(function (q) { return q.season === 'DJF'; })[0], q = x && x.oni_equiv; return q && typeof q.median_lo === 'number' ? { lo: q.median_lo, hi: q.median_hi, m: q.median } : null; }
   function sstDefaultClass() { var f = sstFcRange(), m = f ? f.m : S.oniLive; return m >= 2 ? 'very_strong' : m >= 1.5 ? 'strong' : m >= 1 ? 'moderate' : 'weak'; }
-  function sstView() { return olMap() ? 'outlook' : sstClass() ? 'past' : 'now'; }
-  /* The view switch sits in the map's instrument row, like the other lenses' basis switches: time order, the
-     forecast one dashed. */
-  /* 2026-09-28 (owner: "make this a more noticeable bar slider"): a time bar, not three small chips. Equal cells in
-     time order, a thumb that slides to the pressed one, and under each name the span it paints. The spans are CSS
-     content (data-when), so the control's text stays the three names. */
-  var SST_VIEWS = ['past', 'now', 'outlook'];
-  function sstModeButtons() {
-    if (S.sub !== 'elnino' || S.mode !== 'sst' || !S.sstcomp || !S.sstcomp.maps) return '';
-    var v = sstView(), C = S.sstcomp, g = S.sst || {}, O = S.seasonal && S.seasonal.maps ? S.seasonal : null, R = S.rainnow;
-    var yrs = []; (C.classes || []).forEach(function (c) { c.events.forEach(function (e) { var y = parseInt(e.label, 10); if (y) yrs.push(y); }); });
-    var mo = function (s) { var m = String(s || '').match(/^(\d{4})-(\d{2})/); return m ? MON3[+m[2] - 1] : ''; };
-    var qs = O ? O.seasons || [] : [], last = qs.length ? qs[qs.length - 1].months || [] : [];
-    var b = function (k, label, when, t) { return '<button type="button" class="enso-basis-b" data-sst-view="' + k + '" aria-pressed="' + (v === k) + '" data-when="' + esc(when) + '" title="' + esc(t) + '">' + label + '</button>'; };
-    return '<span class="enso-basis enso-sst-mode enso-timebar' + (O ? '' : ' is-two') + '" role="group" aria-label="What the map shows, in time order" data-v="' + v + '" style="--i:' + SST_VIEWS.indexOf(v) + '"><i class="enso-timebar-thumb" aria-hidden="true"></i>' +
-      b('past', 'Past El Niños', yrs.length ? Math.min.apply(null, yrs) + '–' + (Math.max.apply(null, yrs) + 1) : 'observed', 'Observed: past El Niño winters, averaged by strength or one at a time') +
-      b('now', 'Now', dayRange(g.time_start, g.time_end) || 'this week', 'Observed: sea over the last seven days' + (R && R.anom ? ', rain on land over the last 30 or 7 days' : '')) +
-      (O ? b('outlook', 'Outlook', qs.length ? mo((qs[0].months || [])[0]) + '–' + mo(last[last.length - 1]) + ' · forecast' : 'forecast', 'Forecast: the NMME seasonal outlook for the next three seasons') : '') + '</span>';
+  /* 2026-09-28 (owner: "the sea temperature on the map live one should also go back from here a couple of months"):
+     the last complete months, observed, from data/sst_months.json (monthly means of the same OISST field). */
+  var MON_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  function monLabel(k) { var m = String(k || '').match(/^(\d{4})-(\d{2})/); return m ? MON_FULL[+m[2] - 1] + ' ' + m[1] : String(k || ''); }
+  function monMap() { var M = S.sstmon; if (S.sstView !== 'month' || !M || !M.months) return null; return M.months.filter(function (m) { return m.month === S.sstMonth; })[0] || null; }
+  function sstView() { return olMap() ? 'outlook' : monMap() ? 'month' : sstClass() ? 'past' : 'now'; }
+  /* 2026-09-28 (owner: "this should be a bar you can drag back n forth with months", after a first time bar): the
+     Ocean map's time control is a scrubber under the map (the OWID grammar: map, then its timeline). One track in
+     time order: every past El Niño winter (observed) as a bar as tall as its peak ONI, coloured by CPC strength class;
+     now, with today's ONI and CPC's forecast peak; then the forecast months with the three outlook seasons. Drag the
+     handle, click a mark, use the arrow keys, or play it through. The past stretch is one step per winter, not per
+     year, and a break in the track says so. */
+  /* 2026-09-28 (owner: "go back 6 months ... change based on 30 day and 7 day to show the movement ... slider moves
+     to outlook and you can go back to historical when clicking"): two tracks share the scrubber. The 2026 track
+     (default) runs month by month: the last six complete months (observed monthly means), the last 30 days, the last
+     7 days, then the three outlook seasons (forecast, dashed). Each bar is the Niño 3.4 box of the map at that stop, so
+     the track also shows the event growing. The historical track, behind the "Past El Niños" button, holds every past
+     El Niño winter as a bar as tall as its peak ONI, with today's ONI and CPC's Dec–Feb forecast drawn across it. */
+  var SCRUB = { x0: 2.5, x1: 97.5 };
+  function scrubMode() { return sstView() === 'past' ? 'past' : 'now'; }
+  function scrubStops(mode) {
+    mode = mode || scrubMode();
+    var C = S.sstcomp, O = S.seasonal && S.seasonal.maps ? S.seasonal : null, out = [], g = S.sst || {};
+    out.mode = mode; out.months = [];
+    if (mode === 'past') {
+      var w = [];
+      ((C && C.classes) || []).forEach(function (c) { c.events.forEach(function (e) { w.push({ kind: 'win', label: e.label, cls: c.key, clsLabel: c.label, peak: e.peak_oni }); }); });
+      w.sort(function (a, b) { return parseInt(a.label, 10) - parseInt(b.label, 10); });
+      w.forEach(function (x, i) { x.x = SCRUB.x0 + (w.length > 1 ? i / (w.length - 1) : .5) * (SCRUB.x1 - SCRUB.x0); out.push(x); });
+      return out;
+    }
+    var MM = (S.sstmon && S.sstmon.months) || [], L30 = S.sstmon && S.sstmon.last30, R = S.rainnow, nowM = String(g.time_end || '').slice(0, 7), ms = [];
+    var add = function (m) { if (m && ms.indexOf(m) < 0) ms.push(m); };
+    MM.forEach(function (m) { if (m.month < nowM) add(m.month); }); add(nowM);
+    if (O) (O.seasons || []).forEach(function (q) { (q.months || []).forEach(add); });
+    ms.sort();
+    var mx = function (m, f) { var k = ms.indexOf(m) + (f || 0); return SCRUB.x0 + (ms.length > 1 ? k / (ms.length - 1) : .5) * (SCRUB.x1 - SCRUB.x0); };
+    MM.forEach(function (m) { if (m.month < nowM) out.push({ kind: 'mon', key: m.month, x: mx(m.month), pre: !!m.preliminary, v: (m.box_means_c || {}).nino34 }); });
+    if ((L30 && L30.anom) || (R && R.anom)) out.push({ kind: 'now', days: 30, x: mx(nowM, -.22), v: L30 && L30.box_means_c ? L30.box_means_c.nino34 : null,
+      start: L30 ? L30.start : R.window.start, end: L30 ? L30.end : R.window.end });
+    out.push({ kind: 'now', days: 7, x: mx(nowM, .3), v: (g.box_means_c || {}).nino34, start: g.time_start, end: g.time_end });
+    out.months = ms.filter(function (m) { return m !== nowM; }).map(function (m) { return { m: m, x: mx(m) }; });
+    out.nowX = mx(nowM, .04);
+    out.hasOl = !!O;
+    if (O) (O.seasons || []).forEach(function (q, k) { var qm = q.months || []; out.push({ kind: 'ol', key: q.key, label: q.label, lead: q.lead_months,
+      v: ((O.box_means_c || {})[q.key] || {}).nino34, x: mx(qm[Math.floor(qm.length / 2)] || qm[0]) }); });
+    return out;
   }
-  function sstPastRow() {
-    var C = S.sstcomp; if (S.sub !== 'elnino' || S.mode !== 'sst' || !C || !C.classes || !C.maps) return '';
-    var cl = sstClass(), O = S.seasonal && S.seasonal.maps ? S.seasonal : null, R = S.rainnow, g = S.sst || {};
-    var view = sstView();
-    var w = sstWinter();
-    /* What is painted and over which dates, one line; past winters say it with the pressed buttons instead. */
-    var rw = view === 'now' ? rainNow() : null;
-    var ctx = view === 'now' ? 'Sea ' + dayRange(g.time_start, g.time_end) + (rw && S.showRain !== false ? ' · rain ' + dayRange(rw.start, rw.end) : '') :
-      view === 'outlook' ? 'NMME, ' + olModels() + ', run ' + olRun() + ' · a forecast' : '';
-    var rainOk = view === 'now' ? !!rw : view === 'outlook' ? !!O.rain_grid : !!C.rain_grid;
-    if (view === 'now' && !rainOk) return '';  /* nothing to set: the caption already dates the sea */
-    var rain = rainOk ? '<label class="enso-sst-rain"><input class="enso-native" type="checkbox" id="enso-tog-rain"' + (S.showRain === false ? '' : ' checked') + '><i aria-hidden="true"></i>Rain on land</label>' : '';
-    var nev = view === 'past' && S.pastev && S.pastev.events ? pastEvents().length : 0;
-    if (nev) rain = '<span class="enso-sst-togs">' + rain + '<label class="enso-sst-rain enso-sst-evt"><input class="enso-native" type="checkbox" id="enso-tog-pev"' + (S.showEvents === false ? '' : ' checked') + '><i aria-hidden="true"></i>Events (' + nev + ')</label></span>';
-    /* Rain now: the 30-day pattern or the last 7 days, when the feed carries the week. */
-    if (rw && R.week && R.week.anom) rain = '<div class="enso-sst-season" role="group" aria-label="Rain over the last">' + [[30, '30 days'], [7, '7 days']].map(function (x) {
-      return '<button type="button" data-rain-win="' + x[0] + '" aria-pressed="' + (rw.days === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>' + rain;
-    var seasons = function (list, cur, attr) { return '<div class="enso-sst-season" role="group" aria-label="' + (attr === 'data-sst-season' ? 'Season of the El Niño year' : 'Forecast season') + '">' +
-      list.map(function (q) { return '<button type="button" ' + attr + '="' + q.key + '" aria-pressed="' + (cur === q.key) + '"' + (q.when ? ' title="' + esc(q.when) + '"' : '') + '>' + esc(q.label) + '</button>'; }).join('') + '</div>'; };
-    var head = ctx ? '<p class="enso-sst-ctx"><span>' + ctx + '</span></p>' : '';
-    var body = '';
+  function scrubAt(st) {
+    var v = sstView(), cl = sstClass(), pin = S.sstWinter || S.sstPin, i;
+    for (i = 0; i < st.length; i++) { var x = st[i];
+      if (v === 'now' && x.kind === 'now' && x.days === (S.rainWin === 30 ? 30 : 7)) return i;
+      if (v === 'month' && x.kind === 'mon' && x.key === S.sstMonth) return i;
+      if (v === 'outlook' && x.kind === 'ol' && x.key === (olSeason() || {}).key) return i;
+      if (v === 'past' && x.kind === 'win' && cl && x.cls === cl.key && x.label === pin) return i; }
+    if (v === 'past' && cl) for (i = st.length - 1; i >= 0; i--) if (st[i].kind === 'win' && st[i].cls === cl.key) return i;
+    for (i = st.length - 1; i >= 0; i--) if (st[i].kind === 'now') return i;
+    return 0;
+  }
+  function scrubText(x) {
+    if (!x) return '';
+    if (x.kind === 'win') return winLabel(x.label) + ', ' + x.clsLabel.replace(/ El Niño$/, '').toLowerCase() + ', peak ONI ' + num(x.peak, 1);
+    if (x.kind === 'mon') return monLabel(x.key) + ', observed';
+    if (x.kind === 'now') return 'Last ' + x.days + ' days, ' + dayRange(x.start, x.end);
+    return x.label + ', forecast';
+  }
+  /* A winter picked on the track shows that winter alone; the class average is one click in the row below. */
+  function scrubGo(i, st) {
+    st = st || scrubStops(); var x = st[i]; if (!x) return;
+    if (x.kind === 'now') { S.sstView = 'now'; S.rainWin = x.days; S.sstWinter = null; sstApply(); return; }
+    if (x.kind === 'mon') { S.sstView = 'month'; S.sstMonth = x.key; S.sstWinter = null; sstApply(); return; }
+    if (x.kind === 'ol') { S.sstView = 'outlook'; S.olSeason = x.key; sstApply(); return; }
+    S.sstView = x.cls; S.sstPin = x.label;
+    if (S.sstAvg) { S.sstWinter = null; sstApply(); } else sstPickWinter(x.label);
+  }
+  function scrubHTML(st) {
+    var H = 30, past = st.mode === 'past', max = past ? 3 : 4;
+    var bar = function (v) { return typeof v === 'number' ? Math.max(3, Math.min(H, v / max * H)).toFixed(1) : '3'; };
+    var nino = function (v) { return typeof v === 'number' ? ' · Niño 3.4 box ' + num(v, 1) + ' °C' : ''; };
+    var marks = st.map(function (x, i) {
+      var at = 'data-i="' + i + '" tabindex="-1" style="left:' + x.x.toFixed(2) + '%;--h:' + bar(x.kind === 'win' ? x.peak : x.v) + 'px' + (x.kind !== 'win' && typeof x.v === 'number' ? ';--c:' + sstColor(x.v) : '') + '"';
+      if (x.kind === 'win') return '<button type="button" class="sc-win is-' + x.cls + '" ' + at + ' data-sst-win="' + x.label + '" title="' + esc(scrubText(x)) + '"><i></i><span>’' + x.label.slice(2, 4) + '</span></button>';
+      if (x.kind === 'mon') return '<button type="button" class="sc-win is-mon' + (x.pre ? ' is-pre' : '') + '" ' + at + ' data-sst-mon="' + x.key + '" title="' + esc(scrubText(x) + nino(x.v) + (x.pre ? ', preliminary' : '')) + '"><i></i></button>';
+      if (x.kind === 'now') return '<button type="button" class="sc-win is-now" ' + at + ' data-sst-now="' + x.days + '" title="' + esc(scrubText(x) + nino(x.v)) + '"><i></i><span>' + x.days + ' d</span></button>';
+      return '<button type="button" class="sc-win is-ol" ' + at + ' data-sst-ol="' + x.key + '" title="' + esc(scrubText(x) + nino(x.v) + ' (raw model average)') + '"><i></i><em>' + esc(String(x.label).replace(/ \d{4}/g, '')) + '</em></button>';
+    }).join('');
+    var months = st.months.map(function (m) { var mm = +m.m.slice(5, 7); return '<span class="sc-mon" style="left:' + m.x.toFixed(2) + '%">' + MON3[mm - 1] + (mm === 1 ? ' ’' + m.m.slice(2, 4) : '') + '</span>'; }).join('');
+    var lines, zones, refs = '';
+    if (past) {
+      var fc = sstFcRange(), now = S.oniLive, ref = function (v, cls) { return typeof v === 'number' ? '<i class="sc-ref ' + cls + '" style="bottom:' + (28 + +bar(v)).toFixed(1) + 'px"></i>' : ''; };
+      refs = ref(now, 'is-now') + (fc ? ref(fc.m, 'is-fc') : '');
+      lines = '<i class="sc-line" style="left:0;right:0"></i>';
+      zones = '<span class="sc-zone-t" style="left:' + SCRUB.x0 + '%">Past El Niño winters · observed · bar = peak ONI' + (typeof now === 'number' ? ' · <b>line: now ' + num(now, 1) + '</b>' : '') + (fc ? ' · <b class="is-fc">dashed: CPC Dec–Feb ' + num(fc.m, 1) + '</b>' : '') + '</span>';
+    } else {
+      var nx = st.nowX || SCRUB.x1;
+      lines = '<i class="sc-line" style="left:0;width:' + (nx + 2.2).toFixed(2) + '%"></i>' + (st.hasOl ? '<i class="sc-line is-fc" style="left:' + (nx + 2.2).toFixed(2) + '%;right:0"></i>' : '');
+      zones = '<span class="sc-zone-t" style="left:' + SCRUB.x0 + '%">2026 · observed · bar = Niño 3.4 box, °C</span>' +
+        '<button type="button" class="sc-zone" data-sst-view="now" style="left:' + nx.toFixed(2) + '%">Now</button>' +
+        (st.hasOl ? '<button type="button" class="sc-zone is-fc" data-sst-view="outlook" style="right:0">Outlook<i> · forecast</i></button>' : '');
+    }
+    var side = past ? '<button type="button" class="sc-mode" data-sst-view="now" title="Back to this year: recent months, now and the outlook">2026 ›</button>'
+      : '<button type="button" class="sc-mode" data-sst-view="past" title="Past El Niño winters, observed, by strength">‹ Past El Niños</button>';
+    return '<div class="sc-side"><button type="button" class="sc-play" aria-pressed="false" aria-label="Play the map through time"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path class="sc-i-play" d="M3 1.5v9l7-4.5z"/><path class="sc-i-pause" d="M2.5 1.5h2.6v9H2.5zM6.9 1.5h2.6v9H6.9z"/></svg></button>' + side + '</div>' +
+      '<div class="sc-main"><div class="sc-zones">' + zones + '</div>' +
+      '<div class="sc-track">' + lines + refs + marks + months +
+        '<div class="sc-handle" role="slider" tabindex="0" aria-label="Time shown on the map" aria-valuemin="0" aria-valuemax="' + (st.length - 1) + '"><i class="sc-knob"></i></div>' +
+      '</div></div>';
+  }
+  function syncScrub() {
+    var root = document.getElementById('enso-scrub'); if (!root || typeof root.querySelector !== 'function') return;
+    var st = scrubStops(), i = scrubAt(st), x = st[i], cl = sstClass(), v = sstView(), avg = v === 'past' && !S.sstWinter;
+    var hd = root.querySelector('.sc-handle');
+    if (hd && x && !/\bis-drag\b/.test(root.className)) hd.style.left = x.x.toFixed(2) + '%';
+    if (hd && x) { hd.setAttribute('aria-valuenow', String(i)); hd.setAttribute('aria-valuetext', avg && cl ? cl.label + ' winters averaged' : scrubText(x)); }
+    root.querySelectorAll('[data-i]').forEach(function (b) { var k = +b.getAttribute('data-i'), t = st[k];
+      b.classList.toggle('is-pick', k === i && !avg); b.classList.toggle('is-cls', !!(avg && cl && t && t.kind === 'win' && t.cls === cl.key)); });
+    root.querySelectorAll('[data-sst-view]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-sst-view') === v)); });
+    root.setAttribute('data-v', v);
+  }
+  function stopScrubPlay() {
+    if (S.scrubPlay) { clearInterval(S.scrubPlay); S.scrubPlay = 0; }
+    var b = document.querySelector && document.querySelector('#enso-scrub .sc-play'); if (b && b.setAttribute) b.setAttribute('aria-pressed', 'false');
+  }
+  function startScrubPlay() {
+    var st = scrubStops(), i = scrubAt(st); if (i >= st.length - 1) i = -1;
+    var b = document.querySelector('#enso-scrub .sc-play'); if (b) b.setAttribute('aria-pressed', 'true');
+    var tick = function () { var s2 = scrubStops(); i += 1; if (i >= s2.length || S.sub !== 'elnino') { stopScrubPlay(); return; } if (s2[i].kind === 'win') S.sstAvg = false; scrubGo(i, s2); };
+    tick(); S.scrubPlay = setInterval(tick, 1400);
+  }
+  function wireScrub(root) {
+    if (!root || typeof root.querySelector !== 'function') return;
+    var track = root.querySelector('.sc-track'), hd = root.querySelector('.sc-handle'), drag = false, raf = 0, want = -1;
+    var nearest = function (cx) { var r = track.getBoundingClientRect(), x = (cx - r.left) / r.width * 100, st = scrubStops(), best = 0, bd = 1e9;
+      st.forEach(function (s, i) { var d = Math.abs(s.x - x); if (d < bd) { bd = d; best = i; } }); return { i: best, x: Math.max(0, Math.min(100, x)) }; };
+    var step = function (i) { var st = scrubStops(); i = Math.max(0, Math.min(st.length - 1, i));
+      if (i !== scrubAt(st) || (st[i].kind === 'win' && S.sstAvg)) { if (st[i].kind === 'win') S.sstAvg = false; scrubGo(i, st); } };
+    var move = function (e) { var n = nearest(e.clientX); hd.style.left = n.x.toFixed(2) + '%'; want = n.i;
+      if (!raf) raf = requestAnimationFrame(function () { raf = 0; if (want >= 0) step(want); }); };
+    track.addEventListener('pointerdown', function (e) { if (e.button) return; stopScrubPlay(); drag = true; root.classList.add('is-drag');
+      try { track.setPointerCapture(e.pointerId); } catch (x) {} move(e); e.preventDefault(); });
+    track.addEventListener('pointermove', function (e) { if (drag) move(e); });
+    var end = function () { if (!drag) return; drag = false; root.classList.remove('is-drag'); if (want >= 0) step(want); syncScrub(); try { hd.focus({ preventScroll: true }); } catch (x) {} };
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (t) { track.addEventListener(t, end); });
+    hd.addEventListener('keydown', function (e) { var st = scrubStops(), i = scrubAt(st), k = e.key;
+      var j = k === 'ArrowLeft' || k === 'ArrowDown' ? i - 1 : k === 'ArrowRight' || k === 'ArrowUp' ? i + 1 : k === 'Home' ? 0 : k === 'End' ? st.length - 1 : null;
+      if (j == null) return; e.preventDefault(); stopScrubPlay(); step(j); });
+    root.querySelectorAll('.sc-zones [data-sst-view], .sc-side [data-sst-view]').forEach(function (b) { b.onclick = function () { stopScrubPlay(); var k = b.getAttribute('data-sst-view');
+      if (k === 'past') { if (sstView() !== 'past') { var st = scrubStops(), c = sstDefaultClass(), last = null; st.forEach(function (s) { if (s.kind === 'win' && s.cls === c) last = s.label; });
+        S.sstAvg = true; S.sstView = c; S.sstPin = last; S.sstWinter = null; sstApply(); } return; }
+      if (k === 'outlook') S.olSeason = null;  /* the zone opens on the nearest season; the track picks the others */
+      S.sstView = k; S.sstWinter = null; sstApply(); }; });
+    /* A click that did not come through the pointer (keyboard on a mark, assistive tech, a test) still picks the mark. */
+    root.querySelectorAll('.sc-track [data-i]').forEach(function (b) { b.onclick = function () { stopScrubPlay(); step(+b.getAttribute('data-i')); }; });
+    var play = root.querySelector('.sc-play'); if (play) play.onclick = function () { if (S.scrubPlay) stopScrubPlay(); else startScrubPlay(); };
+  }
+  /* The row under the track: what is painted, then the choices that belong to that view. */
+  function sstOptsRow() {
+    var C = S.sstcomp, cl = sstClass(), O = S.seasonal && S.seasonal.maps ? S.seasonal : null, R = S.rainnow, g = S.sst || {}, view = sstView();
+    var rw = view === 'now' ? rainNow() : null, avg = view === 'past' && !S.sstWinter, pin = S.sstWinter || S.sstPin;
+    var rainOk = view === 'now' ? !!rw : view === 'outlook' ? !!(O && O.rain_grid) : view === 'month' ? false : !!C.rain_grid;
+    var sn0 = seaNow();
+    var ctx = view === 'now' ? 'Last ' + sn0.days + ' days · sea ' + dayRange(sn0.start, sn0.end) + (rw && S.showRain !== false ? ' · rain ' + dayRange(rw.start, rw.end) : '') :
+      view === 'month' ? esc(monLabel(S.sstMonth)) + ' · sea, mean of ' + (monMap() || {}).days_averaged + ' daily fields' + ((monMap() || {}).preliminary ? ' · preliminary' : '') :
+      view === 'outlook' ? esc(olSeason().label) + ' · NMME, ' + olModels() + ', run ' + olRun() :
+      avg ? esc(cl.label.replace(/ El Niño$/, '')) + ' El Niños averaged · ' + cl.events.map(function (e) { return winLabel(e.label); }).join(', ') :
+      esc(scrubText((scrubStops().filter(function (s) { return s.label === pin; })[0])));
+    var grp = function (label, items) { return '<div class="enso-sst-season" role="group" aria-label="' + label + '">' + items.map(function (x) {
+      return '<button type="button" ' + x[0] + ' aria-pressed="' + x[2] + '"' + (x[3] ? ' title="' + esc(x[3]) + '"' : '') + '>' + x[1] + '</button>'; }).join('') + '</div>'; };
+    var mid = '';
     if (view === 'past') {
-      var lo = 0.3, hi = 2.8, fc = sstFcRange(), now = S.oniLive;
-      var P = function (v) { return (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * 100; }, X = function (v) { return P(v).toFixed(2) + '%'; };
-      var by = {}; C.classes.forEach(function (c) { by[c.key] = c; });
-      var bands = [['weak', 0.5, 1.0, 'Weak'], ['moderate', 1.0, 1.5, 'Moderate'], ['strong', 1.5, 2.0, 'Strong'], ['very_strong', 2.0, hi, 'Very strong']];
-      var marks = (fc ? '<i class="enso-sst-fc" style="left:' + X(fc.lo) + ';width:calc(' + X(fc.hi) + ' - ' + X(fc.lo) + ')"></i>' +
-          '<span class="enso-sst-lab is-fc" style="left:' + X(Math.max(fc.lo, typeof now === 'number' ? now : fc.lo)) + '">CPC Dec–Feb</span>' : '') +
-        (typeof now === 'number' ? '<i class="enso-sst-now" style="left:' + X(now) + '"></i><span class="enso-sst-lab is-now" style="' + (P(now) < 25 ? 'left:calc(' + X(now) + ' + 5px)' : 'right:calc(100% - ' + X(now) + ' + 5px)') + '">now ' + num(now, 1) + '</span>' : '');
-      body += '<div class="enso-sst-scale">' + marks +
-        '<div class="enso-sst-bands" role="radiogroup" aria-label="Past El Niño winters by strength (ONI at the peak)">' + bands.map(function (b) {
-          var c = by[b[0]]; return '<button type="button" role="radio" data-sst-cls="' + b[0] + '" aria-checked="' + (S.sstView === b[0]) + '" style="left:' + X(b[1]) + ';width:calc(' + X(b[2]) + ' - ' + X(b[1]) + ')" title="' + esc(c ? c.label + ', ONI ' + c.oni_range + ' at the peak: ' + c.events.map(function (e) { return e.label; }).join(', ') : b[3]) + '">' + b[3] + '</button>'; }).join('') + '</div>' +
-        '<div class="enso-sst-ticks" aria-hidden="true">' + C.classes.map(function (c) { return c.events.map(function (e) { return '<i class="' + (c.key === S.sstView ? 'is-on' : '') + (e.label === S.sstWinter && c.key === S.sstView ? ' is-pick' : '') + '" style="left:' + X(e.peak_oni) + '"></i>'; }).join(''); }).join('') + '</div>' +
-        '</div>';
-      body += '<div class="enso-sst-wins" role="group" aria-label="' + esc(cl.label) + ' winters: all averaged, or one">' +
-        '<button type="button" data-sst-win="" aria-pressed="' + !S.sstWinter + '" title="Average of all ' + cl.n + ' winters">All ' + cl.n + '</button>' +
-        cl.events.map(function (e) { return '<button type="button" data-sst-win="' + e.label + '" aria-pressed="' + (S.sstWinter === e.label) + '"' + (S.sstWinter === e.label && !w ? ' aria-busy="true"' : '') + ' title="Peak ONI ' + num(e.peak_oni, 1) + '">' + winLabel(e.label) + '</button>'; }).join('') + '</div>';
-      body += seasons(C.seasons || [], sstSeason().key, 'data-sst-season');
-    } else if (view === 'outlook') body += seasons((O.seasons || []).map(function (q) { return { key: q.key, label: String(q.label).replace(/ \d{4}/g, ''), when: q.label + (q.lead_months ? ', ' + q.lead_months + ' month' + (q.lead_months > 1 ? 's' : '') + ' ahead' : '') }; }), olSeason().key, 'data-sst-ol');
-    return '<div class="enso-sst-past is-' + view + '" role="group" aria-label="' + { now: 'This week', past: 'Past El Niño winters', outlook: 'Seasonal outlook' }[view] + ': what the map paints">' + head + body + rain + '</div>';
+      var clw = cl.label.replace(/ El Niño$/, '').toLowerCase();
+      mid = grp('One winter or its class average', [['data-sst-avg="0"', pin ? esc(winLabel(pin)) + ' alone' : 'One winter', !avg], ['data-sst-avg="1"', 'All ' + cl.n + ' ' + clw + ' averaged', avg, cl.events.map(function (e) { return e.label; }).join(', ')]]) +
+        grp('Season of the El Niño year', (C.seasons || []).map(function (q) { return ['data-sst-season="' + q.key + '"', esc(q.label), sstSeason().key === q.key, q.when || '']; }));
+    }
+    var togs = (rainOk ? '<label class="enso-sst-rain"><input class="enso-native" type="checkbox" id="enso-tog-rain"' + (S.showRain === false ? '' : ' checked') + '><i aria-hidden="true"></i>Rain on land</label>' : '');
+    var nev = view === 'past' && S.pastev && S.pastev.events ? pastEvents().length : view === 'now' ? nowReports().length : 0;
+    if (nev) togs += '<label class="enso-sst-rain enso-sst-evt"><input class="enso-native" type="checkbox" id="enso-tog-pev"' + (S.showEvents === false ? '' : ' checked') + '><i aria-hidden="true"></i>' + (view === 'now' ? 'Reported' : 'Events') + ' (' + nev + ')</label>';
+    return '<div class="enso-sst-opts is-' + view + '" role="group" aria-label="What the map paints"><p class="enso-sst-ctx"><span>' + ctx + '</span></p>' + mid + '<span class="enso-sst-togs">' + togs + '</span></div>';
   }
   function sstApply() { if (S.sstLayer && S.sstLayer._schedule) S.sstLayer._schedule(); syncRainLayer(); renderWeeklyStrip(); renderLegend(); renderMapTag(); mapChrome(); renderSstDock(); }
   /* One winter's maps are fetched the first time a reader picks it; a failed fetch drops back to the average. */
@@ -45715,25 +45901,26 @@ function showCommodityDetail(key) {
       .catch(function () { if (S.sstWinter === label) S.sstWinter = null; })
       .then(function () { if (S.sub === 'elnino') sstApply(); });
   }
-  /* The control is a bar fixed to the map's lower edge (the OWID grammar: chart, then its controls), so it covers
-     no ocean and no land at any width, and the strip below it reads the same view. */
+  /* Under the map: the scrubber (built once per data set, then only moved, so a drag keeps its pointer) and the
+     options row (rebuilt on every change). */
   function renderSstDock() {
     var body = document.getElementById('enso-map-body'); if (!body || typeof body.querySelector !== 'function') return;
-    var dock = document.getElementById('enso-sst-dock'), html = sstPastRow(), v = sstView();
-    var bar = document.querySelector('#enso-controls .enso-timebar');
-    if (bar && bar.style && bar.style.setProperty) { bar.setAttribute('data-v', v); bar.style.setProperty('--i', SST_VIEWS.indexOf(v)); }
-    document.querySelectorAll('#enso-controls [data-sst-view]').forEach(function (b) { var k = b.getAttribute('data-sst-view'); b.setAttribute('aria-pressed', String(k === v));
-      b.onclick = function () { S.sstView = k === 'now' || k === 'outlook' ? k : (sstClass() ? S.sstView : sstDefaultClass()); sstApply(); }; });
-    if (!html) { if (dock && dock.remove) dock.remove(); return; }
+    var dock = document.getElementById('enso-sst-dock'), C = S.sstcomp;
+    if (S.sub !== 'elnino' || S.mode !== 'sst' || !C || !C.classes || !C.maps) { stopScrubPlay(); if (dock && dock.remove) dock.remove(); return; }
     if (!dock) { dock = document.createElement('div'); dock.id = 'enso-sst-dock'; body.parentNode.insertBefore(dock, body.nextSibling); }
-    dock.innerHTML = html;
-    dock.querySelectorAll('[data-sst-cls]').forEach(function (b) { b.onclick = function () { S.sstView = b.getAttribute('data-sst-cls'); S.sstWinter = null; sstApply(); }; });
-    dock.querySelectorAll('[data-sst-win]').forEach(function (b) { b.onclick = function () { sstPickWinter(b.getAttribute('data-sst-win')); }; });
-    dock.querySelectorAll('[data-sst-season]').forEach(function (b) { b.onclick = function () { S.sstSeason = b.getAttribute('data-sst-season'); sstApply(); }; });
-    dock.querySelectorAll('[data-sst-ol]').forEach(function (b) { b.onclick = function () { S.olSeason = b.getAttribute('data-sst-ol'); sstApply(); }; });
-    dock.querySelectorAll('[data-rain-win]').forEach(function (b) { b.onclick = function () { S.rainWin = +b.getAttribute('data-rain-win'); sstApply(); }; });
-    var trn = dock.querySelector('#enso-tog-rain'); if (trn) trn.onchange = function () { S.showRain = trn.checked; sstApply(); };
-    var tev = dock.querySelector('#enso-tog-pev'); if (tev) tev.onchange = function () { S.showEvents = tev.checked; sstApply(); };
+    var st = scrubStops(), sig = st.mode + ':' + st.map(function (x) { return x.kind + (x.label || x.key || x.days || ''); }).join('|'), scrub = dock.querySelector('#enso-scrub');
+    if (!scrub || scrub.getAttribute('data-sig') !== sig) {
+      dock.innerHTML = '<div id="enso-scrub" class="enso-scrub" data-sig="' + esc(sig) + '">' + scrubHTML(st) + '</div><div id="enso-sst-opts"></div>';
+      wireScrub(dock.querySelector('#enso-scrub'));
+    }
+    syncScrub();
+    var opts = dock.querySelector('#enso-sst-opts'); opts.innerHTML = sstOptsRow();
+    opts.querySelectorAll('[data-sst-avg]').forEach(function (b) { b.onclick = function () { stopScrubPlay(); S.sstAvg = b.getAttribute('data-sst-avg') === '1';
+      if (S.sstAvg) { S.sstWinter = null; sstApply(); } else sstPickWinter(S.sstPin || null); }; });
+    opts.querySelectorAll('[data-sst-season]').forEach(function (b) { b.onclick = function () { S.sstSeason = b.getAttribute('data-sst-season'); sstApply(); }; });
+    opts.querySelectorAll('[data-rain-win]').forEach(function (b) { b.onclick = function () { S.rainWin = +b.getAttribute('data-rain-win'); sstApply(); }; });
+    var trn = opts.querySelector('#enso-tog-rain'); if (trn) trn.onchange = function () { S.showRain = trn.checked; sstApply(); };
+    var tev = opts.querySelector('#enso-tog-pev'); if (tev) tev.onchange = function () { S.showEvents = tev.checked; sstApply(); };
   }
   function syncRainLayer() {
     if (!S.map || !RainLayer) return;
@@ -45765,10 +45952,40 @@ function showCommodityDetail(key) {
       '<br><span style="color:#8b8980">' + (e.link === 'linked' ? 'The source ties it to El Niño' : 'Happened during this El Niño; the source does not attribute it') + '</span>' +
       '<br><span style="color:#8b8980">' + esc([src.publisher, src.date].filter(Boolean).join(', ')) + (src.url ? ' · click to open' : '') + '</span>';
   }
+  /* 2026-09-28 (owner: "maybe work with the reported tab news to model the live rain and droughts too"): rain is
+     never painted from news, but on the Now map the floods and droughts being reported (GDACS alerts, and the flood,
+     drought and wet/dry weather items of the Reported tab's feed) are marked for the last 30 days, and each says
+     whether the gauge map agrees at that spot. The two are independent: agreement is a check, not a proof. */
+  var NOW_REPORT_DAYS = 30;
+  function nowReports() {
+    if (S.sub !== 'elnino' || S.mode !== 'sst' || !S.showSST || sstView() !== 'now') return [];
+    var now = Date.now(), out = [], seen = {}, since = now - NOW_REPORT_DAYS * 864e5;
+    var push = function (ev, ll, cls) { var k = (ev.url || ev.title || '') + '|' + ev.iso; if (seen[k] || !ll) return; seen[k] = 1; out.push({ ev: ev, lat: ll[0], lon: ll[1], kind: cls === 'drier' ? 'dry' : 'wet' }); };
+    Object.keys(S.gdacs || {}).forEach(function (k) { var g = S.gdacs[k]; if (!g || (g.event_type !== 'DR' && g.event_type !== 'FL')) return;
+      if (!g.is_current && !(Date.parse(g.to_date || '') >= since)) return;
+      if (typeof g.lat !== 'number' || typeof g.lng !== 'number') return;
+      push({ iso: g.iso3, type: g.event_type === 'DR' ? 'drought' : 'flood', title: g.title || g.event_type_label, source: 'GDACS ' + (g.alert_level || '') + ' alert', url: g.url,
+        date: g.to_date, since: g.from_date, detail: g.severity_text }, [g.lat, g.lng], g.event_type === 'DR' ? 'drier' : 'wetter'); });
+    ((typeof window !== 'undefined' && window.disturbanceEvents) || []).forEach(function (ev) {
+      if (!ev || !ev.iso || ev.claim) return; var cls = hazardRainClass(ev); if (!cls) return;
+      var t = Date.parse(ev.date || ''); if (!(t >= since) && !(ev.to_date && Date.parse(ev.to_date) >= now)) return;
+      push(ev, evLatLng(ev), cls); });
+    return out;
+  }
+  function nowTip(r) {
+    var ev = r.ev, rg = rainGrid(), rn = rainNow(), pv = rg && rn ? gridCell(rg, rg.kind === 'mm' ? 'pct' : 'anom', { lat: r.lat, lng: r.lon }) : null;
+    var win = rn ? 'last ' + rn.days + ' days' : '';
+    var check = pv == null ? 'No gauge reading at this spot on the rain map' : Math.abs(pv) < 15 ? 'Rain map here: near normal (' + num(pv, 0) + '%, ' + win + ')' :
+      ((pv < 0) === (r.kind === 'dry') ? 'Rain map agrees: ' : 'Rain map disagrees: ') + Math.abs(pv) + '% ' + (pv < 0 ? 'below' : 'above') + ' normal, ' + win;
+    return '<b>' + esc(ev.title || '') + '</b><br>' + esc(nameFor(ev.iso)) + ' · ' + esc(String(ev.source || '').split('(')[0].trim()) + (ev.date ? ' · ' + esc(ev.date) : '') +
+      (ev.since ? ' (since ' + esc(ev.since) + ')' : '') + (ev.detail ? '<br>' + esc(ev.detail) : '') +
+      '<br><span style="color:#8b8980">' + esc(check) + (ev.type === 'drought' && pv != null ? '. Droughts build over months, so one month can differ.' : '.') + '</span>' +
+      (ev.url && /^https:\/\//.test(ev.url) ? '<br><span style="color:#8b8980">click to open the report</span>' : '');
+  }
   function syncPastEvents() {
     if (!S.map || typeof L === 'undefined' || !L.marker) return;
     if (S.pevLayer) { S.map.removeLayer(S.pevLayer); S.pevLayer = null; }
-    var list = S.showEvents === false ? [] : pastEvents(); if (!list.length) return;
+    var list = S.showEvents === false ? [] : pastEvents(), reps = S.showEvents === false ? [] : nowReports(); if (!list.length && !reps.length) return;
     if (!S.map.getPane('ensoEvents')) { S.map.createPane('ensoEvents'); S.map.getPane('ensoEvents').style.zIndex = 615; }
     var ss = sstSeason().key, many = !S.sstWinter;
     S.pevLayer = L.layerGroup(list.map(function (e) {
@@ -45778,7 +45995,13 @@ function showCommodityDetail(key) {
       m.bindTooltip(pevTip(e, many), { direction: 'top', offset: [0, -6], opacity: .97 });
       if (e.source && /^https:\/\//.test(e.source.url)) m.on('click', function () { window.open(e.source.url, '_blank', 'noopener'); });
       return m;
-    })).addTo(S.map);
+    }).concat(reps.map(function (r) {
+      var m = L.marker([r.lat, r.lon], { pane: 'ensoEvents', alt: r.ev.title || '', keyboard: true,
+        icon: L.divIcon({ className: 'enso-pev is-on is-now', iconSize: [14, 14], iconAnchor: [7, 7], html: pevSvg(r.kind, true, 14) }) });
+      m.bindTooltip(nowTip(r), { direction: 'top', offset: [0, -6], opacity: .97 });
+      if (r.ev.url && /^https:\/\//.test(r.ev.url)) m.on('click', function () { window.open(r.ev.url, '_blank', 'noopener'); });
+      return m;
+    }))).addTo(S.map);
   }
   function sstCellAt(latlng) {
     var g = sstGrid(); if (!g || !g.anom || !latlng) return null;
@@ -45792,14 +46015,18 @@ function showCommodityDetail(key) {
      painted value, then when and against what in the words of the view that is painted. Coordinates last. */
   function sstReadoutHtml(f, ll) {
     var sc = sstScene(), rows = [], at = Math.abs(ll.lat).toFixed(1) + '°' + (ll.lat < 0 ? 'S' : 'N') + ' ' + Math.abs(ll.lng).toFixed(1) + '°' + (ll.lng < 0 ? 'W' : 'E');
-    var when = sc.view === 'now' ? '' : sc.view === 'outlook' ? sc.season + ' · forecast' : sc.view === 'winter' ? sc.season + ' ' + winLabel(sc.win.label) :
+    var when = sc.view === 'now' ? '' : sc.view === 'month' ? sc.season + ' mean' : sc.view === 'outlook' ? sc.season + ' · forecast' : sc.view === 'winter' ? sc.season + ' ' + winLabel(sc.win.label) :
       sc.season + ', ' + sc.cls.n + ' ' + sc.cls.label.toLowerCase().replace(' el niño', '') + ' winters averaged';
     if (f) {
       var rg = rainGrid(), rv = rg ? gridCell(rg, 'anom', ll) : null;
       rows.push('<b>' + esc(nameFor(isoOf(f)) || (f.properties || {}).name || '') + '</b>');
       var mm = sc.view === 'now' && rg ? gridCell(rg, 'mm', ll) : null, nmm = sc.view === 'now' && rg ? gridCell(rg, 'nmm', ll) : null, w = sc.view === 'now' ? rainNow() : null;
       var mmTxt = mm != null && nmm != null ? mm + ' mm fell, normal ' + nmm + ' mm' : '';
-      if (rv != null) {
+      if (rv != null && rg.kind === 'mm') {
+        var pv = gridCell(rg, 'pct', ll);
+        rows.push('<span class="ro-v">' + (rv === 0 ? 'Rain at normal' : 'Rain ' + Math.abs(rv) + ' mm ' + (rv < 0 ? 'below' : 'above') + ' normal') + (pv != null ? ' (' + num(pv, 0) + '%)' : '') + '</span>');
+        rows.push('<span class="ro-c">' + (mmTxt ? mmTxt + ' · ' : '') + 'last 7 days, ' + dayRange(w.start, w.end) + '</span>');
+      } else if (rv != null) {
         /* The excess or shortfall against the baseline, in words, then in millimetres where the feed has them. */
         rows.push('<span class="ro-v">' + (rv === 0 ? 'Rain at ' : 'Rain ' + Math.abs(rv) + '% ' + (rv < 0 ? 'below ' : 'above ')) + (sc.view === 'outlook' ? 'the models’ normal' : sc.view === 'now' ? 'normal' : 'the 1991–2020 average') + '</span>');
         if (w) rows.push('<span class="ro-c">' + (mmTxt ? mmTxt + ' · ' : '') + 'last ' + w.days + ' days, ' + dayRange(w.start, w.end) + '</span>');
@@ -45811,8 +46038,8 @@ function showCommodityDetail(key) {
         sc.view === 'now' ? (mmTxt ? 'Normally dry now: ' + mmTxt + ', last ' + w.days + ' days' : 'No rain reading: too few gauges') : 'No rain reading: normally dry this season') + '</span>');
     } else {
       var v = sstCellAt(ll), g = S.sst || {}; if (v == null) return '';
-      rows.push('<b>Sea surface</b>', '<span class="ro-v">' + num(v, 1) + ' °C against ' + (sc.view === 'now' ? '1971–2000' : sc.view === 'outlook' ? 'the models’ normal' : '1991–2020') + '</span>',
-        '<span class="ro-c">' + esc(sc.view === 'now' ? 'Seven-day mean, ' + dayRange(g.time_start, g.time_end) : when) + '</span>');
+      rows.push('<b>Sea surface</b>', '<span class="ro-v">' + num(v, 1) + ' °C against ' + (sc.view === 'now' || sc.view === 'month' ? '1971–2000' : sc.view === 'outlook' ? 'the models’ normal' : '1991–2020') + '</span>',
+        '<span class="ro-c">' + esc(sc.view === 'now' ? (function (q) { return (q.days === 30 ? '30-day' : 'Seven-day') + ' mean, ' + dayRange(q.start, q.end); })(seaNow()) : when) + '</span>');
     }
     return rows.join('') + '<span class="ro-ll">' + at + '</span>';
   }
@@ -45884,24 +46111,28 @@ function showCommodityDetail(key) {
     var ramp = '';
     for (var v = -5; v <= 5.01; v += 0.25) ramp += '<i style="background:' + sstColor(v) + '"></i>';
     var sc = sstScene(), cl = sc.cls;
-    var ends = function (a, b, c) { return '<div style="display:flex;justify-content:space-between;font-family:\'Geist Mono\',monospace;font-size:9px;color:var(--t3);width:150px;margin-top:3px;"><span>' + a + '</span><span>' + b + '</span><span>' + c + '</span></div>'; };
-    var rramp = ''; for (var rv = -80; rv <= 80.01; rv += 4) rramp += '<i style="background:' + (rainColor(rv) || 'transparent') + '"></i>';
-    var rainKey = sc.rain ? '<div class="enso-legend-block"><div class="enso-legend-t">' + ({ now: 'Rain on land vs normal, last ' + sc.rainDays + ' days to ' + esc((sc.rainWhen || '').replace(/^.* to /, '').replace(/ \d{4}$/, '')), outlook: 'Rain on land, % against the models’ normal · forecast' }[sc.view] || 'Rain on land, % against the 1991–2020 ' + esc(sc.season) + ' mean') + '</div>' +
-      '<div class="enso-ramp enso-sst-ramp">' + rramp + '</div>' + ends('below normal', 'normal', 'above normal') +
-      '<div class="ctr-note">' + ({ now: 'NOAA CPC rain gauges against the 1991–2020 normal for the same calendar days; colour ends at ±80%. Blank where there are too few gauges (much of the Congo and Amazon) or under 0.5 mm a day is normal. Hover for millimetres.',
+    var box = function (r, a, b, c) { return '<div class="enso-rampbox"><div class="enso-ramp enso-sst-ramp">' + r + '</div><div class="enso-ramp-ends"><span>' + a + '</span><span>' + b + '</span><span>' + c + '</span></div></div>'; };
+    var rg0 = sc.rain ? rainGrid() : null, rk = rg0 && rg0.kind || 'pct';
+    var rramp = ''; for (var rv = -80; rv <= 80.01; rv += 4) rramp += '<i style="background:' + (rainColor(rv, rk) || 'transparent') + '"></i>';
+    var rainKey = sc.rain ? '<div class="enso-legend-block"><div class="enso-legend-t">' + ({ now: 'Rain on land vs normal, last ' + sc.rainDays + ' days to ' + esc((sc.rainWhen || '').replace(/^.* to /, '').replace(/ \d{4}$/, '')) + (rk === 'mm' ? ', mm' : ''), outlook: 'Rain on land, % against the models’ normal · forecast' }[sc.view] || 'Rain on land, % against the 1991–2020 ' + esc(sc.season) + ' mean') + '</div>' +
+      (rk === 'mm' ? box(rramp, '−80 mm', 'normal', '+80 mm') : box(rramp, rk === 'live' ? '−80%' : 'drier', rk === 'live' ? 'normal ±15%' : 'normal', rk === 'live' ? '+80%' : 'wetter')) +
+      '<div class="ctr-note">' + ({ now: 'NOAA CPC rain gauges against the 1991–2020 normal for the same calendar days. ' + (rk === 'mm' ? 'Seven days are shown in millimetres: a week’s percent swings too far to read.' : 'Within ±15% is ordinary variation and left clear.') + ' Blank where gauges are too few or the season is normally dry. Hover for millimetres.',
         outlook: 'Masked where the season is normally dry. The average of many model runs: a real season swings further. Hover a place for CPC’s odds of a wet or dry third (33% is no signal).',
         winter: 'Masked where the season is arid. One winter: local swings are its own, not a rule.' }[sc.view] || 'Masked where the season is arid. Hover a place for how many of the winters agreed.') + '</div></div>' : '';
-    var sea = function (t, note) { return '<div class="enso-legend-block"><div class="enso-legend-t">' + t + '</div><div class="enso-ramp enso-sst-ramp">' + ramp + '</div>' + ends('≤ −5', '0', '≥ +5') +
+    var sea = function (t, note) { return '<div class="enso-legend-block"><div class="enso-legend-t">' + t + '</div>' + box(ramp, '≤ −5', '0', '≥ +5') +
       '<div class="ctr-note" style="max-width:34ch;margin-top:5px;">' + note + '</div></div>'; };
     if (sc.view === 'outlook') return rainKey + sea(esc(sc.what), ((S.seasonal && S.seasonal.notes) || []).filter(function (n) { return /smooth|own hindcast climate|skill is low/.test(n); }).map(esc).join(' '));
-    var pev = pastEvents(), evKey = pev.length && S.showEvents !== false ? '<div class="enso-legend-block"><div class="enso-legend-t">Reported events, ' + pev.length + ' in ' + (sc.win ? 'this winter' : 'these winters') + '</div>' +
-      '<div class="enso-legend-row enso-pev-key">' + [['wet', 'flood, cyclone'], ['dry', 'drought, fire, heat'], ['other', 'fishery, disease']].filter(function (k) { return pev.some(function (e) { return (PEV_TYPE[e.type] || [0, 'other'])[1] === k[0]; }); }).map(function (k) { return pevSvg(k[0], true, 11) + esc(k[1]); }).join(' ') + ' ' + pevSvg('other', false, 11) + 'other seasons</div>' +
-      '<div class="ctr-note">One source per mark (WMO, NOAA, OCHA, FAO, papers); hover for it, click to open. “Ties it to El Niño” only where that source says so.</div></div>' : '';
+    var isNow = sc.view === 'now', pev = isNow ? nowReports() : pastEvents(), kindOf = function (e) { return e.kind || (PEV_TYPE[e.type] || [0, 'other'])[1]; };
+    var evKey = pev.length && S.showEvents !== false ? '<div class="enso-legend-block"><div class="enso-legend-t">' + (isNow ? 'Reported floods and droughts, ' + pev.length + ' in the last ' + NOW_REPORT_DAYS + ' days' : 'Reported events, ' + pev.length + ' in ' + (sc.win ? 'this winter' : 'these winters')) + '</div>' +
+      '<div class="enso-legend-row enso-pev-key">' + [['wet', isNow ? 'flood, wet spell' : 'flood, cyclone'], ['dry', isNow ? 'drought, dry spell' : 'drought, fire, heat'], ['other', 'fishery, disease']].filter(function (k) { return pev.some(function (e) { return kindOf(e) === k[0]; }); }).map(function (k) { return pevSvg(k[0], true, 11) + esc(k[1]); }).join(' ') + (isNow ? '' : ' ' + pevSvg('other', false, 11) + 'other seasons') + '</div>' +
+      '<div class="ctr-note">' + (isNow ? 'GDACS alerts and the flood and drought items of the Reported tab’s feed. Hover one to see whether the rain map agrees there; click to open the report.' : 'One source per mark (WMO, NOAA, OCHA, FAO, papers); hover for it, click to open. “Ties it to El Niño” only where that source says so.') + '</div></div>' : '';
     if (sc.view === 'winter') return evKey + rainKey + sea(esc(sc.what), esc(winLabel(sc.win.label)) + ', a ' + esc(cl.label.toLowerCase().replace(' el niño', '')) + ' El Niño, peak ONI ' + num(sc.peak, 1) + '. ' +
       'Measured against 1991–2020, so older winters read cooler than against the climate of their day. ERSST v5 is a reconstruction; before about 1980 it rests on few ship observations.');
     if (cl) return evKey + rainKey + sea(esc(sc.what), esc(cl.label) + ' winters (' + esc(cl.oni_range) + ' ONI at the peak): ' + cl.events.map(function (e) { return esc(e.label); }).join(', ') + '. ' +
       ((S.sstcomp && S.sstcomp.notes) || []).map(esc).join(' '));
-    return rainKey + sea('Sea-surface anomaly, °C · observed', esc(g.product || 'OISST') + ', seven-day mean ' + esc(isoText(g.time_start || '')) + ' to ' + esc(isoText(g.time_end || '')) +
+    if (sc.view === 'month') return sea(esc(sc.what), 'Mean of ' + sc.mon.days_averaged + ' daily OISST v2.1 fields against OISST’s 1971–2000 base, the same scale as the Now map.' + (sc.mon.preliminary ? ' Preliminary data.' : '') + ' No rain map for past months yet.');
+    var sq = seaNow();
+    return evKey + rainKey + sea('Sea-surface anomaly, °C · observed', esc(g.product || 'OISST') + ', ' + (sq.days === 30 ? '30-day' : 'seven-day') + ' mean ' + esc(isoText(sq.start || '')) + ' to ' + esc(isoText(sq.end || '')) +
       ', against OISST’s 1971–2000 daily base. One 0.25° cell in eight each way (1 in 64) is sampled, so the Peruvian coast is under-sampled. ' +
       (g.range_c ? 'This week’s field runs ' + num(g.range_c[0], 1) + ' to ' + num(g.range_c[1], 1) + ' °C; beyond ±5 the end colours are shared. ' : '') +
       'ONI comes from ERSST on other base periods, so this map and the ONI number will not match exactly.');
@@ -46592,7 +46823,9 @@ function showCommodityDetail(key) {
   function renderWeeklyStrip() {
     var el = document.getElementById('enso-weekly'); if (!el) return;
     var cl = sstClass(), bm = cl && S.sstcomp.box_means_c && S.sstcomp.box_means_c[cl.key + '/' + sstSeason().key], sc = sstScene();
-    var boxes = function (b) { return b ? '<span>Niño 3.4 <b>' + num(b.nino34, 1) + ' °C</b></span><span>Niño 1+2 <b>' + num(b.nino12, 1) + ' °C</b></span>' : ''; };
+    /* Each °C reading carries the map's own colour for that value, so the strip reads as a key to the sea. */
+    var sw = function (v) { return typeof v === 'number' ? '<i class="enso-wk-sw" style="background:' + sstColor(v) + '"></i>' : ''; };
+    var boxes = function (b) { return b ? '<span>Niño 3.4 <b>' + sw(b.nino34) + num(b.nino34, 1) + ' °C</b></span><span>Niño 1+2 <b>' + sw(b.nino12) + num(b.nino12, 1) + ' °C</b></span>' : ''; };
     /* A past winter or the outlook on the map: the strip reads the same maps, not this week. */
     if (sc.view === 'outlook') { var ob = S.seasonal.box_means_c && S.seasonal.box_means_c[olSeason().key];
       var cq = olCpc(), gap = cq && ob && typeof ob.nino34 === 'number' ? ob.nino34 - cq.m : null;
@@ -46600,14 +46833,18 @@ function showCommodityDetail(key) {
         (cq ? '<span>CPC’s own outlook: ONI ' + num(cq.m, 1) + ' (' + num(cq.lo, 1) + ' to ' + num(cq.hi, 1) + ')' + (gap != null && Math.abs(gap) >= 0.3 ? ', ' + Math.abs(gap).toFixed(1) + ' °C ' + (gap > 0 ? 'below' : 'above') + ' this raw model average' : '') + '</span>' : ''); return; }
     if (sc.view === 'winter') { var wb = sc.win.box_means_c && sc.win.box_means_c[sstSeason().key];
       el.innerHTML = '<span>' + esc(winLabel(sc.win.label)) + ' winter · ' + esc(sc.season) + ' · 1991–2020 base</span>' + boxes(wb) + '<span>Winter ONI <b>' + num(sc.win.djf_oni, 1) + '</b></span><span>Peak ONI <b>' + num(sc.peak, 1) + '</b></span>'; return; }
-    if (cl) { el.innerHTML = '<span>' + esc(cl.label) + ' winters · average of ' + cl.n + ' · ' + esc(sstSeason().label) + ' · 1991–2020 base</span>' + (bm ? '<span>Niño 3.4 <b>' + num(bm.nino34, 1) + ' °C</b></span><span>Niño 1+2 <b>' + num(bm.nino12, 1) + ' °C</b></span>' : '') + '<span>Mean winter ONI <b>' + num(cl.mean_djf_oni, 1) + '</b></span>'; return; }
+    if (cl) { el.innerHTML = '<span>' + esc(cl.label) + ' winters · average of ' + cl.n + ' · ' + esc(sstSeason().label) + ' · 1991–2020 base</span>' + boxes(bm) + '<span>Mean winter ONI <b>' + num(cl.mean_djf_oni, 1) + '</b></span>'; return; }
+    /* A month or the last 30 days: the same OISST grid's box means, labelled as a cross-check of the picture. */
+    var four = function (b) { return [['nino4', 'Niño 4'], ['nino34', 'Niño 3.4'], ['nino3', 'Niño 3'], ['nino12', 'Niño 1+2']].map(function (k) { return '<span>' + k[1] + ' <b>' + sw(b[k[0]]) + num(b[k[0]], 1) + ' °C</b></span>'; }).join(''); };
+    if (sc.view === 'month') { el.innerHTML = '<span>' + esc(sc.season) + ' · OISST monthly mean, 1971–2000 base · a cross-check, not CPC’s index</span>' + four(sc.mon.box_means_c || {}); return; }
+    var sq = seaNow(); if (sc.view === 'now' && sq.days === 30) { el.innerHTML = '<span>Last 30 days · ' + esc(dayRange(sq.start, sq.end)) + ' · OISST, 1971–2000 base · a cross-check, not CPC’s index</span>' + four(sq.box); return; }
     var e = S.enso || {}, rows = (e.weekly_regions || {}).rows || [], last = rows[rows.length - 1];
     el.innerHTML = last ?
       '<span>CPC weekly · ' + esc((function () { var m = String(last.date || '').match(/^(\d{2})([A-Z]{3})(\d{4})$/), M = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
         if (!m) return weeklyDate(last.date); var c = Date.UTC(+m[3], M.indexOf(m[2]), +m[1]), a = new Date(c - 3 * 864e5), z = new Date(c + 3 * 864e5);
         return a.getUTCDate() + (a.getUTCMonth() === z.getUTCMonth() ? '' : ' ' + MON3[a.getUTCMonth()]) + '–' + z.getUTCDate() + ' ' + MON3[z.getUTCMonth()]; })()) + ' · 1991–2020 base</span>' +
       [['nino4','Niño 4'],['nino34','Niño 3.4'],['nino3','Niño 3'],['nino12','Niño 1+2']].map(function (k) {
-        return '<span>' + k[1] + ' <b>' + num(last[k[0]], 1) + ' °C</b></span>';
+        return '<span>' + k[1] + ' <b>' + sw(last[k[0]]) + num(last[k[0]], 1) + ' °C</b></span>';
       }).join('') : '<span>Weekly Niño-box readings unavailable.</span>';
   }
 
@@ -47659,7 +47896,7 @@ function showCommodityDetail(key) {
     var previousSearch = document.getElementById('enso-mapwrap').querySelector('.enso-country-search');
     if (previousSearch) previousSearch.remove();
     el.innerHTML = '<div class="enso-control-deck" role="group" aria-label="Map instruments">' +
-      '<div class="enso-instrument-row enso-layer-row">' + layerChoices(true) + sstModeButtons() +
+      '<div class="enso-instrument-row enso-layer-row">' + layerChoices(true) +
       (S.sub === 'ensoharvest' && S.mode === 'crop' ? '<span class="enso-basis" role="group" aria-label="Crop">' + [['best', 'Strongest'], ['corn', 'Maize'], ['rice', 'Rice'], ['wheat', 'Wheat'], ['soybeans', 'Soy']].map(function (b) {
         return '<button type="button" class="enso-basis-b" data-croppick="' + b[0] + '" aria-pressed="' + ((S.cropPick || 'best') === b[0]) + '">' + b[1] + '</button>'; }).join('') + '</span>' : '') +
       (S.sub === 'ensowater' ? '<span class="enso-basis" role="group" aria-label="Colour by">' + [['now', 'Change now'], ['enso', 'El Niño link']].map(function (b) {
@@ -48282,7 +48519,8 @@ function showCommodityDetail(key) {
     if (S.mode === 'rain') date = (S.alertCounts && S.alertCounts.newest) ? 'newest report ' + stamp(new Date(S.alertCounts.newest)) : 'no reports loaded yet';
     var sc = S.mode === 'sst' && sstScene();
     if (sc && sc.view !== 'now') { title = sc.title; source = sc.source; date = sc.date; if (sc.view === 'outlook') kind = 'modelled'; }
-    if (sc && sc.view === 'now' && sc.rain) { title = 'Sea this week, rain over the last ' + sc.rainDays + ' days'; source = 'NOAA OISST v2.1 · CPC gauges'; date += '; rain ' + sc.rainWhen + ' against 1991–2020'; }
+    if (sc && sc.view === 'now') { var sq = seaNow(); date = (sq.days === 30 ? '30-day' : 'seven-day') + ' mean ' + isoText(sq.start) + ' to ' + isoText(sq.end);
+      if (sc.rain) { title = 'Sea and rain, last ' + sq.days + ' days'; source = 'NOAA OISST v2.1 · CPC gauges'; date += '; rain ' + sc.rainWhen + ' against 1991–2020'; } }
     if (S.mode === 'sst' && !S.showSST) title += ' (backdrop hidden)';
     if (S.mode === 'sst' && !S.sst) date = 'source unavailable';
     return { kind: kind, title: title, source: source, date: date };
@@ -48446,7 +48684,8 @@ function showCommodityDetail(key) {
     var sn = S.mode === 'sst' && sstScene(), scT = sn && sn.view === 'class' && sn.cls;
     /* One line each, so the map stays within 110px of its title; the base periods and caveats sit in the key. */
     var ss = S.sst || {};
-    if (sn && sn.view === 'now') { var rn = sn.rain && rainNow(); el.textContent = 'Observed · sea, seven-day mean ' + dayRange(ss.time_start, ss.time_end) + ', °C against 1971–2000' + (rn ? ' · rain on land, last ' + rn.days + ' days to ' + dayMon(rn.end) + ' ' + String(rn.end).slice(0, 4) + ', above or below the 1991–2020 normal' : '') + '.'; }
+    if (sn && sn.view === 'month') el.textContent = 'Observed · sea, ' + sn.season + ' mean of ' + sn.mon.days_averaged + ' daily fields, °C against 1971–2000' + (sn.mon.preliminary ? ' · preliminary' : '') + '.';
+    if (sn && sn.view === 'now') { var rn = sn.rain && rainNow(), sq = seaNow(); el.textContent = 'Observed · sea, ' + (sq.days === 30 ? '30-day' : 'seven-day') + ' mean ' + dayRange(sq.start, sq.end) + ', °C against 1971–2000' + (rn ? ' · rain on land, last ' + rn.days + ' days to ' + dayMon(rn.end) + ' ' + String(rn.end).slice(0, 4) + ', above or below the 1991–2020 normal' : '') + '.'; }
     if (sn && sn.view === 'winter') el.textContent = 'Observed, not a forecast: the ' + sn.win.label + ' winter alone (' + sn.cls.label.toLowerCase().replace(' el niño', '') + ', peak ONI ' + num(sn.peak, 1) + '), ' + sn.season + '. Sea' + (sn.rain ? ' and rain' : '') + ' against 1991–2020.';
     if (sn && sn.view === 'outlook') el.textContent = 'A forecast, not observed: NMME, ' + olModels() + ', run ' + olRun() + '. Against each model’s own hindcast climate; averaging smooths the extremes.';
     if (scT) el.textContent = 'Observed, not a forecast: ' + scT.n + ' ' + scT.label.toLowerCase().replace(' el niño', '') + ' winters averaged (' + scT.events.map(function (e) { return e.label; }).join(', ') + '), ' + sstSeason().label + '. Sea' + (rainGrid() ? ' and rain' : '') + ' against 1991–2020.';
@@ -48522,7 +48761,7 @@ function showCommodityDetail(key) {
     row.querySelectorAll('.enso-legend-block').forEach(function (block) {
       var note = document.createElement('div'); note.className = 'enso-legend-note';
       var title = block.querySelector('.enso-legend-t').textContent;
-      note.textContent = /Domestic food inflation/.test(title) ? 'Fixed anchors at −10%, 0% and +30%; values beyond the ends take the end colours.' : /Sea-surface/.test(title) ? ({ class: sstSeason().label + ' average of past winters; ±5 °C, the same scale as the Now map.', winter: sstSeason().label + ' of one winter; ±5 °C, the same scale as the Now map.', outlook: 'Forecast season mean; ±5 °C, the same scale as the Now map.' }[sstScene().view] || 'Seven-day mean; ±5 °C.') :
+      note.textContent = /Domestic food inflation/.test(title) ? 'Fixed anchors at −10%, 0% and +30%; values beyond the ends take the end colours.' : /Sea-surface/.test(title) ? ({ class: sstSeason().label + ' average of past winters; ±5 °C, the same scale as the Now map.', winter: sstSeason().label + ' of one winter; ±5 °C, the same scale as the Now map.', outlook: 'Forecast season mean; ±5 °C, the same scale as the Now map.', month: 'Monthly mean; ±5 °C, the same scale as the Now map.' }[sstScene().view] || (seaNow().days === 30 ? '30-day' : 'Seven-day') + ' mean; ±5 °C.') :
         /teleconnection/.test(title) ? 'Published regional membership.' : /Shipping/.test(title) ? '' :
         /Grain imports/.test(title) ? 'Circle area: tonnes imported, 100 kt and up.' :
         /shock|crop/.test(title) ? ((S.meta.exp || {}).production_ready === false ? '' : 'Ochre falls; teal rises. ±15%.') + (modelOni() < 0 ? ' Under La Niña the ONI is negative, so a positive slope is a fall.' : '') :

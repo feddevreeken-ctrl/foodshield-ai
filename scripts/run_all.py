@@ -56,6 +56,7 @@ import refresh_enso
 import refresh_enso_indices
 import refresh_enso_bulletins
 import refresh_sst_anomaly   # v84 -- OISST anomaly grid for the El Nino map
+import refresh_sst_months    # OISST monthly means (last 6 complete months) + last 30 days, for the El Nino scrubber
 import refresh_aqueduct
 import refresh_asap
 import refresh_faostat_prodindex
@@ -126,6 +127,7 @@ STEPS = [
     ("ENSO bulletins",         refresh_enso_bulletins.main,     "enso_bulletins.json"),
     # v84 -- the observed SST anomaly field for the El Nino map (OISST via ERDDAP).
     ("OISST SST anomaly",      refresh_sst_anomaly.main,        "sst_anomaly.json"),
+    ("OISST monthly SST",      refresh_sst_months.main,         "sst_months.json"),
     ("WRI Aqueduct water",     refresh_aqueduct.main,           "aqueduct.json"),
     # v83 — the three feeds that give this dashboard a PRESENT tense. Until now
     # the climate component was baseline hydrology (1979-2019) plus 1991-2020
@@ -174,7 +176,9 @@ STEPS = [
     # on an upstream failure safe_run keeps the last-good file.
     ("NMME seasonal outlook",  refresh_seasonal_outlook.main,   "seasonal_outlook.json"),
     # Observed rain now: 30 CPC daily files (~55 MB of Range requests, ~1 min) against the
-    # committed 1991-2020 normal in data/ref. On a failure safe_run keeps the last-good file.
+    # committed 1991-2020 normal in data/ref, plus the CHIRPS fill for cells CPC leaves blank
+    # (two 66 MB CHC files, capped at chirps_rain_fill.BUDGET_S; on its failure the CPC layers
+    # are written without it). On a CPC failure safe_run keeps the last-good file.
     ("CPC observed rain",      refresh_rain_anomaly.main,       "rain_anomaly.json"),
     ("Shipping gauges",        refresh_shipping_gauges.main,    "enso_gauges.json"),
     ("Import ports",           refresh_import_ports.main,       "enso_ports.json"),
@@ -258,7 +262,8 @@ OPTIONAL_OUTPUTS = {"commodity_interpretation.json", "commodity_article_notes.js
 # dedup fix landed hit [TIMEOUT] and kept serving the pre-dedup (over-counted)
 # file. 2700s covers the observed worst case (~55 rate-limited calls × up to
 # 3 × 30s backoff) with headroom; all other steps keep the 900s default.
-STEP_TIMEOUTS = {"Comtrade": 2700, "Commodity interpretation": 900, "Article notes": 900}  # ~55 model calls at 6 s spacing
+STEP_TIMEOUTS = {"Comtrade": 2700, "Commodity interpretation": 900, "Article notes": 900,  # ~55 model calls at 6 s spacing
+                 "CPC observed rain": 450}  # CPC ~1-2 min + the CHIRPS fill's 150 s budget
 
 
 # v79 — GLOBAL WALL-CLOCK BUDGET.

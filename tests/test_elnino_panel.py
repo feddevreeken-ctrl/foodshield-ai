@@ -1384,7 +1384,7 @@ def main() -> int:
             for tab, labels in (
                 ('ensowater', ['No land layer', 'Shipping', 'Change nowEl Niño link']),
                 ('ensomoney', ['Staple prices', 'Grain imports', 'RealNominal', 'Price changeAgainst pattern']),
-                ('elnino', ['Sea-surface', 'Past El NiñosNowOutlook']),
+                ('elnino', ['Sea-surface']),
                 ('ensoharvest', ['Production shock', 'Strongest crop', 'Coverage', 'Crop stress now', 'Teleconnections']),
                 ('ensolive', ['Rain pattern', 'Hotspots', 'IPC', 'Hazards', 'Headlines', 'Elsewhere'])):
                 page.evaluate('tab => showTab(tab)', tab)
@@ -1429,10 +1429,10 @@ def main() -> int:
         # 2026-09-28 (owner): the Ocean map can show the average December-February anomaly of past El Niño winters by
         # strength, from data/sst_composites.json. The strip, key and caption follow the slider; leaving Ocean resets it.
         page.evaluate("showTab('elnino')")
-        page.wait_for_selector('#enso-controls [data-sst-view="past"]')
-        page.click('#enso-controls [data-sst-view="past"]')
-        page.wait_for_selector('[data-sst-cls="very_strong"]')
-        page.click('[data-sst-cls="very_strong"]')
+        # 2026-09-28 (owner: "a bar you can drag back n forth with months"): the time control is a scrubber under the
+        # map; its Past zone opens the class average that matches CPC's forecast strength.
+        page.wait_for_selector('#enso-scrub [data-sst-view="past"]')
+        page.click('#enso-scrub [data-sst-view="past"]')
         page.wait_for_timeout(700)
         check("the Ocean composite shows past very strong El Niño winters, sea and rain, from the composite file", page.evaluate("""async () => {
             const C = (await (await fetch('data/sst_composites.json')).json()).data, vs = C.classes.find(c => c.key === 'very_strong');
@@ -1441,7 +1441,8 @@ def main() -> int:
             const cap = tag;  // 2026-09-28: the map description names the winters averaged
             return !!vs && tag.includes('not a forecast') && key.includes('average of ' + vs.n + ' past winters') && key.includes('Rain on land')
                 && vs.events.every(e => cap.includes(e.label)) && strip.includes('Very strong') && /very strong El Niño winters, Dec/.test(head)
-                && !!document.querySelector('.enso-rain-canvas') && document.querySelectorAll('.enso-sst-ticks i').length === C.classes.reduce((n, c) => n + c.events.length, 0);
+                && !!document.querySelector('.enso-rain-canvas') && document.querySelectorAll('#enso-scrub .sc-win').length === C.classes.reduce((n, c) => n + c.events.length, 0)
+                && document.querySelectorAll('#enso-scrub .sc-win.is-cls').length === vs.n;
         }"""))
         page.click('[data-sst-season="SON"]')
         page.wait_for_timeout(500)
@@ -1456,18 +1457,39 @@ def main() -> int:
             const strip = document.getElementById('enso-weekly').textContent, n = W.box_means_c.DJF.nino34;
             return W.label === '2015-16' && !!W.maps.DJF && tag.includes('2015-16') && tag.includes('Observed, not a forecast')
                 && strip.includes('Niño 3.4 ' + (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(1))
-                && document.querySelector('[data-sst-win="2015-16"]').getAttribute('aria-pressed') === 'true' && !!document.querySelector('.enso-rain-canvas');
+                && document.querySelector('[data-sst-win="2015-16"]').classList.contains('is-pick') && !!document.querySelector('.enso-rain-canvas');
         }"""))
         # 2026-09-28 (owner: "include where there were natural events"): the winter's sourced events are marked on the
         # map, one https source each; the time bar's thumb sits on the pressed view.
         check("a past winter marks its sourced natural events, and the time bar thumb sits on Past", page.evaluate("""async () => {
             const E = (await (await fetch('data/enso_past_events.json')).json()).data.events.filter(e => e.winter === '2015-16');
-            const marks = document.querySelectorAll('#enso-map .enso-pev').length, bar = document.querySelector('#enso-controls .enso-timebar');
+            const marks = document.querySelectorAll('#enso-map .enso-pev').length, sc = document.getElementById('enso-scrub'), hd = sc.querySelector('.sc-handle');
             return E.length > 0 && marks === E.length && E.every(e => /^https:\\/\\//.test(e.source.url))
-                && bar.dataset.v === 'past' && bar.style.getPropertyValue('--i').trim() === '0';
+                && sc.dataset.v === 'past' && hd.getAttribute('aria-valuetext').startsWith('2015–16');
         }"""))
-        if page.locator('#enso-controls [data-sst-view="outlook"]').count():
-            page.click('#enso-controls [data-sst-view="outlook"]')
+        # The scrubber drags and steps: from a past winter, the "2026" switch brings back this year's track; pull the knob
+        # to the far right (the last outlook season), then Home from the keyboard lands on the first month shown.
+        page.click('#enso-scrub .sc-mode[data-sst-view="now"]')
+        page.wait_for_timeout(500)
+        box = page.locator('#enso-scrub .sc-track').bounding_box()
+        knob = page.locator('#enso-scrub .sc-knob').bounding_box()
+        page.mouse.move(knob['x'] + knob['width'] / 2, knob['y'] + knob['height'] / 2)
+        page.mouse.down()
+        page.mouse.move(box['x'] + box['width'] * .6, box['y'] + 40, steps=6)
+        page.mouse.move(box['x'] + box['width'] - 2, box['y'] + 40, steps=6)
+        page.mouse.up()
+        page.wait_for_timeout(600)
+        dragged = page.evaluate("() => document.getElementById('enso-scrub').dataset.v + '|' + (document.querySelector('#enso-scrub .is-ol.is-pick') || {getAttribute() { return ''; }}).getAttribute('data-sst-ol')")
+        page.focus('#enso-scrub .sc-handle')
+        page.keyboard.press('Home')
+        page.wait_for_timeout(900)
+        check("the time scrubber drags to the last outlook season and Home steps to the first month shown", page.evaluate("""d => {
+            const hd = document.querySelector('#enso-scrub .sc-handle'), first = document.querySelector('#enso-scrub .sc-track [data-i="0"]');
+            return d === 'outlook|DJF' && hd.getAttribute('aria-valuenow') === '0' && first.classList.contains('is-pick') && !!first.dataset.sstMon
+                && /^Sea surface, \\w+ \\d{4} mean/.test(document.querySelector('#enso-mapwrap > .enso-plate-h').textContent);
+        }""", dragged))
+        if page.locator('#enso-scrub [data-sst-view="outlook"]').count():
+            page.click('#enso-scrub [data-sst-view="outlook"]')
             page.wait_for_timeout(500)
             check("the outlook view is a labelled forecast in the modelled frame", page.evaluate("""async () => {
                 const O = (await (await fetch('data/seasonal_outlook.json')).json()).data, head = document.querySelector('#enso-mapwrap > .enso-plate-h').textContent;
@@ -1478,22 +1500,41 @@ def main() -> int:
         page.evaluate("showTab('ensowater')")
         page.evaluate("showTab('elnino')")
         page.wait_for_selector('[data-sst-view="now"]')
-        # Rain on land in this view only when the 30-day rain feed is loaded, and then the key says so.
-        check("leaving Ocean resets the map to this week, rain on land only with the 30-day key", page.evaluate("""() => {
+        # Rain on land in this view only when the rain feed is loaded, and then the key names its window.
+        check("leaving Ocean resets the map to now, rain on land only with a dated key", page.evaluate("""() => {
             const key = document.getElementById('enso-legend').textContent;
             return document.querySelector('[data-sst-view="now"]').getAttribute('aria-pressed') === 'true'
-                && !!document.querySelector('.enso-rain-canvas') === /last 30 days/.test(key)
+                && !!document.querySelector('.enso-rain-canvas') === /last (7|30) days/.test(key)
                 && document.getElementById('enso-weekly').textContent.includes('CPC weekly');
         }"""))
-        # 2026-09-28 (owner: "doesnt show the live if theres a lot of rainfall this month/ week or drought"): observed
-        # rain now, the last 30 days or the last 7, from data/rain_anomaly.json; no past-event marks on this view.
-        if page.locator('[data-rain-win="7"]').count():
-            page.click('[data-rain-win="7"]')
+        # 2026-09-28 (owner: "go back 6 months ... change based on 30 day and 7 day to show the movement"): the 2026 track
+        # steps through the last complete months (OISST monthly means), the last 30 days and the last 7; sea and rain
+        # switch window together, and the Now view marks only reported floods and droughts, never past-winter events.
+        if page.locator('[data-sst-now="30"]').count():
+            page.click('[data-sst-now="30"]')
+            page.wait_for_timeout(500)
+            check("the 30-day stop switches sea and rain to the last 30 days and says so in key, caption and strip", page.evaluate("""() =>
+                /last 30 days/.test(document.getElementById('enso-legend').textContent) && /30-day mean/.test(document.getElementById('enso-maptag').textContent)
+                && /last 30 days/.test(document.getElementById('enso-maptag').textContent) && /^Last 30 days/.test(document.getElementById('enso-weekly').textContent)
+                && document.querySelector('#enso-scrub .sc-handle').getAttribute('aria-valuetext').startsWith('Last 30 days')
+                && !document.querySelector('#enso-map .enso-pev:not(.is-now)')"""))
+            page.click('[data-sst-now="7"]')
             page.wait_for_timeout(400)
-            check("the Now view switches observed rain to the last 7 days and says so in key and caption", page.evaluate("""() =>
-                /last 7 days/.test(document.getElementById('enso-legend').textContent) && /last 7 days/.test(document.getElementById('enso-maptag').textContent)
-                && document.querySelector('[data-rain-win="7"]').getAttribute('aria-pressed') === 'true' && !document.querySelector('#enso-map .enso-pev')"""))
-            page.click('[data-rain-win="30"]')
+        mons = page.evaluate("() => [...document.querySelectorAll('#enso-scrub [data-sst-mon]')].map(b => b.getAttribute('data-sst-mon'))")
+        check("the 2026 track carries six past months, then 30 and 7 days, then the outlook", len(mons) == 6 and page.evaluate("""() => {
+            const k = [...document.querySelectorAll('#enso-scrub .sc-track [data-i]')].map(b => b.dataset.sstMon ? 'm' : b.dataset.sstNow ? 'n' + b.dataset.sstNow : b.dataset.sstOl ? 'o' : '?').join('');
+            return /^m{6}n30n7o{3}$/.test(k);
+        }"""))
+        if mons:
+            page.click(f'[data-sst-mon="{mons[-1]}"]')
+            page.wait_for_timeout(500)
+            check("a month stop paints that month's observed sea mean and says which", page.evaluate("""m => {
+                const [y, mo] = m.split('-'), name = ['January','February','March','April','May','June','July','August','September','October','November','December'][+mo - 1] + ' ' + y;
+                return document.querySelector('#enso-mapwrap > .enso-plate-h').textContent.includes('Sea surface, ' + name + ' mean')
+                    && document.getElementById('enso-weekly').textContent.includes('OISST monthly mean') && !document.querySelector('.enso-rain-canvas');
+            }""", mons[-1]))
+            page.click('#enso-scrub [data-sst-view="now"]')
+            page.wait_for_timeout(400)
 
         print("\nTier 1: figures come from the feeds (court 2026-09-23)")
         src = (ROOT / "index.html").read_text()
