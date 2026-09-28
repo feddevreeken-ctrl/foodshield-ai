@@ -85,7 +85,7 @@ def bom_weekly() -> dict:
     return {
         "agency": "BoM Australia",
         "kind": "weekly",
-        "title": ("Weekly relative Niño 3.4 " + ("%+.2f" % r_val) + " °C, Troup SOI "
+        "title": ("Weekly relative Niño 3.4 " + ("%+.2f" % r_val) + " °C (week to " + end.strftime("%-d %b") + "), Troup SOI "
                   + ("%+.1f" % s_val) + " (30 days to " + s_dt.strftime("%-d %b") + ")"),
         "summary": ("BoM's operational ocean index for the week ending "
                     + end.strftime("%-d %B %Y")

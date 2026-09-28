@@ -5,7 +5,8 @@ build_enso_outlook.py — what this El Nino implies, by region, crop, country an
 Reads what the pipeline already holds and writes data/enso_outlook.json:
 
   - data/enso_regions.json   published teleconnection regions (curated, cited)
-  - data/enso_model.json     fitted yield slopes, % per ONI (build_enso_model.py)
+  - data/enso_model.json     fitted yield slopes, log points per ONI, and the El Nino
+                             test per pair (nino_signal, q_nino) (build_enso_model.py)
   - data/crop_calendars.json harvest months per country-crop
   - data/usda_psd.json       current production / imports / exports
   - data/worldbank_pink_sheet.json  latest world prices, $/t
@@ -16,9 +17,12 @@ Reads what the pipeline already holds and writes data/enso_outlook.json:
 TWO ANCHORED CASES, NO EXTRAPOLATION
 ------------------------------------
 The fit is linear in ONI and was trained on 1961-2024 winters, the largest of
-which is 2015-16 at +2.5. CPC's own RONI outlook for the coming DJF (data/enso_strengths.json,
-roni_outlook) plus the current ONI-RONI gap (data/enso_indices.json) puts it beyond anything the
-fit has seen; the honesty line states both, from those files. So this does not weight a probability
+which is 2015-16 at +2.5. CPC's own RONI outlook for the coming DJF may go past
+anything the fit has seen. Its ONI equivalent is a range, not one number:
+refresh_cpc_roni_outlook.py adds the June-August ONI-RONI gap plus how that gap
+moved from June-August to December-February in past El Ninos
+(data/enso_strengths.json, roni_outlook[].oni_equiv). The honesty line states
+the RONI median and that ONI range. So this does not weight a probability
 table into a single forecast. It reports each fitted pair at two ONI values the
 record contains: the latest observed season, and the record winter. Anything
 stronger is stated as outside the fitted range.
@@ -102,30 +106,32 @@ def body(d: dict):
 
 
 def honesty_line(jan_year: int, record: dict) -> str:
-    """CPC's DJF RONI median (refresh_cpc_roni_outlook.py) and the ONI-RONI gap
-    for the latest season both indices cover (refresh_enso_indices), in words."""
-    rec = f"(ONI {record['anom']:+.1f}, {record['year'] - 1}-{str(record['year'])[2:]})"
+    """CPC's DJF RONI median and its season-matched ONI equivalent, as a range
+    (roni_outlook[].oni_equiv, refresh_cpc_roni_outlook.py). Never the JJA gap alone:
+    the ONI-RONI gap moves between June-August and December-February."""
+    rec = f"ONI {record['anom']:+.1f} ({record['year'] - 1}-{str(record['year'])[2:]})"
     winter = f"{jan_year - 1}-{str(jan_year)[2:]}"
     try:
         djf = next(o for o in body(load("enso_strengths.json")).get("roni_outlook") or []
                    if o.get("label") == f"DJF {winter}")
-        idx = {i["key"]: i for i in body(load("enso_indices.json")).get("indices", [])}
-        oni, roni = idx["oni"], idx["roni"]
-        if oni.get("window") != roni.get("window"):
-            raise ValueError("ONI and RONI windows differ")
-        gap = oni["value"] - roni["value"]
+        med = float(djf["median"])
     except (StopIteration, KeyError, OSError, ValueError, TypeError):
         return ("Estimates from a linear fit. The fit is on December–February; CPC's RONI outlook for "
                 f"December–February {winter} was not available this run, so how it compares with the strongest "
-                f"winter in the fit {rec} is not stated.")
-    oni_eq = djf["median"] + gap
-    side = ("a little above" if oni_eq - record["anom"] <= 0.5 else "well above") if oni_eq > record["anom"] \
-        else "within the range of"
-    return ("Estimates from a linear fit. "
-            f"The fit is on December–February, and CPC's median for December–February {winter} is RONI "
-            f"{djf['median']:+.2f}. ONI has been running about {abs(gap):.1f} °C {'above' if gap >= 0 else 'below'} "
-            f"RONI, so that is roughly ONI {oni_eq:+.1f}, {side} the strongest winter in the fit {rec}."
-            + (" A winter that strong could bring larger changes than those shown." if oni_eq > record["anom"] else ""))
+                f"winter in the fit, {rec}, is not stated.")
+    eq = djf.get("oni_equiv") or {}
+    head = (f"Estimates from a linear fit on December–February ONI. CPC's December–February {winter} median, "
+            f"RONI {med:+.2f}, ")
+    if not all(isinstance(eq.get(k), (int, float)) for k in ("median_lo", "median_hi")):
+        return head + (f"has no ONI equivalent this run, so how it compares with the strongest winter in the fit, "
+                       f"{rec}, is not stated.")
+    lo, hi, top = eq["median_lo"], eq["median_hi"], record["anom"]
+    line = head + f"is about ONI {lo:+.1f} to {hi:+.1f} given how the ONI–RONI gap moved in past El Niños. "
+    if lo > top:
+        return line + f"All of that is above the strongest winter in the fit, {rec}. Changes could be larger than those shown."
+    if hi > top:
+        return line + f"The strongest winter in the fit is {rec}. A winter above it could bring larger changes than those shown."
+    return line + f"That is within the fit, whose strongest winter is {rec}."
 
 
 def month_span(months: list[int]) -> str:
@@ -198,7 +204,9 @@ def allocate_buyers(total: float, shares: list[dict], cap_of, top: int = 5) -> l
 
 def main() -> int:
     enso = body(load("enso.json"))
-    model = body(load("enso_model.json"))
+    model_doc = load("enso_model.json")
+    model = body(model_doc)
+    n_fitted = ((model_doc.get("_meta") or {}).get("counts") or {}).get("pairs_fitted")
     regions = body(load("enso_regions.json"))["regions"]
     cal = body(load("crop_calendars.json"))
     psd = body(load("usda_psd.json"))
@@ -233,31 +241,29 @@ def main() -> int:
 
     # The model's `signal` is a joint test on the El Niño AND La Niña slopes, so a
     # pair can carry it on its La Niña side alone. What "this El Niño implies"
-    # needs is the El Niño slope, so it gets its own Benjamini-Hochberg q across
-    # every fitted pair's p_nino, and a row is shown only when that q < 0.10.
-    pn = sorted(((c["p_nino"], (iso, crop)) for iso, cs in model.items() for crop, c in cs.items()
-                 if isinstance(c, dict) and isinstance(c.get("p_nino"), (int, float))), key=lambda t: t[0])
-    q_nino, m_tests, running = {}, len(pn), 1.0
-    for rank in range(m_tests, 0, -1):
-        p_val, key = pn[rank - 1]
-        running = min(running, p_val * m_tests / rank)
-        q_nino[key] = running
-
+    # needs is the El Niño slope, so the model gives it its own Benjamini-Hochberg
+    # q across ALL fitted pairs' El Niño-slope p values (q_nino, nino_signal), and
+    # a row is shown only when that passes. Until 2026-09-28 this q was computed
+    # here over only the pairs the joint test had already kept (audit F3).
     def status_of(iso: str, crop: str, c: dict) -> str:
         harvest = (cal.get(iso) or {}).get(crop, {}).get("harvest") or []
         if harvest and harvest[-1] < harvest[0] and c.get("alignment") == "djf_same_year":
             return "alignment_review"          # wrap-around harvest fitted to the wrong winter; refit pending
+        # The El Niño test comes first: a pair whose El Niño slope fails is not "shared with the IOD" (audit N2).
+        if not c.get("nino_signal"):
+            return "no_el_nino_slope"
         if c.get("enso_specific") is False:
             return "shared_iod"
-        if q_nino.get((iso, crop), 1) >= 0.10:
-            return "no_el_nino_slope"
         return "shown"
 
+    rec_oni = cases["record"]["oni"]
+
     def fitted_rows(isos: list[str]) -> list[dict]:
+        # Every pair with the joint signal or its own El Niño signal: shown, or listed with its reason.
         rows = []
         for iso in isos:
             for crop, c in (model.get(iso) or {}).items():
-                if not (isinstance(c, dict) and c.get("signal")):
+                if not (isinstance(c, dict) and (c.get("signal") or c.get("nino_signal"))):
                     continue
                 slope = c["yield_pct_per_oni_nino"]
                 p = (psd.get(iso) or {}).get(PSD_KEY.get(crop, ""), {})
@@ -279,7 +285,7 @@ def main() -> int:
                         base_note = (f"{lab(my)} crop {abs(round((prod / prev - 1) * 100))}% "
                                      f"{'below' if prod < prev else 'above'} {lab(my_prev)}; "
                                      f"on the {lab(my_prev)} crop the change would be "
-                                     f"{'+' if slope > 0 else '−'}{abs(round(prev * (math.exp(slope / 100 * 2.5) - 1) / 1000, 1))} Mt at ONI +2.5")
+                                     f"{'+' if slope > 0 else '−'}{abs(round(prev * (math.exp(slope / 100 * rec_oni) - 1) / 1000, 1))} Mt at ONI {rec_oni:+.1f}")
                     if base_harvest == hyear:
                         base_note = (base_note + "; " if base_note else "") + DOUBLE_COUNT
                 else:
@@ -290,7 +296,7 @@ def main() -> int:
                 in_season = hyear < jan_year
                 row = {
                     "iso": iso, "crop": crop, "slope_pct_per_oni": slope,
-                    "q_value": c.get("q_value"), "p_nino": c.get("p_nino"), "q_nino": round(q_nino.get((iso, crop), 1), 4),
+                    "q_value": c.get("q_value"), "p_nino": c.get("p_nino"), "q_nino": round(c.get("q_nino", 1), 4),
                     "status": status_of(iso, crop, c), "enso_specific": c.get("enso_specific", True),
                     # A harvest of the onset year is already in USDA's in-season
                     # estimate; the fit's share of it is shown as a percentage,
@@ -476,12 +482,16 @@ def main() -> int:
         "cases": cases, "harvest_winter": f"DJF {jan_year - 1}-{str(jan_year)[2:]}",
         "method": "exp(fitted log-yield slope × ONI) − 1, × production, at two ONI values the record contains; value at stake = tonnes × latest World Bank price. No world-price model, no probability weighting.",
         "honesty": honesty_line(jan_year, record),
+        # The El Niño test's family, stated once for the page: every fitted pair, not the joint-test survivors.
+        "q_nino_family": n_fitted,
+        "q_nino_rule": ("A row is shown only when its El Niño slope passes Benjamini–Hochberg control on its own: "
+                        + (f"q < 0.10 across all {n_fitted} fitted pairs." if n_fitted else "q < 0.10 across all fitted pairs.")),
         "regions": out_regions,
         "crops": sorted(by_crop.values(), key=lambda c: c["loss_kt_record"]),
         "rows_all": rows_all,
         "who_pays": chain, "who_pays_totals": who_pays_totals,
         "who_pays_case": "record",
-        "who_pays_rule": "At the fit's strongest winter (ONI +2.5). Shortfall cuts exports first, allocated to buyers by Comtrade value share, each capped at its usual imports (USDA) with the capped excess spread over the other named buyers; any remainder is extra import need. Priced at the latest World Bank price. Stocks shown, not subtracted.",
+        "who_pays_rule": f"At the fit's strongest winter (ONI {rec_oni:+.1f}). Shortfall cuts exports first, allocated to buyers by Comtrade value share, each capped at its usual imports (USDA) with the capped excess spread over the other named buyers; any remainder is extra import need. Priced at the latest World Bank price. Stocks shown, not subtracted.",
     }, source="Derived: enso_regions, enso_model, crop_calendars, USDA PSD, World Bank Pink Sheet; live signals from JRC ASAP, GDACS, World Bank RTFP, ReliefWeb, El Niño news feed, trade_restrictions",
        notes="Tonnes first; value at stake is tonnes × latest World Bank price, not a price forecast.", status="ok")
     print(f"[OK] enso_outlook: {len(out_regions)} regions, {sum(len(r['fitted']) for r in out_regions)} fitted rows, "

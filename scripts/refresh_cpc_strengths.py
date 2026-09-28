@@ -76,11 +76,12 @@ def main() -> int:
         "issued": issued.strftime("%B %Y"), "index": "RONI (relative Oceanic Niño Index)",
         "bins": BINS, "classes": [c[0] for c in CLASSES], "seasons": seasons, "url": URL,
     }
-    # refresh_cpc_roni_outlook.py owns data.roni_outlook in this file; keep its last-good value.
+    # refresh_cpc_roni_outlook.py owns data.roni_outlook and data.oni_roni_gap in this file; keep their last-good values.
     try:
         prev = json.loads((DATA_DIR / "enso_strengths.json").read_text()).get("data", {})
-        if prev.get("roni_outlook"):
-            payload["roni_outlook"] = prev["roni_outlook"]
+        for key in ("roni_outlook", "oni_roni_gap"):
+            if prev.get(key):
+                payload[key] = prev[key]
     except (OSError, ValueError):
         pass
     write_json("enso_strengths.json", payload, source="NOAA Climate Prediction Center, ENSO strength probabilities (RONI)",

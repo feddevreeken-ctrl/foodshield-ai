@@ -2,11 +2,17 @@
 """
 build_enso_exposure.py — turn fitted ENSO yield responses into per-country exposure.
 
-Reads data/enso_model.json (coefficients measured by build_enso_model.py, net of
-the Indian Ocean Dipole) and data/usda_psd.json (current production and
-consumption), and emits data/enso_exposure.json: for each country, at each
-scenario ONI level, the production-weighted crop shock in percent AND in
-thousand tonnes, plus the resulting change in net import requirement.
+Reads data/enso_model.json (coefficients measured by build_enso_model.py: the
+unconditional ENSO association, with the Indian Ocean Dipole fitted alongside
+only as a check that sets `enso_specific`) and data/usda_psd.json (current
+production and consumption), and emits data/enso_exposure.json: for each
+country, at each scenario ONI level, the production-weighted crop shock in
+percent AND in thousand tonnes, plus the resulting change in net import
+requirement.
+
+Each level uses the slope of its own phase, and only where that slope passes on
+its own: El Nino levels count `nino_signal` pairs, La Nina levels `nina_signal`
+pairs (Benjamini-Hochberg q < 0.10 across all fitted pairs, set in the model).
 
 THE HEADLINE NUMBER IS TONNES, NOT PRICE
 ----------------------------------------
@@ -34,7 +40,8 @@ with a global elasticity.
 
 COVERAGE IS REPORTED, NOT ASSUMED
 ---------------------------------
-Only 69 of 428 country x commodity pairs carry a detectable signal. A country's
+Only a minority of fitted country x commodity pairs carry a detectable signal
+(counts in enso_model.json _meta.counts). A country's
 shock is therefore diluted by its UNMODELLED production: the weighted mean uses
 every commodity in the denominator but only signal-bearing ones in the
 numerator. A country whose one significant crop is a rounding error in its food
@@ -83,18 +90,13 @@ def main() -> int:
     psd = load("usda_psd.json")["data"]
 
     # The map and the harvest ledger must tell one story (2026-09-24): the same
-    # El Niño-alone test as build_enso_outlook (Benjamini-Hochberg q on each
-    # pair's El Niño-slope p value, q < 0.10) and the same exp(b·ONI) − 1 form,
-    # since the slopes are in log points. The old linear form overstated large
-    # shocks (Zimbabwe's aggregate read below both of its crops).
-    pn = sorted(((c["p_nino"], (iso, crop)) for iso, cs in model["data"].items() for crop, c in cs.items()
-                 if isinstance(c, dict) and isinstance(c.get("p_nino"), (int, float))), key=lambda t: t[0])
-    q_nino, running = {}, 1.0
-    for rank in range(len(pn), 0, -1):
-        p_val, key = pn[rank - 1]
-        running = min(running, p_val * len(pn) / rank)
-        q_nino[key] = running
-
+    # exp(b·ONI) − 1 form, since the slopes are in log points (the old linear
+    # form overstated large shocks), and the same phase tests. Since 2026-09-28
+    # those tests live in the model (audit F3/F7): Benjamini-Hochberg q < 0.10
+    # on each phase's slope across ALL fitted pairs, so El Niño levels read
+    # `nino_signal` and La Niña levels read `nina_signal`. Before, La Niña
+    # levels used any joint-signal pair's La Niña slope, tested or not (South
+    # African maize, La Niña p 0.82, fed every La Niña level).
     def change(b_pct: float, oni: float) -> float:
         return math.exp(b_pct / 100.0 * oni) - 1.0
 
@@ -107,8 +109,7 @@ def main() -> int:
         if total_prod <= 0:
             continue
         # A pair that survives on its own but NOT against the Indian Ocean Dipole
-        # control is not evidence of an ENSO effect. Four such pairs (Australian
-        # barley, Brazilian wheat, Indonesian maize, Uruguayan rice) used to sit
+        # control is not evidence of an ENSO effect. Such pairs used to sit
         # inside the production-weighted sum while the map called the result "what
         # ENSO implies". They are excluded from the ENSO aggregate now and
         # reported separately, because the honest answer for a country whose only
@@ -116,16 +117,21 @@ def main() -> int:
         def enso_specific(e):
             return e.get("enso_specific") is not False
 
-        def counted(e, oni=1.0):
-            # On the El Niño side a pair also needs its own El Niño slope to pass.
-            key = (iso3, next((k for k, v in commodities.items() if v is e), None))
-            return bool(e.get("signal") and enso_specific(e) and (oni < 0 or q_nino.get(key, 1) < 0.10))
+        def phase_ok(e, oni):
+            # Neutral (ONI 0) is zero either way; it is grouped with the El Niño side.
+            return bool(e.get("nina_signal") if oni < 0 else e.get("nino_signal"))
 
-        signal_prod = sum(e.get("mean_production_kt") or 0.0
-                          for e in commodities.values() if counted(e))
-        shared_prod = sum(e.get("mean_production_kt") or 0.0
-                          for e in commodities.values()
-                          if e.get("signal") and not enso_specific(e))
+        def counted(e, oni=1.0):
+            return phase_ok(e, oni) and enso_specific(e)
+
+        def shared(e, oni=1.0):
+            return phase_ok(e, oni) and not enso_specific(e)
+
+        def prod_where(pred, oni):
+            return sum(e.get("mean_production_kt") or 0.0 for e in commodities.values() if pred(e, oni))
+
+        signal_prod, signal_prod_nina = prod_where(counted, 1.0), prod_where(counted, -1.0)
+        shared_prod, shared_prod_nina = prod_where(shared, 1.0), prod_where(shared, -1.0)
 
         consumption = sum(
             (psd_c.get(k) or {}).get("consumption_kt") or 0.0
@@ -135,7 +141,7 @@ def main() -> int:
         def shock_for(oni, predicate):
             kt = 0.0
             for e in commodities.values():
-                if not predicate(e):
+                if not predicate(e, oni):
                     continue
                 prod = e.get("mean_production_kt") or 0.0
                 if prod <= 0:
@@ -147,16 +153,7 @@ def main() -> int:
 
         levels: dict = {}
         for label, oni in LEVELS.items():
-            shock_kt = 0.0
-            for e in commodities.values():
-                if not counted(e, oni):
-                    continue
-                prod = e.get("mean_production_kt") or 0.0
-                if prod <= 0:
-                    continue
-                b = (e["yield_pct_per_oni_nino"] if oni >= 0
-                     else e["yield_pct_per_oni_nina"])
-                shock_kt += prod * change(b, oni)
+            shock_kt = shock_for(oni, counted)
             entry = {
                 "oni": oni,
                 "production_shock_kt": round(shock_kt, 1),
@@ -171,27 +168,33 @@ def main() -> int:
                     -100.0 * shock_kt / consumption, 2)
             levels[label] = entry
 
-        # Kept, clearly separated, never summed into the ENSO figure above.
+        # Kept, clearly separated, never summed into the ENSO figure above. Each
+        # level again uses only pairs whose own phase slope passes.
         shared_levels = {}
-        if shared_prod > 0:
+        if shared_prod > 0 or shared_prod_nina > 0:
             for label, oni in LEVELS.items():
-                kt = shock_for(oni, lambda e: e.get("signal") and not enso_specific(e))
+                kt = shock_for(oni, shared)
                 shared_levels[label] = {
                     "oni": oni,
                     "production_shock_kt": round(kt, 1),
                     "production_shock_pct": round(100.0 * kt / total_prod, 2),
                 }
 
+        def names(pred, oni):
+            return sorted(k for k, e in commodities.items() if pred(e, oni))
+
+        # The unsuffixed fields are the El Niño side (as before); *_la_nina the La Niña side.
         out[iso3] = {
             "coverage": round(signal_prod / total_prod, 3),
-            "modelled_commodities": sorted(
-                k for k, e in commodities.items() if counted(e)),
-            "shared_iod_commodities": sorted(
-                k for k, e in commodities.items()
-                if e.get("signal") and not enso_specific(e)),
+            "coverage_la_nina": round(signal_prod_nina / total_prod, 3),
+            "modelled_commodities": names(counted, 1.0),
+            "modelled_commodities_la_nina": names(counted, -1.0),
+            "shared_iod_commodities": names(shared, 1.0),
+            "shared_iod_commodities_la_nina": names(shared, -1.0),
             "shared_iod_coverage": round(shared_prod / total_prod, 3),
+            "shared_iod_coverage_la_nina": round(shared_prod_nina / total_prod, 3),
             "unmodelled_commodities": sorted(
-                k for k, e in commodities.items() if not e.get("signal")),
+                k for k, e in commodities.items() if not (phase_ok(e, 1.0) or phase_ok(e, -1.0))),
             "total_production_kt": round(total_prod, 1),
             "staple_consumption_kt": round(consumption, 1),
             "levels": levels,
@@ -203,6 +206,8 @@ def main() -> int:
         (v["levels"][strong]["production_shock_pct"], k)
         for k, v in out.items() if v["coverage"] > 0
     )
+    shared_list = lambda key: ", ".join(f"{iso} {c}" for iso in sorted(out) for c in out[iso][key]) or "none"
+    n_fitted = (model.get("_meta") or {}).get("counts", {}).get("pairs_fitted")
     payload = {
         "_meta": {
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -214,13 +219,14 @@ def main() -> int:
                 "its calibration is unknown even where its direction is not. Until that is "
                 "settled the aggregate is a direction, not a magnitude, and the UI renders "
                 "it rounded to the whole percent and paints it in banded steps for that "
-                "reason. The second limitation is now RESOLVED: the four pairs that survive "
-                "on their own but not against the Indian Ocean Dipole control (Australian "
-                "barley, Brazilian wheat, Indonesian maize, Uruguayan rice) are no longer "
-                "inside the production-weighted sum. They are reported separately under "
-                "shared_iod_levels / shared_iod_commodities and are never added to the ENSO "
-                "figure. A country whose only modelled crop was one of them now correctly "
-                "reports no ENSO coverage rather than a number."),
+                "reason. The second limitation is now RESOLVED: pairs whose phase slope passes "
+                "on its own but whose ENSO signal does not survive the Indian Ocean Dipole "
+                "control are no longer inside the production-weighted sum. They are reported "
+                "separately under shared_iod_levels / shared_iod_commodities and are never "
+                "added to the ENSO figure (El Niño side: " + shared_list("shared_iod_commodities")
+                + "; La Niña side: " + shared_list("shared_iod_commodities_la_nina") + "). A "
+                "country whose only modelled crop was one of them now correctly reports no "
+                "ENSO coverage rather than a number."),
             "blocking_superseded": (
                 "PREVIOUS TEXT, KEPT FOR AUDIT -- every claim in it was false against the "
                 "current model: \"Inherits data/enso_model.json's unresolved seasonal "
@@ -244,10 +250,15 @@ def main() -> int:
             ),
             "method": (
                 "Per country, the production-weighted sum of fitted per-commodity yield "
-                "responses at each ONI level. Numerator covers only commodities with a "
-                "detected signal; denominator covers all commodities with production, so "
-                "the percentage is deliberately diluted by unmodelled output and "
-                "`coverage` reports how much of production is actually characterised."
+                "changes, exp(b·ONI) − 1, at each ONI level. El Niño levels use the El Niño "
+                "slope of pairs whose El Niño slope passes on its own (nino_signal); La Niña "
+                "levels use the La Niña slope of pairs whose La Niña slope passes on its own "
+                "(nina_signal). Both are Benjamini-Hochberg q < 0.10 across all "
+                + (f"{n_fitted} " if n_fitted else "") + "fitted pairs, and pairs that are not "
+                "ENSO-specific against the Indian Ocean Dipole are kept apart. The denominator "
+                "covers all commodities with production, so the percentage is deliberately "
+                "diluted by unmodelled output; `coverage` (El Niño side) and `coverage_la_nina` "
+                "report how much of production is actually characterised."
             ),
             "why_no_price": (
                 "No world price is modelled. World agricultural prices rose in only one "
@@ -260,10 +271,11 @@ def main() -> int:
             "caveats": [
                 "ENSO shifts the odds of a yield outcome; it does not determine any "
                 "single country-season.",
-                "Coefficients are net of the Indian Ocean Dipole. Australian wheat "
-                "carries NO coefficient because its apparent ENSO signal does not "
-                "survive that control -- and Australia 2026 is in fact running wet "
-                "against the El Nino script.",
+                "Coefficients are the unconditional ENSO association; the Indian Ocean "
+                "Dipole is fitted alongside only as a check, and pairs that fail it are "
+                "kept out of the country totals. Australian wheat has no ENSO slope that "
+                "passes in this fit, and Australia 2026 is in fact running wet against "
+                "the El Nino script.",
                 "Fitted on yield. Where ENSO transmits through AREA harvested instead "
                 "-- Indonesian and Philippine rice are the documented cases -- this "
                 "model is blind by construction and reports no signal.",

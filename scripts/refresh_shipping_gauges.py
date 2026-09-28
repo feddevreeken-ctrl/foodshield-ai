@@ -28,9 +28,16 @@ The dry-season outlook (gatun.outlook) is this site's model, not the Canal's:
 for every year since 1965, the lake on today's calendar day and the El Nino part
 of the following December-February ONI, fitted by least squares to the lowest
 level the lake reached between 1 January and 15 June. It is scored leave-one-out
-against the historical average, driven by NOAA CPC's December-February forecast,
-and published with its range. It adds no number the record does not support:
-every input is a file in data/ or the Canal's own history.
+against the historical average (with each winter's actual ONI known, so skill in
+real time is lower), driven by NOAA CPC's December-February forecast, and
+published with its range. CPC forecasts RONI; the fit is on ONI. The forecast is
+moved to ONI by the June-August ONI-RONI gap plus how that gap changed from
+June-August to December-February in one past El Nino, drawn at random per draw
+(data/enso_strengths.json oni_roni_gap, from refresh_cpc_roni_outlook.py), never
+by the June-August gap alone. It adds no number the record does not support:
+every input is a file in data/ or the Canal's own history. Draws past the
+strongest winter in the fit are counted (share_beyond_fit): there the line is
+extrapolated.
 """
 from __future__ import annotations
 
@@ -232,40 +239,59 @@ def gatun_outlook(rows: list[tuple[date, float]], last_day: date, last_ft: float
     for p, e in zip(pts, res):
         p["fit"] = round(p["low"] - e, 2)
     recent = [e for p, e in zip(pts, res) if p["season"] >= 2017]
-    # The driver: CPC's December-February forecast on RONI, moved to ONI by this year's ONI-RONI gap.
-    ro = next((r for r in _read("enso_strengths.json").get("roni_outlook", []) if r.get("season") == "DJF"), None)
-    idx = {r.get("key"): r for r in _read("enso_indices.json").get("indices", [])}
-    gap = (idx["oni"]["value"] - idx["roni"]["value"]) if "oni" in idx and "roni" in idx else None
+    # The driver: CPC's December-February forecast, on RONI. The fit is on ONI, and the ONI-RONI
+    # gap moves between June-August and December-February, so the conversion is a range
+    # (roni_outlook[].oni_equiv) and each draw below takes one past El Nino's gap change.
+    st = _read("enso_strengths.json")
+    ro = next((r for r in st.get("roni_outlook", []) if r.get("season") == "DJF"), None)
+    og = st.get("oni_roni_gap") or {}
+    dl = [d["delta"] for d in (og.get("deltas") or {}).get("DJF", []) if isinstance(d.get("delta"), (int, float))]
+    eq = (ro or {}).get("oni_equiv") or {}
     scen = []
     latest = _read("enso.json").get("latest", {})
     if isinstance(latest.get("anom"), (int, float)):
         scen.append({"key": "today", "label": f"ONI stays at today's {latest['anom']:+.1f}", "oni": latest["anom"]})
     fc = None
-    if ro and gap is not None:
-        fc = {"median": ro["median"] + gap, "p05": ro["p05"] + gap, "p95": ro["p95"] + gap,
-              "roni_median": ro["median"], "roni_p05": ro["p05"], "roni_p95": ro["p95"], "gap": round(gap, 2),
+    if ro and dl and isinstance(og.get("jja_gap"), (int, float)) and all(k in eq for k in ("median", "lo", "hi", "median_lo", "median_hi")):
+        fc = {"median": eq["median"], "lo": eq["lo"], "hi": eq["hi"], "median_lo": eq["median_lo"], "median_hi": eq["median_hi"],
+              "roni_median": ro["median"], "roni_p05": ro["p05"], "roni_p95": ro["p95"],
+              "jja_gap": og["jja_gap"], "jja_window": og.get("jja_window"),
+              "delta_djf_min": min(dl), "delta_djf_median": round(statistics.median(dl), 3), "delta_djf_max": max(dl),
+              "delta_events": len(dl),
+              "gap_method": ("RONI moved to ONI by the June-August gap plus one past El Niño's change in the gap from "
+                             "June-August to December-February, drawn at random for each draw."),
               "issued": ro.get("issued"), "label": ro.get("label")}
-        scen.append({"key": "cpc", "label": f"CPC's median for {ro.get('label', 'DJF')} (about ONI {fc['median']:+.1f})", "oni": fc["median"]})
+        scen.append({"key": "cpc", "label": (f"CPC's median for {ro.get('label', 'DJF')}, RONI {ro['median']:+.2f} "
+                                             f"(about ONI {eq['median_lo']:+.1f} to {eq['median_hi']:+.1f})"),
+                     "oni": eq["median"], "oni_lo": eq["median_lo"], "oni_hi": eq["median_hi"]})
+    elif ro:
+        print("  gatun outlook: no season-matched ONI equivalent of CPC's December-February RONI "
+              "(oni_roni_gap missing), so no forecast range this run")
     for sc in scen:
         sc["low"] = round(b[0] + b[1] * last_ft + b[2] * max(sc["oni"], 0.0), 2)
         sc["oni"] = round(sc["oni"], 2)
     record = min(pts, key=lambda p: p["low"])
+    # The strongest winter the line was fitted on; a driver above it is an extrapolation.
+    fit_max = max(pts, key=lambda p: p["oni_djf"])
     dist = None
     if fc:
-        # Monte Carlo over the coefficients, the residual and CPC's forecast spread (5th-95th percentile as +-1.645 sd).
+        # Monte Carlo over the coefficients, the residual, CPC's forecast spread on RONI (5th-95th
+        # percentile as +-1.645 sd) and the gap change (bootstrap over past El Ninos).
         rng, Lc = random.Random(20260927), _chol(cov)
-        mu, sdo = fc["median"], (fc["p95"] - fc["p05"]) / 3.29
-        draws = []
+        mu, sdo = fc["roni_median"], (fc["roni_p95"] - fc["roni_p05"]) / 3.29
+        draws, beyond = [], 0
         for _ in range(20000):
             z = [rng.gauss(0, 1) for _ in range(3)]
             bb = [b[i] + sum(Lc[i][k] * z[k] for k in range(3)) for i in range(3)]
-            o = rng.gauss(mu, sdo)
+            o = rng.gauss(mu, sdo) + fc["jja_gap"] + rng.choice(dl)
+            beyond += o > fit_max["oni_djf"]
             draws.append(bb[0] + bb[1] * last_ft + bb[2] * max(o, 0.0) + rng.gauss(0, sd))
         draws.sort()
         q = lambda f: round(draws[int(f * (len(draws) - 1))], 2)
         dist = {"p05": q(.05), "p10": q(.10), "p50": q(.50), "p90": q(.90), "p95": q(.95),
                 "p_below_record": round(sum(1 for v in draws if v < record["low"]) / len(draws), 3),
-                "record_ft": record["low"], "record_season": record["season"]}
+                "record_ft": record["low"], "record_season": record["season"],
+                "share_beyond_fit": round(beyond / len(draws), 3)}
     # The last El Nino's slot cuts, each read against the lake level on its date.
     lanes = _read("enso_lanes.json").get("lanes", [])
     pan = next((ln for ln in lanes if ln.get("id") == "panama"), {})
@@ -284,6 +310,8 @@ def gatun_outlook(rows: list[tuple[date, float]], last_day: date, last_ft: float
         "coef": {"intercept": round(b[0], 3), "level_then": round(b[1], 3), "el_nino_oni": round(b[2], 3)},
         "se": {"level_then": round(math.sqrt(cov[1][1]), 3), "el_nino_oni": round(math.sqrt(cov[2][2]), 3)},
         "resid_sd_ft": round(sd, 2), "loo_rmse_ft": round(rmse(loo), 2), "loo_rmse_average_ft": round(rmse(loo_clim), 2),
+        "loo_note": "leave-one-out with each winter's actual ONI known, so real-time skill is lower",
+        "fit_max_oni": fit_max["oni_djf"], "fit_max_season": fit_max["season"],
         "recent_mean_resid_ft": round(sum(recent) / len(recent), 2) if recent else None, "recent_from": 2017,
         "level_now": last_ft, "level_date": last_day.isoformat(), "forecast": fc, "scenarios": scen,
         "distribution": dist, "points": pts, "ladder_2023": ladder,

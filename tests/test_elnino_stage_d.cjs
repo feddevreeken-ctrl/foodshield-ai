@@ -98,7 +98,7 @@ test('Stage I transit rings join actual lane values and distinguish zero, missin
  try {
   for(const pct of [-100,-25,0,25,100,150]){
    S.portwatch={fixture:{yoy:{total_pct:pct},transits_per_day:{total:0}}};
-   const m=api.laneMeasurement(ln);assert.equal(m.pct,pct);assert.equal(m.radius,9+Math.min(Math.abs(pct),100)*.24);
+   const m=api.laneMeasurement(ln);assert.equal(m.pct,pct);assert.equal(m.radius,Math.sqrt(81+10.08*Math.min(Math.abs(pct),100)));  /* 2026-09-28: ring area, not radius, grows with the change */
   }
   for(const pw of [{},{yoy:{total_pct:null},transits_per_day:{total:1}},{yoy:{total_pct:'2'},transits_per_day:{total:1}},
     {yoy:{total_pct:Infinity},transits_per_day:{total:1}},{yoy:{total_pct:2},transits_per_day:{total:null}}]){
@@ -252,10 +252,10 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
  ctx.document.querySelectorAll=s=>s==='#enso-map svg'?[svg]:[];
  api.buildDefs();ctx.document.querySelectorAll=query;
  /* Harvest hatches first; then the Reported rain hatches, in the drought and flood hues (dry, wet, and both crossed). */
- assert.deepEqual(svg.querySelectorAll('line').map(n=>n.getAttribute('stroke')),['#c9773a','#6ba36b','#c47a3c','#4a7ab3','#c47a3c','#4a7ab3','#6ba36b']);  /* + the Harvests published-rises hatch, green like the fitted rises (2026-09-27) */
+ assert.deepEqual(svg.querySelectorAll('line').map(n=>n.getAttribute('stroke')),['#c9773a','#4f9fa8','#c47a3c','#4a7ab3','#c47a3c','#4a7ab3','#4f9fa8']);  /* + the Harvests published-rises hatch, green like the fitted rises (2026-09-27) */
  S.mode='impact';S.showRegions=true;S.showSST=false;S.showLanes=false;api.renderLegend();
  const key=node('enso-legend').querySelector('.enso-legend').innerHTML;
- for(const c of ['#c9773a','#6ba36b'])assert(key.includes('repeating-linear-gradient(45deg,'+c));
+ for(const c of ['#c9773a','#4f9fa8'])assert(key.includes('repeating-linear-gradient(45deg,'+c));
 });
 (async()=>{
  // Exercise buildMap and the real plate handlers with a bounded Leaflet double.
@@ -302,7 +302,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    if(view!=='ensolive')assert(!country.element.classList.contains('enso-hotspot')&&!country.element.classList.contains('enso-major-hotspot'));
    const legend=node('enso-legend'),visible=legend.querySelector('.enso-legend'),key=visible.textContent;
    assert.equal(legend.querySelectorAll('details').length,1);assert.equal(visible.querySelectorAll('details').length,0);
-   assert.equal(key.includes('Niño 3.4 box'),view==='elnino');
+   assert.equal(legend.textContent.includes('Niño 3.4 box'),view==='elnino');  /* 2026-09-28: reference swatches sit in the key's fold */
    /* 2026-09-27: the published regions are an opt-in toggle, so their key rows appear only when it is on. */
    assert.equal(key.includes('El Niño reduces output here'),S.showRegions&&view==='ensoharvest');
    assert.equal(key.includes('El Niño raises output here'),S.showRegions&&view==='ensoharvest');

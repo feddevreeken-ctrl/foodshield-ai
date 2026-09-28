@@ -14,13 +14,13 @@ for(const [iso,e] of Object.entries(S.exp)) {
 }
 assert(api.modelStateSentence().includes('interpolated between the +1.5 and +2.0 rungs at the observed +1.80'));
 assert.equal(api.scenarioSnap(),null);assert.equal(api.intervalBand(1.8),'Strong El Niño');
-close(api.cropEffect({yield_pct_per_oni_nino:10}),18);
+close(api.cropEffect({yield_pct_per_oni_nino:10}),(Math.exp(0.1*1.8)-1)*100);  /* 2026-09-28: log-point slopes, exp form as in the ledger */
 assert.equal(api.impactColor(NaN,1),null);assert.equal(api.impactColor('2',1),null);
 assert.equal(api.interpolateNumeric(null,5,.5),null);assert.equal(api.interpolateNumeric('low','high',.5),null);
 assert.equal(api.interpolateNumeric({x:1},{},.5).x,null);
 S.mode='impact';const z=api.rowFor('ZWE');assert.equal(api.fillFor('ZWE'),api.impactColor(Math.round(z.lv.production_shock_pct),z.cov));
 S.oniLive=-1.2;S.oni=-1;close(api.rowFor('ZWE').lv.production_shock_pct,.4*S.exp.ZWE.levels.la_nina_strong.production_shock_pct+.6*S.exp.ZWE.levels.la_nina_moderate.production_shock_pct);
-close(api.cropEffect({yield_pct_per_oni_nina:10}),-12);
+close(api.cropEffect({yield_pct_per_oni_nina:10}),(Math.exp(0.1*-1.2)-1)*100);
 S.explicitScenario=true;S.oni=1.5;assert.equal(api.rowFor('ZWE').lv,S.exp.ZWE.levels.el_nino_strong);assert(api.scenarioSnap());assert(api.modelStateSentence().startsWith('Explicit scenario:'));
 S.explicitScenario=false;
 for(const oni of [.2,-.2]){S.oniLive=oni;assert.equal(api.rowFor('ZWE'),null);assert.equal(api.cropEffect({yield_pct_per_oni_nino:1}),null);}

@@ -8,10 +8,16 @@ scores it: for every pair the outlook shows, each El Nino winter with DJF ONI
 of +1.0 or more is held out in turn, the two-slope fit is re-estimated on the
 remaining years, and the held-out harvest is predicted from that winter's ONI.
 
-Two choices keep the test honest:
+Three choices keep the test honest:
   - The detrend looks back only (the mean of up to eight earlier log yields).
     The fit on the page uses a centred window, which borrows the four harvests
     after each year; a live forecast cannot, so the hindcast does not either.
+  - Leave-one-out re-detrends without the held-out harvest (2026-09-28 audit,
+    F13). Otherwise that harvest sits in the trailing baselines of the next
+    eight training years (the 1992 drought lowered the 1993-2000 baselines),
+    and the training data carries an echo of the year being predicted. The
+    forward walk needs no such step: it trains only on earlier harvests, whose
+    baselines are earlier still.
   - A trailing mean lags a rising yield trend, so most anomalies come out
     positive and a fit scores the "sign" from trend alone. v2 therefore scores
     only the El Nino part: the training intercept b0 carries the trend, the
@@ -99,8 +105,10 @@ def main() -> int:
         shift = M.shift_for((cal.get(iso) or {}).get(crop, {}))
         if shift is None or len(yrs) < 20:
             continue
-        ty, ta = trailing(yrs, [series[y]["yield"] for y in yrs])
-        data = [(y, a, oni.get(y + shift)) for y, a in zip(ty, ta) if oni.get(y + shift) is not None]
+        def aligned(years):
+            ty, ta = trailing(years, [series[y]["yield"] for y in years])
+            return [(y, a, oni.get(y + shift)) for y, a in zip(ty, ta) if oni.get(y + shift) is not None]
+        data = aligned(yrs)
         held, fwd, abstain = [], [], []
         for hy, act, o in [d for d in data if d[2] >= EVENT_ONI]:
             # Forward walk: fit only on harvests before the held-out one, as a forecaster would have had.
@@ -115,7 +123,10 @@ def main() -> int:
                             "sign_right": bool(((act - fb) < 0) == (fe < 0)),
                             "in_band": bool(fp - 1.645 * fsd <= act <= fp + 1.645 * fsd),
                             "abs_err": abs(act - fp), "abs_err_zero": abs(act - fb)})
-            train = [d for d in data if d[0] != hy]
+            # Leave-one-out: detrend again with the held-out harvest removed, so it is in
+            # no training year's baseline. Its own anomaly (act) is unchanged: its
+            # baseline is the harvests before it either way.
+            train = aligned([y for y in yrs if y != hy])
             b, cov, s = ols([d[2] for d in train], [d[1] for d in train])
             # The yardstick is the model without the El Nino term, refit on the same
             # years: an intercept-only fit, i.e. the mean training anomaly (it carries
@@ -159,10 +170,11 @@ def main() -> int:
               f"error {mae * 100:.1f} vs baseline {mae0 * 100:.1f}; forward sign {forward.get('sign_right', 0)}/{forward['events']}"
               f"{', beats' if forward.get('beats_no_change') else ''}, abstained {len(abstain)}")
     payload = {"_meta": {
-        "generated_at": datetime.now(timezone.utc).isoformat(), "version": "v2", "method_version": "v2",
+        "generated_at": datetime.now(timezone.utc).isoformat(), "version": "v3", "method_version": "v3",
         "method": (f"Each El Niño winter (DJF ONI of +{EVENT_ONI} or more) is left out in turn and the fit is "
                    "redone on the other years. A harvest is measured against the average of up to "
-                   f"{TRAIL} earlier harvests, so no later year informs it. Because yields trend upward, that "
+                   f"{TRAIL} earlier harvests, so no later year informs it, and the left-out harvest is also "
+                   "taken out of the averages the other years are measured against. Because yields trend upward, that "
                    "average runs low. The yardstick is the same fit without its El Niño term (the average "
                    "of the other years), which carries that trend. 'Sign right' means the fit and the harvest "
                    "both landed on the same side of the yardstick; beating it means the El Niño term moved the "

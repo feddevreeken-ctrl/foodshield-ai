@@ -134,9 +134,9 @@ def build() -> dict:
         "range_c": [min(vals) / 10.0, max(vals) / 10.0],
         "box_means_c": {k: box_mean(b) for k, b in BOXES.items()},
         "box_note": ("Means of this 2-degree OISST grid over the Nino boxes, for a cross-check "
-                     "of the picture against the indices only. They are NOT the ONI or CPC's "
-                     "weekly values: those use ERSST and a 1991-2020 base, this field uses "
-                     "OISST's 1971-2000 daily climatology."),
+                     "of the picture against the indices only. They are NOT the ONI (ERSST, "
+                     "centred 30-year bases) or CPC's weekly values (weekly OISST, 1991-2020 "
+                     "base); this field uses OISST's 1971-2000 daily climatology."),
         "sampling_note": ("One 0.25-degree cell in eight in each direction, not an area "
                           "average; coastal structure off Peru is under-sampled. Rows run "
                           "from 84.875 S to 84.875 N, the Web Mercator extent; ice-covered "
@@ -148,7 +148,7 @@ def main() -> int:
     payload = build()
     write_json("sst_anomaly.json", payload, source="NOAA NCEI OISST v2.1 via CoastWatch ERDDAP",
                notes=("Seven-day mean sea-surface temperature anomaly on a 2-degree grid, "
-                      "60S-60N, for the El Nino map. Anomaly base is OISST's 1971-2000 "
+                      "84.9S-84.9N (the Web Mercator extent), for the El Nino map. Anomaly base is OISST's 1971-2000 "
                       "climatology; do not read box means as the ONI."),
                status="preliminary" if payload["preliminary"] else "ok")
     print(f"[OK] OISST anomaly {payload['time_start']}..{payload['time_end']} "

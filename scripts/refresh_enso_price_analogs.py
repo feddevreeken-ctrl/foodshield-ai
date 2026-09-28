@@ -58,6 +58,30 @@ def _monthly_end(serie):
     return ""
 
 
+def add_estimates(countries, k1):
+    """Estimate, not a forecast: this year's latest index carried along each past event's own path
+    (index at month k over index at this year's latest month). Computed here so the page prints it, not derives it."""
+    tops = {}
+    for c in countries:
+        now = c["events"].get("2026-27")
+        if not now:
+            continue
+        lk, lv = now[-1]
+        paths = []
+        for lab in ("2015-16", "2023-24"):
+            m = dict((k, v) for k, v in c["events"].get(lab, []))
+            if not m.get(lk):
+                continue
+            pth = [[lk, lv]] + [[k, round(lv * m[k] / m[lk], 1)] for k in range(lk + 1, k1 + 1) if k in m]
+            if len(pth) > 1:
+                top = max(q[1] for q in pth[1:])
+                paths.append({"label": lab, "points": pth, "top": top})
+                tops.setdefault(lab, []).append(top)
+        if paths:
+            c["estimate"] = {"from_k": lk, "paths": paths}
+    return {lab: {"median_top_pct": round(statistics.median(v) - 100, 1), "n": len(v)} for lab, v in tops.items()}
+
+
 def main():
     listed = http_get(f"{API}/FpmaSerieDomestic/", params={"format": "json"},
                       timeout=120, patient=True).json().get("results") or []
@@ -116,7 +140,10 @@ def main():
             "n_below_base_now": sum(1 for g in got if g["last"][1] < 100),
             "last_k": max(g["last"][0] for g in got),
         }
-    print(f"[analogs] {len(countries)} countries; " + "; ".join(f"{k}: n={v['n']}, median peak {v['median_peak_pct']:+}%" for k, v in summary.items()))
+    est = add_estimates(countries, K1)
+    if est:
+        summary["estimate"] = {"by_path": est, "method": "This year's latest index carried along each past event's own path; a replay, not a forecast."}
+    print(f"[analogs] {len(countries)} countries; " + "; ".join(f"{k}: n={v['n']}, median peak {v['median_peak_pct']:+}%" for k, v in summary.items() if k != "estimate"))
     write_json("enso_price_analogs.json", {
         "window": {"from": K0, "to": K1, "base": "March of the El Niño year = 100", "peak_month": "December"},
         "events": [{"label": label, "peak_month": peak} for label, peak in EVENTS],

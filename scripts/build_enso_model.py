@@ -58,7 +58,16 @@ and the detrend adds more, so OLS errors are too small and reward whichever
 series is SMOOTHEST rather than whichever response is strongest. The joint test
 is an HAC Wald. p is then passed through Benjamini-Hochberg across every pair,
 because at a per-pair 0.10 threshold a panel this size hands back dozens of
-passes on noise alone.
+passes on noise alone. That joint test sets `signal`.
+
+The joint test can pass on one phase alone, so each phase also gets its own
+test (2026-09-28 audit, F3/F7). Every fitted pair publishes both slopes, their
+HAC SEs and p values, and two more Benjamini-Hochberg runs cover ALL fitted
+pairs: one on the El Nino slope's p (`q_nino`, `nino_signal`) and one on the La
+Nina slope's p (`q_nina`, `nina_signal`). The family is every fitted pair, not
+the pairs the joint test already kept, so no pair is screened twice. What an El
+Nino scenario shows reads `nino_signal`; what a La Nina scenario shows reads
+`nina_signal`.
 
 The Indian Ocean Dipole is fit alongside as a DIAGNOSTIC only, setting
 `enso_specific`. It does not gate and it does not replace the coefficient: the
@@ -293,6 +302,17 @@ def fit(years, anom, djf, shift, dmi=None):
     }
 
 
+def bh_q(pvals: dict) -> dict:
+    """Benjamini-Hochberg q for every key, over the whole family passed in."""
+    flat = sorted((p, k) for k, p in pvals.items())
+    m, run, q = len(flat), 1.0, {}
+    for rank in range(m, 0, -1):
+        p, k = flat[rank - 1]
+        run = min(run, p * m / rank)
+        q[k] = run
+    return q
+
+
 def main() -> int:
     djf, dmi, cals = load_oni(), load_dmi(), load_calendars()
     panel = load_faostat()
@@ -334,7 +354,7 @@ def main() -> int:
                 "enso_specific": bool(adj and adj["p_joint"] < P_GATE),
                 "p_incremental_over_iod": round(adj["p_joint"], 5) if adj else None,
                 "iod_pct_per_dmi": round(adj["b_iod"] * 100, 3) if adj else None,
-                "_p": base["p_joint"], "_pend": {
+                "_p": base["p_joint"], "_pn": base["p_nino"], "_pa": base["p_nina"], "_pend": {
                     "yield_pct_per_oni_nino": round(base["b_nino"] * 100, 3),
                     "se_nino_pct": round(base["se_nino"] * 100, 3),
                     "p_nino": round(base["p_nino"], 5),
@@ -345,29 +365,37 @@ def main() -> int:
                 },
             }
 
-    flat = sorted((e["_p"], i, c) for i, cs in results.items() for c, e in cs.items())
-    m = len(flat)
-    q_of, run = {}, 1.0
-    for rank in range(m, 0, -1):
-        pv, i, c = flat[rank - 1]
-        run = min(run, pv * m / rank)
-        q_of[(i, c)] = run
+    # Three Benjamini-Hochberg families, each over every fitted pair: the joint
+    # test (signal), the El Nino slope alone and the La Nina slope alone.
+    pairs = [(i, c) for i, cs in results.items() for c in cs]
+    m = len(pairs)
+    q_of = bh_q({k: results[k[0]][k[1]]["_p"] for k in pairs})
+    qn_of = bh_q({k: results[k[0]][k[1]]["_pn"] for k in pairs})
+    qa_of = bh_q({k: results[k[0]][k[1]]["_pa"] for k in pairs})
+    n_nino = n_nina = 0
     for i, cs in results.items():
         for c, e in cs.items():
-            q = q_of[(i, c)]
-            pend = e.pop("_pend"); pv = e.pop("_p")
+            q, qn, qa = q_of[(i, c)], qn_of[(i, c)], qa_of[(i, c)]
+            pend = e.pop("_pend"); pv = e.pop("_p"); e.pop("_pn"); e.pop("_pa")
             e["p_value"] = round(pv, 5); e["q_value"] = round(q, 5)
             e["signal"] = bool(q < P_GATE)
-            if e["signal"]:
-                n_sig += 1
-                e.update(pend)
+            # Both slopes are published for every fitted pair; the flags say which may be used.
+            e.update(pend)
+            e["q_nino"] = round(qn, 5); e["q_nina"] = round(qa, 5)
+            e["nino_signal"] = bool(qn < P_GATE); e["nina_signal"] = bool(qa < P_GATE)
+            n_sig += e["signal"]; n_nino += e["nino_signal"]; n_nina += e["nina_signal"]
+            if e["signal"] or e["nino_signal"] or e["nina_signal"]:
                 if not e["enso_specific"]:
                     e["note"] = ("Reported, but not ENSO-specific: adding the Indian Ocean "
                                  "Dipole removes ENSO's incremental explanatory power. Treat "
                                  "as a shared Indo-Pacific teleconnection.")
+                elif not e["signal"]:
+                    e["note"] = (f"The joint test does not pass across the {m} pairs, but the "
+                                 f"{'El Niño' if e['nino_signal'] else 'La Niña'} slope does on its own.")
             else:
                 e["note"] = ("no ENSO signal surviving false-discovery control across the "
-                             f"{m} pairs tested, not modelled")
+                             f"{m} pairs tested (joint, El Niño or La Niña test); slopes kept "
+                             "for reference, not used")
 
     payload = {"_meta": {
         "generated_at": datetime.now(timezone.utc).isoformat(), "version": "v2-faostat",
@@ -377,7 +405,9 @@ def main() -> int:
                    "HARVEST YEAR. Alignment is set by the harvest month from USDA/FAO-GIEWS "
                    "crop calendars: harvest Jan-Aug uses DJF(Y) unless the crop is sown Mar-Aug, "
                    "harvest Sep-Dec and spring-sown summer crops use DJF(Y+1); never chosen by fit. Newey-West HAC errors and an HAC Wald joint test; "
-                   "Benjamini-Hochberg across the panel with q<0.10."),
+                   "Benjamini-Hochberg across the panel with q<0.10 on the joint test (signal), and "
+                   "separately on the El Nino slope's p and on the La Nina slope's p, each across all "
+                   "fitted pairs (nino_signal, nina_signal). Both slopes are published for every fitted pair."),
         "sources": {"enso": ONI_URL, "iod": DMI_URL, "yields": FAOSTAT_URL},
         # Page-facing strings are written plain here, so a refit cannot undo the copy pass.
         "copy_pass": ("2026-09-07: prose fields rewritten for plain sentences (no em dashes or double "
@@ -389,12 +419,13 @@ def main() -> int:
                     "effect means no detectable signal, not zero effect. ENSO shifts the odds "
                     "of a yield outcome; it does not determine any single country-season."),
         "counts": {"pairs_fitted": n_fit, "pairs_with_signal": n_sig,
+                   "pairs_with_el_nino_signal": n_nino, "pairs_with_la_nina_signal": n_nina,
                    "pairs_too_thin": n_thin, "pairs_without_calendar": n_nocal},
     }, "data": results}
     out = os.path.join(DATA, "enso_model.json")
     with open(out, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=1, sort_keys=True, ensure_ascii=False); f.write("\n")
-    print(f"[OK] fitted {n_fit} | signal {n_sig} | thin {n_thin} | no-calendar {n_nocal}")
+    print(f"[OK] fitted {n_fit} | signal {n_sig} | El Nino {n_nino} | La Nina {n_nina} | thin {n_thin} | no-calendar {n_nocal}")
     print(f"[OK] wrote {out}")
     return 0
 

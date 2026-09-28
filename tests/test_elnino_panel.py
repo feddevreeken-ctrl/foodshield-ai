@@ -727,9 +727,9 @@ def main() -> int:
             const first = document.querySelector('#subview-elnino > *:not([hidden])');
             const harv = O.rows_all.filter(r => r.status === 'shown' && !r.in_season && Math.abs(r.change_kt_record || 0) >= 150);
             const text = document.querySelector('.enso-next12').textContent;
-            // 2026-09-27: the map opens Ocean, then the Pacific explainer, then the ONI record and the CPC odds; the dated calendar follows.
-            const second = first && first.nextElementSibling, third = second && second.nextElementSibling;
-            return first && first.classList.contains('enso-mapgrid') && second && second.id === 'enso-pacific' && third && third.classList.contains('enso-oni-plate') && !!document.querySelector('#subview-elnino > #enso-next12')
+            // 2026-09-28 (audit): the map opens Ocean, then CPC's odds and the dated twelve months; the Pacific explainer and the ONI record follow.
+            const second = first && first.nextElementSibling, third = second && second.nextElementSibling, fourth = third && third.nextElementSibling;
+            return first && first.classList.contains('enso-mapgrid') && second && second.id === 'enso-strengths' && third && third.id === 'enso-next12' && fourth && fourth.id === 'enso-pacific' && !!document.querySelector('#subview-elnino > .enso-oni-plate')
                 && items.length >= 6 && items.every(li => /^is-(forecast|published|modelled|precedent)$/.test(li.className) && li.querySelector('[data-goto-lens]'))
                 // 2026-09-27: the fitted harvests are one pointer row naming each (sizes live on Harvests).
                 && harv.every(r => text.includes(r.iso === 'USA' ? 'United States' : r.iso === 'ZAF' ? 'South Africa' : ''))
@@ -780,9 +780,10 @@ def main() -> int:
               calendar['actual'] == calendar['expected'] and calendar['actual'] > 0 and calendar['complete'], str(calendar))
         page.select_option('#enso-mode', 'impact')
         palette = page.eval_on_selector_all('#enso-legend .enso-ramp i', "els => els.map(e => getComputedStyle(e).backgroundColor)")
-        # 2026-09-27: zero is a dark neutral that recedes; falls step up in ochre, rises in green.
-        check("yield ramp has fixed ochre, dark neutral and green anchors",
-              palette[0] == 'rgb(224, 103, 60)' and palette[len(palette)//2] == 'rgb(78, 80, 84)' and palette[-1] == 'rgb(143, 199, 154)', str(palette))
+        # 2026-09-27: zero is a dark neutral that recedes; falls step up in ochre, rises in teal
+        # (2026-09-28 audit: green rises failed protan/deutan contrast against the weak ochre step).
+        check("yield ramp has fixed ochre, dark neutral and teal anchors",
+              palette[0] == 'rgb(224, 103, 60)' and palette[len(palette)//2] == 'rgb(78, 80, 84)' and palette[-1] == 'rgb(134, 199, 204)', str(palette))
         page.goto(f"{base}/index.html?tab=ensomoney&enso_level=-1.5&enso_mode=crop", wait_until='networkidle')
         page.wait_for_selector('#subview-ensomoney.active .enso-subview-meta')
         check("explicit URL scenario and mode override view defaults",
@@ -1214,7 +1215,7 @@ def main() -> int:
                         && key.includes(label.querySelector('text').textContent);
                 }
                 measured++;
-                const expected = 2 * (9 + Math.min(Math.abs(pct),100) * .24);
+                const expected = 2 * Math.sqrt(81 + 10.08 * Math.min(Math.abs(pct),100));
                 const signed = (pct > 0 ? '+' : pct < 0 ? '−' : '') + Math.abs(pct).toFixed(1) + '% y/y';
                 return ring && Number(ring.dataset.yoy) === pct
                     && Math.abs(parseFloat(ring.style.width) - expected) < .001
@@ -1225,7 +1226,7 @@ def main() -> int:
             }) && measured === rings.length && measured > 0 && missing > 0
                 && key.includes('per day against a year earlier, all vessels where dry bulk is missing, IMF PortWatch')
                 && key.includes('collected ' + date(feed._meta.generated_at))
-                && key.includes('Ring radius grows with absolute change, capped at 100%');
+                && key.includes('Ring area grows with the size of the change, capped at 100%');
         }"""))
         check("Stage I both Panama arcs carry a visible matching continuation name", page.evaluate("""() => {
             const markers = [];
@@ -1341,6 +1342,9 @@ def main() -> int:
                 && width('soi') < width('oni') && width('soi') < width('bom_rel');
         }"""))
         page.evaluate("showTab('ensoharvest')")
+        # 2026-09-28: coverage follows the phase in view (La Niña reads coverage_la_nina, which after the
+        # phase-specific refit is Pakistan maize alone), so read the ramp at the observed El Niño ONI.
+        page.select_option('#enso-level', 'observed')
         page.locator('[data-native="enso-mode"][data-value="coverage"]').click()
         # paint() throttles a layer change behind a burst guard and a globe-wide
         # ripple, so reading fillColor in the same tick reads the previous layer.
@@ -1365,10 +1369,10 @@ def main() -> int:
         for width, height in ((1280, 800), (1440, 900)):
             page.set_viewport_size({'width': width, 'height': height})
             for tab, labels in (
-                ('ensowater', ['No land layer', 'Shipping', 'El Niño timeline', 'Change nowEl Niño link']),
-                ('ensomoney', ['Staple prices', 'Grain imports', 'El Niño timeline', 'RealNominal', 'Price changeAgainst pattern']),
-                ('elnino', ['Sea-surface']),
-                ('ensoharvest', ['Production shock', 'Strongest crop', 'Coverage', 'Crop stress now', 'Teleconnections', 'El Niño timeline']),
+                ('ensowater', ['No land layer', 'Shipping', 'Change nowEl Niño link']),
+                ('ensomoney', ['Staple prices', 'Grain imports', 'RealNominal', 'Price changeAgainst pattern']),
+                ('elnino', ['Sea-surface', 'Past El NiñosThis weekWeakModerateStrongVery strong']),
+                ('ensoharvest', ['Production shock', 'Strongest crop', 'Coverage', 'Crop stress now', 'Teleconnections']),
                 ('ensolive', ['Rain pattern', 'Hotspots', 'IPC', 'Hazards', 'Headlines', 'Elsewhere'])):
                 page.evaluate('tab => showTab(tab)', tab)
                 page.wait_for_timeout(150)
@@ -1406,25 +1410,26 @@ def main() -> int:
                     && document.querySelectorAll('.enso-price-lbl').length >= 3;
             }"""))
 
-        # 2026-09-27: one El Niño month slider for Prices, Harvests and Shipping. Past the latest observed month the
-        # Prices map shows only estimates (dashed), and a month with nothing knowable is left blank.
-        page.set_viewport_size({'width': 1440, 'height': 1000})
-        page.evaluate("showTab('ensomoney')")
-        page.wait_for_selector('[data-tl]')
-        page.locator('[data-tl]').click()
-        page.wait_for_selector('#enso-tl:not([hidden]) input[type=range]')
-        page.evaluate("(()=>{const r=document.querySelector('#enso-tl input[type=range]'); r.value=String(2027*12+1); r.dispatchEvent(new Event('input'));})()")
-        page.wait_for_timeout(600)
-        check("the El Niño timeline shows only dashed estimates past the latest month, from the timeline file", page.evaluate("""async () => {
-            const C = (await (await fetch('data/enso_price_timeline.json')).json()).data.countries;
-            let est = 0, solid = 0;
-            _stageHMap.eachLayer(l => { const p = l.feature && l.feature.properties; if (!p || !l.options.fillColor || l.options.fillOpacity < .3) return;
-                const iso = p.ISO_A3 || p.ADM0_A3 || p.iso_a3 || p.id; if (!C[iso]) return;
-                if (l.options.dashArray === '4 3') est++; else solid++; });
-            return est >= 5 && solid === 0 && document.querySelector('#enso-tl .enso-tl-lab').textContent === 'Feb 2027';
+        # 2026-09-28: the El Niño month slider was removed at the owner's request (it mixed observed, estimated
+        # and fitted values in one control); each lens keeps its dated plates instead.
+        check("no month slider on the El Niño lenses", page.evaluate("() => !document.querySelector('[data-tl], #enso-tl')"))
+        # 2026-09-28 (owner): the Ocean map can show the average December-February anomaly of past El Niño winters by
+        # strength, from data/sst_composites.json. The strip, key and caption follow the slider; leaving Ocean resets it.
+        page.evaluate("showTab('elnino')")
+        page.wait_for_selector('#enso-sst-past')
+        page.evaluate("(()=>{const r=document.getElementById('enso-sst-past'); r.value='4'; r.dispatchEvent(new Event('input'));})()")
+        page.wait_for_timeout(500)
+        check("the Ocean slider shows past very strong El Niño winters from the composite file", page.evaluate("""async () => {
+            const C = (await (await fetch('data/sst_composites.json')).json()).data, vs = C.classes.find(c => c.key === 'very_strong');
+            const tag = document.getElementById('enso-maptag').textContent, key = document.getElementById('enso-legend').textContent;
+            const strip = document.getElementById('enso-weekly').textContent, head = document.querySelector('#enso-mapwrap > .enso-plate-h').textContent;
+            return !!vs && tag.includes('not a forecast') && tag.includes(String(vs.n)) && key.includes('average of ' + vs.n + ' past winters')
+                && vs.events.every(e => key.includes(e.label)) && strip.includes('Very strong') && head.includes('very strong');
         }"""))
-        page.locator('[data-tl]').click()
-        page.wait_for_timeout(300)
+        page.evaluate("showTab('ensowater')")
+        page.evaluate("showTab('elnino')")
+        page.wait_for_selector('#enso-sst-past')
+        check("leaving Ocean resets the sea-surface slider to this week", page.evaluate("() => document.getElementById('enso-sst-past').value === '0' && document.getElementById('enso-weekly').textContent.includes('CPC weekly')"))
 
         print("\nTier 1: figures come from the feeds (court 2026-09-23)")
         src = (ROOT / "index.html").read_text()
