@@ -45731,12 +45731,15 @@ function showCommodityDetail(key) {
   /* 2026-09-28 (owner: "for next week make it automatically show last week too so store data"): stored calendar weeks,
      Monday to Sunday (data/rain_weeks.json, data/sst_weeks.json, rolling twelve), as their own stops before the live
      week. S.nowWeek holds the picked week's Sunday; null is the live window. */
+  /* The picked stored week counts only on the Now stretch; every other way out of it clears it (scrubGo, the zone and
+     mode buttons, leaving the Ocean lens), so coming back lands on the live week. */
+  function nowWeek() { return (!S.sstView || S.sstView === 'now') ? S.nowWeek || null : null; }
   function wkPair(end) {
     var R = S.rainwk && (S.rainwk.weeks || []).filter(function (w) { return w.end === end; })[0], W = S.sstwk && (S.sstwk.weeks || []).filter(function (w) { return w.end === end; })[0];
     return R && W && W.anom ? { rain: R, sea: W } : null;
   }
   function seaNow() {
-    var L = S.sstmon && S.sstmon.last30, g = S.sst || {}, A = S.nowWeek && S.rainWin !== 30 ? wkPair(S.nowWeek) : null;
+    var L = S.sstmon && S.sstmon.last30, g = S.sst || {}, A = nowWeek() && S.rainWin !== 30 ? wkPair(nowWeek()) : null;
     if (A) return { days: 7, start: A.sea.start, end: A.sea.end, grid: S.sstwk.grid, anom: A.sea.anom, box: A.sea.box_means_c || {}, pre: A.sea.preliminary, arch: true };
     return S.rainWin === 30 && L && L.anom ? { days: 30, start: L.start, end: L.end, grid: L.grid, anom: L.anom, box: L.box_means_c || {}, pre: L.preliminary }
       : { days: 7, start: g.time_start, end: g.time_end, box: g.box_means_c || {}, pre: g.preliminary };
@@ -45751,7 +45754,7 @@ function showCommodityDetail(key) {
   }
   /* Observed rain now: the last 30 days (the pattern) or the last 7 (what is falling now), from data/rain_anomaly.json. */
   function rainArch() {
-    var A = wkPair(S.nowWeek), G = S.rainwk && S.rainwk.grid; if (!A || !G) return null;
+    var A = wkPair(nowWeek()), G = S.rainwk && S.rainwk.grid; if (!A || !G) return null;
     var d30 = S.rainWin === 30, blk = d30 ? A.rain.d30 : A.rain; if (!blk || !blk.cells) return null;
     var key = 'arch/' + (d30 ? 30 : 7) + '/' + A.rain.end; S._rainMix = S._rainMix || {};
     if (!S._rainMix[key]) {
@@ -45765,7 +45768,7 @@ function showCommodityDetail(key) {
     return { days: d30 ? 30 : 7, anom: M.anom, spi: M.spi, mm: M.mm, nmm: M.nmm, src: M.src, start: blk.start, end: blk.end, fdays: f.days, fstart: f.start, fend: f.end, arch: true };
   }
   function rainNow() {
-    if (S.nowWeek && wkPair(S.nowWeek)) return rainArch();
+    if (nowWeek() && wkPair(nowWeek())) return rainArch();
     var R = S.rainnow; if (!R || !R.anom || !R.grid || !R.window) return null;
     var wk = S.rainWin !== 30 && R.week && R.week.anom ? R.week : null;
     var b = wk ? { days: 7, anom: wk.anom, spi: wk.spi || null, mm: wk.mm || null, nmm: wk.norm_mm || null, start: wk.start, end: wk.end } : { days: 30, anom: R.anom, spi: R.spi || null, mm: R.mm || null, nmm: R.norm_mm || null, start: R.window.start, end: R.window.end };
@@ -45796,7 +45799,7 @@ function showCommodityDetail(key) {
   /* The week's own grid (the overlay on the 7-day stop). */
   function rainOverGrid() {
     if (S.showRain === false || !(!S.sstView || S.sstView === 'now') || S.rainWin === 30) return null;
-    if (S.nowWeek) { var A = wkPair(S.nowWeek); if (A && !A.rain.d30) return null; }
+    if (nowWeek()) { var A = wkPair(nowWeek()); if (A && !A.rain.d30) return null; }
     var keep = S.rainWin; S.rainWin = 7; var g = rainGrid(true); S.rainWin = keep; return g;
   }
   /* How unusual, in words, from SPI x100 (-1 moderately, -1.5 severely, -2 extremely; the same for wet). */
@@ -45808,7 +45811,7 @@ function showCommodityDetail(key) {
     /* The 7-day stop's base is the 30-day picture; its own week is rainOverGrid(). */
     if ((!S.sstView || S.sstView === 'now') && S.rainWin !== 30 && !week) { var kw = S.rainWin; S.rainWin = 30; var base = rainGrid(); S.rainWin = kw;
       /* A stored week without its 30 days: the week alone is the picture, with no glaze. */
-      return base || (S.nowWeek ? rainGrid(true) : null); }
+      return base || (nowWeek() ? rainGrid(true) : null); }
     if (!S.sstView || S.sstView === 'now') { var w = rainNow(), R = w && w.arch ? S.rainwk : S.rainnow, k = w && w.days + '/' + w.end; S._rainNow = S._rainNow || {};
       if (!w) return null;
       RAIN_KIND = w.spi ? (w.days === 7 ? 'spiwk' : 'spi') : w.days === 7 ? 'wk' : 'live';
@@ -45977,6 +45980,7 @@ function showCommodityDetail(key) {
     st = st || scrubStops(); var x = st[i]; if (!x) return;
     if (x.kind === 'now') { S.sstView = 'now'; S.rainWin = x.days; S.nowWeek = null; S.sstWinter = null; sstApply(); return; }
     if (x.kind === 'wk') { S.sstView = 'now'; S.rainWin = 7; S.nowWeek = x.end; S.sstWinter = null; sstApply(); return; }
+    S.nowWeek = null;
     if (x.kind === 'mon') { S.sstView = 'month'; S.sstMonth = x.key; S.sstWinter = null; sstApply(); return; }
     if (x.kind === 'ol') { S.sstView = 'outlook'; S.olSeason = x.key; sstApply(); return; }
     S.sstView = x.cls; S.sstPin = x.label;
@@ -46062,10 +46066,10 @@ function showCommodityDetail(key) {
       if (j == null) return; e.preventDefault(); stopScrubPlay(); step(j); });
     root.querySelectorAll('[data-sst-view]').forEach(function (b) { b.onclick = function () { stopScrubPlay(); var k = b.getAttribute('data-sst-view');
       if (k === 'past') { if (sstView() !== 'past') { var st = scrubStops('past'), c = sstDefaultClass(), last = null; st.forEach(function (s) { if (s.cls === c) last = s.label; });
-        S.sstAvg = true; S.sstView = c; S.sstPin = last; S.sstWinter = null; sstApply(); } return; }
-      if (k === 'month') { var m0 = scrubStops('now').filter(function (s) { return s.kind === 'mon'; }).pop(); if (m0) { S.sstView = 'month'; S.sstMonth = m0.key; S.sstWinter = null; sstApply(); } return; }
+        S.sstAvg = true; S.nowWeek = null; S.sstView = c; S.sstPin = last; S.sstWinter = null; sstApply(); } return; }
+      if (k === 'month') { var m0 = scrubStops('now').filter(function (s) { return s.kind === 'mon'; }).pop(); if (m0) { S.nowWeek = null; S.sstView = 'month'; S.sstMonth = m0.key; S.sstWinter = null; sstApply(); } return; }
       if (k === 'outlook') S.olSeason = null;  /* the zone opens on the nearest month; the track picks the others */
-      S.sstView = k; S.sstWinter = null; sstApply(); }; });
+      S.nowWeek = null; S.sstView = k; S.sstWinter = null; sstApply(); }; });
     /* A click that did not come through the pointer (keyboard on a column, assistive tech, a test) still picks the stop. */
     root.querySelectorAll('.sc-win[data-i]').forEach(function (b) { b.onclick = function () { stopScrubPlay(); step(+b.getAttribute('data-i')); }; });
     var play = root.querySelector('.sc-play'); if (play) play.onclick = function () { if (S.scrubPlay) stopScrubPlay(); else startScrubPlay(); };
@@ -52883,6 +52887,7 @@ function showCommodityDetail(key) {
     applyEnsoQuery(!viewChanged);
     if (viewChanged) writeEnsoQuery();
     S.showSST = S.mode === 'sst';
+    if (S.sub !== 'elnino') S.nowWeek = null;
     if (S.sub !== 'elnino' && S.sstView && S.sstView !== 'now') { S.sstView = 'now'; S.sstWinter = null; renderWeeklyStrip(); if (S.sstLayer && S.sstLayer._schedule) S.sstLayer._schedule(); syncRainLayer(); }
     else if (S.sub !== 'elnino' && S.pevLayer) syncPastEvents();
     S.showRegions = false;  /* 2026-09-27 (map research): published regions are a toggle, not hatching over the banded fill */

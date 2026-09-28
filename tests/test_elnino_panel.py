@@ -1586,6 +1586,14 @@ def main() -> int:
                     && (!R.d30 || (!!document.querySelector('#enso-map .enso-rain-over') && /darker where the week adds/.test(key) && /30 days to /.test(key)))
                     && col === ((E + A) ? String(E + A) : '') && document.querySelector('#enso-scrub .sc-handle').getAttribute('aria-valuetext').startsWith('Week ');
             }""", wks[-1]))
+            # 2026-09-29 review: a picked stored week must not survive leaving it; back on 2026 the live week is picked.
+            page.click('#enso-scrub .sc-mode[data-sst-view="past"]')
+            page.wait_for_timeout(500)
+            page.click('#enso-scrub .sc-mode[data-sst-view="now"]')
+            page.wait_for_timeout(500)
+            check("leaving a stored week and coming back lands on the live window, not the old week", page.evaluate("""() =>
+                !/^Week /.test(document.querySelector('#enso-scrub .sc-handle').getAttribute('aria-valuetext'))
+                && !/Sea and rain, week /.test(document.querySelector('#enso-mapwrap > .enso-plate-h').textContent)"""))
             page.click('[data-sst-now="7"]')
             page.wait_for_timeout(400)
         if mons:
