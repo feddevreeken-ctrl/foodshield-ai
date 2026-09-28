@@ -40,6 +40,20 @@ Data:
     the observation and the normal: CHIRPS's land mask is fixed (4,848,282 pixels in every
     archive file); a cell where the observation misses any of them is left out.
   * Cells north of 60N (outside CHIRPS) get no fill.
+  * SPI (added 28 September 2026): fill.spi (the six pentads) and fill.week.spi (the one
+    pentad), parallel to fill.cells, give the Standardized Precipitation Index on the same
+    scale as the CPC cells' spi (see refresh_rain_anomaly.py). The observed total (the
+    unrounded cell mean of the Early Estimates file) is placed on the cell's 1991-2020 gamma
+    fit of CHIRPS v3.0 final pentads for the same window ending at the same pentad of the year
+    (scripts/build_chirps_spi_params.py -> data/ref/chirps3_spi_params_1991_2020.json.gz: p6
+    and p1 rows, pentad of year minus one) by scripts/spi.py, with that build's own rule: a
+    total under 1 mm (the archive's whole-mm floor) gets the middle of the dry class, (dry
+    years + 1) / 62. SPI x 100, integers clamped to -300..300. Null where the fill's percent is
+    null (CPC has the layer, or arid) or the window has no fit (fewer than 15 of 30 wet years,
+    or a frozen CHIRPS record at tiny islands and along 57.5-60N). Known small bias: the live
+    Early Estimates are float files, the fit's archive floors each pixel, so the live SPI reads
+    a little wet (95th percentile of cells +0.03 for a pentad, +0.04 for six; build's check).
+    If the parameter file cannot be read the fill is written without SPI.
 
 Pure Python (requests only) in CI; numpy only in --build-normal.
 """
@@ -58,6 +72,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import http_get  # noqa: E402
+import spi as SPI  # noqa: E402
 
 EE = "https://data.chc.ucsb.edu/products/Early_Estimates/v3/Recent_Rainfall/observed"
 EE_DIR = EE + "/moving_{n:02d}pentad/global/tifs/archive/"
@@ -305,6 +320,27 @@ def fill(need30: list[bool], need7: list[bool], arid_mm_day: float) -> tuple[dic
     if short30 or short7:
         block["notes"].append(f"Cells with CHIRPS pixels missing are left out rather than averaged over less ground "
                               f"than their normal: {short30} on the 30-day layer, {short7} on the week.")
+    try:  # an addition: the fill stands without it
+        s = {}
+        for kind, arr, nd in (("p6", a30, days30), ("p1", a7, days7)):
+            fits, m = SPI.chirps_fits((LAT0, LON0, STEP, NLAT, NLON), kind, p - 1)
+            s[kind] = [None if x is None or pct(x) is None or k not in fits
+                       else SPI.to_x100(SPI.spi_chirps(x[0] * nd, nd, fits[k], m["zero_mm"], m["n_years"]))
+                       for k, x in zip(cells, arr)]
+        block["spi"], block["week"]["spi"] = s["p6"], s["p1"]
+        block["spi_info"] = {
+            "params": f"data/ref/{SPI.CHIRPS_PARAMS.name}", "pentad_of_year": p, "zero_mm": m["zero_mm"],
+            "fit": ("gamma by maximum likelihood on the wet years of 1991-2020 CHIRPS v3.0 final pentads, per cell, "
+                    f"for the six pentads (spi) and the one pentad (week.spi) ending at pentad {p} of the year; a "
+                    "total under zero_mm gets the middle of the dry class, (dry years + 1) / 62"),
+            "encoding": ("spi and week.spi: SPI x 100 as integers, parallel to cells, clamped to -300..300; null where "
+                         "that layer's anom is null or the window has no 1991-2020 fit"),
+            "n_valid": sum(v is not None for v in s["p6"]), "week_n_valid": sum(v is not None for v in s["p1"]),
+        }
+        block["notes"].append("SPI for these cells is against CHIRPS's own 1991-2020 record of the same pentads, on "
+                              "the same scale as the gauge cells.")
+    except (OSError, ValueError, KeyError, TypeError, IndexError, RuntimeError) as e:
+        print(f"[WARN] CHIRPS SPI left out: {type(e).__name__}: {e}")
     return block, {"c30": f30, "c7": f7}
 
 

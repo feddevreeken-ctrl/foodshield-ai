@@ -64,6 +64,26 @@ Data:
   * Cells whose normal over the window is under 0.3 mm a day (the same arid
     threshold as the composites) are null on the percent layers, as are sea
     cells.
+  * SPI (added 28 September 2026). A percent does not read alike on 7 and 30
+    days: a week varies far more than a month, so the week looked calmer than
+    the 30-day layer. "spi" (30 days) and "week.spi" give each cell's
+    Standardized Precipitation Index (McKee et al. 1993; WMO-No. 1090), one
+    scale for every window: the window's mean rain per day (the unrounded value
+    behind the percent, after the gauge mask and spike filter) placed on the
+    cell's 1991-2020 mixed-gamma fit for the same window at the same time of
+    year (scripts/build_cpc_spi_params.py -> data/ref/cpc_spi_params_1991_2020
+    .json.gz, fitted to PSL's yearly files of this CPC product, aggregated as
+    here), read off a standard normal by scripts/spi.py (pure Python). The fit
+    row is the pentad end day nearest the window's last day (365-day calendar);
+    the nominal window length (30 or 7 days) only decides whether the total is
+    in the dry class (under 0.5 mm). Stored as SPI x 100, integers clamped to
+    -300..300 (-300 = -3 or below). Null where the percent is null (sea, arid,
+    missing: one blank rule for both), or where the cell has no fit: fewer than
+    2/3 of the 1991-2020 windows over 0.5 mm, or a footprint CPC's analysis
+    only covers from 2007 (95 coastal and island cells). SPI measures how
+    unusual each window is on its own: a dry week where dry weeks are common
+    reads only mildly dry even inside a severe 30-day drought. If the parameter
+    file cannot be read the percent layers are written without SPI.
 
 Pure Python (requests only), because the GitHub Actions job installs nothing
 else.
@@ -82,6 +102,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import http_get, write_json  # noqa: E402
 import chirps_rain_fill  # noqa: E402
+import spi as SPI  # noqa: E402
 
 CPC_RT = "https://ftp.cpc.ncep.noaa.gov/precip/CPC_UNI_PRCP/GAUGE_GLB/RT"
 CPC_FILE = "PRCP_CU_GAUGE_V1.0GLB_0.50deg.lnx.{d}.RT"
@@ -315,6 +336,15 @@ def _pct(cells) -> list:
     return [None if x is None or x[1] < ARID_MM_DAY else int(round(100 * (x[0] - x[1]) / x[1])) for x in cells]
 
 
+def _spi(cells: list, pct: list, kind: str, end: date, days: int) -> tuple[list, dict]:
+    """SPI x 100 per cell of one CPC layer (kind 'd30' or 'd7'), from the unrounded mean rain per day; null where
+    the percent is null or the cell has no fit for this window and time of year (see the docstring)."""
+    fits, m = SPI.cpc_fits((LAT0, LON0, STEP, NLAT, NLON), kind, SPI.cpc_row(end))
+    return [None if x is None or p is None or k not in fits
+            else SPI.to_x100(SPI.spi_cpc(x[0], fits[k], days, m["zero_mm"], m["clip"]))
+            for k, (x, p) in enumerate(zip(cells, pct))], m
+
+
 def build() -> tuple[dict, dict]:
     today = date.today()
     try:
@@ -389,6 +419,31 @@ def build() -> tuple[dict, dict]:
         ] + ([f"CPC had not posted {', '.join(missing)}; the window and its normal skip those days."]
              if missing else []),
     }
+    try:  # an addition: the percent layers stand without it
+        s30, m = _spi(c30, anom, "d30", end, DAYS)
+        s7, _ = _spi(c7, wanom, "d7", end, WEEK)
+        payload["spi"], payload["week"]["spi"] = s30, s7
+        payload["spi_info"] = {
+            "index": "Standardized Precipitation Index (McKee, Doesken and Kleist 1993; WMO-No. 1090, 2012)",
+            "params": f"data/ref/{SPI.CPC_PARAMS.name}",
+            "fit": ("mixed gamma (probability of a total under zero_mm, then gamma) per cell, fitted to the 1991-2020 "
+                    "CPC Unified daily gauge analysis (NOAA PSL yearly files) aggregated as here, for the 30 and the 7 "
+                    f"days ending on day of year {m['end_day']} (365-day calendar, the pentad end nearest "
+                    f"{end.isoformat()}) and on the days up to {m['pool_end_days']} either side"),
+            "fit_end_day": m["end_day"], "zero_mm": m["zero_mm"],
+            "encoding": ("spi (30 days) and week.spi: SPI x 100 as integers, row-major from the southern edge as anom, "
+                         "clamped to -300..300 (-300 = -3 or below, 300 = +3 or above); null where anom is null or the "
+                         "cell has no 1991-2020 fit for this window and time of year"),
+            "n_valid": sum(v is not None for v in s30), "week_n_valid": sum(v is not None for v in s7),
+        }
+        payload["notes"].append(
+            "SPI, the Standardized Precipitation Index, puts the 30 days and the week on one scale: how unusual this "
+            "much rain is at this place for the same window at the same time of year in 1991-2020. -1, -1.5 and -2 "
+            "are moderately, severely and extremely dry (about 1 year in 6, 15 and 44 that dry or drier); +1, +1.5 "
+            "and +2 the wet mirror. It judges each window on its own: where a week without rain is common, a dry "
+            "week reads only mildly dry, even inside a severe 30-day drought.")
+    except (OSError, ValueError, KeyError, TypeError, IndexError, RuntimeError) as e:
+        print(f"[WARN] SPI left out: {type(e).__name__}: {e}")
     cf, fdiag = chirps_rain_fill, None
     if (cf.LAT0, cf.LON0, cf.STEP, cf.NLAT, cf.NLON) != (LAT0, LON0, STEP, NLAT, NLON):
         raise RuntimeError("chirps_rain_fill.py grid differs from this script's")
@@ -433,6 +488,13 @@ def main() -> int:
           f"IQR {vals[len(vals) // 4]:+d}..{vals[3 * len(vals) // 4]:+d}% (a large offset would mean a biased base)")
     print("[check] largest dropped cell-days (mm, day, lat, lon): "
           + ", ".join(map(str, sorted(diag["dropped"], reverse=True)[:8])))
+    for key, blk in (("30d", payload), ("7d", wk)):
+        s = [v for v in blk.get("spi") or [] if v is not None]
+        if s:
+            share = lambda t: 100 * sum(abs(v) >= t for v in s) / len(s)  # noqa: E731
+            print(f"[check] SPI {key} (CPC): {len(s)} cells of {sum(v is not None for v in blk['anom'])} with a "
+                  f"percent, median {sorted(s)[len(s) // 2] / 100:+.2f}, |SPI| >= 1 in {share(100):.0f}%, >= 2 in "
+                  f"{share(200):.0f}% (a normal year: 32% and 5%)")
     for label, s, n, we, e in CHECKS:
         for key, pct in (("30d", payload["anom"]), ("7d", wk["anom"])):
             k, kv, med, obs, nrm = _region(diag["c" + key[:-1]], pct, s, n, we, e)

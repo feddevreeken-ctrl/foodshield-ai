@@ -13114,6 +13114,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .sc-handle.is-fc .sc-knob { background:#f0b089; }
 #tab-elnino .sc-handle.is-avg :is(.sc-hl, .sc-knob) { opacity:0; }
 #tab-elnino .enso-plate-t .enso-num { font:inherit !important; }
+@media (max-width:700px) { #tab-elnino #enso-legend .enso-legend-t { white-space:normal; } #tab-elnino #enso-legend .enso-key > .enso-legend-block { flex:1 1 100% !important; min-width:0 !important; max-width:100%; } #tab-elnino #enso-legend .enso-legend-block > .enso-legend-t { flex:1 1 100%; min-width:0; } }
 #tab-elnino .sc-handle:focus-visible .sc-knob { box-shadow:0 0 0 2px var(--warm); }
 #tab-elnino .enso-scrub .enso-num { font:inherit !important; margin:0 !important; padding:0 !important; }
 @media (max-width:700px) {
@@ -45624,6 +45625,11 @@ function showCommodityDetail(key) {
     var clear = kind === 'live' ? 15 : 0, al = t <= clear && clear ? 0.03 : 0.1 + 0.72 * Math.min(1, (t - clear) / (kind === 'pct' ? 40 : 55));
     /* 'wk', the last 7 days (audit 2026-09-28, tested on the same week of 1991-2020): clear from -80% to +75%, where
        most weeks fall; opacity .3 at the edge, full at -100% (no rain) or +150%. */
+    /* 'spi': the Standardized Precipitation Index x100 (WMO's drought index; one scale for 30 days, months and the
+       week): clear within +-0.5, deepening to full colour at +-2. */
+    if (kind === 'spi' || kind === 'spiwk') { var sv = Math.abs(v); if (sv < 50) return 'rgba(0,0,0,0)'; var tt = Math.min(80, sv / 250 * 80);
+      var a2 = tt < 25 ? s[0] : s[1], b2 = tt < 25 ? s[1] : s[2], f2 = tt < 25 ? tt / 25 : (tt - 25) / 55, c2 = a2.map(function (x, i) { return Math.round(x + (b2[i] - x) * f2); });
+      return 'rgba(' + c2.join(',') + ',' + (0.32 + 0.53 * Math.min(1, (sv - 50) / 150)).toFixed(3) + ')'; }
     if (kind === 'wk') { if (v > -80 && v < 75) return 'rgba(0,0,0,0)'; al = v <= -80 ? 0.58 + 0.26 * Math.min(1, (-80 - v) / 15) : 0.58 + 0.26 * Math.min(1, (v - 75) / 45); }
     return 'rgba(' + c.join(',') + ',' + al.toFixed(3) + ')';
   }
@@ -45634,10 +45640,11 @@ function showCommodityDetail(key) {
      stop the base stays the 30-day picture, and the week is drawn on top in darker diagonal stripes, only where the
      week was unusually dry or wet (outside the middle of 1991-2020 weeks). So a quiet week never reads as "it got
      better". */
-  function rainOverColor(v) { return v == null || isNaN(v) || (v > -80 && v < 75) ? null : v < 0 ? 'rgba(92,40,8,.92)' : 'rgba(6,74,82,.92)'; }
-  var RainOver = gridLayer({ pane: 'ensoRainOver', z: 396, cls: 'enso-rain-over', keep: 'land', min: -100, max: 150, res: 1, scale: 1, color: rainOverColor, hatch: true,
-    grid: function (map) { return map === S.map ? rainOverGrid() : null; } });
-  var RainLayer = gridLayer({ pane: 'ensoRain', z: 395, cls: 'enso-rain-canvas', keep: 'land', min: -100, max: 150, res: 1, scale: 1, color: rainColor, soften: true,
+  function rainOverColor(v) { var lo = RAIN_OVER_SPI ? -100 : -80, hi = RAIN_OVER_SPI ? 100 : 75; return v == null || isNaN(v) || (v > lo && v < hi) ? null : v < 0 ? 'rgba(92,40,8,.92)' : 'rgba(6,74,82,.92)'; }
+  var RAIN_OVER_SPI = false;
+  var RainOver = gridLayer({ pane: 'ensoRainOver', z: 396, cls: 'enso-rain-over', keep: 'land', min: -300, max: 300, res: 1, scale: 1, color: rainOverColor, hatch: true,
+    grid: function (map) { var g = map === S.map ? rainOverGrid() : null; RAIN_OVER_SPI = !!(g && g.kind === 'spiwk'); return g; } });
+  var RainLayer = gridLayer({ pane: 'ensoRain', z: 395, cls: 'enso-rain-canvas', keep: 'land', min: -300, max: 300, res: 1, scale: 1, color: rainColor, soften: true,
     grid: function (map) { return map === S.map ? rainGrid() : null; } });
   /* 2026-09-28 (owner: "a model of what temperature looks like under El Niño, with a sliding bar"): the Ocean
      map can show, instead of this week, what past El Niño winters of one strength class looked like
@@ -45690,7 +45697,7 @@ function showCommodityDetail(key) {
   function rainNow() {
     var R = S.rainnow; if (!R || !R.anom || !R.grid || !R.window) return null;
     var wk = S.rainWin !== 30 && R.week && R.week.anom ? R.week : null;
-    var b = wk ? { days: 7, anom: wk.anom, mm: wk.mm || null, nmm: wk.norm_mm || null, start: wk.start, end: wk.end } : { days: 30, anom: R.anom, mm: R.mm || null, nmm: R.norm_mm || null, start: R.window.start, end: R.window.end };
+    var b = wk ? { days: 7, anom: wk.anom, spi: wk.spi || null, mm: wk.mm || null, nmm: wk.norm_mm || null, start: wk.start, end: wk.end } : { days: 30, anom: R.anom, spi: R.spi || null, mm: R.mm || null, nmm: R.norm_mm || null, start: R.window.start, end: R.window.end };
     /* 2026-09-28 (owner: "lacking data on africa"): where CPC has too few gauges, CHIRPS v3 (satellite + stations, its
        own 1991-2020 normal) fills the cell; data.fill lists those cells. Its windows are pentads, a few days older,
        and its week is five days: each cell keeps its source so the hover and key can say so. */
@@ -45698,27 +45705,31 @@ function showCommodityDetail(key) {
     if (!fw || !fw.anom || !fwin) return b;
     var key = b.days + '/' + b.end + '/' + fwin.end; S._rainMix = S._rainMix || {};
     if (!S._rainMix[key]) {
-      var a = b.anom.slice(), mm = b.mm ? b.mm.slice() : null, nm = b.nmm ? b.nmm.slice() : null, src = [];
-      F.cells.forEach(function (c, i) { var fa = fw.anom[i], fm = fw.mm ? fw.mm[i] : null, fn = fw.norm_mm ? fw.norm_mm[i] : null;
+      var a = b.anom.slice(), sp = b.spi ? b.spi.slice() : null, mm = b.mm ? b.mm.slice() : null, nm = b.nmm ? b.nmm.slice() : null, src = [];
+      F.cells.forEach(function (c, i) { var fa = fw.anom[i], fm = fw.mm ? fw.mm[i] : null, fn = fw.norm_mm ? fw.norm_mm[i] : null, fs = fw.spi ? fw.spi[i] : null;
         if (fa == null && fm == null) return;
-        if (fa != null) a[c] = fa; if (mm && fm != null) mm[c] = fm; if (nm && fn != null) nm[c] = fn; src[c] = 1; });
-      S._rainMix[key] = { anom: a, mm: mm, nmm: nm, src: src };
+        if (fa != null) a[c] = fa; if (sp && fs != null) sp[c] = fs; if (mm && fm != null) mm[c] = fm; if (nm && fn != null) nm[c] = fn; src[c] = 1; });
+      S._rainMix[key] = { anom: a, spi: sp, mm: mm, nmm: nm, src: src };
     }
     var M = S._rainMix[key];
-    return { days: b.days, anom: M.anom, mm: M.mm, nmm: M.nmm, src: M.src, start: b.start, end: b.end, fdays: fwin.days, fstart: fwin.start, fend: fwin.end };
+    return { days: b.days, anom: M.anom, spi: M.spi, mm: M.mm, nmm: M.nmm, src: M.src, start: b.start, end: b.end, fdays: fwin.days, fstart: fwin.start, fend: fwin.end };
   }
   function rainMonth() {
     var R = S.rainmon, x = R && R.months && R.months.filter(function (m) { return m.month === S.sstMonth; })[0];
     if (!x || !x.cpc || !x.cpc.anom || !R.grid) return null;
-    var a = x.cpc.anom.slice(), mm = (x.cpc.mm || []).slice(), nm = (x.cpc.norm_mm || []).slice(), src = [], f = x.fill;
-    if (f && f.cells) f.cells.forEach(function (c, i) { if (f.anom && f.anom[i] != null) a[c] = f.anom[i]; if (f.mm && f.mm[i] != null) mm[c] = f.mm[i]; if (f.norm_mm && f.norm_mm[i] != null) nm[c] = f.norm_mm[i]; src[c] = 1; });
-    return { key: x.month, days: x.days, anom: a, mm: mm, nmm: nm, src: src, fillFinal: f ? !!f.final : null };
+    var a = x.cpc.anom.slice(), sp = x.cpc.spi ? x.cpc.spi.slice() : null, mm = (x.cpc.mm || []).slice(), nm = (x.cpc.norm_mm || []).slice(), src = [], f = x.fill;
+    if (f && f.cells) f.cells.forEach(function (c, i) { if (f.anom && f.anom[i] != null) a[c] = f.anom[i]; if (sp && f.spi && f.spi[i] != null) sp[c] = f.spi[i];
+      if (f.mm && f.mm[i] != null) mm[c] = f.mm[i]; if (f.norm_mm && f.norm_mm[i] != null) nm[c] = f.norm_mm[i]; src[c] = 1; });
+    return { key: x.month, days: x.days, anom: a, spi: sp, mm: mm, nmm: nm, src: src, fillFinal: f ? !!f.final : null };
   }
   /* The week's own grid (the overlay on the 7-day stop). */
   function rainOverGrid() {
     if (S.showRain === false || !(!S.sstView || S.sstView === 'now') || S.rainWin === 30) return null;
     var keep = S.rainWin; S.rainWin = 7; var g = rainGrid(true); S.rainWin = keep; return g;
   }
+  /* How unusual, in words, from SPI x100 (-1 moderately, -1.5 severely, -2 extremely; the same for wet). */
+  function spiWord(v, week) { if (v == null) return ''; var a = Math.abs(v), d = v < 0 ? 'dry' : 'wet';
+    return a < 50 ? 'near normal for ' + (week ? 'a week' : 'the time of year') : (a < 100 ? 'a little ' : a < 150 ? 'moderately ' : a < 200 ? 'severely ' : 'extremely ') + d + (week ? ' for a week' : ' for the time of year'); }
   function rainNowWin(d) { var k = S.rainWin; S.rainWin = d; var r = rainNow(); S.rainWin = k; return r; }
   function rainGrid(week) {
     if (S.showRain === false) return null;
@@ -45726,18 +45737,18 @@ function showCommodityDetail(key) {
     if ((!S.sstView || S.sstView === 'now') && S.rainWin !== 30 && !week) { var kw = S.rainWin; S.rainWin = 30; var base = rainGrid(); S.rainWin = kw; return base; }
     if (!S.sstView || S.sstView === 'now') { var R = S.rainnow, w = rainNow(), k = w && w.days + '/' + w.end; S._rainNow = S._rainNow || {};
       if (!w) return null;
-      RAIN_KIND = w.days === 7 ? 'wk' : 'live';
+      RAIN_KIND = w.spi ? (w.days === 7 ? 'spiwk' : 'spi') : w.days === 7 ? 'wk' : 'live';
       k += '/' + (w.fend || '');
       /* The week: each cell's own percent (a CHIRPS cell's five-day pentad, unscaled), blank where the week normally
          brings under 1 mm a day, clamped to -100..+150 so one outlier does not bleed through the interpolation. */
-      if (!S._rainNow[k]) S._rainNow[k] = gridOf(R.grid, RAIN_KIND === 'wk' ? w.anom.map(function (a, i) {
+      if (!S._rainNow[k]) S._rainNow[k] = gridOf(R.grid, w.spi ? w.spi : RAIN_KIND === 'wk' ? w.anom.map(function (a, i) {
           var n = w.nmm ? w.nmm[i] : null, d = w.src && w.src[i] ? w.fdays : 7;
           return a == null || n == null || n / d < 1 ? null : Math.max(-100, Math.min(150, a)); }) : w.anom,
         { kind: RAIN_KIND, pct: w.anom, mm: w.mm, nmm: w.nmm, src: w.src || [], days: w.days });
       return S._rainNow[k]; }
     /* A past month of 2026: CPC gauges where they are dense, CHIRPS (final or preliminary) elsewhere, data/rain_months.json. */
-    if (S.sstView === 'month') { var rm = rainMonth(); RAIN_KIND = 'live'; if (!rm) return null; S._rainM = S._rainM || {};
-      return S._rainM[rm.key] || (S._rainM[rm.key] = gridOf(S.rainmon.grid, rm.anom, { kind: 'live', mm: rm.mm, nmm: rm.nmm, src: rm.src, days: rm.days })); }
+    if (S.sstView === 'month') { var rm = rainMonth(); if (!rm) return null; RAIN_KIND = rm.spi ? 'spi' : 'live'; S._rainM = S._rainM || {};
+      return S._rainM[rm.key] || (S._rainM[rm.key] = gridOf(S.rainmon.grid, rm.spi || rm.anom, { kind: RAIN_KIND, pct: rm.anom, mm: rm.mm, nmm: rm.nmm, src: rm.src, days: rm.days })); }
     RAIN_KIND = 'pct';
     var ol = olMap(), m = ol || sstMap(), g = ol ? S.seasonal.rain_grid : S.sstcomp && S.sstcomp.rain_grid;
     if (!m || !m.rain || !g || (!ol && !sstClass())) return null;
@@ -45985,8 +45996,8 @@ function showCommodityDetail(key) {
       var rw0 = x.kind === 'now' && S.rainnow ? (x.days === 30 ? S.rainnow.window : S.rainnow.week) : null;
       var name = x.kind === 'mon' ? monLabel(x.key) : x.kind === 'now' ? 'Last ' + x.days + ' days' : x.kind === 'ol' ? x.label : '';
       mid = '<p class="sc-read' + (x.kind === 'ol' ? ' is-fc' : '') + '"><span class="sc-kind' + (x.kind === 'ol' ? ' is-fc' : '') + '">' + (x.kind === 'ol' ? 'Forecast' : 'Observed') + '</span><b>' + esc(name) + '</b>' +
-        (x.kind === 'now' ? '<span>sea ' + dayRange(x.start, x.end) + (rw0 ? ' · rain and headlines ' + dayRange(rw0.start, rw0.end) : '') + '</span>' : '') +
-        (typeof x.v === 'number' ? '<span>Niño 3.4 box ' + num(x.v, 1) + ' °C</span>' : '') + (x.kind === 'ol' && x.lead ? '<span>' + x.lead + ' month' + (x.lead > 1 ? 's' : '') + ' ahead</span>' : '') + '</p>';
+        (x.kind === 'now' ? '<span>sea ' + dayRange(x.start, x.end) + (rw0 ? ' · rain ' + dayRange(rw0.start, rw0.end) : '') + '</span>' : '') +
+        (typeof x.v === 'number' && x.kind !== 'now' ? '<span>Niño 3.4 box ' + num(x.v, 1) + ' °C</span>' : '') + (x.kind === 'ol' && x.lead ? '<span>' + x.lead + ' month' + (x.lead > 1 ? 's' : '') + ' ahead</span>' : '') + '</p>';
     }
     var togs = rainOk ? '<label class="enso-sst-rain"><input class="enso-native" type="checkbox" id="enso-tog-rain"' + (S.showRain === false ? '' : ' checked') + '><i aria-hidden="true"></i><span>Rain on land</span></label>' : '';
     var nev = view === 'past' && S.pastev && S.pastev.events ? pastEvents().length : view === 'now' || view === 'month' ? recentNow().length : 0;
@@ -46094,10 +46105,11 @@ function showCommodityDetail(key) {
     var kind = (PEV_TYPE[e.type] || [0, 'other'])[1], sc = sstScene(), src = e.source || {}, og = sc.view === 'now' ? rainOverGrid() : null, rg = og || rainGrid();
     /* On the 7-day stop the check reads the week (its own band: most weeks fall between -80% and +75%); elsewhere the
        30-day or month picture (+-15%). The window named is the one read. */
-    var pv = rg ? gridCell(rg, og ? 'pct' : 'anom', { lat: e.lat, lng: e.lon }) : null, lo = og ? -80 : -15, hi = og ? 75 : 15;
+    var ll0 = { lat: e.lat, lng: e.lon }, isS = !!(rg && (rg.kind === 'spi' || rg.kind === 'spiwk')), sv = isS ? gridCell(rg, 'anom', ll0) : null;
+    var pv = rg ? gridCell(rg, rg.pct ? 'pct' : 'anom', ll0) : null, tv = isS ? sv : pv, lo = isS ? -100 : og ? -80 : -15, hi = isS ? 100 : og ? 75 : 15;
     var win = sc.view === 'month' ? sc.season : sc.view === 'now' ? 'last ' + (og ? 7 : 30) + ' days' : '';
-    var check = kind === 'other' ? '' : pv == null ? 'No rain reading at this spot on the map' : pv > lo && pv < hi ? 'Rain map here: within the usual range (' + num(pv, 0) + '%)' :
-      ((pv < 0) === (kind === 'dry') ? 'Rain map agrees: ' : 'Rain map disagrees: ') + Math.abs(pv) + '% ' + (pv < 0 ? 'below' : 'above') + ' normal';
+    var check = kind === 'other' ? '' : tv == null || pv == null ? 'No rain reading at this spot on the map' : tv > lo && tv < hi ? 'Rain map here: within the usual range (' + num(pv, 0) + '%' + (isS ? ', ' + spiWord(sv, !!og) : '') + ')' :
+      ((tv < 0) === (kind === 'dry') ? 'Rain map agrees: ' : 'Rain map disagrees: ') + Math.abs(pv) + '% ' + (pv < 0 ? 'below' : 'above') + ' normal' + (isS ? ', ' + spiWord(sv, !!og) : '');
     var when = e.date_start === e.date_end ? isoText(e.date_start) : isoText(e.date_start) + ' to ' + isoText(e.date_end);
     return '<b>' + esc(e.title) + '</b><br>' + esc(e.place || nameFor((e.iso3 || [])[0])) + ' · ' + esc(when) + (e.impact ? '<br>' + esc(e.impact) : '') +
       '<br><span style="color:#8b8980">' + (e.enso_link === 'attributed' ? 'The source links it to El Niño' : 'Fits El Niño’s usual pattern here; the source does not name El Niño') + '</span>' +
@@ -46178,10 +46190,11 @@ function showCommodityDetail(key) {
       var srcTxt = w ? (chirps ? 'CHIRPS satellite + stations' : 'CPC rain gauges') + ', ' + dayRange(chirps ? w.fstart : w.start, chirps ? w.fend : w.end) :
         rm ? (chirps ? 'CHIRPS satellite + stations' + (rm.fillFinal === false ? ', preliminary' : '') : 'CPC rain gauges') + ', ' + sc.season : '';
       var mmTxt = mm != null && nmm != null ? mm + ' mm fell, normal ' + nmm + ' mm in ' + wd + ' days' : '';
-      var pct = rg && rg.kind === 'wk' ? gridCell(rg, 'pct', ll) : rv;
+      var pct = rg && rg.pct ? gridCell(rg, 'pct', ll) : rv, sv = rg && rg.kind === 'spi' ? rv : null;
       if (pct != null && (rv != null || !obs)) {
         /* The excess or shortfall against the baseline, in words, then in millimetres where the feed has them. */
         rows.push('<span class="ro-v">' + (pct === 0 ? 'Rain at ' : 'Rain ' + Math.abs(pct) + '% ' + (pct < 0 ? 'below ' : 'above ')) + (sc.view === 'outlook' ? 'the models’ normal' : obs ? 'normal' : 'the 1991–2020 average') + '</span>');
+        if (sv != null) rows.push('<span class="ro-v ro-spi">' + esc(spiWord(sv).replace(/^./, function (c) { return c.toUpperCase(); })) + ' <span class="ro-c">(drought index ' + num(sv / 100, 1) + ')</span></span>');
         if (obs) rows.push('<span class="ro-c">' + (mmTxt || (wd ? 'last ' + wd + ' days' : '')) + '</span>', '<span class="ro-c">' + esc(srcTxt) + '</span>');
         else rows.push('<span class="ro-c">' + esc(when) + '</span>');
         var ag = gridCell(rg, 'agree', ll), pw = gridCell(rg, 'pwet', ll), pd = gridCell(rg, 'pdry', ll);
@@ -46193,7 +46206,9 @@ function showCommodityDetail(key) {
       var og = sc.view === 'now' ? rainOverGrid() : null;
       if (og) { var p7 = gridCell(og, 'pct', ll), w7 = rainNowWin(7), c7 = !!gridCell(og, 'src', ll), paint = gridCell(og, 'anom', ll);
         rows.push('<span class="ro-v ro-wk">' + (p7 == null ? 'Last 7 days: no reading' : 'Last 7 days: ' + (p7 === 0 ? 'at normal' : Math.abs(p7) + '% ' + (p7 < 0 ? 'below' : 'above') + ' normal')) + '</span>');
-        if (p7 != null) rows.push('<span class="ro-c">' + (paint == null ? 'Normally near-dry this week (under 7 mm), not scored' : paint <= -80 || paint >= 75 ? (paint < 0 ? 'Unusually dry week (striped)' : 'Unusually wet week (striped)') : 'Within the usual range for a week') + ' · ' +
+        var ws = og.kind === 'spiwk', strong = paint != null && (ws ? Math.abs(paint) >= 100 : paint <= -80 || paint >= 75);
+        if (p7 != null) rows.push('<span class="ro-c">' + (paint == null ? (ws ? 'No week score here' : 'Normally near-dry this week (under 7 mm), not scored') : ws ? spiWord(paint, true).replace(/^./, function (c) { return c.toUpperCase(); }) + (strong ? ' (striped)' : '') :
+          strong ? (paint < 0 ? 'Unusually dry week (striped)' : 'Unusually wet week (striped)') : 'Within the usual range for a week') + ' · ' +
           esc((c7 ? 'CHIRPS, ' + dayRange(w7.fstart, w7.fend) : 'CPC gauges, ' + dayRange(w7.start, w7.end))) + '</span>'); }
     } else {
       var v = sstCellAt(ll), g = S.sst || {}; if (v == null) return '';
@@ -46272,22 +46287,26 @@ function showCommodityDetail(key) {
     var sc = sstScene(), cl = sc.cls;
     var box = function (r, a, b, c) { return '<div class="enso-rampbox"><div class="enso-ramp enso-sst-ramp">' + r + '</div><div class="enso-ramp-ends"><span>' + a + '</span><span>' + b + '</span><span>' + c + '</span></div></div>'; };
     var rg0 = sc.rain ? rainGrid() : null, rk = rg0 && rg0.kind || 'pct', rm0 = sc.view === 'month' ? rainMonth() : null;
-    var rramp = ''; if (rk === 'wk') { for (var rw = -100; rw <= 150.01; rw += 5) rramp += '<i style="background:' + (rainColor(rw, rk) || 'transparent') + '"></i>'; }
+    var rramp = ''; if (rk === 'spi') { for (var rs = -300; rs <= 300.01; rs += 12) rramp += '<i style="background:' + (rainColor(rs, rk) || 'transparent') + '"></i>'; }
+    else if (rk === 'wk') { for (var rw = -100; rw <= 150.01; rw += 5) rramp += '<i style="background:' + (rainColor(rw, rk) || 'transparent') + '"></i>'; }
     else for (var rv = -80; rv <= 80.01; rv += 4) rramp += '<i style="background:' + (rainColor(rv, rk) || 'transparent') + '"></i>';
     var rn0 = sc.view === 'now' ? rainNowWin(30) || {} : {}, onWeek = sc.view === 'now' && !!rainOverGrid(), rw7 = onWeek ? rainNowWin(7) || {} : {};
-    var both = function (when) { return 'NOAA CPC rain gauges where they are dense; elsewhere CHIRPS v3 (satellite + stations' + when + '). Each against its own 1991–2020 normal for the same days. '; };
-    var rainKey = sc.rain ? '<div class="enso-legend-block"><div class="enso-legend-t">' + ({ now: 'Rain on land vs normal, last 30 days to ' + esc(rn0.end ? dayMon(rn0.end) : ''),
-        month: 'Rain on land vs normal, ' + esc(sc.season), outlook: 'Rain on land, % against the models’ normal · forecast' }[sc.view] || 'Rain on land, % against the 1991–2020 ' + esc(sc.season) + ' mean') + '</div>' +
-      (rk === 'wk' ? box(rramp, 'drier', 'clear −80% to +75%', 'wetter') : box(rramp, rk === 'live' ? '−80%' : 'drier', rk === 'live' ? 'normal ±15%' : 'normal', rk === 'live' ? '+80%' : 'wetter')) +
-      '<div class="ctr-note">' + ({ now: both(rn0.fstart ? ', ' + dayRange(rn0.fstart, rn0.fend) : '') + (rk === 'wk' ? 'Clear from −80% to +75%, where most weeks of 1991–2020 fell; blank where the week normally brings under 7 mm. A CHIRPS week is one five-day pentad.' : 'Within ±15% is ordinary variation and left clear; blank where the season is normally dry.') + ' Hover for the source and millimetres.',
-        month: both(rm0 && rm0.fillFinal === false ? ', preliminary' : '') + 'Within ±15% is left clear; blank where the month is normally dry. Hover for the source and millimetres.',
+    var both = function (when) { return (rk === 'spi' ? 'Drought index (SPI, the World Meteorological Organization’s standard): this rain against the 1991–2020 record for the same place and days. −1 is moderately dry, −1.5 severely, −2 extremely; the same for wet; clear within ±0.5. On 30-day windows these classes come up somewhat more often than the names suggest. ' : '') +
+      'NOAA CPC rain gauges where they are dense; elsewhere CHIRPS v3 (satellite + stations' + when + '), each against its own 1991–2020 record. '; };
+    var how = rk === 'spi' ? ': how unusual' : ' vs normal';
+    var rainKey = sc.rain ? '<div class="enso-legend-block"><div class="enso-legend-t">' + ({ now: 'Rain on land, last 30 days to ' + esc(rn0.end ? dayMon(rn0.end) : '') + how,
+        month: 'Rain on land, ' + esc(sc.season) + how, outlook: 'Rain on land, % against the models’ normal · forecast' }[sc.view] || 'Rain on land, % against the 1991–2020 ' + esc(sc.season) + ' mean') + '</div>' +
+      (rk === 'spi' ? box(rramp, 'extremely dry', 'normal', 'extremely wet') : rk === 'wk' ? box(rramp, 'drier', 'clear −80% to +75%', 'wetter') : box(rramp, rk === 'live' ? '−80%' : 'drier', rk === 'live' ? 'normal ±15%' : 'normal', rk === 'live' ? '+80%' : 'wetter')) +
+      '<div class="ctr-note">' + ({ now: both(rn0.fstart ? ', ' + dayRange(rn0.fstart, rn0.fend) : '') + (rk === 'spi' ? 'Blank where the season is normally dry.' : rk === 'wk' ? 'Clear from −80% to +75%, where most weeks of 1991–2020 fell; blank where the week normally brings under 7 mm. A CHIRPS week is one five-day pentad.' : 'Within ±15% is ordinary variation and left clear; blank where the season is normally dry.') + ' Hover for the percent, millimetres and source.',
+        month: both(rm0 && rm0.fillFinal === false ? ', preliminary' : '') + (rk === 'spi' ? '' : 'Within ±15% is left clear. ') + 'Blank where the month is normally dry. Hover for the percent, millimetres and source.',
         outlook: 'Masked where the month is normally dry. The average of many model runs: a real month swings further. Hover a place for CPC’s odds of a wet or dry third (33% is no signal).',
         winter: 'Masked where the season is arid. One winter: local swings are its own, not a rule.' }[sc.view] || 'Masked where the season is arid. Hover a place for how many of the winters agreed.') + '</div></div>' : '';
-    var barKey = sc.view === 'now' || sc.view === 'month' || sc.view === 'outlook' ? '<div class="enso-legend-block"><div class="enso-legend-t">Time bar under the map</div><div class="ctr-note">Bar: the Niño 3.4 box (central Pacific, where El Niño is measured), °C. Number: headlines at that stop. Dashed: forecast, the raw average of six North American models (NMME).</div></div>' : '';
+    var barKey = sc.view === 'now' || sc.view === 'month' || sc.view === 'outlook' ? '<div class="enso-legend-block"><div class="enso-legend-t">Time bar: Niño 3.4 °C bars, headline counts</div><div class="ctr-note">Each bar is the Niño 3.4 box, the central Pacific where El Niño is measured; the number over it counts that stop’s headlines. Dashed bars are the forecast, the raw average of six North American models (NMME).</div></div>' : '';
     var stripe = function (c, bg) { return '<svg class="enso-sw-stripe" aria-hidden="true" width="16" height="10" viewBox="0 0 16 10"><rect width="16" height="10" fill="' + bg + '"/><path d="M-2 10L8 0M3 10L13 0M8 10L18 0" stroke="' + c + '" stroke-width="2"/></svg>'; };
     var overKey = onWeek ? '<div class="enso-legend-block"><div class="enso-legend-t">Last 7 days to ' + esc(rw7.end ? dayMon(rw7.end) : '') + ', striped where unusual</div>' +
       '<div class="enso-legend-row enso-pev-key">' + stripe('rgba(92,40,8,.95)', 'rgba(201,119,58,.3)') + 'much drier ' + stripe('rgba(6,74,82,.95)', 'rgba(79,159,168,.3)') + 'much wetter</div>' +
-      '<div class="ctr-note">The stripes sit on the 30-day picture. They mark a week outside the middle of 1991–2020 weeks (under −80% or over +75% of normal); blank where the week normally brings under 7 mm. A CHIRPS week is one five-day pentad.</div></div>' : '';
+      '<div class="ctr-note">The stripes sit on the 30-day picture. ' + ((rainOverGrid() || {}).kind === 'spiwk' ? 'They mark a week that alone was at least moderately dry or wet for the time of year (drought index −1 or +1). A single week is noisier than 30 days, so fewer places reach it.' :
+        'They mark a week outside the middle of 1991–2020 weeks (under −80% or over +75% of normal); blank where the week normally brings under 7 mm.') + ' A CHIRPS week is one five-day pentad.</div></div>' : '';
     var sea = function (t, note) { return '<div class="enso-legend-block"><div class="enso-legend-t">' + t + '</div>' + box(ramp, '≤ −5', '0', '≥ +5') +
       '<div class="ctr-note" style="max-width:34ch;margin-top:5px;">' + note + '</div></div>'; };
     if (sc.view === 'outlook') { var on = ((S.seasonal && (S.seasonal.notes_months || S.seasonal.notes)) || []).filter(function (n) { return /smooth|own hindcast climate|less predictable|skill is low/.test(n); });

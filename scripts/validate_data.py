@@ -260,6 +260,22 @@ def validate_one(filename, spec):
                                            for k, v in zip(cells, arr)):
                     return False, f"{key} sits on a cell CPC already paints (or off the grid)"
             extra = f", CHIRPS fill {fl.get('n_valid')} cells to {(fl.get('window') or {}).get('end')}"
+        # SPI (scripts/spi.py, added 2026-09-28), optional: a collector writes the percent layers without it when a
+        # parameter file cannot be read. Where present: SPI x 100 as integers in -300..300, the same length as its
+        # percent layer, and only on cells that have a percent (one blank rule for both).
+        fl, fw = fl or {}, (fl or {}).get('week') or {}
+        spi_n = []
+        for key, arr, pct, size in (('spi', data.get('spi'), data['anom'], n), ('week.spi', wk.get('spi'), wk['anom'], n),
+                                    ('fill.spi', fl.get('spi'), fl.get('anom'), len(fl.get('cells') or [])),
+                                    ('fill.week.spi', fw.get('spi'), fw.get('anom'), len(fl.get('cells') or []))):
+            if arr is None:
+                continue
+            if not isinstance(arr, list) or len(arr) != size or not isinstance(pct, list) or len(pct) != size:
+                return False, f"{key} is not parallel to its percent layer"
+            if any(v is not None and (type(v) is not int or not -300 <= v <= 300 or p is None) for v, p in zip(arr, pct)):
+                return False, f"{key} holds a value that is not an integer in -300..300, or sits on a cell without a percent"
+            spi_n.append(f"{key} {sum(v is not None for v in arr)}")
+        extra += f", SPI cells: {', '.join(spi_n)}" if spi_n else ", no SPI"
         return True, (f"ok — {(data.get('window') or {}).get('start')}..{(data.get('window') or {}).get('end')}, "
                       f"{len(valid)} cells, median {med:+d}%{extra}")
     elif shape == 'object':

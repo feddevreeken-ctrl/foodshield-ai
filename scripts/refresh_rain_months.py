@@ -28,6 +28,18 @@ month is fetched again, CPC too, once when the final file appears: by then
 CPC's late gauge reports for the month are in as well. On a normal day this
 step is one CPC listing and, at most, two CHC listings.
 
+SPI (added 28 September 2026): cpc.spi and fill.spi, the month's Standardized
+Precipitation Index on the live layers' scale (refresh_rain_anomaly.py), from
+scripts/spi.py and the calendar month's 1991-2020 fit of the same product:
+data/ref/cpc_spi_params_1991_2020.json.gz (nominal month length, February 28
+days; 0.5 mm dry class) and data/ref/chirps3_spi_params_1991_2020.json.gz (CHIRPS
+v3.0 final monthly files; 1 mm dry class). SPI x 100, integers in -300..300;
+null where the percent is null or there is no fit. A fetched month feeds its
+unrounded mean rain per day (spi_from "rate"); months cached before SPI existed
+get it once from their stored whole-mm totals (spi_from "whole_mm", at most 0.5
+mm off over the month; on the live 30-day layer of 28 September 2026 that moved
+SPI by 0.01 median, 0.03 at the 95th percentile, 0.10 at most) until refetched.
+
 Pure Python (requests only), like the live collector.
 """
 from __future__ import annotations
@@ -45,6 +57,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import http_get, write_json  # noqa: E402
 import chirps_rain_fill as F  # noqa: E402
 import refresh_rain_anomaly as R  # noqa: E402
+import spi as SPI  # noqa: E402
 
 MONTHS = 6
 OUT = Path(__file__).resolve().parent.parent / "data" / "rain_months.json"
@@ -214,6 +227,29 @@ def _fill_block(cpc_cells: list, chirps: list, ndays: int, final: bool, url: str
     return blk
 
 
+def _add_spi(rec: dict, cpc_cells: list | None, chirps: list | None) -> None:
+    """cpc.spi and fill.spi of one month (see the docstring). cpc_cells / chirps: this run's unrounded per-cell
+    (observed, normal) mm a day, or None where the block is the cache's; a cached block that has spi keeps it."""
+    m, ndays, g = int(rec["month"][5:]), rec["days"], (R.LAT0, R.LON0, R.STEP, NLAT, NLON)
+    cp = rec["cpc"]
+    if cpc_cells is not None or "spi" not in cp:
+        fits, s = SPI.cpc_fits(g, "month", m - 1)
+        rate = ([None if x is None else x[0] for x in cpc_cells] if cpc_cells is not None
+                else [None if v is None else v / ndays for v in cp["mm"]])
+        cp["spi"] = [None if r is None or a is None or k not in fits
+                     else SPI.to_x100(SPI.spi_cpc(r, fits[k], SPI.MONTH_DAYS[m - 1], s["zero_mm"], s["clip"]))
+                     for k, (r, a) in enumerate(zip(rate, cp["anom"]))]
+        cp["spi_from"] = "rate" if cpc_cells is not None else "whole_mm"
+    fl = rec.get("fill")
+    if fl and (chirps is not None or "spi" not in fl):
+        fits, s = SPI.chirps_fits(g, "month", m - 1)
+        tot = [chirps[k][0] * ndays for k in fl["cells"]] if chirps is not None else fl["mm"]
+        fl["spi"] = [None if t is None or a is None or k not in fits
+                     else SPI.to_x100(SPI.spi_chirps(t, ndays, fits[k], s["zero_mm"], s["n_years"]))
+                     for k, t, a in zip(fl["cells"], tot, fl["anom"])]
+        fl["spi_from"] = "rate" if chirps is not None else "whole_mm"
+
+
 def _listing(url: str) -> set:
     html = http_get(url, timeout=60, headers=R.UA, retries=2).text
     return {(int(y), int(m)) for y, m in re.findall(r"chirps-v3\.0\.(\d{4})\.(\d\d)\.tif\b", html)}
@@ -318,6 +354,12 @@ def build() -> tuple[dict, dict]:
         normal_from = diag.get("normal_from") or normal_from
     if not months:
         raise RuntimeError("no complete month available")
+    for rec in months:
+        d = diags.get(rec["month"]) or {}
+        try:  # an addition: the month stands without it
+            _add_spi(rec, (d.get("cpc") or {}).get("cells"), d.get("chirps"))
+        except (OSError, ValueError, KeyError, TypeError, IndexError, RuntimeError) as e:
+            print(f"[WARN] {rec['month']} SPI left out: {type(e).__name__}: {e}")
 
     payload = {
         "product": "NOAA CPC Global Unified Gauge-Based Analysis of Daily Precipitation, real-time, 0.5 degree, "
@@ -341,6 +383,12 @@ def build() -> tuple[dict, dict]:
                      "fill: CHIRPS for cells CPC leaves null (not arid ones); cells lists grid indexes, anom/mm/"
                      "norm_mm are parallel to it, anom null where arid; null when CHC has not posted the month. "
                      "n_valid_cpc and n_fill count non-null percents."),
+        "spi_encoding": ("cpc.spi (grid, as cpc.anom) and fill.spi (parallel to fill.cells): Standardized "
+                         "Precipitation Index of the month x 100 as integers, clamped to -300..300 (-300 = -3 or "
+                         "below); null where the percent is null or the cell has no 1991-2020 fit for that calendar "
+                         "month. spi_from: 'rate' = from the unrounded mean rain per day, 'whole_mm' = from the "
+                         "stored whole-mm total (months cached before SPI was added)."),
+        "spi_params": {"cpc": f"data/ref/{SPI.CPC_PARAMS.name}", "fill": f"data/ref/{SPI.CHIRPS_PARAMS.name}"},
         "min_gauges_per_day": R.MIN_GAUGES, "arid_mm_day": R.ARID_MM_DAY, "need_share": R.NEED_SHARE,
         "spike_filter": {"times_normal": R.SPIKE_X, "over_mm": R.SPIKE_MM},
         "months": months,
@@ -362,6 +410,10 @@ def build() -> tuple[dict, dict]:
             f"A day in a cell is dropped from CPC's analysis when it is over {R.SPIKE_MM} mm and over "
             f"{R.SPIKE_X} times the cell's normal daily rain. This removes bad reports, but it can also remove "
             "a real extreme storm, so a cell hit by one may read drier than it was.",
+            "SPI, the Standardized Precipitation Index, puts each month on the same scale as the last 30 days and "
+            "the last week: how unusual that month's rain was at that place against the same calendar month in "
+            "1991-2020. -1, -1.5 and -2 are moderately, severely and extremely dry (about 1 year in 6, 15 and 44 "
+            "that dry or drier); +1, +1.5 and +2 the wet mirror.",
         ],
     }
     return payload, diags
@@ -388,6 +440,11 @@ def report(payload: dict, diags: dict) -> None:
               f"{mo['cells_without_gauges']} cells without gauges, {mo['spike_cell_days_dropped']} spike cell-days), "
               f"CHIRPS {mo['n_fill']} valid ({fl.get('product', 'none')}); median CPC {_fm(_med(ca))}, "
               f"CHIRPS {_fm(_med(fa))}, both {_fm(_med(ca + fa))}")
+        sp = [v for v in (cp.get("spi") or []) + (fl.get("spi") or []) if v is not None]
+        if sp:
+            print(f"[check]   SPI ({cp.get('spi_from')}/{fl.get('spi_from')}): {len(sp)} cells, median "
+                  f"{_med(sp) / 100:+.2f}, |SPI| >= 1 in {100 * sum(abs(v) >= 100 for v in sp) / len(sp):.0f}%, "
+                  f">= 2 in {100 * sum(abs(v) >= 200 for v in sp) / len(sp):.0f}% (a normal year: 32% and 5%)")
         for label, s, n, w, e in BOXES:
             vals, mm, nm, kc, kf = [], 0, 0, 0, 0
             for r in range(NLAT):
