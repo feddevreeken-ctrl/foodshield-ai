@@ -300,8 +300,12 @@ def _windows(per: dict, days: list[date], wdays: list[date]):
                 dropped.append((round(x[0]), d.isoformat(), LAT0 + STEP * (k // NLON), LON0 + STEP * (k % NLON)))
             else:
                 keep.append((d, x))
-        for xs, need, out in (([x for _, x in keep], need30, c30),
-                              ([x for d, x in keep if d in wdays], need7, c7)):
+        wk = [x for d, x in keep if d in wdays]
+        # The week needs its own gauge test: a cell whose gauges stopped reporting this week would otherwise keep
+        # a CPC week value that decays towards no rain, instead of the CHIRPS fill (audit, 2026-09-28).
+        if wk and sum(x[2] for x in wk) / len(wk) < MIN_GAUGES:
+            wk = []
+        for xs, need, out in (([x for _, x in keep], need30, c30), (wk, need7, c7)):
             out.append((sum(x[0] for x in xs) / len(xs), sum(x[1] for x in xs) / len(xs))
                        if xs and len(xs) >= need else None)
     return c30, c7, dropped, ungauged, gauges

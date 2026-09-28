@@ -82,6 +82,7 @@ import refresh_cpc_strengths    # CPC RONI strength odds by season (how strong, 
 import refresh_cpc_roni_outlook  # CPC RONI outlook: median and 5th/95th percentile per season
 import refresh_seasonal_outlook  # CPC NMME seasonal outlook maps (sea + land rain) for the El Nino map
 import refresh_rain_anomaly     # CPC gauge rain, last 30 and 7 days vs 1991-2020, for the El Nino map
+import refresh_rain_months      # CPC + CHIRPS rain for the last six complete months (cached per month), El Nino scrubber
 import refresh_shipping_gauges  # Gatún, St. Louis (+ barge rate), Kaub, Rosario, Manaus: the water behind the lanes
 import refresh_import_ports     # PortWatch dry-bulk imports at the gateway ports of the El Niño concern regions
 import refresh_enso_freight     # USDA AgTransport: Gulf/PNW->Japan grain freight, export inspections, barged grain
@@ -180,6 +181,7 @@ STEPS = [
     # (two 66 MB CHC files, capped at chirps_rain_fill.BUDGET_S; on its failure the CPC layers
     # are written without it). On a CPC failure safe_run keeps the last-good file.
     ("CPC observed rain",      refresh_rain_anomaly.main,       "rain_anomaly.json"),
+    ("Monthly rain",           refresh_rain_months.main,        "rain_months.json"),
     ("Shipping gauges",        refresh_shipping_gauges.main,    "enso_gauges.json"),
     ("Import ports",           refresh_import_ports.main,       "enso_ports.json"),
     ("Grain freight (USDA)",   refresh_enso_freight.main,       "enso_freight.json"),

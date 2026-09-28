@@ -1485,8 +1485,9 @@ def main() -> int:
         page.wait_for_timeout(900)
         check("the time scrubber drags to the last outlook season and Home steps to the first month shown", page.evaluate("""d => {
             const hd = document.querySelector('#enso-scrub .sc-handle'), first = document.querySelector('#enso-scrub .sc-track [data-i="0"]');
-            return d === 'outlook|DJF' && hd.getAttribute('aria-valuenow') === '0' && first.classList.contains('is-pick') && !!first.dataset.sstMon
-                && /^Sea surface, \\w+ \\d{4} mean/.test(document.querySelector('#enso-mapwrap > .enso-plate-h').textContent);
+            const last = [...document.querySelectorAll('#enso-scrub [data-sst-ol]')].pop();
+            return d === 'outlook|' + last.dataset.sstOl && hd.getAttribute('aria-valuenow') === '0' && first.classList.contains('is-pick') && !!first.dataset.sstMon
+                && /^Sea (surface|and rain), \\w+ \\d{4} mean/.test(document.querySelector('#enso-mapwrap > .enso-plate-h').textContent);
         }""", dragged))
         if page.locator('#enso-scrub [data-sst-view="outlook"]').count():
             page.click('#enso-scrub [data-sst-view="outlook"]')
@@ -1494,8 +1495,10 @@ def main() -> int:
             check("the outlook view is a labelled forecast in the modelled frame", page.evaluate("""async () => {
                 const O = (await (await fetch('data/seasonal_outlook.json')).json()).data, head = document.querySelector('#enso-mapwrap > .enso-plate-h').textContent;
                 const tag = document.getElementById('enso-maptag').textContent, strip = document.getElementById('enso-weekly').textContent;
-                return head.startsWith('Outlook for ' + O.seasons[0].label) && tag.includes('A forecast, not observed') && strip.includes('forecast')
-                    && document.getElementById('enso-mapwrap').classList.contains('is-modelled') && document.querySelectorAll('[data-sst-ol]').length === O.seasons.length;
+                // 2026-09-28 (owner: "outlook should be 6 months"): six monthly NMME maps, lead 1 to 6.
+                const list = O.months && O.months.length ? O.months : O.seasons;
+                return list.length === (O.months ? 6 : 3) && head.startsWith('Outlook for ' + list[0].label) && tag.includes('A forecast, not observed') && strip.includes('forecast')
+                    && document.getElementById('enso-mapwrap').classList.contains('is-modelled') && document.querySelectorAll('#enso-scrub [data-sst-ol]').length === list.length;
             }"""))
         page.evaluate("showTab('ensowater')")
         page.evaluate("showTab('elnino')")
@@ -1520,18 +1523,30 @@ def main() -> int:
                 && !document.querySelector('#enso-map .enso-pev:not(.is-now)')"""))
             page.click('[data-sst-now="7"]')
             page.wait_for_timeout(400)
+            # 2026-09-28 (owner: "the 30 d should have its own headlines ... only add headlines that can be a result or
+            # impact of el nino"): a stop marks only the checked headlines of its own window, and the count on the track
+            # is the same number.
+            check("the 7-day stop marks only the checked El Niño headlines of its own week, and the track counts them", page.evaluate("""async () => {
+                const E = (await (await fetch('data/enso_recent_events.json')).json()).data.events, w = (await (await fetch('data/rain_anomaly.json')).json()).data.week;
+                const n = E.filter(e => e.date_start <= w.end && e.date_end >= w.start).length;
+                const marks = document.querySelectorAll('#enso-map .enso-pev.is-now').length, col = document.querySelector('#enso-scrub [data-sst-now="7"] .sc-c').textContent;
+                return n > 0 && marks === n && col === String(n) && E.every(e => ['attributed', 'consistent'].includes(e.enso_link) && /^https:\\/\\//.test(e.source.url));
+            }"""))
         mons = page.evaluate("() => [...document.querySelectorAll('#enso-scrub [data-sst-mon]')].map(b => b.getAttribute('data-sst-mon'))")
         check("the 2026 track carries six past months, then 30 and 7 days, then the outlook", len(mons) == 6 and page.evaluate("""() => {
             const k = [...document.querySelectorAll('#enso-scrub .sc-track [data-i]')].map(b => b.dataset.sstMon ? 'm' : b.dataset.sstNow ? 'n' + b.dataset.sstNow : b.dataset.sstOl ? 'o' : '?').join('');
-            return /^m{6}n30n7o{3}$/.test(k);
+            return /^m{6}n30n7o{6}$/.test(k);
         }"""))
         if mons:
             page.click(f'[data-sst-mon="{mons[-1]}"]')
             page.wait_for_timeout(500)
             check("a month stop paints that month's observed sea mean and says which", page.evaluate("""m => {
                 const [y, mo] = m.split('-'), name = ['January','February','March','April','May','June','July','August','September','October','November','December'][+mo - 1] + ' ' + y;
-                return document.querySelector('#enso-mapwrap > .enso-plate-h').textContent.includes('Sea surface, ' + name + ' mean')
-                    && document.getElementById('enso-weekly').textContent.includes('OISST monthly mean') && !document.querySelector('.enso-rain-canvas');
+                // The month's own rain too (data/rain_months.json, CPC gauges + CHIRPS), and its checked El Niño headlines only.
+                return document.querySelector('#enso-mapwrap > .enso-plate-h').textContent.includes('Sea and rain, ' + name + ' mean')
+                    && document.getElementById('enso-weekly').textContent.includes('OISST monthly mean') && !!document.querySelector('.enso-rain-canvas')
+                    && new RegExp('last 30 days|' + name).test(document.getElementById('enso-legend').textContent)
+                    && !document.querySelector('#enso-map .enso-pev:not(.is-now)');
             }""", mons[-1]))
             page.click('#enso-scrub [data-sst-view="now"]')
             page.wait_for_timeout(400)
