@@ -228,7 +228,7 @@ SOURCES = [
         "key": "portwatch",
         "file": "portwatch.json",
         "label": "IMF PortWatch chokepoint transits",
-        "cadence": "daily fetch / daily upstream (~7d lag)",
+        "cadence": "daily fetch / weekly upstream release (Tuesdays)",
         "mode": "live",
     },
     # El Nino tab feeds (v85). The live ones ride the six-hourly cron; the
@@ -267,7 +267,7 @@ SOURCES = [
         "key": "portwatch_history",
         "file": "portwatch_history.json",
         "label": "IMF PortWatch daily transits, 365 days, 8 chokepoints",
-        "cadence": "6-hourly fetch / daily upstream (~3d lag)",
+        "cadence": "6-hourly fetch / weekly upstream release (Tuesdays)",
         "mode": "live",
     },
     {
@@ -490,6 +490,20 @@ SOURCES = [
 # lag does not trip the check. Feeds whose dates are irregular analysis dates
 # (IPC, HungerMap) or annual/structural vintages are deliberately not listed.
 DATA_STALE_DAYS = {"daily": 7, "weekly": 21, "monthly": 60}
+# Per-feed threshold for a publisher whose RELEASE cadence is slower than its row
+# granularity. PortWatch rows are daily, but the chokepoint layer is "updated
+# weekly, Tuesdays 9 AM ET" (https://portwatch.imf.org/pages/data-and-methodology)
+# and each release ends on the previous Sunday. So the newest row is 2 days old on
+# release day and 9 days old the next Tuesday morning, and the 7-day daily rule
+# flagged both files stale every Monday and Tuesday with nothing wrong. This repo's
+# history agrees: Aug-Sep 2026 releases ended 08-23, 08-30, 09-06, 09-13, 09-20
+# (all Sundays), and two of the four landed a day late (Wednesday). 10 = one full
+# weekly cycle (9) + that observed one-day slip; a release missed for longer than
+# that still goes stale.
+DATA_STALE_OVERRIDE = {
+    "portwatch": (10, "daily rows released weekly on Tuesdays"),
+    "portwatch_history": (10, "daily rows released weekly on Tuesdays"),
+}
 DATA_DATE = {
     "worldbank_pink_sheet": ("as_of_month", "monthly"),
     "fao_ffpi": ("month", "monthly"),
@@ -770,7 +784,8 @@ def main():
         if spec["key"] in DATA_DATE:
             _field, _every = DATA_DATE[spec["key"]]
             _latest = latest_data_date(payload, _field, _every)
-            _limit = DATA_STALE_DAYS[_every]
+            _limit, _rule = DATA_STALE_OVERRIDE.get(
+                spec["key"], (DATA_STALE_DAYS[_every], f"{_every} data"))
             _data_age = (TODAY - _latest).days if _latest else None
             # The age test uses the END of the latest period (a monthly figure is not late
             # until its month is over); the published date is the period's START, so a
@@ -787,7 +802,7 @@ def main():
                 if status == "ok":
                     status = "stale"
                     reason = (f"latest data {_latest.isoformat()} is {_data_age}d old "
-                              f"(> {_limit}d for {_every} data), although the file was "
+                              f"(> {_limit}d for {_rule}), although the file was "
                               f"regenerated {rows[spec['key']]['age_days']}d ago")
                     rows[spec["key"]]["status"] = status
                     rows[spec["key"]]["reason"] = reason
@@ -849,7 +864,8 @@ def main():
         notes=(
             "Derived from the current data/ snapshots. Status categories: ok, manual, "
             "stale (file refreshed but newest DATA older than 7d daily / 21d weekly / "
-            "60d monthly — see latest_data_date), degraded, setup_required, failed."
+            "60d monthly; 10d for PortWatch's weekly release — see latest_data_date), "
+            "degraded, setup_required, failed."
         ),
     )
 

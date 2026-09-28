@@ -75,6 +75,7 @@ OUTPUT: data/hapi_conflict.json
 import base64
 import json
 import math
+import time
 from datetime import date, timedelta
 
 from _common import DATA_DIR, http_get, write_json
@@ -101,6 +102,32 @@ def _app_identifier():
     return base64.b64encode(f"{APP_NAME}:{CONTACT_EMAIL}".encode()).decode()
 
 
+# v87 — http_get retries HTTP errors only; an HTTP 200 whose body is not JSON went
+# straight to r.json() and blanked the whole feed on one bad page. Every CI run
+# from 2026-09-27 failed that way ("Expecting value: line 1 column 1 (char 0)")
+# while the same code and identifier fetched all 43k rows locally, so the bad body
+# is intermittent and CI-side. Retry the page, and put what came back into the
+# error so the next failure names its cause in _meta.notes.
+BAD_BODY_SLEEPS = (15, 30, 60)
+
+
+def _page_json(params, admin_level):
+    last = None
+    for attempt in range(len(BAD_BODY_SLEEPS) + 1):
+        r = http_get(ENDPOINT, params=params, timeout=90, retries=3, patient=True)
+        try:
+            return r.json()
+        except ValueError as e:
+            last = (f"admin{admin_level} offset {params.get('offset')}: HTTP {r.status_code}, "
+                    f"{r.headers.get('content-type')}, {len(r.content)} bytes, "
+                    f"cache {r.headers.get('x-nginx-cache') or '-'}, "
+                    f"body starts {r.content[:120]!r} ({e})")
+            print(f"  [warn] non-JSON body, attempt {attempt + 1}: {last}")
+            if attempt < len(BAD_BODY_SLEEPS):
+                time.sleep(BAD_BODY_SLEEPS[attempt])
+    raise RuntimeError(f"non-JSON body on {len(BAD_BODY_SLEEPS) + 1} attempts — {last}")
+
+
 def _fetch_level(admin_level, start_date):
     """Return all rows at one admin level from start_date onward.
 
@@ -114,9 +141,8 @@ def _fetch_level(admin_level, start_date):
     rows = []
     offset = 0
     for page in range(MAX_PAGES):
-        r = http_get(
-            ENDPOINT,
-            params={
+        body = _page_json(
+            {
                 "app_identifier": _app_identifier(),
                 "output_format": "json",
                 "admin_level": str(admin_level),
@@ -124,11 +150,9 @@ def _fetch_level(admin_level, start_date):
                 "limit": str(PAGE_LIMIT),
                 "offset": str(offset),
             },
-            timeout=90,
-            retries=3,
-            patient=True,
+            admin_level,
         )
-        batch = (r.json() or {}).get("data")
+        batch = (body or {}).get("data")
         if batch is None:
             raise RuntimeError(f"admin{admin_level}: response had no 'data' key")
         rows.extend(batch)

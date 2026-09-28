@@ -938,8 +938,14 @@ def main() -> int:
         page.wait_for_selector('#subview-ensomoney.active #enso-c-record')
         check("Who pays lists every modelled shortfall with its buyers from the outlook file", page.evaluate("""async () => {
             const W = (await (await fetch('data/enso_outlook.json')).json()).data.who_pays;
-            const rows = [...document.querySelectorAll('.enso-whopays-plate .enso-wp-row:not(.enso-wp-head)')];
-            return rows.length === W.length && rows.every((r, i) => r.querySelector('button').dataset.mapCountry === W[i].iso)
+            // 2026-09-28 (redesign): one row per payer. Every producer that imports to cover its shortfall and every named
+            // buyer of a producer's exports has a row with its tonnes; a country hit both ways is one row.
+            const rows = [...document.querySelectorAll('.enso-whopays-plate .enso-wp-row.is-pay:not(.enso-wp-head)')];
+            const isos = rows.map(r => (r.querySelector('button') || {dataset: {}}).dataset.mapCountry).filter(Boolean);
+            const want = new Set(W.flatMap(c => (c.extra_import_kt ? [c.iso + '/' + c.crop] : []).concat((c.buyers || []).map(b => b.iso + '/' + c.crop))));
+            const zwe = rows.find(r => (r.querySelector('button') || {dataset: {}}).dataset.mapCountry === 'ZWE');
+            return rows.length >= want.size && [...want].every(k => isos.includes(k.split('/')[0]))
+                && (!zwe || /own harvest short/.test(zwe.textContent) && /less from South Africa/.test(zwe.textContent))
                 && document.querySelector('.enso-whopays-plate').textContent.includes('hit twice')
                 && document.querySelectorAll('.enso-whopays-plate .enso-wp-total').length === ((await (await fetch('data/enso_outlook.json')).json()).data.who_pays_totals || []).length;
         }"""))
