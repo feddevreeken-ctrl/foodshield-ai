@@ -12792,7 +12792,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-ol-zero { top:0 !important; bottom:0; border-left:1px solid var(--t3); }
 #tab-elnino .enso-ol-band { height:8px; margin-top:-4px; background:rgba(235,233,226,.14); transform-origin:left center; }
 #tab-elnino .enso-ol-row.is-falls .enso-ol-band { background:rgba(201,119,58,.28); }
-#tab-elnino .enso-ol-row.is-rises .enso-ol-band { background:rgba(107,163,107,.28); }
+#tab-elnino .enso-ol-row.is-rises .enso-ol-band { background:rgba(79,159,168,.28); }
 #tab-elnino .enso-ol-dot { width:11px; height:11px; margin:-5.5px 0 0 -5.5px; background:var(--t1); transform:rotate(45deg); }
 #tab-elnino .enso-ol-row.is-falls .enso-ol-dot { background:#e0864a; }
 #tab-elnino .enso-ol-row.is-rises .enso-ol-dot { background:#4f9fa8; }
@@ -51198,10 +51198,12 @@ function showCommodityDetail(key) {
           var p = ipcOf(r.iso); if (!p || typeof p.phase3plus_count !== 'number') return '<td class="enso-ol-v"><span class="enso-ol-na">—</span></td>';
           var per = ipcPeriod(p), old = per.end != null && per.end < today - 365 * day;
           var m = function (n) { return (n / 1e6).toFixed(n >= 1e6 ? 1 : 2) + ' m'; };
+          /* Phase 5 counts are small: 26,000 reads as 0.03 m, so they print in thousands under 100,000. */
+          var p5 = function (n) { return n >= 1e5 ? m(n) : (Math.round(n / 1000) * 1000).toLocaleString('en-US'); };
           /* An analysis whose period has ended is history, not a headcount: it drops to a note. */
-          if (old || (per.end != null && per.end < today)) return '<td class="enso-ol-v is-stale" data-l="People in IPC Phase 3+"><span class="enso-live-sub">Last analysis, period ended: ' + m(p.phase3plus_count) + (p.phase5_count > 0 ? ', ' + m(p.phase5_count) + ' in Phase 5' : '') + ' · ' + esc(per.text) + ' · ' + esc(ipcSource(p)) + '</span></td>';
+          if (old || (per.end != null && per.end < today)) return '<td class="enso-ol-v is-stale" data-l="People in IPC Phase 3+"><span class="enso-live-sub">Last analysis, period ended: ' + m(p.phase3plus_count) + (p.phase5_count > 0 ? ', ' + p5(p.phase5_count) + ' in Phase 5' : '') + ' · ' + esc(per.text) + ' · ' + esc(ipcSource(p)) + '</span></td>';
           return '<td class="enso-ol-v" data-l="People in IPC Phase 3+"><b class="enso-live-people">' + m(p.phase3plus_count) + '</b>' +
-            (p.phase5_count > 0 ? '<span class="enso-live-sub"><b>' + m(p.phase5_count) + ' in Phase 5</b></span>' : '') +
+            (p.phase5_count > 0 ? '<span class="enso-live-sub"><b>' + p5(p.phase5_count) + ' in Phase 5</b></span>' : '') +
             (p.famine_risk ? '<span class="enso-live-sub"><b>' + esc(p.famine_risk.split(';')[0].replace(/^r/, 'R')) + '</b> · <a href="' + esc(safeUrl(p.url)) + '" target="_blank" rel="noopener">IPC, ' + esc(fmtDate(p.released)) + '</a></span>' : '') +
             '<span class="enso-live-sub">' + esc(per.text) + (old ? ' (older than 12 months)' : per.end != null && per.end < today ? ' (ended)' : '') + (per.status ? ' · ' + esc(per.status) : '') + ' · ' + esc(ipcSource(p)) +
             (typeof p.analysis_coverage_ratio === 'number' && p.analysis_coverage_ratio < 0.9 ? ' · ' + Math.round(p.analysis_coverage_ratio * 100) + '% of people analysed' : '') + '</span></td>';
