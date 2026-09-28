@@ -13045,14 +13045,15 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-sst-wins { grid-area:wins; } #tab-elnino .enso-sst-ctx { grid-area:ctx; } #tab-elnino .enso-sst-rain { grid-area:rain; justify-self:end; }
 /* 2026-09-28: the Ocean map's time bar. Three equal cells in time order; the thumb slides to the pressed one (--i);
    the forecast cell and its thumb are dashed, the site's grammar for modelled. */
-#tab-elnino .enso-timebar { position:relative; display:inline-grid; grid-template-columns:repeat(3,minmax(0,1fr)); width:min(470px,calc(100% - 12px)); margin-left:12px; border:1px solid var(--b2); background:rgba(235,233,226,.025); }
+#tab-elnino .enso-timebar { position:relative; display:inline-grid; grid-template-columns:repeat(3,minmax(0,1fr)); width:min(470px,calc(100% - 24px)); margin-left:12px; border:0; border-bottom:3px solid var(--b2); background:rgba(235,233,226,.035); }
+/* the track runs left to right, past to forecast: an arrowhead at its end */
+#tab-elnino .enso-timebar::after { content:''; position:absolute; right:-9px; bottom:-7px; border-left:9px solid var(--b2); border-top:5.5px solid transparent; border-bottom:5.5px solid transparent; }
 #tab-elnino .enso-timebar.is-two { grid-template-columns:repeat(2,minmax(0,1fr)); width:min(320px,calc(100% - 12px)); }
-#tab-elnino .enso-timebar-thumb { position:absolute; top:-1px; bottom:-1px; left:calc(var(--i,1) * 100% / 3); width:calc(100% / 3); background:rgba(201,119,58,.17); border-top:2px solid var(--warm); pointer-events:none; transition:left .34s cubic-bezier(.3,.7,.2,1); }
+#tab-elnino .enso-timebar-thumb { position:absolute; top:0; bottom:-3px; left:calc(var(--i,1) * 100% / 3); width:calc(100% / 3); background:rgba(201,119,58,.17); border-bottom:3px solid var(--warm); pointer-events:none; transition:left .34s cubic-bezier(.3,.7,.2,1); }
 #tab-elnino .enso-timebar.is-two .enso-timebar-thumb { left:calc(var(--i,1) * 50%); width:50%; }
-#tab-elnino .enso-timebar[data-v="outlook"] .enso-timebar-thumb { border-top-style:dashed; border-top-color:#e0864a; background:rgba(224,134,74,.11); }
+#tab-elnino .enso-timebar[data-v="outlook"] .enso-timebar-thumb { border-bottom-style:dashed; border-bottom-color:#e0864a; background:rgba(224,134,74,.11); }
 #tab-elnino .enso-timebar .enso-basis-b { position:relative; z-index:1; display:flex; flex-direction:column; justify-content:center; align-items:flex-start; gap:2px; min-width:0; min-height:32px !important; padding:2px 12px !important; border:0 !important; font:500 13px/1.1 'Geist',sans-serif; color:var(--t2); text-align:left; background:none; }
 #tab-elnino .enso-timebar .enso-basis-b::after { content:attr(data-when); font:400 10px/1.1 'Geist Mono',monospace; color:var(--t3); white-space:nowrap; }
-#tab-elnino .enso-timebar .enso-basis-b + .enso-basis-b { border-left:1px solid var(--b2) !important; }
 #tab-elnino .enso-timebar .enso-basis-b[data-sst-view="outlook"] { border-left:1px dashed #e0864a !important; }
 #tab-elnino .enso-timebar .enso-basis-b[aria-pressed="true"] { color:var(--t1); }
 #tab-elnino .enso-timebar .enso-basis-b[aria-pressed="true"]::after { color:var(--t2); }
@@ -45606,6 +45607,11 @@ function showCommodityDetail(key) {
   }
   function dayMon(x) { var d = new Date(x); return isNaN(d) ? '' : d.getUTCDate() + ' ' + MON3[d.getUTCMonth()]; }
   function dayRange(a, b) { var x = new Date(a), y = new Date(b); if (isNaN(x) || isNaN(y)) return ''; return x.getUTCMonth() === y.getUTCMonth() ? x.getUTCDate() + '–' + dayMon(b) : dayMon(a) + '–' + dayMon(b); }
+  /* CPC's official outlook for the same season (RONI converted to ONI in refresh_cpc_roni_outlook.py), printed beside
+     the raw NMME average: the map applies no amplitude correction, so its Niño 3.4 box runs warmer (+3.9 against +3.1
+     for Oct–Dec in the Sep 2026 run). */
+  function olCpc() { var q = olSeason(), x = q && ((S.strengths && S.strengths.roni_outlook) || []).filter(function (r) { return r.season === q.key; })[0], e = x && x.oni_equiv;
+    return e && typeof e.median === 'number' ? { m: e.median, lo: e.lo, hi: e.hi } : null; }
   function olRun() { var m = String((S.seasonal || {}).initialized || '').match(/^(\d{4})-(\d{2})/); return m ? MON3[+m[2] - 1] + ' ' + m[1] : 'latest'; }
   function winLabel(l) { return String(l).replace('-', '–'); }
   function olModels() { var n = ((S.seasonal || {}).models || []).length; return n ? n + ' models averaged' : 'ensemble mean'; }
@@ -46589,7 +46595,9 @@ function showCommodityDetail(key) {
     var boxes = function (b) { return b ? '<span>Niño 3.4 <b>' + num(b.nino34, 1) + ' °C</b></span><span>Niño 1+2 <b>' + num(b.nino12, 1) + ' °C</b></span>' : ''; };
     /* A past winter or the outlook on the map: the strip reads the same maps, not this week. */
     if (sc.view === 'outlook') { var ob = S.seasonal.box_means_c && S.seasonal.box_means_c[olSeason().key];
-      el.innerHTML = '<span>Outlook · ' + esc(sc.season) + ' · NMME, ' + olModels() + ', run ' + olRun() + ' · forecast</span>' + boxes(ob); return; }
+      var cq = olCpc(), gap = cq && ob && typeof ob.nino34 === 'number' ? ob.nino34 - cq.m : null;
+      el.innerHTML = '<span>Outlook · ' + esc(sc.season) + ' · NMME, ' + olModels() + ', run ' + olRun() + ' · forecast</span>' + boxes(ob) +
+        (cq ? '<span>CPC’s own outlook: ONI ' + num(cq.m, 1) + ' (' + num(cq.lo, 1) + ' to ' + num(cq.hi, 1) + ')' + (gap != null && Math.abs(gap) >= 0.3 ? ', ' + Math.abs(gap).toFixed(1) + ' °C ' + (gap > 0 ? 'below' : 'above') + ' this raw model average' : '') + '</span>' : ''); return; }
     if (sc.view === 'winter') { var wb = sc.win.box_means_c && sc.win.box_means_c[sstSeason().key];
       el.innerHTML = '<span>' + esc(winLabel(sc.win.label)) + ' winter · ' + esc(sc.season) + ' · 1991–2020 base</span>' + boxes(wb) + '<span>Winter ONI <b>' + num(sc.win.djf_oni, 1) + '</b></span><span>Peak ONI <b>' + num(sc.peak, 1) + '</b></span>'; return; }
     if (cl) { el.innerHTML = '<span>' + esc(cl.label) + ' winters · average of ' + cl.n + ' · ' + esc(sstSeason().label) + ' · 1991–2020 base</span>' + (bm ? '<span>Niño 3.4 <b>' + num(bm.nino34, 1) + ' °C</b></span><span>Niño 1+2 <b>' + num(bm.nino12, 1) + ' °C</b></span>' : '') + '<span>Mean winter ONI <b>' + num(cl.mean_djf_oni, 1) + '</b></span>'; return; }

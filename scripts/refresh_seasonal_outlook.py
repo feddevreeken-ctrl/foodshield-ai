@@ -394,7 +394,8 @@ def build(init: tuple) -> dict:
             "Lead is the number of months from the forecast's start to the season's first month; "
             "skill falls as lead grows.",
             "CPC's Niño 3.4 plume divides each model by its hindcast amplitude error. This map "
-            "does not, so its Niño 3.4 box reads a few tenths of a degree warmer than that plume.",
+            "does not, so its Niño 3.4 box reads warmer than that plume and than CPC's official "
+            "outlook; the page prints CPC's figure beside it.",
             "In seas that freeze, the models' surface temperature can be the ice surface rather "
             "than the water, so treat polar anomalies with care.",
         ],
