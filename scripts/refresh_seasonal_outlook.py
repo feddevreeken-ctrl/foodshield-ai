@@ -52,6 +52,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import DATA_DIR, http_get, write_json  # noqa: E402
+import outlook_rain_spi  # noqa: E402  (SPI, drought outlook and ENSO blend for the monthly maps)
 
 CPC = "https://ftp.cpc.ncep.noaa.gov/NMME"
 ENS = f"{CPC}/realtime_anom/ENSMEAN"
@@ -515,10 +516,15 @@ def main() -> int:
         old = {}
     ym = f"{init[3][:4]}-{init[3][4:]}"
     if old.get("initialized") == ym and old.get("schema") == SCHEMA and old.get("maps"):
+        # The SPI fields are recomputed from the stored rain percent, so new observed months and a new
+        # CPC ENSO outlook reach the map even when the NMME run has not changed.
+        outlook_rain_spi.add_rain_spi(old)
         _write(old, src)
-        print(f"[OK] NMME outlook unchanged (start {ym} is still CPC's newest); re-stamped, nothing downloaded")
+        print(f"[OK] NMME outlook unchanged (start {ym} is still CPC's newest); re-stamped, SPI fields recomputed")
+        for line in outlook_rain_spi.checks(old):
+            print(line)
         return 0
-    payload = build(init)
+    payload = outlook_rain_spi.add_rain_spi(build(init))
     path = _write(payload, src)
     for s in payload["seasons"]:
         print(f"[OK] {s['key']} ({s['label']}, lead {s['lead_months']}): box means "
@@ -527,7 +533,7 @@ def main() -> int:
         print(f"[OK] {x['key']} ({x['label']}, lead {x['lead_months']}, {x['n_models']} models"
               f"{'' if 'rain_prob_below' in x['maps'] else ', no odds'}): box means "
               f"{payload['box_means_c_months'][x['key']]} | sea range {x['maps']['sst_range_c']}")
-    for line in rain_checks(payload):
+    for line in rain_checks(payload) + outlook_rain_spi.checks(payload):
         print(line)
     print(f"[OK] NMME start {payload['initialized']}, {len(payload['models'])} models "
           f"({', '.join(payload['models'])}) | {path.stat().st_size / 1e6:.2f} MB")

@@ -77,10 +77,15 @@ Data:
     row is the pentad end day nearest the window's last day (365-day calendar);
     the nominal window length (30 or 7 days) only decides whether the total is
     in the dry class (under 0.5 mm). Stored as SPI x 100, integers clamped to
-    -300..300 (-300 = -3 or below). Null where the percent is null (sea, arid,
-    missing: one blank rule for both), or where the cell has no fit: fewer than
-    2/3 of the 1991-2020 windows over 0.5 mm, or a footprint CPC's analysis
-    only covers from 2007 (95 coastal and island cells). SPI measures how
+    -300..300 (-300 = -3 or below). Null where the cell has no reading (sea,
+    missing, gauge mask), or no fit: a 1991-2020 normal under 0.1 mm a day over
+    the window (build_cpc_spi_params.SPI_ARID_MM_DAY), fewer than 2/3 of the
+    1991-2020 windows over 0.5 mm, or a footprint CPC's analysis only covers
+    from 2007 (95 coastal and island cells). Not tied to the percent's arid
+    blank (normal under ARID_MM_DAY, 0.5 mm a day) since 28 September 2026:
+    inland Australia's wet August 2026 was blank on every layer. The percent
+    keeps that blank, where one shower reads as hundreds of percent; SPI does
+    not have that problem, it ranks the window against the cell's own years. SPI measures how
     unusual each window is on its own: a dry week where dry weeks are common
     reads only mildly dry even inside a severe 30-day drought. If the parameter
     file cannot be read the percent layers are written without SPI.
@@ -141,6 +146,9 @@ CHECKS = (("southern Africa (dry season)", -35, -15, 15, 40),
           ("eastern Australia", -38, -15, 140, 154),
           ("US Corn Belt", 37, 45, -98, -82),
           ("southern Brazil / Argentina", -38, -22, -65, -45))
+# The last build()'s per-day cell values, CPC listing, newest day, payload and CHIRPS grids, kept in this process so
+# refresh_rain_weeks.py (the next run_all step) builds the weekly archive without downloading the days again.
+LAST: dict = {}
 
 
 # --- observations ---------------------------------------------------------
@@ -338,11 +346,12 @@ def _pct(cells) -> list:
 
 def _spi(cells: list, pct: list, kind: str, end: date, days: int) -> tuple[list, dict]:
     """SPI x 100 per cell of one CPC layer (kind 'd30' or 'd7'), from the unrounded mean rain per day; null where
-    the percent is null or the cell has no fit for this window and time of year (see the docstring)."""
+    the cell has no reading or no fit for this window and time of year (see the docstring). pct is not used: SPI
+    is not blanked with the percent's arid mask."""
     fits, m = SPI.cpc_fits((LAT0, LON0, STEP, NLAT, NLON), kind, SPI.cpc_row(end))
-    return [None if x is None or p is None or k not in fits
+    return [None if x is None or k not in fits
             else SPI.to_x100(SPI.spi_cpc(x[0], fits[k], days, m["zero_mm"], m["clip"]))
-            for k, (x, p) in enumerate(zip(cells, pct))], m
+            for k, x in enumerate(cells)], m
 
 
 def build() -> tuple[dict, dict]:
@@ -432,8 +441,9 @@ def build() -> tuple[dict, dict]:
                     f"{end.isoformat()}) and on the days up to {m['pool_end_days']} either side"),
             "fit_end_day": m["end_day"], "zero_mm": m["zero_mm"],
             "encoding": ("spi (30 days) and week.spi: SPI x 100 as integers, row-major from the southern edge as anom, "
-                         "clamped to -300..300 (-300 = -3 or below, 300 = +3 or above); null where anom is null or the "
-                         "cell has no 1991-2020 fit for this window and time of year"),
+                         "clamped to -300..300 (-300 = -3 or below, 300 = +3 or above); null where mm is null (no "
+                         "reading) or the cell has no 1991-2020 fit for this window and time of year; set on arid "
+                         "cells too, where anom is null"),
             "n_valid": sum(v is not None for v in s30), "week_n_valid": sum(v is not None for v in s7),
         }
         payload["notes"].append(
@@ -451,6 +461,8 @@ def build() -> tuple[dict, dict]:
         payload["fill"], fdiag = chirps_rain_fill.fill([x is None for x in c30], [x is None for x in c7], ARID_MM_DAY)
     except Exception as e:  # noqa: BLE001 -- any CHC failure leaves the CPC layers as they are
         print(f"[WARN] CHIRPS fill left out: {e}")
+    LAST.clear()
+    LAST.update(per=per, listed=listed, end=end, payload=payload, chirps=fdiag)
     return payload, {"c30": c30, "c7": c7, "dropped": dropped, "gauges": gauges, "chirps": fdiag}
 
 

@@ -57,6 +57,7 @@ import refresh_enso_indices
 import refresh_enso_bulletins
 import refresh_sst_anomaly   # v84 -- OISST anomaly grid for the El Nino map
 import refresh_sst_months    # OISST monthly means (last 6 complete months) + last 30 days, for the El Nino scrubber
+import refresh_sst_weeks     # OISST weekly means (Monday-Sunday, rolling 12 weeks), the same weeks as rain_weeks.json
 import refresh_aqueduct
 import refresh_asap
 import refresh_faostat_prodindex
@@ -78,10 +79,12 @@ import refresh_giews_crea       # FAO GIEWS countries requiring external assista
 import refresh_imf_food_cpi     # IMF CPI food (CP01) YoY, monthly, fresher than FAOSTAT's CPI
 import refresh_commodity_news   # v46 — GDELT + EC RSS commodity headlines (claims, not data)
 import refresh_enso_news        # El Niño wire: headlines that name the event (claims, not data)
+import refresh_enso_auto_events  # El Niño map marks picked by rule from GDACS, ReliefWeb and the El Niño wire (no network)
 import refresh_cpc_strengths    # CPC RONI strength odds by season (how strong, how long)
 import refresh_cpc_roni_outlook  # CPC RONI outlook: median and 5th/95th percentile per season
 import refresh_seasonal_outlook  # CPC NMME seasonal outlook maps (sea + land rain) for the El Nino map
 import refresh_rain_anomaly     # CPC gauge rain, last 30 and 7 days vs 1991-2020, for the El Nino map
+import refresh_rain_weeks       # CPC + CHIRPS rain per calendar week (rolling 12 weeks), El Nino scrubber
 import refresh_rain_months      # CPC + CHIRPS rain for the last six complete months (cached per month), El Nino scrubber
 import refresh_shipping_gauges  # Gatún, St. Louis (+ barge rate), Kaub, Rosario, Manaus: the water behind the lanes
 import refresh_import_ports     # PortWatch dry-bulk imports at the gateway ports of the El Niño concern regions
@@ -129,6 +132,9 @@ STEPS = [
     # v84 -- the observed SST anomaly field for the El Nino map (OISST via ERDDAP).
     ("OISST SST anomaly",      refresh_sst_anomaly.main,        "sst_anomaly.json"),
     ("OISST monthly SST",      refresh_sst_months.main,         "sst_months.json"),
+    # Weekly archive: reuses the 30 daily fields the step above just fetched (no second ERDDAP request), so it
+    # must run right after it; without them it fails fast and safe_run keeps the last-good file.
+    ("OISST weekly SST",       refresh_sst_weeks.main,          "sst_weeks.json"),
     ("WRI Aqueduct water",     refresh_aqueduct.main,           "aqueduct.json"),
     # v83 — the three feeds that give this dashboard a PRESENT tense. Until now
     # the climate component was baseline hydrology (1979-2019) plus 1991-2020
@@ -171,17 +177,24 @@ STEPS = [
     # El Niño wire: ReliefWeb reports, the same publisher feeds, one GDELT query,
     # all asked for the event by name. Keeps last-good items across a bad run.
     ("El Niño news",           refresh_enso_news.main,          "enso_news.json"),
+    # Reads the three feeds above (GDACS and ReliefWeb run earlier); marks for the map's 30-day and week stops.
+    ("El Niño auto marks",     refresh_enso_auto_events.main,   "enso_auto_events.json"),
     ("CPC strength odds",      refresh_cpc_strengths.main,      "enso_strengths.json"),
     ("CPC RONI outlook",       refresh_cpc_roni_outlook.main,   "enso_strengths.json"),
-    # NMME seasonal outlook maps: a monthly upstream (~8th), so most runs only re-stamp;
-    # on an upstream failure safe_run keeps the last-good file.
-    ("NMME seasonal outlook",  refresh_seasonal_outlook.main,   "seasonal_outlook.json"),
     # Observed rain now: 30 CPC daily files (~55 MB of Range requests, ~1 min) against the
     # committed 1991-2020 normal in data/ref, plus the CHIRPS fill for cells CPC leaves blank
     # (two 66 MB CHC files, capped at chirps_rain_fill.BUDGET_S; on its failure the CPC layers
     # are written without it). On a CPC failure safe_run keeps the last-good file.
     ("CPC observed rain",      refresh_rain_anomaly.main,       "rain_anomaly.json"),
+    # Weekly archive: reuses the CPC days and the CHIRPS pentad the step above just read (a few more CPC days and,
+    # about once a week, one CHIRPS pentad of its own), so it must run right after it; without them it fails fast
+    # and safe_run keeps the last-good file.
+    ("CPC weekly rain",        refresh_rain_weeks.main,         "rain_weeks.json"),
     ("Monthly rain",           refresh_rain_months.main,        "rain_months.json"),
+    # NMME seasonal outlook maps: a monthly upstream (~8th), so most runs only re-stamp; it runs after the observed
+    # rain because the drought outlook carries the months already observed into its first forecast months.
+    # On an upstream failure safe_run keeps the last-good file.
+    ("NMME seasonal outlook",  refresh_seasonal_outlook.main,   "seasonal_outlook.json"),
     ("Shipping gauges",        refresh_shipping_gauges.main,    "enso_gauges.json"),
     ("Import ports",           refresh_import_ports.main,       "enso_ports.json"),
     ("Grain freight (USDA)",   refresh_enso_freight.main,       "enso_freight.json"),

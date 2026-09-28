@@ -131,6 +131,16 @@ EXPECTED_FILES = {
     # Observed rain now (CPC gauge analysis, 30 and 7 days vs 1991-2020) for the El Nino map.
     # SOFT: on an upstream failure run_all keeps the last good file, which goes stale, not wrong.
     'rain_anomaly.json':          ('soft',     'rain_grid'),
+    # The six observed months of the same map (refresh_rain_months.py), and marks picked by rule from the Reported
+    # feeds for its 30-day and week stops (refresh_enso_auto_events.py; empty on a quiet cycle is honest).
+    'rain_months.json':           ('soft',     'dict_or_empty'),
+    'enso_auto_events.json':      ('soft',     'dict_or_empty'),
+    # Official seasonal forecasts marked on the outlook months (hand-curated, like enso_recent_events.json).
+    'enso_outlook_events.json':   ('soft',     'dict_or_empty'),
+    # Weekly archives for the same map (refresh_rain_weeks.py, refresh_sst_weeks.py): calendar weeks, up to 12.
+    # SOFT for the same reason; a failed step keeps the last good archive.
+    'rain_weeks.json':            ('soft',     'rain_weeks'),
+    'sst_weeks.json':             ('soft',     'sst_weeks'),
     # Build-time commodity interpretation. SOFT, and additionally listed in
     # OPTIONAL_FILES below: on a repo that has never run the step (no provider key
     # and no prior build) the file legitimately does not exist yet.
@@ -196,6 +206,125 @@ def _dig(row, path):
     return cur
 
 
+def _weeks_chain(data, meta, max_age_days=16):
+    """Shared checks of rain_weeks.json / sst_weeks.json: 1..12 calendar weeks (Monday..Sunday), oldest first, no
+    overlap, the newest ending within max_age_days of the file's generation. Returns (weeks, error or None)."""
+    from datetime import date, datetime
+    weeks = data.get('weeks') if isinstance(data, dict) else None
+    if not isinstance(weeks, list) or not 1 <= len(weeks) <= 12:
+        return None, f"weeks is not a list of 1..12 ({type(weeks).__name__})"
+    prev = None
+    for w in weeks:
+        try:
+            s, e = date.fromisoformat(w['start']), date.fromisoformat(w['end'])
+        except (KeyError, TypeError, ValueError):
+            return None, f"a week without ISO start/end: {str(w)[:60]}"
+        if e.weekday() != 6 or (e - s).days != 6:
+            return None, f"week {s}..{e} is not Monday..Sunday"
+        if prev and s <= prev:
+            return None, f"week {s}..{e} overlaps or precedes the one before (end {prev})"
+        prev = e
+    try:
+        made = datetime.fromisoformat(str((meta or {}).get('generated_at'))).date()
+    except ValueError:
+        return None, "no _meta.generated_at"
+    if (made - prev).days > max_age_days:
+        return None, f"newest week ends {prev}, {(made - prev).days} days before the file was written: stale"
+    return weeks, None
+
+
+def _check_rain_layer(tag, w, n, max_days, fill_days):
+    """One sparse CPC layer of rain_weeks.json (a week, or its d30) and its optional CHIRPS fill: error or None."""
+    blocks = [('', w)] + ([('fill.', w['fill'])] if w.get('fill') is not None else [])
+    seen = set()
+    for pre, b in blocks:
+        cells = b.get('cells')
+        if not isinstance(cells, list) or cells != sorted(set(cells)) or any(type(k) is not int or not 0 <= k < n
+                                                                             for k in cells):
+            return f"{tag}: {pre}cells is not an ascending list of grid indexes"
+        if seen & set(cells):
+            return f"{tag}: fill.cells repeats cells CPC already paints"
+        seen |= set(cells)
+        if not isinstance(b.get('days'), int) or not 1 <= b['days'] <= (fill_days if pre else max_days):
+            return f"{tag}: {pre}days is {b.get('days')}"
+        for key in ('anom', 'mm', 'norm_mm', 'spi'):
+            arr = b.get(key)
+            if arr is None and key == 'spi':
+                continue
+            if not isinstance(arr, list) or len(arr) != len(cells):
+                return f"{tag}: {pre}{key} is not parallel to {pre}cells"
+        if any(v is None or type(v) is not int or v < 0 for key in ('mm', 'norm_mm') for v in b[key]):
+            return f"{tag}: {pre}mm / norm_mm hold a value that is not a whole mm >= 0"
+        if any(v is not None and (type(v) is not int or v < -100) for v in b['anom']):
+            return f"{tag}: {pre}anom holds a percent below -100 or not an integer"
+        if b.get('spi') is not None and any(v is not None and (type(v) is not int or not -300 <= v <= 300)
+                                            for v in b['spi']):
+            return f"{tag}: {pre}spi is not an integer in -300..300"
+    return None
+
+
+def _check_rain_weeks(data, meta):
+    """refresh_rain_weeks.py: per week, sparse CPC cells and a sparse CHIRPS fill on the rain_anomaly.json grid, and the
+    same for the 30 days ending on the week's Sunday (d30)."""
+    from datetime import date, timedelta
+    weeks, err = _weeks_chain(data, meta)
+    if err:
+        return False, err
+    g = data.get('grid') or {}
+    n = (g.get('nlat') or 0) * (g.get('nlon') or 0)
+    if n != 52 * 144:
+        return False, f"grid is {g.get('nlat')}x{g.get('nlon')}, not the 52x144 rain grid"
+    for w in weeks:
+        tag = f"week to {w['end']}"
+        err = _check_rain_layer(tag, w, n, 7, 6)
+        if err:
+            return False, err
+        if w.get('n_valid', 0) < 300:
+            return False, f"{tag}: only {w.get('n_valid')} CPC cells with a percent (the live week has ~800)"
+        d = w.get('d30')
+        if not isinstance(d, dict):
+            return False, f"{tag}: no d30 (the 30 days ending on its Sunday)"
+        if d.get('end') != w['end'] or d.get('start') != (date.fromisoformat(w['end']) - timedelta(days=29)).isoformat():
+            return False, f"{tag}: d30 runs {d.get('start')}..{d.get('end')}, not the 30 days ending on the week's Sunday"
+        err = _check_rain_layer(f"{tag} d30", d, n, 30, 31)
+        if err:
+            return False, err
+        if d.get('n_valid', 0) < 300:
+            return False, f"{tag}: only {d.get('n_valid')} d30 CPC cells with a percent (the live 30 days have ~900)"
+    last = weeks[-1]
+    return True, (f"ok — {len(weeks)} weeks {weeks[0]['start']}..{last['end']}, newest {len(last['cells'])} CPC + "
+                  f"{len((last.get('fill') or {}).get('cells') or [])} CHIRPS cells, d30 {len(last['d30']['cells'])} + "
+                  f"{len((last['d30'].get('fill') or {}).get('cells') or [])}, "
+                  f"{sum(1 for w in weeks if w.get('final'))} final")
+
+
+def _check_sst_weeks(data, meta):
+    """refresh_sst_weeks.py: per week, a full OISST anomaly grid in tenths of a degree C and the Nino box means."""
+    weeks, err = _weeks_chain(data, meta)
+    if err:
+        return False, err
+    g = data.get('grid') or {}
+    n = (g.get('nlat') or 0) * (g.get('nlon') or 0)
+    if n < 10000:
+        return False, f"grid is {g.get('nlat')}x{g.get('nlon')}"
+    for w in weeks:
+        a = w.get('anom')
+        if not isinstance(a, list) or len(a) != n:
+            return False, f"week to {w['end']}: anom is not a {g.get('nlat')}x{g.get('nlon')} grid"
+        vals = [v for v in a if v is not None]
+        if len(vals) < 0.5 * n or any(type(v) is not int or not -150 <= v <= 150 for v in vals):
+            return False, f"week to {w['end']}: {len(vals)} sea cells, or a value outside +-15 C / not tenths"
+        if not isinstance(w.get('days_averaged'), int) or not 6 <= w['days_averaged'] <= 7:
+            return False, f"week to {w['end']}: {w.get('days_averaged')} days averaged"
+        b = w.get('box_means_c') or {}
+        if any(not isinstance(b.get(k), (int, float)) or abs(b[k]) > 6 for k in ('nino34', 'nino12', 'nino3', 'nino4')):
+            return False, f"week to {w['end']}: Nino box means missing or implausible ({b})"
+    last = weeks[-1]
+    return True, (f"ok — {len(weeks)} weeks {weeks[0]['start']}..{last['end']}, newest nino34 "
+                  f"{last['box_means_c']['nino34']:+.2f} C ({last.get('dataset')}), "
+                  f"{sum(1 for w in weeks if w.get('final'))} final")
+
+
 def validate_one(filename, spec):
     """Returns (ok: bool, message: str)."""
     criticality, shape = spec
@@ -248,6 +377,15 @@ def validate_one(filename, spec):
         med = valid[len(valid) // 2]
         if abs(med) > 40:
             return False, f"median 30-day change over all cells is {med:+d}%: a biased base?"
+        # A kept last-good file passes every shape test forever; the live window must also be recent.
+        from datetime import date, datetime, timezone
+        end = (data.get('window') or {}).get('end')
+        try:
+            age = (datetime.now(timezone.utc).date() - date.fromisoformat(end)).days
+        except (TypeError, ValueError):
+            return False, "no window.end"
+        if age > 6:
+            return False, f"30-day window ends {end}, {age} days ago: the CPC step has not refreshed"
         # chirps_rain_fill.py: sparse CHIRPS block, parallel to fill.cells, only where CPC has no value.
         fl, extra = data.get('fill'), ''
         if fl is not None:
@@ -262,22 +400,27 @@ def validate_one(filename, spec):
             extra = f", CHIRPS fill {fl.get('n_valid')} cells to {(fl.get('window') or {}).get('end')}"
         # SPI (scripts/spi.py, added 2026-09-28), optional: a collector writes the percent layers without it when a
         # parameter file cannot be read. Where present: SPI x 100 as integers in -300..300, the same length as its
-        # percent layer, and only on cells that have a percent (one blank rule for both).
+        # layer, and only on cells with a reading (mm). Since 2026-09-28 (evening) arid cells keep their SPI where the
+        # percent is blank, so the rule is mm, not anom.
         fl, fw = fl or {}, (fl or {}).get('week') or {}
         spi_n = []
-        for key, arr, pct, size in (('spi', data.get('spi'), data['anom'], n), ('week.spi', wk.get('spi'), wk['anom'], n),
-                                    ('fill.spi', fl.get('spi'), fl.get('anom'), len(fl.get('cells') or [])),
-                                    ('fill.week.spi', fw.get('spi'), fw.get('anom'), len(fl.get('cells') or []))):
+        for key, arr, mm, size in (('spi', data.get('spi'), data.get('mm'), n), ('week.spi', wk.get('spi'), wk['mm'], n),
+                                   ('fill.spi', fl.get('spi'), fl.get('mm'), len(fl.get('cells') or [])),
+                                   ('fill.week.spi', fw.get('spi'), fw.get('mm'), len(fl.get('cells') or []))):
             if arr is None:
                 continue
-            if not isinstance(arr, list) or len(arr) != size or not isinstance(pct, list) or len(pct) != size:
-                return False, f"{key} is not parallel to its percent layer"
-            if any(v is not None and (type(v) is not int or not -300 <= v <= 300 or p is None) for v, p in zip(arr, pct)):
-                return False, f"{key} holds a value that is not an integer in -300..300, or sits on a cell without a percent"
+            if not isinstance(arr, list) or len(arr) != size or not isinstance(mm, list) or len(mm) != size:
+                return False, f"{key} is not parallel to its layer"
+            if any(v is not None and (type(v) is not int or not -300 <= v <= 300 or w is None) for v, w in zip(arr, mm)):
+                return False, f"{key} holds a value that is not an integer in -300..300, or sits on a cell without a reading"
             spi_n.append(f"{key} {sum(v is not None for v in arr)}")
         extra += f", SPI cells: {', '.join(spi_n)}" if spi_n else ", no SPI"
         return True, (f"ok — {(data.get('window') or {}).get('start')}..{(data.get('window') or {}).get('end')}, "
                       f"{len(valid)} cells, median {med:+d}%{extra}")
+    elif shape in ('rain_weeks', 'sst_weeks'):
+        if not isinstance(data, dict) or not data:
+            return False, f"no weekly archive yet ({notes[:60] if notes else 'no notes'})"
+        return (_check_rain_weeks if shape == 'rain_weeks' else _check_sst_weeks)(data, env.get('_meta'))
     elif shape == 'object':
         if data is None:
             return False, "data is null"

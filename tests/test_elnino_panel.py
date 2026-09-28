@@ -1500,6 +1500,21 @@ def main() -> int:
                 return list.length === (O.months ? 6 : 3) && head.startsWith('Outlook for ' + list[0].label) && tag.includes('A forecast, not observed') && strip.includes('forecast')
                     && document.getElementById('enso-mapwrap').classList.contains('is-modelled') && document.querySelectorAll('#enso-scrub [data-sst-ol]').length === list.length;
             }"""))
+            # 2026-09-28, fifth pass (owner: "the drought/ rain overlay in the outlook seems to have failed ... use real
+            # data real modelling ... the outlook adjusts to this live data"): the outlook paints the drought index of the
+            # three months to each forecast month (NMME joined with the 1951-2020 El Niño fit, observed months carried in),
+            # and every forecast month shows the official forecasts that name it.
+            check("the outlook paints a drought outlook that carries in the observed months, with its forecast marks", page.evaluate("""async () => {
+                const O = (await (await fetch('data/seasonal_outlook.json')).json()).data, m = O.months[0], W = (O.rain_model || {}).windows || [];
+                const key = document.getElementById('enso-legend').textContent, tag = document.getElementById('enso-maptag').textContent;
+                const ev = await fetch('data/enso_outlook_events.json').then(r => r.ok ? r.json() : null).catch(() => null);
+                const n = ev ? ev.data.events.filter(e => e.months.includes(m.key)).length : 0;
+                const marks = [...document.querySelectorAll('#enso-map .enso-pev.is-now')].reduce((k, x) => k + (+(x.querySelector('[data-n]') || {dataset: {n: 1}}).dataset.n), 0);
+                const col = document.querySelector('#enso-scrub [data-sst-ol="' + m.key + '"] .sc-c').textContent;
+                return Array.isArray(m.maps.rain_spi3) && m.maps.rain_spi3.length === 7488 && !!document.querySelector('.enso-rain-canvas')
+                    && /drought outlook/.test(key) && /drought outlook for/.test(tag) && W.length === O.months.length && W[0].observed.length > 0 && /observed/.test(tag)
+                    && marks === n && col === (n ? String(n) : '');
+            }"""))
         page.evaluate("showTab('ensowater')")
         page.evaluate("showTab('elnino')")
         page.wait_for_selector('[data-sst-view="now"]')
@@ -1526,11 +1541,15 @@ def main() -> int:
             # 2026-09-28 (owner: "the 30 d should have its own headlines ... only add headlines that can be a result or
             # impact of el nino"): a stop marks only the checked headlines of its own window, and the count on the track
             # is the same number.
-            check("the 7-day stop marks only the checked El Niño headlines of its own week, and the track counts them", page.evaluate("""async () => {
-                const E = (await (await fetch('data/enso_recent_events.json')).json()).data.events, w = (await (await fetch('data/rain_anomaly.json')).json()).data.week;
-                const n = E.filter(e => e.date_start <= w.end && e.date_end >= w.start).length;
+            # 2026-09-28, fifth pass (owner: "make sure teh 7 day automatically updates with new info"): the week also shows
+            # marks picked by rule every six hours from the Reported feeds (data/enso_auto_events.json), never unlabelled.
+            check("the 7-day stop marks the checked El Niño headlines of its own week plus the wire's, and the track counts them", page.evaluate("""async () => {
+                const E0 = (await (await fetch('data/enso_recent_events.json')).json()).data.events, w = (await (await fetch('data/rain_anomaly.json')).json()).data.week;
+                const A = await fetch('data/enso_auto_events.json').then(r => r.ok ? r.json() : null).then(j => j ? j.data.events : []).catch(() => []);
+                if (!A.every(e => e.checked === false && /^https:\\/\\//.test(e.source.url))) return false;
+                const E = E0.concat(A), n = E.filter(e => e.date_start <= w.end && e.date_end >= w.start).length;
                 const marks = [...document.querySelectorAll('#enso-map .enso-pev.is-now')].reduce((k, m) => k + (+(m.querySelector('[data-n]') || {dataset: {n: 1}}).dataset.n), 0), col = document.querySelector('#enso-scrub [data-sst-now="7"] .sc-c').textContent;
-                return n > 0 && marks === n && col === String(n) && E.every(e => ['attributed', 'consistent'].includes(e.enso_link) && /^https:\\/\\//.test(e.source.url));
+                return n > 0 && marks === n && col === String(n) && E0.every(e => ['attributed', 'consistent'].includes(e.enso_link) && /^https:\\/\\//.test(e.source.url));
             }"""))
         # 2026-09-28 (owner: "make wetter on 7 day and more drought be an overlay on 30 day"): the 7-day stop keeps the
         # 30-day picture as its base and stripes the week on top; the 30-day stop has no stripes. The Past El Niños
@@ -1546,10 +1565,29 @@ def main() -> int:
         page.click('[data-sst-now="7"]')
         page.wait_for_timeout(400)
         mons = page.evaluate("() => [...document.querySelectorAll('#enso-scrub [data-sst-mon]')].map(b => b.getAttribute('data-sst-mon'))")
-        check("the 2026 track carries six past months, then 30 and 7 days, then the outlook", len(mons) == 6 and page.evaluate("""() => {
-            const k = [...document.querySelectorAll('#enso-scrub .sc-track [data-i]')].map(b => b.dataset.sstMon ? 'm' : b.dataset.sstNow ? 'n' + b.dataset.sstNow : b.dataset.sstOl ? 'o' : '?').join('');
-            return /^m{6}n30n7o{6}$/.test(k);
+        check("the 2026 track carries six past months, then 30 days, the stored weeks and 7 days, then the outlook", len(mons) == 6 and page.evaluate("""() => {
+            const k = [...document.querySelectorAll('#enso-scrub .sc-track [data-i]')].map(b => b.dataset.sstMon ? 'm' : b.dataset.sstNow ? 'n' + b.dataset.sstNow : b.dataset.sstWk ? 'w' : b.dataset.sstOl ? 'o' : '?').join('');
+            return /^m{6}n30w{0,3}n7o{6}$/.test(k);
         }"""))
+        # 2026-09-28 (owner: "for next week make it automatically show last week too so store data"): stored calendar
+        # weeks (data/rain_weeks.json, data/sst_weeks.json) are their own stops: that week's sea, its 30 days with the week
+        # glazed on top, its own headlines, and a strip that names the week.
+        wks = page.evaluate("() => [...document.querySelectorAll('#enso-scrub [data-sst-wk]')].map(b => b.getAttribute('data-sst-wk'))")
+        if wks:
+            page.click(f'[data-sst-wk="{wks[-1]}"]')
+            page.wait_for_timeout(600)
+            check("a stored week paints that week's sea and rain, glazed over its own 30 days, with its own headlines", page.evaluate("""async end => {
+                const R = (await (await fetch('data/rain_weeks.json')).json()).data.weeks.filter(w => w.end === end)[0];
+                const E = (await (await fetch('data/enso_recent_events.json')).json()).data.events.filter(e => e.date_start <= R.end && e.date_end >= R.start).length;
+                const A = await fetch('data/enso_auto_events.json').then(r => r.ok ? r.json() : null).then(j => j ? j.data.events.filter(e => e.date_start <= R.end && e.date_end >= R.start).length : 0).catch(() => 0);
+                const head = document.querySelector('#enso-mapwrap > .enso-plate-h').textContent, key = document.getElementById('enso-legend').textContent;
+                const col = document.querySelector('#enso-scrub [data-sst-wk="' + end + '"] .sc-c').textContent;
+                return /Sea and rain, week /.test(head) && /^Week /.test(document.getElementById('enso-weekly').textContent)
+                    && (!R.d30 || (!!document.querySelector('#enso-map .enso-rain-over') && /darker where the week adds/.test(key) && /30 days to /.test(key)))
+                    && col === ((E + A) ? String(E + A) : '') && document.querySelector('#enso-scrub .sc-handle').getAttribute('aria-valuetext').startsWith('Week ');
+            }""", wks[-1]))
+            page.click('[data-sst-now="7"]')
+            page.wait_for_timeout(400)
         if mons:
             page.click(f'[data-sst-mon="{mons[-1]}"]')
             page.wait_for_timeout(500)

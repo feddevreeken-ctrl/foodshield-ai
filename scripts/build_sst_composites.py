@@ -43,6 +43,10 @@ Each winter's own maps also go to data/sst_winters/<label>.json (same grids, no
 agreement count), so the page can show one observed winter instead of a class
 average.
 
+Each rain map also carries rain_spi, the season's 3-month SPI on the scale of every other rain
+layer (scripts/sst_rain_spi.py says how). `--rain-spi-only` adds just that field to the files
+already in data/ and leaves every other byte of them as it was.
+
 Every winter is measured against 1991-2020, so older winters sit on a cooler
 baseline and their sea anomalies read cooler than they were against the
 climate of their day. (A trend-removed "relative" SST version shipped until
@@ -64,7 +68,8 @@ import numpy as np
 from scipy.io import netcdf_file
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import http_get, write_json  # noqa: E402
+from _common import DATA_DIR, http_get, write_json  # noqa: E402
+import sst_rain_spi  # noqa: E402  (rain_spi: the same seasons on the site's 3-month SPI scale)
 
 ERDDAP = "https://coastwatch.pfeg.noaa.gov/erddap/griddap"
 DS = "nceiErsstv5_LonPM180"
@@ -319,13 +324,14 @@ def build() -> dict:
         rain_base[key] = np.where(r >= ARID_MM_DAY, r, np.nan)  # arid or sea -> NaN
 
     winters = [w for w in el_nino_winters(oni) if w["year"] <= last_year]
-    per = {}  # (winter year, season) -> (SST anomaly C, rain change %)
+    per = {}  # (winter year, season) -> (SST anomaly C, rain change %, rain 3-month SPI)
     for w in winters:
         for key, _, _, months in SEASONS:
             s, r = _season_mean(sst, w["year"], months), _season_mean(rain, w["year"], months)
             if s is None or r is None:
                 continue
-            per[(w["year"], key)] = (s - sst_base[key], 100 * (r - rain_base[key]) / rain_base[key])
+            per[(w["year"], key)] = (s - sst_base[key], 100 * (r - rain_base[key]) / rain_base[key],
+                                     sst_rain_spi.season_spi(rain, w["year"], months, r.shape))
         if (w["year"], "DJF") not in per:
             raise RuntimeError(f"ERSST or PREC/L months missing for winter {w['label']}")
         w["nino34_c"] = round(_wmean(per[(w["year"], "DJF")][0], lats, lons, *BOXES["nino34"]), 2)
@@ -352,10 +358,12 @@ def build() -> dict:
                 agree = ((np.sign(pct) == np.sign(rain_c)) & (rain_c != 0)).sum(axis=0)
             ok = sst_c[np.isfinite(sst_c)]
             mk = f"{ckey}/{skey}"
+            rain_enc = _encode(rain_c)
             maps[mk] = {
                 "sst": _encode(sst_c, 10),
                 "sst_range_c": [round(float(ok.min()), 1), round(float(ok.max()), 1)],
-                "rain": _encode(rain_c),
+                "rain": rain_enc,
+                "rain_spi": sst_rain_spi.encode(np.mean([g[2] for g in got], axis=0), rain_enc)[0],
                 "rain_agree": [int(a) if np.isfinite(r) else None
                                for a, r in zip(agree.ravel(), rain_c.ravel())],
                 "n": len(got),
@@ -371,9 +379,9 @@ def build() -> dict:
         for skey, *_ in SEASONS:
             if (w["year"], skey) not in per:
                 continue
-            s, r = per[(w["year"], skey)]
-            ok = s[np.isfinite(s)]
-            wm[skey] = {"sst": _encode(s, 10), "rain": _encode(r),
+            s, r, z = per[(w["year"], skey)]
+            ok, r_enc = s[np.isfinite(s)], _encode(r)
+            wm[skey] = {"sst": _encode(s, 10), "rain": r_enc, "rain_spi": sst_rain_spi.encode(z, r_enc)[0],
                         "sst_range_c": [round(float(ok.min()), 1), round(float(ok.max()), 1)]}
             wb[skey] = {b: round(_wmean(s, lats, lons, *box), 2) for b, box in BOXES.items()}
         winter_maps[w["label"]] = {"label": w["label"], "class": cls_of[w["label"]], "peak_oni": w["peak_oni"],
@@ -406,6 +414,7 @@ def build() -> dict:
             "sea keeps a value near zero.",
             "Rain on land is NOAA PREC/L, a 2.5-degree grid built from rain gauges, shown as the percent "
             "change against the 1991-2020 mean for the same three months. It stops at 72N, north of all farmland.",
+            sst_rain_spi.NOTE,
             f"Land that averages under {ARID_MM_DAY} mm of rain a day in that season is left blank: a "
             "percent change of almost nothing says little. Sea cells are blank on the rain layer.",
             "Agreement counts how many of the class's winters moved the same way as the average, wetter "
@@ -450,6 +459,11 @@ def rain_checks(payload: dict, ckey: str = "very_strong") -> list[str]:
 
 
 def main() -> int:
+    if "--rain-spi-only" in sys.argv[1:]:
+        res = sst_rain_spi.add_rain_spi(DATA_DIR, load_precl()[0], SEASONS, WINTER_DIR)
+        print(f"[OK] rain_spi added to sst_composites.json and {len({k[0] for k in res['spi']})} winter files; "
+              f"cells with rain but no 3-month fit: {sum(res['gaps'].values())} over {len(res['gaps'])} maps")
+        return 0
     payload = build()
     check = payload.pop("_check")
     winter_maps = payload.pop("_winter_maps")

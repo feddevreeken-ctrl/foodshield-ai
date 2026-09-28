@@ -28,6 +28,9 @@ import refresh_sst_anomaly as W  # noqa: E402
 MONTHS = 6    # owner: "I want the temp to go back 6 months for the slider"
 LAST = 30     # the scrubber's 30-day stop pairs a 30-day sea mean with the 30-day rain
 OUT = Path(__file__).resolve().parent.parent / "data" / "sst_months.json"
+# The last30 fetch's dataset and daily rows, kept in this process for refresh_sst_weeks.py (the next run_all step),
+# so the weekly archive needs no second ERDDAP request (a 30-day fetch takes 80 s).
+LAST30: dict = {}
 
 
 def _month_bounds(y: int, m: int) -> tuple[datetime, datetime]:
@@ -38,6 +41,8 @@ def _month_bounds(y: int, m: int) -> tuple[datetime, datetime]:
 
 def _mean_field(ds: str, t0: datetime, t1: datetime):
     rows = W._fetch(ds, t0, t1)
+    LAST30.clear()
+    LAST30.update(ds=ds, rows=rows)
     lats = sorted({r["latitude"] for r in rows})
     lons = sorted({r["longitude"] for r in rows})
     li = {v: i for i, v in enumerate(lats)}
