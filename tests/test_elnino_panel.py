@@ -1535,14 +1535,14 @@ def main() -> int:
         # 2026-09-28 (owner: "make wetter on 7 day and more drought be an overlay on 30 day"): the 7-day stop keeps the
         # 30-day picture as its base and stripes the week on top; the 30-day stop has no stripes. The Past El Niños
         # button sits at the left end of the 2026 track.
-        check("the 7-day stop stripes the week over the 30-day picture, the 30-day stop does not, and Past El Niños sits left of the track", page.evaluate("""() => {
+        check("the 7-day stop glazes the week over the 30-day picture, the 30-day stop does not, and Past El Niños sits left of the track", page.evaluate("""() => {
             const over = !!document.querySelector('#enso-map .enso-rain-over'), key = document.getElementById('enso-legend').textContent;
             const btn = document.querySelector('#enso-scrub .sc-end[data-sst-view="past"]'), track = document.querySelector('#enso-scrub .sc-track');
-            return over && /last 30 days/.test(key) && /striped where unusual/.test(key) && !!btn && btn.getBoundingClientRect().right <= track.getBoundingClientRect().left;
+            return over && /last 30 days/.test(key) && /darker where the week adds/.test(key) && !!btn && btn.getBoundingClientRect().right <= track.getBoundingClientRect().left;
         }"""))
         page.click('[data-sst-now="30"]')
         page.wait_for_timeout(400)
-        check("the 30-day stop has no week overlay", page.evaluate("() => !document.querySelector('#enso-map .enso-rain-over') && !/striped where unusual/.test(document.getElementById('enso-legend').textContent)"))
+        check("the 30-day stop has no week overlay", page.evaluate("() => !document.querySelector('#enso-map .enso-rain-over') && !/darker where the week adds/.test(document.getElementById('enso-legend').textContent)"))
         page.click('[data-sst-now="7"]')
         page.wait_for_timeout(400)
         mons = page.evaluate("() => [...document.querySelectorAll('#enso-scrub [data-sst-mon]')].map(b => b.getAttribute('data-sst-mon'))")
