@@ -1377,7 +1377,7 @@ def main() -> int:
             for tab, labels in (
                 ('ensowater', ['No land layer', 'Shipping', 'Change nowEl Niño link']),
                 ('ensomoney', ['Staple prices', 'Grain imports', 'RealNominal', 'Price changeAgainst pattern']),
-                ('elnino', ['Sea-surface', 'Past El NiñosThis weekWeakModerateStrongVery strong']),
+                ('elnino', ['Sea-surface']),
                 ('ensoharvest', ['Production shock', 'Strongest crop', 'Coverage', 'Crop stress now', 'Teleconnections']),
                 ('ensolive', ['Rain pattern', 'Hotspots', 'IPC', 'Hazards', 'Headlines', 'Elsewhere'])):
                 page.evaluate('tab => showTab(tab)', tab)
@@ -1422,20 +1422,25 @@ def main() -> int:
         # 2026-09-28 (owner): the Ocean map can show the average December-February anomaly of past El Niño winters by
         # strength, from data/sst_composites.json. The strip, key and caption follow the slider; leaving Ocean resets it.
         page.evaluate("showTab('elnino')")
-        page.wait_for_selector('#enso-sst-past')
-        page.evaluate("(()=>{const r=document.getElementById('enso-sst-past'); r.value='4'; r.dispatchEvent(new Event('input'));})()")
-        page.wait_for_timeout(500)
-        check("the Ocean slider shows past very strong El Niño winters from the composite file", page.evaluate("""async () => {
+        page.wait_for_selector('[data-sst-cls="very_strong"]')
+        page.click('[data-sst-cls="very_strong"]')
+        page.wait_for_timeout(700)
+        check("the Ocean composite shows past very strong El Niño winters, sea and rain, from the composite file", page.evaluate("""async () => {
             const C = (await (await fetch('data/sst_composites.json')).json()).data, vs = C.classes.find(c => c.key === 'very_strong');
             const tag = document.getElementById('enso-maptag').textContent, key = document.getElementById('enso-legend').textContent;
             const strip = document.getElementById('enso-weekly').textContent, head = document.querySelector('#enso-mapwrap > .enso-plate-h').textContent;
-            return !!vs && tag.includes('not a forecast') && tag.includes(String(vs.n)) && key.includes('average of ' + vs.n + ' past winters')
-                && vs.events.every(e => key.includes(e.label)) && strip.includes('Very strong') && head.includes('very strong');
+            const cap = tag;  // 2026-09-28: the map description names the winters averaged
+            return !!vs && tag.includes('not a forecast') && key.includes('average of ' + vs.n + ' past winters') && key.includes('Rain on land')
+                && vs.events.every(e => cap.includes(e.label)) && strip.includes('Very strong') && /very strong El Niño winters, Dec/.test(head)
+                && !!document.querySelector('.enso-rain-canvas') && document.querySelectorAll('.enso-sst-ticks i').length === C.classes.reduce((n, c) => n + c.events.length, 0);
         }"""))
+        page.click('[data-sst-season="SON"]')
+        page.wait_for_timeout(500)
+        check("the Ocean composite season switch changes the maps and says so", page.evaluate("() => /Sep/.test(document.querySelector('#enso-mapwrap > .enso-plate-h').textContent) && /Sep/.test(document.getElementById('enso-weekly').textContent)"))
         page.evaluate("showTab('ensowater')")
         page.evaluate("showTab('elnino')")
-        page.wait_for_selector('#enso-sst-past')
-        check("leaving Ocean resets the sea-surface slider to this week", page.evaluate("() => document.getElementById('enso-sst-past').value === '0' && document.getElementById('enso-weekly').textContent.includes('CPC weekly')"))
+        page.wait_for_selector('[data-sst-view="now"]')
+        check("leaving Ocean resets the sea surface to this week and drops the rain layer", page.evaluate("""() => document.querySelector('[data-sst-view="now"]').getAttribute('aria-pressed') === 'true' && !document.querySelector('.enso-rain-canvas') && document.getElementById('enso-weekly').textContent.includes('CPC weekly')"""))
 
         print("\nTier 1: figures come from the feeds (court 2026-09-23)")
         src = (ROOT / "index.html").read_text()
