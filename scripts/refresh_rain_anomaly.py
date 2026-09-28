@@ -15,16 +15,33 @@ Data:
     (1.8 MB a day). The window ends on the newest day CPC has posted, usually one to two
     days behind today. CPC re-issues its newest days as late reports arrive.
   * Normal: the 1991-2020 daily long-term mean of the same CPC product, which
-    NOAA PSL publishes (PSL_LTM, read through THREDDS OPeNDAP as DAP2 binary in
-    ten-day pieces), taken for the same calendar days. There is deliberately
-    no fallback base: CPC's PREC/L monthly analysis was tried and rejected.
-    For the same month (August 2026) the real-time daily analysis sat 12%
-    below PREC/L at the median of well-gauged cells and 74% below where no
-    gauge reports, so a PREC/L base paints droughts that are not there. If PSL
-    is down the step fails and run_all keeps the last good file.
+    NOAA PSL publishes as precip.day.ltm.1991-2020.nc (365 calendar days, no
+    29 February; 29 February reads 28 February), taken for the same calendar
+    days. It is read from NORMAL_CACHE first: a committed, gzipped JSON built
+    once from PSL's file (PSL_FTP, 568 MB, NetCDF-3) by
+        python3 scripts/refresh_rain_anomaly.py --build-normal precip.day.ltm.1991-2020.nc
+    (needs numpy and scipy, which CI does not install and does not need). Per
+    calendar day and per 2.5-degree cell it holds the mean of the cell's
+    0.5-degree cells that have a normal (0.01 mm a day, integers), plus a
+    25-bit mask of which 0.5-degree cells those are, and the source file's
+    sha256. The normal never changes, so CI reads no PSL server at all. Only
+    if the cache is missing or unreadable is PSL's THREDDS OPeNDAP read
+    (PSL_LTM, DAP2 binary in ten-day pieces) as before. PSL THREDDS answered
+    503 and downloads.psl.noaa.gov 502 from 27 September 2026; PSL's FTP
+    (ftp.cdc.noaa.gov) still served the file, and the cache was built from it
+    on 28 September 2026. There is deliberately no fallback base: CPC's
+    PREC/L monthly analysis was tried and rejected. For the same month
+    (August 2026) the real-time daily analysis sat 12% below PREC/L at the
+    median of well-gauged cells and 74% below where no gauge reports, so a
+    PREC/L base paints droughts that are not there. If the cache and PSL both
+    fail the step fails and run_all keeps the last good file.
   * Each day, each 2.5-degree cell is the mean of its 0.5-degree land cells
-    that have a value in both the observations and the normal (up to 25: a
-    true cell mean, not a centre sample).
+    that have a normal (up to 25: a true cell mean, not a centre sample). The
+    observed mean is taken over exactly those 0.5-degree cells; a cell-day where
+    one of them has no observation is left out, so the observation and the
+    normal always average the same ground. (CPC's real-time land mask is the
+    normal's minus a few remote islands -- South Georgia, Marion, Easter,
+    Pitcairn, some days Hawaii -- so this drops almost nothing.)
   * Gauge mask. CPC's file also carries the number of reporting gauges per
     0.5-degree box. Away from reporting gauges the real-time analysis decays
     towards no rain (Indonesia, the Congo basin, the Amazon interior), so a
@@ -46,6 +63,7 @@ else.
 from __future__ import annotations
 
 import array
+import gzip
 import json
 import re
 import struct
@@ -60,11 +78,15 @@ CPC_RT = "https://ftp.cpc.ncep.noaa.gov/precip/CPC_UNI_PRCP/GAUGE_GLB/RT"
 CPC_FILE = "PRCP_CU_GAUGE_V1.0GLB_0.50deg.lnx.{d}.RT"
 PSL_LTM = "https://psl.noaa.gov/thredds/dodsC/Datasets/cpc_global_precip/precip.day.ltm.1991-2020.nc"
 PSL_PAGE = "https://psl.noaa.gov/data/gridded/data.cpc.globalprecip.html"
+PSL_FTP = "ftp://ftp.cdc.noaa.gov/Datasets/cpc_global_precip/precip.day.ltm.1991-2020.nc"
+NORMAL_CACHE = Path(__file__).resolve().parent.parent / "data" / "ref" / "cpc_rain_normal_1991_2020.json.gz"
 UA = {"User-Agent": "FoodShield-AI data refresh (github.com/feddevreeken-ctrl/foodshield-ai)"}
 
 DAYS, WEEK = 30, 7
 NEED_SHARE = 0.85          # share of the window's days a cell needs after the spike filter
-ARID_MM_DAY = 0.3
+# 0.5, not the composites' 0.3: over 7 or 30 days a normal of a few tenths of a mm a day is one shower, and the
+# dry-season percents it gives (+183% over southern Africa in September 2026) read as a wet spell that is not there.
+ARID_MM_DAY = 0.5
 SPIKE_X, SPIKE_MM = 20, 50
 MIN_GAUGES = 1.0          # mean gauge reports a day inside a 2.5-degree cell
 # Output grid: the composites' rain_grid.
@@ -139,15 +161,65 @@ def _dap_arrays(buf: bytes) -> list[array.array]:
     return out
 
 
+def _ltm_index(d: date, n: int) -> int:
+    """Index of d's calendar day on a 365-day (no 29 February: it reads 28 February) or 366-day axis."""
+    ref = 2001 if n == 365 else 2000
+    return date(ref, d.month, 28 if (d.month, d.day, ref) == (2, 29, 2001) else d.day).timetuple().tm_yday - 1
+
+
+def _cells_from_field(f: array.array) -> tuple[list[int], list]:
+    """A 0.5-degree normal on the rows of _cpc_day -> (per output cell, a 25-bit mask of its
+    0.5-degree cells that have a normal; per output cell, their mean in mm or None)."""
+    masks, means = [], []
+    for subs in CELL_SUBS:
+        m, t, k = 0, 0.0, 0
+        for i, s in enumerate(subs):
+            if f[s] >= 0:
+                m |= 1 << i
+                t += f[s]
+                k += 1
+        masks.append(m)
+        means.append(t / k if k else None)
+    return masks, means
+
+
+def _cache_normal(days: list[date]) -> dict:
+    """{day: (masks, means)} as _cells_from_field, from the committed NORMAL_CACHE."""
+    with gzip.open(NORMAL_CACHE, "rt", encoding="utf-8") as fh:
+        c = json.load(fh)
+    g = c["grid"]
+    if ((g["lat0"], g["lon0"], g["step_deg"], g["nlat"], g["nlon"]) != (LAT0, LON0, STEP, NLAT, NLON)
+            or len(c["days"]) != 365 or not all(len(row) == len(c["cells"]) for row in c["days"])
+            or len(c["mask"]) != len(c["cells"])):
+        raise RuntimeError(f"{NORMAL_CACHE.name}: grid or shape does not match this script")
+    masks = [0] * NCELL
+    for k, m in zip(c["cells"], c["mask"]):
+        masks[k] = m
+    out = {}
+    for d in days:
+        means = [None] * NCELL
+        for k, v in zip(c["cells"], c["days"][_ltm_index(d, 365)]):
+            means[k] = v / 100
+        out[d] = (masks, means)
+    return out
+
+
+def _normal(days: list[date]) -> tuple[dict, str]:
+    """The committed cache first, PSL THREDDS second; never another product (see the docstring)."""
+    try:
+        return _cache_normal(days), f"committed cache data/ref/{NORMAL_CACHE.name}, built from {PSL_FTP}"
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError) as e:
+        print(f"[WARN] {NORMAL_CACHE.name} unusable ({e}); reading PSL THREDDS")
+    return {d: _cells_from_field(f) for d, f in _psl_normal(days).items()}, f"PSL THREDDS {PSL_LTM}"
+
+
 def _psl_normal(days: list[date]) -> dict:
     """{day: 1991-2020 daily mean in mm on the 0.5-degree rows of _cpc_day}, from PSL's LTM."""
     dds = http_get(f"{PSL_LTM}.dds", timeout=60, headers=UA, retries=2).text
     m = re.search(r"Float32 precip\[time = (\d+)\]\[lat = 360\]\[lon = 720\]", dds)
     if not m or m.group(1) not in ("365", "366"):
         raise RuntimeError("PSL daily LTM shape changed")
-    ref = 2001 if m.group(1) == "365" else 2000  # a no-leap or a leap day axis
-    idx = [date(ref, d.month, 28 if (d.month, d.day, ref) == (2, 29, 2001) else d.day).timetuple().tm_yday - 1
-           for d in days]
+    idx = [_ltm_index(d, int(m.group(1))) for d in days]
     # PSL rows run north to south (89.75N first): 72.25N..57.25S is rows 35..294.
     p0, p1 = int(round((89.75 - 72.25) / 0.5)), int(round((89.75 + 57.25) / 0.5))
     runs = []
@@ -176,22 +248,24 @@ def _psl_normal(days: list[date]) -> dict:
 
 # --- grid -----------------------------------------------------------------
 
-def _cell_day(day: tuple[array.array, array.array], norm: array.array) -> list:
-    """One day: per output cell, (observed mm, normal mm, gauge reports) over 0.5-degree cells
-    valid in both the observations and the normal."""
+def _cell_day(day: tuple[array.array, array.array], norm: tuple[list[int], list]) -> list:
+    """One day: per output cell, (observed mm, normal mm, gauge reports) over the 0.5-degree cells
+    that have a normal; None where there are none or one of them has no observation that day."""
     obs, gauges = day
+    masks, means = norm
     out = []
-    for subs in CELL_SUBS:
-        o = n = g = 0.0
+    for subs, m, nv in zip(CELL_SUBS, masks, means):
+        o = g = 0.0
         k = 0
-        for s in subs:
-            ov, nv = obs[s], norm[s]
-            if ov >= 0 and nv >= 0:
-                o += ov
-                n += nv
+        for i, s in enumerate(subs):
+            if m >> i & 1:
+                if obs[s] < 0:
+                    k = 0
+                    break
+                o += obs[s]
                 g += max(0.0, gauges[s])
                 k += 1
-        out.append((o / k, n / k, g) if k else None)
+        out.append((o / k, nv, g) if k and nv is not None else None)
     return out
 
 
@@ -247,13 +321,14 @@ def build() -> tuple[dict, dict]:
     if len(days) < NEED_SHARE * DAYS or len(wdays) < NEED_SHARE * WEEK:
         raise RuntimeError(f"CPC has {len(days)}/{DAYS} days and {len(wdays)}/{WEEK} this week")
 
-    norm = _psl_normal(days)  # no fallback base: see the module docstring
+    norm, normal_from = _normal(days)  # no fallback base: see the module docstring
     per = {d: _cell_day(_cpc_day(d), norm[d]) for d in days}
     del norm
     c30, c7, dropped, ungauged = _windows(per, days, wdays)
 
     anom, wanom = _pct(c30), _pct(c7)
-    wmm = [None if x is None else int(round(x[0] * len(wdays))) for x in c7]
+    tot = lambda cells, i, n: [None if x is None else int(round(x[i] * n)) for x in cells]
+    wmm = tot(c7, 0, len(wdays))
     missing = [(start + timedelta(days=i)).isoformat() for i in range(DAYS)
                if start + timedelta(days=i) not in listed]
     payload = {
@@ -264,13 +339,16 @@ def build() -> tuple[dict, dict]:
         "window": {"start": start.isoformat(), "end": end.isoformat(), "days": len(days)},
         "base": "1991-2020",
         "base_source": "NOAA PSL daily long-term mean 1991-2020 of the same CPC product",
+        "base_read_from": normal_from,
         "anom": anom,
         "n_valid": sum(v is not None for v in anom),
+        # The baseline in millimetres beside what fell, so a reader sees the excess or shortfall itself.
+        "mm": tot(c30, 0, len(days)), "norm_mm": tot(c30, 1, len(days)),
         "week": {"start": wstart.isoformat(), "end": end.isoformat(), "days": len(wdays),
                  "anom": wanom, "n_valid": sum(v is not None for v in wanom),
-                 "mm": wmm,
-                 "mm_encoding": "row-major from the southern edge, observed rain in whole millimetres "
-                                "over the week, null over sea or missing"},
+                 "mm": wmm, "norm_mm": tot(c7, 1, len(wdays)),
+                 "mm_encoding": "row-major from the southern edge, whole millimetres over the window: mm what "
+                                "fell, norm_mm the 1991-2020 normal for the same days; null over sea or missing"},
         "min_gauges_per_day": MIN_GAUGES,
         "cells_without_gauges": ungauged,
         "spike_cell_days_dropped": len(dropped),
@@ -312,7 +390,8 @@ def main() -> int:
     payload, diag = build()
     path = write_json("rain_anomaly.json", payload,
                       source="NOAA CPC Global Unified Gauge-Based daily precipitation (CPC FTP); "
-                             "1991-2020 daily normal of the same product (NOAA PSL THREDDS)",
+                             "1991-2020 daily normal of the same product (NOAA PSL precip.day.ltm.1991-2020.nc, "
+                             "read from the " + payload["base_read_from"].split(",")[0] + ")",
                       notes=("Observed rain on land over the last 30 and 7 days as a percent change against "
                              "1991-2020 for the same calendar days, on the El Nino Ocean map's 2.5-degree land "
                              "grid (same grid as sst_composites.json rain_grid). Gauge analysis, not a model."),
@@ -337,5 +416,61 @@ def main() -> int:
     return 0
 
 
+def build_normal_cache(nc_path: str) -> int:
+    """One-off, by hand: PSL's precip.day.ltm.1991-2020.nc (NetCDF-3, from PSL_FTP) -> NORMAL_CACHE.
+    Imports numpy and scipy here only, so the CI collector stays requests-only."""
+    import hashlib
+    import numpy as np
+    from scipy.io import netcdf_file
+
+    raw = Path(nc_path).read_bytes()
+    f = netcdf_file(nc_path, "r", mmap=False)
+    lat, lon, pr = f.variables["lat"][:], f.variables["lon"][:], f.variables["precip"]
+    climo = f.variables["time"].climo_period.decode()
+    if pr.shape != (365, 360, 720) or abs(lat[0] - 89.75) > 1e-3 or abs(lon[0] - 0.25) > 1e-3 \
+            or climo != "1991/01/01 - 2020/12/31":
+        raise RuntimeError(f"unexpected LTM file: {pr.shape}, lat0 {lat[0]}, lon0 {lon[0]}, {climo}")
+    # Rows north first: 72.25N..57.25S is rows 35..294; flip to the CPC order (south first).
+    band = np.asarray(pr[:, 35:295, :], dtype=np.float64)[:, ::-1, :].reshape(365, NSUB)
+    valid = (band >= 0) & (band < 1e5)
+    # The land mask is the 0.5-degree cells with a normal on every day. In the 2021 file 3 July
+    # also carries 4,463 sea cells averaged from one year (valid_yr_count 1), and four other days
+    # one cell each: not land, left out.
+    land = valid.all(0)
+    odd = [int(i) for i in np.nonzero((valid != land).any(1))[0]]
+    print(f"[build] {int(land.sum())} land 0.5-degree cells; day indexes with extra cells left out: {odd}")
+    subs = np.array(CELL_SUBS)                      # NCELL x 25
+    v = land[subs]
+    cnt = v.sum(1)
+    cells = np.nonzero(cnt)[0]
+    masks = (v[cells] * (1 << np.arange(SUB * SUB))).sum(1)
+    means = np.where(v[cells][None], band[:, subs[cells]], 0.0).sum(2) / cnt[cells]
+    out = {
+        "what": "1991-2020 daily long-term mean of NOAA CPC Global Unified Gauge-Based daily precipitation "
+                "(0.5 degree), averaged to the 2.5-degree cells of refresh_rain_anomaly.py",
+        "source_file": PSL_FTP, "source_page": PSL_PAGE,
+        "source_bytes": len(raw), "source_sha256": hashlib.sha256(raw).hexdigest(),
+        "source_history": f.history.decode(), "climo_period": climo,
+        "built": date.today().isoformat(),
+        "built_by": "python3 scripts/refresh_rain_anomaly.py --build-normal precip.day.ltm.1991-2020.nc",
+        "grid": {"lat0": LAT0, "lon0": LON0, "step_deg": STEP, "nlat": NLAT, "nlon": NLON},
+        "cells_encoding": "output cell index, row-major from the southern edge; only cells with a normal",
+        "mask_encoding": "per cell, bit i set = its 0.5-degree cell i // 5 rows north and i % 5 columns east "
+                         "of the south-west corner has a normal on every day of the year; the mean is over "
+                         "those cells (3 July's extra one-year sea cells are left out)",
+        "days_encoding": "365 calendar days, 1 January first, no 29 February; per day, per listed cell, "
+                         "the mean normal in 0.01 mm per day (integers)",
+        "cells": cells.tolist(), "mask": masks.tolist(),
+        "days": np.rint(means * 100).astype(int).tolist(),
+    }
+    f.close()
+    NORMAL_CACHE.parent.mkdir(parents=True, exist_ok=True)
+    NORMAL_CACHE.write_bytes(gzip.compress(json.dumps(out, separators=(",", ":")).encode(), 9, mtime=0))
+    print(f"[OK] wrote {NORMAL_CACHE} ({len(cells)} cells, {NORMAL_CACHE.stat().st_size / 1e6:.2f} MB)")
+    return 0
+
+
 if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--build-normal":
+        raise SystemExit(build_normal_cache(sys.argv[2]))
     raise SystemExit(main())

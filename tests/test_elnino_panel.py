@@ -1037,10 +1037,13 @@ def main() -> int:
         }""")
         page.mouse.move(land['x'],land['y'])
         # 2026-09-28 (owner: "it should show rain that there is this week"): over land the readout quotes the last
-        # 30 days of rain when data/rain_anomaly.json has the cell, never a sea temperature.
+        # 30 days of rain when data/rain_anomaly.json has the cell, never a sea temperature. Later that day (owner:
+        # "when hovering over a country you get both of the info"): it is the only hover on the sea layer, so it
+        # names the country and no crop tooltip opens.
         ro_land = page.locator('.enso-sst-readout')
-        check("over land the readout quotes rain, never a sea temperature",
-              not ro_land.is_visible() or ('%' in ro_land.inner_text() and '°C' not in ro_land.inner_text()))
+        check("over land the readout names the country and quotes rain, never a sea temperature, and no crop tooltip opens",
+              ro_land.is_visible() and '°C' not in ro_land.inner_text() and len(ro_land.inner_text().split('\n')[0]) > 2
+              and page.evaluate("() => ![...document.querySelectorAll('#enso-map .leaflet-tooltip')].some(t => /measured|coverage|log points/.test(t.textContent))"))
         page.mouse.move(1,1)
         check("SST readout hides on pointer leave", not page.locator('.enso-sst-readout').is_visible())
         collapse = []
@@ -1381,7 +1384,7 @@ def main() -> int:
             for tab, labels in (
                 ('ensowater', ['No land layer', 'Shipping', 'Change nowEl Niño link']),
                 ('ensomoney', ['Staple prices', 'Grain imports', 'RealNominal', 'Price changeAgainst pattern']),
-                ('elnino', ['Sea-surface', 'Past El NiñosThis weekOutlook']),
+                ('elnino', ['Sea-surface', 'Past El NiñosNowOutlook']),
                 ('ensoharvest', ['Production shock', 'Strongest crop', 'Coverage', 'Crop stress now', 'Teleconnections']),
                 ('ensolive', ['Rain pattern', 'Hotspots', 'IPC', 'Hazards', 'Headlines', 'Elsewhere'])):
                 page.evaluate('tab => showTab(tab)', tab)
@@ -1455,6 +1458,14 @@ def main() -> int:
                 && strip.includes('Niño 3.4 ' + (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(1))
                 && document.querySelector('[data-sst-win="2015-16"]').getAttribute('aria-pressed') === 'true' && !!document.querySelector('.enso-rain-canvas');
         }"""))
+        # 2026-09-28 (owner: "include where there were natural events"): the winter's sourced events are marked on the
+        # map, one https source each; the time bar's thumb sits on the pressed view.
+        check("a past winter marks its sourced natural events, and the time bar thumb sits on Past", page.evaluate("""async () => {
+            const E = (await (await fetch('data/enso_past_events.json')).json()).data.events.filter(e => e.winter === '2015-16');
+            const marks = document.querySelectorAll('#enso-map .enso-pev').length, bar = document.querySelector('#enso-controls .enso-timebar');
+            return E.length > 0 && marks === E.length && E.every(e => /^https:\\/\\//.test(e.source.url))
+                && bar.dataset.v === 'past' && bar.style.getPropertyValue('--i').trim() === '0';
+        }"""))
         if page.locator('#enso-controls [data-sst-view="outlook"]').count():
             page.click('#enso-controls [data-sst-view="outlook"]')
             page.wait_for_timeout(500)
@@ -1474,6 +1485,15 @@ def main() -> int:
                 && !!document.querySelector('.enso-rain-canvas') === /last 30 days/.test(key)
                 && document.getElementById('enso-weekly').textContent.includes('CPC weekly');
         }"""))
+        # 2026-09-28 (owner: "doesnt show the live if theres a lot of rainfall this month/ week or drought"): observed
+        # rain now, the last 30 days or the last 7, from data/rain_anomaly.json; no past-event marks on this view.
+        if page.locator('[data-rain-win="7"]').count():
+            page.click('[data-rain-win="7"]')
+            page.wait_for_timeout(400)
+            check("the Now view switches observed rain to the last 7 days and says so in key and caption", page.evaluate("""() =>
+                /last 7 days/.test(document.getElementById('enso-legend').textContent) && /last 7 days/.test(document.getElementById('enso-maptag').textContent)
+                && document.querySelector('[data-rain-win="7"]').getAttribute('aria-pressed') === 'true' && !document.querySelector('#enso-map .enso-pev')"""))
+            page.click('[data-rain-win="30"]')
 
         print("\nTier 1: figures come from the feeds (court 2026-09-23)")
         src = (ROOT / "index.html").read_text()

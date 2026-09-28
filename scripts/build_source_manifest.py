@@ -477,6 +477,13 @@ SOURCES = [
         "mode": "forecast",
     },
     {
+        "key": "rain_anomaly",
+        "file": "rain_anomaly.json",
+        "label": "NOAA CPC gauge rain on land, last 30 and 7 days vs 1991-2020 (same-product daily normal)",
+        "cadence": "6-hourly fetch / daily upstream (1-2d lag, newest days re-issued)",
+        "mode": "live",
+    },
+    {
         "key": "imf_food_cpi",
         "file": "imf_food_cpi.json",
         "label": "IMF CPI — food and non-alcoholic beverages, year-on-year",
@@ -525,6 +532,7 @@ DATA_DATE = {
     "portwatch": ("latest_date", "daily"),
     "portwatch_history": ("end", "daily"),
     "sst_anomaly": ("time_end", "daily"),
+    "rain_anomaly": ("end", "daily"),  # window.end / week.end: the newest CPC day
     "enso_bulletins": ("published", "weekly"),
     "commodity_news": ("published_at", "daily"),
     "enso_news": ("published_at", "daily"),
@@ -562,6 +570,9 @@ def payload_count(key, payload):
     # Data Status page counts stories here, not commodities.
     if key in ("commodity_news", "enso_news"):
         return len(payload.get("items") or [])
+    # Land cells with a 30-day reading, not the payload's 15 keys.
+    if key == "rain_anomaly":
+        return int(payload.get("n_valid") or 0)
     # The atlas's unit is the corridor, not the commodity: a bare key count would
     # publish "46" on the Data Status page for a file that ships 4,000+ flows.
     if key == "commodity_flows":

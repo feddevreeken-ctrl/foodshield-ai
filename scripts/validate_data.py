@@ -128,6 +128,9 @@ EXPECTED_FILES = {
     'enso_situation.json':        ('soft',     'dict_or_empty'),
     'enso_strengths.json':        ('soft',     'dict_or_empty'),
     'seasonal_outlook.json':      ('soft',     'dict_or_empty'),  # NMME outlook maps, monthly upstream
+    # Observed rain now (CPC gauge analysis, 30 and 7 days vs 1991-2020) for the El Nino map.
+    # SOFT: on an upstream failure run_all keeps the last good file, which goes stale, not wrong.
+    'rain_anomaly.json':          ('soft',     'rain_grid'),
     # Build-time commodity interpretation. SOFT, and additionally listed in
     # OPTIONAL_FILES below: on a repo that has never run the step (no provider key
     # and no prior build) the file legitimately does not exist yet.
@@ -229,6 +232,23 @@ def validate_one(filename, spec):
     elif shape == 'dict_or_empty':
         if data is None or (isinstance(data, dict) and not data):
             return True, f"empty (allowed) — {notes[:60] if notes else 'no notes'}"
+    elif shape == 'rain_grid':
+        # refresh_rain_anomaly.py: the page paints anom and week.anom cell by cell on the grid.
+        if not isinstance(data, dict) or not data:
+            return False, f"no rain grid yet ({notes[:60] if notes else 'no notes'})"
+        g, wk = data.get('grid') or {}, data.get('week') or {}
+        n = (g.get('nlat') or 0) * (g.get('nlon') or 0)
+        for key, arr in (('anom', data.get('anom')), ('week.anom', wk.get('anom')), ('week.mm', wk.get('mm'))):
+            if not isinstance(arr, list) or len(arr) != n or n == 0:
+                return False, f"{key} is not a {g.get('nlat')}x{g.get('nlon')} grid"
+        valid = sorted(v for v in data['anom'] if isinstance(v, (int, float)))
+        if len(valid) < 1000 or sum(v is not None for v in wk['anom']) < 1000:
+            return False, f"only {len(valid)} valid 30-day cells (expected ~1,800)"
+        med = valid[len(valid) // 2]
+        if abs(med) > 40:
+            return False, f"median 30-day change over all cells is {med:+d}%: a biased base?"
+        return True, (f"ok — {(data.get('window') or {}).get('start')}..{(data.get('window') or {}).get('end')}, "
+                      f"{len(valid)} cells, median {med:+d}%")
     elif shape == 'object':
         if data is None:
             return False, "data is null"
