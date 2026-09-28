@@ -48,9 +48,11 @@ Data:
     (scripts/build_chirps_spi_params.py -> data/ref/chirps3_spi_params_1991_2020.json.gz: p6
     and p1 rows, pentad of year minus one) by scripts/spi.py, with that build's own rule: a
     total under 1 mm (the archive's whole-mm floor) gets the middle of the dry class, (dry
-    years + 1) / 62. SPI x 100, integers clamped to -300..300. Null where the fill's percent is
-    null (CPC has the layer, or arid) or the window has no fit (fewer than 15 of 30 wet years,
-    or a frozen CHIRPS record at tiny islands and along 57.5-60N). Known small bias: the live
+    years + 1) / 62. SPI x 100, integers clamped to -300..300. Null where the fill has no
+    reading on that layer (CPC has it) or the window has no fit (a 1991-2020 normal under 0.1
+    mm a day, fewer than 15 of 30 wet years, or a frozen CHIRPS record at tiny islands and along
+    57.5-60N). Arid cells (percent blank, normal under 0.5 mm a day) keep their SPI since 28
+    September 2026 (see refresh_rain_anomaly.py). Known small bias: the live
     Early Estimates are float files, the fit's archive floors each pixel, so the live SPI reads
     a little wet (95th percentile of cells +0.03 for a pentad, +0.04 for six; build's check).
     If the parameter file cannot be read the fill is written without SPI.
@@ -324,7 +326,7 @@ def fill(need30: list[bool], need7: list[bool], arid_mm_day: float) -> tuple[dic
         s = {}
         for kind, arr, nd in (("p6", a30, days30), ("p1", a7, days7)):
             fits, m = SPI.chirps_fits((LAT0, LON0, STEP, NLAT, NLON), kind, p - 1)
-            s[kind] = [None if x is None or pct(x) is None or k not in fits
+            s[kind] = [None if x is None or k not in fits
                        else SPI.to_x100(SPI.spi_chirps(x[0] * nd, nd, fits[k], m["zero_mm"], m["n_years"]))
                        for k, x in zip(cells, arr)]
         block["spi"], block["week"]["spi"] = s["p6"], s["p1"]
@@ -334,7 +336,7 @@ def fill(need30: list[bool], need7: list[bool], arid_mm_day: float) -> tuple[dic
                     f"for the six pentads (spi) and the one pentad (week.spi) ending at pentad {p} of the year; a "
                     "total under zero_mm gets the middle of the dry class, (dry years + 1) / 62"),
             "encoding": ("spi and week.spi: SPI x 100 as integers, parallel to cells, clamped to -300..300; null where "
-                         "that layer's anom is null or the window has no 1991-2020 fit"),
+                         "that layer's mm is null or the window has no 1991-2020 fit; set on arid cells too"),
             "n_valid": sum(v is not None for v in s["p6"]), "week_n_valid": sum(v is not None for v in s["p1"]),
         }
         block["notes"].append("SPI for these cells is against CHIRPS's own 1991-2020 record of the same pentads, on "

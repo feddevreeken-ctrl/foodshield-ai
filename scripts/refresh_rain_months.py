@@ -34,11 +34,15 @@ scripts/spi.py and the calendar month's 1991-2020 fit of the same product:
 data/ref/cpc_spi_params_1991_2020.json.gz (nominal month length, February 28
 days; 0.5 mm dry class) and data/ref/chirps3_spi_params_1991_2020.json.gz (CHIRPS
 v3.0 final monthly files; 1 mm dry class). SPI x 100, integers in -300..300;
-null where the percent is null or there is no fit. A fetched month feeds its
+null where there is no reading or no fit (not blanked with the percent's arid
+mask since 28 September 2026). A fetched month feeds its
 unrounded mean rain per day (spi_from "rate"); months cached before SPI existed
 get it once from their stored whole-mm totals (spi_from "whole_mm", at most 0.5
 mm off over the month; on the live 30-day layer of 28 September 2026 that moved
 SPI by 0.01 median, 0.03 at the 95th percentile, 0.10 at most) until refetched.
+Each month records spi_params (spi.params_id(), the parameter files' hash); when
+the fits are rebuilt, a cached month's SPI is recomputed the same way, from its
+whole-mm totals.
 
 Pure Python (requests only), like the live collector.
 """
@@ -236,17 +240,17 @@ def _add_spi(rec: dict, cpc_cells: list | None, chirps: list | None) -> None:
         fits, s = SPI.cpc_fits(g, "month", m - 1)
         rate = ([None if x is None else x[0] for x in cpc_cells] if cpc_cells is not None
                 else [None if v is None else v / ndays for v in cp["mm"]])
-        cp["spi"] = [None if r is None or a is None or k not in fits
+        cp["spi"] = [None if r is None or k not in fits
                      else SPI.to_x100(SPI.spi_cpc(r, fits[k], SPI.MONTH_DAYS[m - 1], s["zero_mm"], s["clip"]))
-                     for k, (r, a) in enumerate(zip(rate, cp["anom"]))]
+                     for k, r in enumerate(rate)]
         cp["spi_from"] = "rate" if cpc_cells is not None else "whole_mm"
     fl = rec.get("fill")
     if fl and (chirps is not None or "spi" not in fl):
         fits, s = SPI.chirps_fits(g, "month", m - 1)
         tot = [chirps[k][0] * ndays for k in fl["cells"]] if chirps is not None else fl["mm"]
-        fl["spi"] = [None if t is None or a is None or k not in fits
+        fl["spi"] = [None if t is None or k not in fits
                      else SPI.to_x100(SPI.spi_chirps(t, ndays, fits[k], s["zero_mm"], s["n_years"]))
-                     for k, t, a in zip(fl["cells"], tot, fl["anom"])]
+                     for k, t in zip(fl["cells"], tot)]
         fl["spi_from"] = "rate" if chirps is not None else "whole_mm"
 
 
@@ -354,10 +358,19 @@ def build() -> tuple[dict, dict]:
         normal_from = diag.get("normal_from") or normal_from
     if not months:
         raise RuntimeError("no complete month available")
+    try:
+        sig = SPI.params_id()
+    except OSError as e:
+        sig = None
+        print(f"[WARN] SPI parameter files unreadable: {e}")
     for rec in months:
         d = diags.get(rec["month"]) or {}
+        if sig and rec.get("spi_params") != sig:  # fits rebuilt since this month's SPI: recompute it
+            for blk in (rec["cpc"], rec.get("fill") or {}):
+                blk.pop("spi", None)
         try:  # an addition: the month stands without it
             _add_spi(rec, (d.get("cpc") or {}).get("cells"), d.get("chirps"))
+            rec["spi_params"] = sig
         except (OSError, ValueError, KeyError, TypeError, IndexError, RuntimeError) as e:
             print(f"[WARN] {rec['month']} SPI left out: {type(e).__name__}: {e}")
 
@@ -385,8 +398,8 @@ def build() -> tuple[dict, dict]:
                      "n_valid_cpc and n_fill count non-null percents."),
         "spi_encoding": ("cpc.spi (grid, as cpc.anom) and fill.spi (parallel to fill.cells): Standardized "
                          "Precipitation Index of the month x 100 as integers, clamped to -300..300 (-300 = -3 or "
-                         "below); null where the percent is null or the cell has no 1991-2020 fit for that calendar "
-                         "month. spi_from: 'rate' = from the unrounded mean rain per day, 'whole_mm' = from the "
+                         "below); null where mm is null (no reading) or the cell has no 1991-2020 fit for that calendar "
+                         "month; set on arid cells too, where anom is null. spi_from: 'rate' = from the unrounded mean rain per day, 'whole_mm' = from the "
                          "stored whole-mm total (months cached before SPI was added)."),
         "spi_params": {"cpc": f"data/ref/{SPI.CPC_PARAMS.name}", "fill": f"data/ref/{SPI.CHIRPS_PARAMS.name}"},
         "min_gauges_per_day": R.MIN_GAUGES, "arid_mm_day": R.ARID_MM_DAY, "need_share": R.NEED_SHARE,

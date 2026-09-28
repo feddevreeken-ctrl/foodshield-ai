@@ -71,9 +71,24 @@ q > 0, gets the middle of the dry class, invnorm(q / 2) (the "centre of mass" of
 is SPI -1.28 where q = 0.2, -0.97 where q = 1/3 (the most the 2/3 rule allows); hence fewer 7-day
 values under -2 than normal. SPI is clipped to +-SPI_CLIP (1 in 740; 30 years cannot tell rarer).
 Null, no SPI: where the cell's live 1991-2020 normal over the window ending on the block's end
-day is under ARID_MM_DAY (0.5 mm a day, the live arid mask; for months, the month's normal), or
+day is under SPI_ARID_MM_DAY (d7 0.5 mm a day, the live arid mask; d30 and month 0.1, see below;
+for months, the month's normal), or
 fewer than MIN_NONZERO (2/3) of the values are over ZERO_MM ("20 of 30 years"): 220 of 330
 pooled windows, 20 of 30 months.
+
+Since 28 September 2026 the 30-day (six-pentad) and monthly fits reach down to a normal of
+SPI_ARID_MM_DAY (0.1 mm a day) instead of the live percent's arid mask (0.5): inland Australia's
+wet August 2026 (BoM drought statement, 7 September) had no fit and read blank on every layer.
+Checked before adopting, on the cell-windows the change adds (normal 0.1-0.5 mm a day), share
+of the 30 years under their own fit below -1 / above +1 (normal 15.9 each), and out of sample
+(fit on the odd years, SPI of the even ones; the old population's figures in brackets):
+    CPC d30     16.9 / 15.9 (15.9 / 15.8);  out of sample 18.9 / 18.1 (17.7 / 18.1)
+    CPC month   16.8 / 16.1 (16.1 / 16.0)
+    CHIRPS p6   13.5 / 15.8 (16.1 / 16.0);  out of sample 18.6 / 17.9 (18.2 / 18.1)
+    CHIRPS month 12.8 / 15.7 (16.1 / 16.0); out of sample 17.1 / 18.6 (18.1 / 18.2)
+The 7-day and single-pentad fits keep 0.5: there most added windows are dry-class years and the
+scale is off -- CPC d7 19.8 / 14.7 (out of sample 22.0 / 16.0), CHIRPS p1 4.5 / 13.3 with 4.5%
+above +2 (normal 2.3) -- and capping the dry share at 1 in 6 fixed CPC d7 but not CHIRPS p1.
 
 Storage (PARAMS, gzipped JSON, 1.6 MB): cells lists the output cells (row-major from the south)
 with a fit; d7 and d30 (73 ends) and month (12) hold rows "a", "b", "q" parallel to cells:
@@ -106,6 +121,9 @@ POOL = 5                                 # end days pooled either side of each p
 ZERO_MM = 0.5                            # window total under this is the dry class
 MIN_NONZERO = 2 / 3                      # share of values over ZERO_MM a fit needs ("20 of 30 years")
 SPI_CLIP = 3.0
+# A window whose 1991-2020 normal is under this (mm a day) gets no fit. d30 and month reach below the live percent's
+# arid mask (R.ARID_MM_DAY); d7 does not (the docstring has the calibration that decided it).
+SPI_ARID_MM_DAY = {"d7": R.ARID_MM_DAY, "d30": 0.1, "month": 0.1}
 LN_SCALE = 1000                          # a, b = round(LN_SCALE * ln(alpha, beta)): 0.1% steps
 MONTH_DAYS = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
 KINDS = {"d7": 7, "d30": 30}
@@ -335,7 +353,7 @@ def build(folder: Path) -> int:
         else:
             a, b, q, fitted = _fit_blocks(win[kind], POOL, _zero_rate(kind))
         normal = norms[kind][[e - 1 for e in ENDS]] if kind != "month" else norms["month"]
-        fitted &= normal >= R.ARID_MM_DAY
+        fitted &= normal >= SPI_ARID_MM_DAY[kind]
         fits[kind] = (a, b, q, fitted)
         samples[kind] = win[kind][:, [e - 1 for e in ENDS]] if kind != "month" else win["month"]  # years x rows x cells
     keep = np.logical_or.reduce([f[3].any(0) for f in fits.values()])      # cells with at least one fit
@@ -353,12 +371,14 @@ def build(folder: Path) -> int:
         "ends": list(ENDS), "pool_end_days": POOL,
         "block_rule": "a window ending on day-of-year d (365-day calendar, 29 February reads 28 February) "
                       "uses d7/d30 row ((d + 2) // 5 - 1) % 73, the nearest end; month rows are January..December",
-        "zero_mm": ZERO_MM, "min_nonzero_share": MIN_NONZERO, "arid_mm_day": R.ARID_MM_DAY, "spi_clip": SPI_CLIP,
+        "zero_mm": ZERO_MM, "min_nonzero_share": MIN_NONZERO, "arid_mm_day": R.ARID_MM_DAY,
+        "spi_arid_mm_day": SPI_ARID_MM_DAY, "spi_clip": SPI_CLIP,
         "ln_scale": LN_SCALE,
         "encoding": "cells: output cell indexes, row-major from the southern edge, with at least one fit. "
                     "Per kind, a/b/q: one row per end day (d7, d30) or month, parallel to cells. alpha = "
                     "exp(a / ln_scale), beta = exp(b / ln_scale) in mm a day, q = q / 1000; null = no fit "
-                    "(arid, or fewer than min_nonzero_share of the values over zero_mm).",
+                    "(normal under spi_arid_mm_day for that kind, or fewer than min_nonzero_share of the values "
+                    "over zero_mm).",
         "spi_rule": "p = q / 2 if the window total < zero_mm and q > 0, else q + (1 - q) * P(alpha, x / beta) "
                     "with x the mean rain in mm a day; SPI = inverse normal of p, clipped to +-spi_clip",
         "cells": cells[keep].tolist(),
@@ -456,7 +476,7 @@ def _report(S, N, cells, win, norms, spikes, fits, samples):
         zs = {}
         for pool in (0, 2, 5, 10):
             a, b, q, f = _fit_blocks(tr, pool, zr)
-            zs[pool] = np.where(f & (norms[kind][ends] >= R.ARID_MM_DAY), _spi_np(te, a, b, q, zr), np.nan)
+            zs[pool] = np.where(f & (norms[kind][ends] >= SPI_ARID_MM_DAY[kind]), _spi_np(te, a, b, q, zr), np.nan)
         common = np.logical_and.reduce([np.isfinite(z).any(0) for z in zs.values()])
         for pool, z in zs.items():
             z = z[:, common][np.isfinite(z[:, common])]

@@ -65,7 +65,7 @@ Fit, per cell and window, over the 30 years
     The page should say "-3 or below" rather than print the digits.
   * No parameters (null) where
       - the window's 1991-2020 normal in NORMAL_CACHE (the normal the live percent uses) is under
-        ARID_MM_DAY (0.5 mm a day, the live arid mask);
+        SPI_ARID_MM_DAY: p1 0.5 mm a day (ARID_MM_DAY, the live arid mask), p6 and month 0.1 (below);
       - fewer than MIN_WET (15) of the 30 years are wet. Then the window's median total is a dry one,
         any rain at all ranks above it, and a gamma rests on under 15 points. This blanks 8.6% of the
         non-arid single-pentad windows (20 wet years would blank 20.7%), 13 six-pentad windows and 1
@@ -79,6 +79,10 @@ Fit, per cell and window, over the 30 years
         99.9% of single-pentad records in cells of 1,000+ land pixels south of 57.5N by 22% or more.
         Blanks 173 single-pentad windows in 21 cells (one window in a full land cell: eastern Yemen,
         6-10 January), 12 six-pentad windows and 5 months in 2 cells (south Greenland, a 3.75S atoll).
+
+Since 28 September 2026 p6 and month fits reach down to a normal of 0.1 mm a day, p1 fits keep 0.5 (inland
+Australia's wet August 2026 read blank). The calibration that decided it, both products, is in
+build_cpc_spi_params.py's docstring.
 
 Storage: quantised integers, as NORMAL_CACHE: shape x 1000, wet mean in 0.001 mm a day (shapes >= 0.33 and wet
 means >= 0.495: steps of 0.3% at worst; SPI moves <= 0.004), dry years as a count; lists [window][cell].
@@ -137,6 +141,9 @@ MIN_WET = 15              # wet years (of 30) a fit needs: the window's median m
 MIN_DISTINCT = 10         # distinct wet totals a record needs (see "frozen records" in the docstring)
 MAX_SHAPE = 400           # gamma shape above which the wet years vary by under 5% (ditto)
 ARID_MM_DAY = R.ARID_MM_DAY
+# A window whose 1991-2020 normal is under this (mm a day) gets no fit: p6 and month reach below the live percent's
+# arid mask, p1 does not (the docstring has the calibration that decided it).
+SPI_ARID_MM_DAY = {"p1": ARID_MM_DAY, "p6": 0.1, "month": 0.1}
 KINDS = (("p1", 72), ("p6", 72), ("month", 12))
 PLACES = (("Para, Brazil", -6.25, -56.25), ("Congo basin", -1.25, 23.75), ("Borneo", 1.25, 113.75),
           ("western Niger", 13.75, 1.25), ("central Ethiopia", 8.75, 38.75))
@@ -435,7 +442,7 @@ def main(argv: list[str]) -> int:
     for kind, nw in KINDS:
         a, mw, dry, thom, distinct = fit(*ser[kind])
         fits[kind] = (a, mw, dry, thom)
-        arid = normals[kind] < ARID_MM_DAY
+        arid = normals[kind] < SPI_ARID_MM_DAY[kind]
         few = ~arid & (N_YEARS - dry < MIN_WET)
         frozen = ~arid & ~few & ((distinct < MIN_DISTINCT) | (a > MAX_SHAPE))
         ok = ~arid & ~few & ~frozen
@@ -473,7 +480,7 @@ def main(argv: list[str]) -> int:
         "cells_encoding": f"output cell index, row-major from the southern edge; identical to {F.NORMAL_CACHE.name}",
         "years": f"{Y0}-{Y1}", "n_years": N_YEARS, "zero_mm": ZERO_MM, "min_wet_years": MIN_WET,
         "min_distinct_wet_totals": MIN_DISTINCT, "max_shape": MAX_SHAPE,
-        "arid_mm_day": ARID_MM_DAY,
+        "arid_mm_day": ARID_MM_DAY, "spi_arid_mm_day": SPI_ARID_MM_DAY,
         "windows": {"p1": "one CHIRPS pentad, ending at pentad 1..72 of the year (1-5 January first)",
                     "p6": "six pentads, ending at pentad 1..72 (the first five reach into the previous year)",
                     "month": "calendar months January..December, from CHIRPS v3.0 monthly files"},
@@ -485,7 +492,8 @@ def main(argv: list[str]) -> int:
                       "Past about +-1.85 (1 in 31) SPI rests on the fitted tail; show under -3 as '-3 or below'.",
         "encoding": "shape: gamma shape x 1000; wet_mean: mean rate of the wet years in 0.001 mm a day (= shape x "
                     "scale); dry: years of 30 with a total under zero_mm. Each [window][cell], parallel to cells; "
-                    "shape and wet_mean null where the normal is under arid_mm_day, wet years < min_wet_years, or "
+                    "shape and wet_mean null where the normal is under spi_arid_mm_day for that kind, wet years < "
+                    "min_wet_years, or "
                     "the record is frozen (under min_distinct_wet_totals distinct wet totals, or shape > max_shape).",
         "counts": counts, "checks": chk,
     }

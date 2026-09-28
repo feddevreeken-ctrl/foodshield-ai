@@ -123,6 +123,16 @@ def to_x100(z: float | None) -> int | None:
 
 # --- parameter files -------------------------------------------------------------
 
+def params_id() -> str:
+    """First 12 hex of the sha256 of both parameter files. A collector that caches SPI (rain_months.json,
+    rain_weeks.json) stores it beside the values and recomputes them when the fits have been rebuilt."""
+    import hashlib
+    h = hashlib.sha256()
+    for path in (CPC_PARAMS, CHIRPS_PARAMS):
+        h.update(path.read_bytes())
+    return h.hexdigest()[:12]
+
+
 def _load(path: Path, grid: tuple) -> dict:
     """The gzipped JSON, read once per run; grid = (lat0, lon0, step, nlat, nlon) the caller writes on."""
     if path not in _loaded:

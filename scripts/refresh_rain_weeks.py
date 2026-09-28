@@ -28,7 +28,9 @@ back reads the missing days itself (1.8 MB each; up to 21 days on a first run, 0
 live 30-day layer as it reads with that Sunday as the newest CPC day (the same _windows call that
 gives the week: CPC cells over the 30 days ending on the Sunday, percent, mm, SPI from the d30 fit
 of the pentad end nearest the Sunday), with its own CHIRPS fill from a six-pentad total. A week
-stored before d30 existed gets it once, then follows the finality rule like the rest of the week.
+stored before d30 existed is recomputed once, then follows the finality rule. So is a stored week
+whose spi_params (spi.params_id(), a hash of the two fit files) is not the current one: rebuilt fits
+must not leave old SPI in final weeks.
 
 CHIRPS fill. Cells CPC leaves blank that week get the CHIRPS v3 Early Estimates single-pentad
 total (chirps_rain_fill.py: same files, 1991-2020 pentad normal, pixel rule, arid mask and p1 SPI
@@ -86,7 +88,8 @@ ENCODING = ("weeks: oldest first, one per calendar week (Monday start .. Sunday 
             "(fill.days); fill.cells never repeats a cell of the week's cells. A cell in neither list is blank (sea, "
             "or no reading). d30: the same fields over the 30 days ending on the week's Sunday (d30.start..d30.end, "
             "d30.days CPC days), the live 30-day layer's rules and d30 fit; d30.fill is the six-pentad CHIRPS total "
-            "d30.fill.pentads (d30.fill.start..end), its cells never on a cell of d30.cells.")
+            "d30.fill.pentads (d30.fill.start..end), its cells never on a cell of d30.cells. spi_params: "
+            "spi.params_id() of the fits the week's SPI came from.")
 # (label, lat_s, lat_n, lon_w, lon_e) on cell centres, for the printed checks only.
 REGIONS = (("Maritime Continent", -11, 6, 95, 141), ("Amazon interior", -12, 0, -72, -50),
            ("Central America dry corridor", 11, 16, -92, -85), ("East Africa", -5, 12, 33, 51),
@@ -242,10 +245,11 @@ def _remask(fill: dict | None, cpc_cells: list) -> dict | None:
     return out
 
 
-def _chirps(weeks: dict, fresh: set, old: dict) -> None:
+def _chirps(weeks: dict, fresh: set, old: dict) -> set:
     """Give each kept week's layers (the week: n = 1; d30: n = 6) the fill of their best posted CHIRPS total, newest
-    week first, within CHIRPS_BUDGET_S. fresh: (Sunday, n) pairs whose CPC block this run recomputed."""
-    posted, grids = {1: set(), 6: set()}, {}
+    week first, within CHIRPS_BUDGET_S. fresh: (Sunday, n) pairs whose CPC block this run recomputed. Returns the
+    (Sunday, n) pairs whose fill this run computed."""
+    posted, grids, filled = {1: set(), 6: set()}, {}, set()
     for n in posted:
         try:
             html = http_get(F.EE_DIR.format(n=n), timeout=60, headers=F.UA, retries=3).text
@@ -275,10 +279,12 @@ def _chirps(weeks: dict, fresh: set, old: dict) -> None:
                     print(f"[fetch] CHIRPS {_tag(yp, n)} ({time.monotonic() - t:.0f} s)")
                 cpc = set(blk["cells"])
                 blk["fill"] = fill_block([k not in cpc for k in range(R.NCELL)], yp, grids[(n, yp)], n)
+                filled.add((key, n))
             except Exception as e:  # noqa: BLE001 -- a fill only: the CPC layer stands without it
                 print(f"[WARN] {'week' if n == 1 else 'd30'} to {key}: CHIRPS fill: {type(e).__name__}: {e}")
                 if (key, n) in fresh:
                     blk["fill"] = _remask(prev.get("fill"), blk["cells"])
+    return filled
 
 
 # --- the archive -----------------------------------------------------------------
@@ -290,29 +296,32 @@ def build(standalone: bool = False) -> tuple[dict, dict]:
         R.build()
     newest, run_day = R.LAST["end"], datetime.now(timezone.utc).date()
     old = _stored()
-    todo = [s for s in sundays(newest) if not (old.get(s.isoformat()) or {}).get("final")]
-    # Weeks stored before d30 existed get it once (the week itself stays as stored).
-    no_d30 = [date.fromisoformat(k) for k in sorted(old)[-MAX_WEEKS:] if "d30" not in old[k]
-              and date.fromisoformat(k) not in todo]
+    try:
+        sig = SPI.params_id()
+    except OSError:
+        sig = None
+    # Open weeks, and stored weeks without d30 or whose SPI came from other fits (spi.params_id), are recomputed.
+    todo = sorted({s for s in sundays(newest) if not (old.get(s.isoformat()) or {}).get("final")}
+                  | {date.fromisoformat(k) for k in sorted(old)[-MAX_WEEKS:]
+                     if "d30" not in old[k] or (sig and old[k].get("spi_params") != sig)})
     fresh, weeks = set(), {k: dict(w) for k, w in old.items()}
-    if todo or no_d30:
-        per, listed = _cpc_days(todo + no_d30)
-        for s in todo + no_d30:
+    if todo:
+        per, listed = _cpc_days(todo)
+        for s in todo:
             got = cpc_week(per, listed, s)
             if not got:
                 continue
             wk, d30 = got
             d30["fill"] = None
-            if s in todo:
-                wk.update(final=(run_day - s).days >= FINAL_AFTER, computed=run_day.isoformat(), fill=None)
-                weeks[wk["end"]] = wk
-                fresh.add((wk["end"], 1))
-            weeks[wk["end"]]["d30"] = d30
-            fresh.add((wk["end"], 6))
+            wk.update(final=(run_day - s).days >= FINAL_AFTER, computed=run_day.isoformat(), fill=None, d30=d30)
+            weeks[wk["end"]] = wk
+            fresh |= {(wk["end"], 1), (wk["end"], 6)}
         del per
-        if not any(n == 1 for _, n in fresh) and any((run_day - s).days < FINAL_AFTER for s in todo):
+        if not fresh and any((run_day - s).days < FINAL_AFTER for s in todo):
             raise RuntimeError(f"no week could be computed ({', '.join(map(str, todo))}); keeping the last good file")
-    _chirps(weeks, fresh, old)
+    filled = _chirps(weeks, fresh, old)
+    for key in {k for k, _ in fresh}:  # a week whose fills could not be redone keeps its old tag, so a later run retries
+        weeks[key]["spi_params"] = sig if {(key, 1), (key, 6)} <= filled else (old.get(key) or {}).get("spi_params")
     kept = [weeks[k] for k in sorted(weeks)][-MAX_WEEKS:]
     payload = {
         "product": "NOAA CPC Global Unified Gauge-Based Analysis of Daily Precipitation, real-time, 0.5 degree",
@@ -350,7 +359,7 @@ def build(standalone: bool = False) -> tuple[dict, dict]:
             "moderately, severely and extremely dry for that place and time of year; +1, +1.5 and +2 the wet mirror.",
         ],
     }
-    return payload, {"fresh": sorted({k for k, n in fresh if n == 1}), "d30": sorted({k for k, n in fresh if n == 6})}
+    return payload, {"fresh": sorted({k for k, _ in fresh}), "filled": sorted(filled)}
 
 
 def _spi_of(wk: dict) -> dict:
@@ -397,7 +406,8 @@ def main(standalone: bool = False) -> int:
                              "rain_anomaly.json. Gauge analysis, not a model."),
                       status="ok")
     path.write_text(json.dumps(json.loads(path.read_text()), ensure_ascii=False, separators=(",", ":")))
-    print(f"[OK] rain weeks: {len(payload['weeks'])} kept, recomputed {diag['fresh'] or 'none'}, d30 {diag['d30'] or 'none'} | "
+    print(f"[OK] rain weeks: {len(payload['weeks'])} kept, recomputed {diag['fresh'] or 'none'}, fills redone "
+          f"{len(diag['filled'])} | "
           f"{path.stat().st_size / 1e3:.0f} KB | {time.monotonic() - t0:.0f} s")
     for wk in payload["weeks"]:
         fl, spi = wk.get("fill") or {}, _spi_of(wk)
