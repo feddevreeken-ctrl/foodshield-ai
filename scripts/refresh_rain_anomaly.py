@@ -46,7 +46,15 @@ Data:
     0.5-degree box. Away from reporting gauges the real-time analysis decays
     towards no rain (Indonesia, the Congo basin, the Amazon interior), so a
     cell needs on average MIN_GAUGES gauge reports a day inside it over the
-    window, or it is null.
+    window, or it is null. MIN_GAUGES was 1 until 28 September 2026; it is 3
+    because the dry pull reaches past one gauge. Over 29 August..27 September
+    2026, by mean reports a day per cell, the median cell read -23% (area-
+    weighted observed/normal 0.85) under 1 a day, -18% (0.97) at 1-3, -12%
+    (1.10) at 3-10 and about 0% at 10 or more.
+  * CHIRPS fill. Cells left without a reading (gauge mask, missing days) get
+    CHIRPS v3 against its own 1991-2020 normal in a separate "fill" block (see
+    chirps_rain_fill.py); arid cells have a CPC reading and are not filled. If
+    CHC fails, the CPC layers are written without "fill"; never the reverse.
   * Spike filter. The real-time analysis carries bad reports that the
     interpolation spreads into bumps of several hundred mm a day (seen on
     2026-09-18: 900 mm over Arctic Siberia; and near-daily 600-850 mm over
@@ -73,6 +81,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import http_get, write_json  # noqa: E402
+import chirps_rain_fill  # noqa: E402
 
 CPC_RT = "https://ftp.cpc.ncep.noaa.gov/precip/CPC_UNI_PRCP/GAUGE_GLB/RT"
 CPC_FILE = "PRCP_CU_GAUGE_V1.0GLB_0.50deg.lnx.{d}.RT"
@@ -88,7 +97,7 @@ NEED_SHARE = 0.85          # share of the window's days a cell needs after the s
 # dry-season percents it gives (+183% over southern Africa in September 2026) read as a wet spell that is not there.
 ARID_MM_DAY = 0.5
 SPIKE_X, SPIKE_MM = 20, 50
-MIN_GAUGES = 1.0          # mean gauge reports a day inside a 2.5-degree cell
+MIN_GAUGES = 3.0          # mean gauge reports a day inside a 2.5-degree cell (1.0 before 2026-09-28: see the docstring)
 # Output grid: the composites' rain_grid.
 LAT0, LON0, STEP, NLAT, NLON = -56.25, -178.75, 2.5, 52, 144
 NCELL, SUB = NLAT * NLON, 5    # 0.5-degree cells per 2.5-degree cell, each way
@@ -273,9 +282,10 @@ def _windows(per: dict, days: list[date], wdays: list[date]):
     """Per cell over the window and the week, after the gauge mask and the spike filter:
     (observed, normal) mm/day or None."""
     need30, need7 = NEED_SHARE * len(days), NEED_SHARE * len(wdays)
-    c30, c7, dropped, ungauged = [], [], [], 0
+    c30, c7, dropped, ungauged, gauges = [], [], [], 0, []
     for k in range(NCELL):
         got = [(d, per[d][k]) for d in days if per[d][k] is not None]
+        gauges.append(sum(x[2] for _, x in got) / len(got) if got else None)
         if got and len(got) >= need30 and sum(x[2] for _, x in got) / len(got) < MIN_GAUGES:
             ungauged += 1
             got = []
@@ -294,7 +304,7 @@ def _windows(per: dict, days: list[date], wdays: list[date]):
                               ([x for d, x in keep if d in wdays], need7, c7)):
             out.append((sum(x[0] for x in xs) / len(xs), sum(x[1] for x in xs) / len(xs))
                        if xs and len(xs) >= need else None)
-    return c30, c7, dropped, ungauged
+    return c30, c7, dropped, ungauged, gauges
 
 
 def _pct(cells) -> list:
@@ -324,7 +334,7 @@ def build() -> tuple[dict, dict]:
     norm, normal_from = _normal(days)  # no fallback base: see the module docstring
     per = {d: _cell_day(_cpc_day(d), norm[d]) for d in days}
     del norm
-    c30, c7, dropped, ungauged = _windows(per, days, wdays)
+    c30, c7, dropped, ungauged, gauges = _windows(per, days, wdays)
 
     anom, wanom = _pct(c30), _pct(c7)
     tot = lambda cells, i, n: [None if x is None else int(round(x[i] * n)) for x in cells]
@@ -367,13 +377,22 @@ def build() -> tuple[dict, dict]:
             "dropped too, so a cell hit by one may read drier than it was.",
             "Seven days of rain are patchy: one storm can double a week. Read the 30-day layer for the pattern "
             "and the week for what is happening now.",
-            f"Land with fewer than {MIN_GAUGES:g} gauge report a day inside the cell is left blank "
-            f"({ungauged} cells this run), as in parts of Africa, Indonesia and the Amazon. Away from gauges "
-            "CPC's daily analysis falls towards no rain, which would read as a drought that is not there.",
+            f"Land with fewer than {MIN_GAUGES:g} gauge reports a day inside the cell gets no gauge reading "
+            f"({ungauged} cells this run), as in much of Africa, Indonesia and the Amazon. Away from gauges "
+            "CPC's daily analysis falls towards no rain, which would read as a drought that is not there: in "
+            "the 30 days to 27 September 2026 cells with under one report a day read a median -23%, one to "
+            "three -18%, three to ten -12%, ten or more about 0%.",
         ] + ([f"CPC had not posted {', '.join(missing)}; the window and its normal skip those days."]
              if missing else []),
     }
-    return payload, {"c30": c30, "c7": c7, "dropped": dropped}
+    cf, fdiag = chirps_rain_fill, None
+    if (cf.LAT0, cf.LON0, cf.STEP, cf.NLAT, cf.NLON) != (LAT0, LON0, STEP, NLAT, NLON):
+        raise RuntimeError("chirps_rain_fill.py grid differs from this script's")
+    try:  # a fill only: CPC is written without it, never the reverse
+        payload["fill"], fdiag = chirps_rain_fill.fill([x is None for x in c30], [x is None for x in c7], ARID_MM_DAY)
+    except Exception as e:  # noqa: BLE001 -- any CHC failure leaves the CPC layers as they are
+        print(f"[WARN] CHIRPS fill left out: {e}")
+    return payload, {"c30": c30, "c7": c7, "dropped": dropped, "gauges": gauges, "chirps": fdiag}
 
 
 def _region(cells, pct, s, n, w, e):
@@ -391,7 +410,9 @@ def main() -> int:
     path = write_json("rain_anomaly.json", payload,
                       source="NOAA CPC Global Unified Gauge-Based daily precipitation (CPC FTP); "
                              "1991-2020 daily normal of the same product (NOAA PSL precip.day.ltm.1991-2020.nc, "
-                             "read from the " + payload["base_read_from"].split(",")[0] + ")",
+                             "read from the " + payload["base_read_from"].split(",")[0] + ")"
+                             + ("; where CPC has too few gauges, CHIRPS v3.0 (CHC Early Estimates pentad totals) "
+                                "against its own 1991-2020 pentad normal, in the fill block" if "fill" in payload else ""),
                       notes=("Observed rain on land over the last 30 and 7 days as a percent change against "
                              "1991-2020 for the same calendar days, on the El Nino Ocean map's 2.5-degree land "
                              "grid (same grid as sst_composites.json rain_grid). Gauge analysis, not a model."),
@@ -413,6 +434,8 @@ def main() -> int:
             k, kv, med, obs, nrm = _region(diag["c" + key[:-1]], pct, s, n, we, e)
             print(f"[check] {label} {key}: {k} land cells, {kv} not arid, median {med if med is None else f'{med:+d}%'}"
                   f", observed {obs:.1f} vs normal {nrm:.1f} mm/day")
+    if diag["chirps"]:
+        chirps_rain_fill.report(payload, diag, diag["chirps"], ARID_MM_DAY)
     return 0
 
 

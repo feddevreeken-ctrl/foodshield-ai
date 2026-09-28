@@ -479,7 +479,8 @@ SOURCES = [
     {
         "key": "rain_anomaly",
         "file": "rain_anomaly.json",
-        "label": "NOAA CPC gauge rain on land, last 30 and 7 days vs 1991-2020 (same-product daily normal)",
+        "label": "NOAA CPC gauge rain on land, last 30 and 7 days vs 1991-2020 (same-product daily normal); "
+                 "CHIRPS v3 satellite+station where gauges are sparse (its own 1991-2020 pentad normal)",
         "cadence": "6-hourly fetch / daily upstream (1-2d lag, newest days re-issued)",
         "mode": "live",
     },
@@ -572,7 +573,7 @@ def payload_count(key, payload):
         return len(payload.get("items") or [])
     # Land cells with a 30-day reading, not the payload's 15 keys.
     if key == "rain_anomaly":
-        return int(payload.get("n_valid") or 0)
+        return int(payload.get("n_valid") or 0) + int((payload.get("fill") or {}).get("n_valid") or 0)
     # The atlas's unit is the corridor, not the commodity: a bare key count would
     # publish "46" on the Data Status page for a file that ships 4,000+ flows.
     if key == "commodity_flows":

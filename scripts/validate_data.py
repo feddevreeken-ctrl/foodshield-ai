@@ -242,13 +242,26 @@ def validate_one(filename, spec):
             if not isinstance(arr, list) or len(arr) != n or n == 0:
                 return False, f"{key} is not a {g.get('nlat')}x{g.get('nlon')} grid"
         valid = sorted(v for v in data['anom'] if isinstance(v, (int, float)))
-        if len(valid) < 1000 or sum(v is not None for v in wk['anom']) < 1000:
-            return False, f"only {len(valid)} valid 30-day cells (expected ~1,800)"
+        # CPC cells only (the CHIRPS fill may be absent): ~900 since MIN_GAUGES went from 1 to 3 on 2026-09-28.
+        if len(valid) < 600 or sum(v is not None for v in wk['anom']) < 600:
+            return False, f"only {len(valid)} valid 30-day CPC cells (expected ~900)"
         med = valid[len(valid) // 2]
         if abs(med) > 40:
             return False, f"median 30-day change over all cells is {med:+d}%: a biased base?"
+        # chirps_rain_fill.py: sparse CHIRPS block, parallel to fill.cells, only where CPC has no value.
+        fl, extra = data.get('fill'), ''
+        if fl is not None:
+            cells, fw = fl.get('cells') or [], fl.get('week') or {}
+            for key, arr, cpc in (('fill.anom', fl.get('anom'), data['anom']), ('fill.week.anom', fw.get('anom'), wk['anom']),
+                                  ('fill.mm', fl.get('mm'), None), ('fill.week.mm', fw.get('mm'), None)):
+                if not isinstance(arr, list) or len(arr) != len(cells):
+                    return False, f"{key} is not parallel to fill.cells"
+                if cpc is not None and any(not 0 <= k < n or (v is not None and cpc[k] is not None)
+                                           for k, v in zip(cells, arr)):
+                    return False, f"{key} sits on a cell CPC already paints (or off the grid)"
+            extra = f", CHIRPS fill {fl.get('n_valid')} cells to {(fl.get('window') or {}).get('end')}"
         return True, (f"ok — {(data.get('window') or {}).get('start')}..{(data.get('window') or {}).get('end')}, "
-                      f"{len(valid)} cells, median {med:+d}%")
+                      f"{len(valid)} cells, median {med:+d}%{extra}")
     elif shape == 'object':
         if data is None:
             return False, "data is null"
