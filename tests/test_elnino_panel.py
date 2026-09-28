@@ -1036,7 +1036,11 @@ def main() -> int:
             const p = m.latLngToContainerPoint([0,20]); return {x:box.left+p.x,y:box.top+p.y};
         }""")
         page.mouse.move(land['x'],land['y'])
-        check("SST readout hides over land", not page.locator('.enso-sst-readout').is_visible())
+        # 2026-09-28 (owner: "it should show rain that there is this week"): over land the readout quotes the last
+        # 30 days of rain when data/rain_anomaly.json has the cell, never a sea temperature.
+        ro_land = page.locator('.enso-sst-readout')
+        check("over land the readout quotes rain, never a sea temperature",
+              not ro_land.is_visible() or ('%' in ro_land.inner_text() and '°C' not in ro_land.inner_text()))
         page.mouse.move(1,1)
         check("SST readout hides on pointer leave", not page.locator('.enso-sst-readout').is_visible())
         collapse = []
@@ -1377,7 +1381,7 @@ def main() -> int:
             for tab, labels in (
                 ('ensowater', ['No land layer', 'Shipping', 'Change nowEl Niño link']),
                 ('ensomoney', ['Staple prices', 'Grain imports', 'RealNominal', 'Price changeAgainst pattern']),
-                ('elnino', ['Sea-surface']),
+                ('elnino', ['Sea-surface', 'Past El NiñosThis weekOutlook']),
                 ('ensoharvest', ['Production shock', 'Strongest crop', 'Coverage', 'Crop stress now', 'Teleconnections']),
                 ('ensolive', ['Rain pattern', 'Hotspots', 'IPC', 'Hazards', 'Headlines', 'Elsewhere'])):
                 page.evaluate('tab => showTab(tab)', tab)
@@ -1422,6 +1426,8 @@ def main() -> int:
         # 2026-09-28 (owner): the Ocean map can show the average December-February anomaly of past El Niño winters by
         # strength, from data/sst_composites.json. The strip, key and caption follow the slider; leaving Ocean resets it.
         page.evaluate("showTab('elnino')")
+        page.wait_for_selector('#enso-controls [data-sst-view="past"]')
+        page.click('#enso-controls [data-sst-view="past"]')
         page.wait_for_selector('[data-sst-cls="very_strong"]')
         page.click('[data-sst-cls="very_strong"]')
         page.wait_for_timeout(700)
@@ -1437,10 +1443,37 @@ def main() -> int:
         page.click('[data-sst-season="SON"]')
         page.wait_for_timeout(500)
         check("the Ocean composite season switch changes the maps and says so", page.evaluate("() => /Sep/.test(document.querySelector('#enso-mapwrap > .enso-plate-h').textContent) && /Sep/.test(document.getElementById('enso-weekly').textContent)"))
+        # 2026-09-28 (owner: "past el nino should map historical el nino from data"): one observed winter on its own,
+        # from data/sst_winters/<label>.json, named as observed; the outlook is a forecast with the dashed frame.
+        page.click('[data-sst-season="DJF"]')
+        page.click('[data-sst-win="2015-16"]')
+        page.wait_for_function("() => /The 2015–16 El Niño/.test(document.querySelector('#enso-mapwrap > .enso-plate-h').textContent)", timeout=15000)
+        check("one past winter opens from its own observed file and says so", page.evaluate("""async () => {
+            const W = (await (await fetch('data/sst_winters/2015-16.json')).json()).data, tag = document.getElementById('enso-maptag').textContent;
+            const strip = document.getElementById('enso-weekly').textContent, n = W.box_means_c.DJF.nino34;
+            return W.label === '2015-16' && !!W.maps.DJF && tag.includes('2015-16') && tag.includes('Observed, not a forecast')
+                && strip.includes('Niño 3.4 ' + (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(1))
+                && document.querySelector('[data-sst-win="2015-16"]').getAttribute('aria-pressed') === 'true' && !!document.querySelector('.enso-rain-canvas');
+        }"""))
+        if page.locator('#enso-controls [data-sst-view="outlook"]').count():
+            page.click('#enso-controls [data-sst-view="outlook"]')
+            page.wait_for_timeout(500)
+            check("the outlook view is a labelled forecast in the modelled frame", page.evaluate("""async () => {
+                const O = (await (await fetch('data/seasonal_outlook.json')).json()).data, head = document.querySelector('#enso-mapwrap > .enso-plate-h').textContent;
+                const tag = document.getElementById('enso-maptag').textContent, strip = document.getElementById('enso-weekly').textContent;
+                return head.startsWith('Outlook for ' + O.seasons[0].label) && tag.includes('A forecast, not observed') && strip.includes('forecast')
+                    && document.getElementById('enso-mapwrap').classList.contains('is-modelled') && document.querySelectorAll('[data-sst-ol]').length === O.seasons.length;
+            }"""))
         page.evaluate("showTab('ensowater')")
         page.evaluate("showTab('elnino')")
         page.wait_for_selector('[data-sst-view="now"]')
-        check("leaving Ocean resets the sea surface to this week and drops the rain layer", page.evaluate("""() => document.querySelector('[data-sst-view="now"]').getAttribute('aria-pressed') === 'true' && !document.querySelector('.enso-rain-canvas') && document.getElementById('enso-weekly').textContent.includes('CPC weekly')"""))
+        # Rain on land in this view only when the 30-day rain feed is loaded, and then the key says so.
+        check("leaving Ocean resets the map to this week, rain on land only with the 30-day key", page.evaluate("""() => {
+            const key = document.getElementById('enso-legend').textContent;
+            return document.querySelector('[data-sst-view="now"]').getAttribute('aria-pressed') === 'true'
+                && !!document.querySelector('.enso-rain-canvas') === /last 30 days/.test(key)
+                && document.getElementById('enso-weekly').textContent.includes('CPC weekly');
+        }"""))
 
         print("\nTier 1: figures come from the feeds (court 2026-09-23)")
         src = (ROOT / "index.html").read_text()

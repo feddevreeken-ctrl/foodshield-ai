@@ -39,6 +39,10 @@ Data:
     1986-88 gives two winters with their own peaks (CPC's bins: weak +0.5 to
     +0.9, moderate +1.0 to +1.4, strong +1.5 to +1.9, very strong >= +2.0).
 
+Each winter's own maps also go to data/sst_winters/<label>.json (same grids, no
+agreement count), so the page can show one observed winter instead of a class
+average.
+
 Every winter is measured against 1991-2020, so older winters sit on a cooler
 baseline and their sea anomalies read cooler than they were against the
 climate of their day. (A trend-removed "relative" SST version shipped until
@@ -80,6 +84,7 @@ LAT0, LAT1, LON0, LON1, STEP = -84.0, 84.0, -180.0, 178.0, 2.0
 # north of all farmland) to 56.25S (Tierra del Fuego). The Arctic rows above and
 # Antarctica are left out to keep the file under ~1.8 MB.
 RAIN_ROWS, RAIN_STEP, ARID_MM_DAY = (7, 58), 2.5, 0.3
+WINTER_DIR = "sst_winters"  # data/sst_winters/<label>.json, one observed winter each
 CLIM = (1991, 2020)
 FIRST_WINTER = 1950  # first DJF in CPC's ONI table
 ONI_SEASONS = "DJF JFM FMA MAM AMJ MJJ JJA JAS ASO SON OND NDJ".split()
@@ -226,12 +231,22 @@ def _fetch_precl(nt: int, path: Path) -> None:
 
 def load_precl():
     """{(year, month): 2-D rain rate in mm/day}, rows south to north, lon -178.75..178.75."""
-    dds = http_get(f"{PRECL_DAP}.dds", timeout=90, headers=UA, retries=3).text
+    CACHE.mkdir(parents=True, exist_ok=True)
+    try:
+        dds = http_get(f"{PRECL_DAP}.dds", timeout=90, headers=UA, retries=3).text
+    except RuntimeError:
+        # PSL's THREDDS server is down now and then (503 on 2026-09-28): the longest cached
+        # record is still a complete one, only possibly a month short.
+        cached = sorted(CACHE.glob(f"precl_2.5deg_*m_rows{RAIN_ROWS[0]}-{RAIN_ROWS[1]}.nc"),
+                        key=lambda q: int(q.name.split("_")[2][:-1]))
+        if not cached:
+            raise
+        print(f"[warn] PSL THREDDS unreachable; using cached {cached[-1].name}")
+        dds = f"time = {cached[-1].name.split('_')[2][:-1]}]"
     m = re.search(r"time\s*=\s*(\d+)\]", dds)
     if not m:
         raise RuntimeError("PREC/L DDS has no time axis -- feed shape changed")
     nt = int(m.group(1))
-    CACHE.mkdir(parents=True, exist_ok=True)
     path = CACHE / f"precl_2.5deg_{nt}m_rows{RAIN_ROWS[0]}-{RAIN_ROWS[1]}.nc"
     if not (path.exists() and path.stat().st_size > 1_000_000):
         _fetch_precl(nt, path)
@@ -347,8 +362,27 @@ def build() -> dict:
             }
             box_means[mk] = {b: round(_wmean(sst_c, lats, lons, *box), 2) for b, box in BOXES.items()}
 
+    # One file per winter, loaded by the page only when a reader picks that winter: the same
+    # observed anomalies the class averages are made of, one winter at a time.
+    cls_of = {e["label"]: c["key"] for c in classes for e in c["events"]}
+    winter_maps = {}
+    for w in winters:
+        wm, wb = {}, {}
+        for skey, *_ in SEASONS:
+            if (w["year"], skey) not in per:
+                continue
+            s, r = per[(w["year"], skey)]
+            ok = s[np.isfinite(s)]
+            wm[skey] = {"sst": _encode(s, 10), "rain": _encode(r),
+                        "sst_range_c": [round(float(ok.min()), 1), round(float(ok.max()), 1)]}
+            wb[skey] = {b: round(_wmean(s, lats, lons, *box), 2) for b, box in BOXES.items()}
+        winter_maps[w["label"]] = {"label": w["label"], "class": cls_of[w["label"]], "peak_oni": w["peak_oni"],
+                                   "djf_oni": w["djf_oni"], "maps": wm, "box_means_c": wb}
+
     n = {c["key"]: c["n"] for c in classes}
     return {
+        "_winter_maps": winter_maps,
+        "winter_path": WINTER_DIR + "/{label}.json",
         "source_url": f"{ERDDAP}/{DS}.html", "rain_source_url": PRECL_FILE, "oni_url": ONI_URL,
         "grid": {"lat0": float(lats[0]), "lon0": float(lons[0]), "step_deg": STEP,
                  "nlat": len(lats), "nlon": len(lons),
@@ -418,6 +452,7 @@ def rain_checks(payload: dict, ckey: str = "very_strong") -> list[str]:
 def main() -> int:
     payload = build()
     check = payload.pop("_check")
+    winter_maps = payload.pop("_winter_maps")
     path = write_json("sst_composites.json", payload,
                       source="NOAA NCEI ERSST v5 via CoastWatch ERDDAP; NOAA PSL PREC/L via PSL THREDDS; "
                              "NOAA CPC ONI",
@@ -429,6 +464,19 @@ def main() -> int:
     # Sixteen maps of three grids each are several MB at write_json's indent=2. Same
     # envelope, no whitespace (as build_trade_matrix does).
     path.write_text(json.dumps(json.loads(path.read_text()), ensure_ascii=False, separators=(",", ":")))
+    wdir = path.parent / WINTER_DIR
+    wdir.mkdir(exist_ok=True)
+    for label, wp in winter_maps.items():
+        wpath = write_json(f"{WINTER_DIR}/{label}.json", wp,
+                           source="NOAA NCEI ERSST v5 via CoastWatch ERDDAP; NOAA PSL PREC/L via PSL THREDDS",
+                           notes=(f"Observed sea-surface temperature anomaly and land rain change in the "
+                                  f"{label} El Niño winter, by season, against 1991-2020. Same grids as "
+                                  "sst_composites.json."),
+                           status="ok")
+        wpath.write_text(json.dumps(json.loads(wpath.read_text()), ensure_ascii=False, separators=(",", ":")))
+    for stale in wdir.glob("*.json"):
+        if stale.stem not in winter_maps:
+            stale.unlink()
     for c in payload["classes"]:
         print(f"[OK] {c['key']:<12} n={c['n']:<2} mean DJF ONI {c['mean_djf_oni']:+.2f} | "
               + ", ".join(f"{e['label']}({e['peak_oni']})" for e in c["events"]))

@@ -127,6 +127,7 @@ EXPECTED_FILES = {
     'enso_hindcast.json':         ('soft',     'dict_or_empty'),
     'enso_situation.json':        ('soft',     'dict_or_empty'),
     'enso_strengths.json':        ('soft',     'dict_or_empty'),
+    'seasonal_outlook.json':      ('soft',     'dict_or_empty'),  # NMME outlook maps, monthly upstream
     # Build-time commodity interpretation. SOFT, and additionally listed in
     # OPTIONAL_FILES below: on a repo that has never run the step (no provider key
     # and no prior build) the file legitimately does not exist yet.

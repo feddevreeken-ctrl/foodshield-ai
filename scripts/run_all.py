@@ -79,6 +79,7 @@ import refresh_commodity_news   # v46 — GDELT + EC RSS commodity headlines (cl
 import refresh_enso_news        # El Niño wire: headlines that name the event (claims, not data)
 import refresh_cpc_strengths    # CPC RONI strength odds by season (how strong, how long)
 import refresh_cpc_roni_outlook  # CPC RONI outlook: median and 5th/95th percentile per season
+import refresh_seasonal_outlook  # CPC NMME seasonal outlook maps (sea + land rain) for the El Nino map
 import refresh_shipping_gauges  # Gatún, St. Louis (+ barge rate), Kaub, Rosario, Manaus: the water behind the lanes
 import refresh_import_ports     # PortWatch dry-bulk imports at the gateway ports of the El Niño concern regions
 import refresh_enso_freight     # USDA AgTransport: Gulf/PNW->Japan grain freight, export inspections, barged grain
@@ -168,6 +169,9 @@ STEPS = [
     ("El Niño news",           refresh_enso_news.main,          "enso_news.json"),
     ("CPC strength odds",      refresh_cpc_strengths.main,      "enso_strengths.json"),
     ("CPC RONI outlook",       refresh_cpc_roni_outlook.main,   "enso_strengths.json"),
+    # NMME seasonal outlook maps: a monthly upstream (~8th), so most runs only re-stamp;
+    # on an upstream failure safe_run keeps the last-good file.
+    ("NMME seasonal outlook",  refresh_seasonal_outlook.main,   "seasonal_outlook.json"),
     ("Shipping gauges",        refresh_shipping_gauges.main,    "enso_gauges.json"),
     ("Import ports",           refresh_import_ports.main,       "enso_ports.json"),
     ("Grain freight (USDA)",   refresh_enso_freight.main,       "enso_freight.json"),

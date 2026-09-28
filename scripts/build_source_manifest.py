@@ -470,6 +470,13 @@ SOURCES = [
         "mode": "forecast",
     },
     {
+        "key": "seasonal_outlook",
+        "file": "seasonal_outlook.json",
+        "label": "NOAA CPC NMME seasonal outlook maps: sea-surface temperature and land rain, next three seasons",
+        "cadence": "6-hourly check / monthly upstream (new NMME start ~8th of each month)",
+        "mode": "forecast",
+    },
+    {
         "key": "imf_food_cpi",
         "file": "imf_food_cpi.json",
         "label": "IMF CPI — food and non-alcoholic beverages, year-on-year",
@@ -525,6 +532,8 @@ DATA_DATE = {
     # carries its own). giews_crea is a 3x-yearly list, so not date-gated here.
     "fpma_prices": ("latest_month", "monthly"),
     "imf_food_cpi": ("month", "monthly"),
+    # NMME start month ("YYYY-MM"); a new one is posted each month around the 8th.
+    "seasonal_outlook": ("initialized", "monthly"),
 }
 
 
