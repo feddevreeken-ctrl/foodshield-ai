@@ -713,10 +713,21 @@ def main() -> int:
                     const has = tele.filter(i => F[i] && (typeof F[i].staple_price_real_yoy_pct === 'number' || typeof F[i].staple_price_yoy_pct === 'number'));
                     return [has.length, tele.length, tele.filter(i => !has.includes(i)).sort().join(', ')];
                 }""")
+                # 2026-09-29 audit ("doesn't really show food prices"): the map leads with real staple prices since March in
+                # the high-effect countries (data/enso_price_outlook.json); its one-line tag states the price model's verdict
+                # from the file. The older 37-country layer is the "Year on year" view and keeps its checks there.
+                pout = page.evaluate("async () => (await (await fetch('data/enso_price_outlook.json')).json()).data")
+                check("Prices map leads with staple prices since March and states the model verdict from the data",
+                      'Staple price since March' in legend and tag.startswith('After inflation, Mar ')
+                      and (pout['model_status'] != 'no_skill' or f"tested on {pout['skill']['n_events']} past El Niños, no better than replaying them: not shown" in tag), tag)
+                page.click('[data-pview="change"]'); page.wait_for_timeout(300)
+                legend = page.locator('#enso-legend').text_content()
+                tag = page.locator('#enso-maptag').text_content()
                 check("staple legend states sizes, the harvest encoding and the countries without a series",
                       all(t in legend for t in ('Staple price, year on year', 'Blue falling', 'ochre to red rising', 'Dashed outline'))
                       and ('No staple series' in legend) == bool(counts[2]), str(counts))
                 check("staple map tag counts the countries with a series from the data", tag.startswith(f"{counts[0]} of {counts[1]} El Niño countries have staple prices"), tag)
+                page.click('[data-pview="since"]'); page.wait_for_timeout(300)
             headings.append(page.locator('#tab-elnino h2:visible').count())
             # 2026-09-24: a no-wrap table once pushed the Reported ledger 557px past its plate.
             heights[tab] = page.evaluate("() => document.querySelector('#tab-elnino .content-page').scrollHeight")
@@ -970,7 +981,7 @@ def main() -> int:
             const want = new Set(W.flatMap(c => (c.extra_import_kt ? [c.iso + '/' + c.crop] : []).concat((c.buyers || []).map(b => b.iso + '/' + c.crop))));
             const zwe = rows.find(r => (r.querySelector('button') || {dataset: {}}).dataset.mapCountry === 'ZWE');
             return rows.length >= want.size && [...want].every(k => isos.includes(k.split('/')[0]))
-                && (!zwe || /own harvest short/.test(zwe.textContent) && /less from South Africa/.test(zwe.textContent))
+                && (!zwe || /lost from its own harvest/.test(zwe.textContent) && /less from South Africa/.test(zwe.textContent))
                 && document.querySelector('.enso-whopays-plate').textContent.includes('hit twice')
                 && document.querySelectorAll('.enso-whopays-plate .enso-wp-total').length === ((await (await fetch('data/enso_outlook.json')).json()).data.who_pays_totals || []).length;
         }"""))
@@ -979,8 +990,21 @@ def main() -> int:
         check("Prices shows past El Niños as one dot plot and food inflation once",
               page.locator('#enso-c-record .enso-event').count() == 7
               and page.locator('#enso-c-record .enso-pp-prev').count() == 7
-              and page.locator('#enso-c-ffpi, #enso-c-rtfp, #enso-c-ffpilive, #enso-money-story').count() == 0
-              and page.locator('.enso-pricewatch-plate .enso-price-spark').count() >= 4)
+              and page.locator('#enso-c-ffpi, #enso-c-rtfp, #enso-c-ffpilive, #enso-money-story').count() == 0)
+        # 2026-09-29 audit ("why is it there? weirdly designed"): the watch table is a calendar in the Ocean grammar. Each row
+        # label carries the World Bank price and its change on a year earlier; marks come from the model's harvest windows
+        # and the export measures file; the ECB lag is a shaded column; the old policy text box is gone.
+        check("Which prices to watch is a calendar: priced rows, harvest windows, dated measures and the ECB lag", page.evaluate("""async () => {
+            const O = (await (await fetch('data/enso_outlook.json')).json()).data, R = (await (await fetch('data/trade_restrictions.json')).json()).data;
+            const pl = document.querySelector('.enso-pricewatch-plate'); if (!pl) return false;
+            const labels = [...pl.querySelectorAll('.enso-pw-labels span')].map(e => e.textContent);
+            const harvests = O.rows_all.filter(r => r.status === 'shown' && !r.in_season && ['corn', 'wheat', 'rice'].includes(r.crop)).length;
+            const dated = R.filter(r => r.status !== 'historical' && (r.ends_date || (r.next_step && r.next_step.date))).length;
+            return labels.length >= 5 && labels.filter(t => /\$[\d,]+\/t/.test(t)).length >= 5
+                && pl.querySelectorAll('.enso-pw-bar.is-modelled').length >= 1 && pl.querySelectorAll('.enso-pw-bar.is-modelled').length <= harvests
+                && pl.querySelectorAll('.enso-pw-bar.is-point').length === dated
+                && !!pl.querySelector('.enso-pw-lag') && !pl.querySelector('table');
+        }"""))
         # 2026-09-27: the humanitarian record is its own fold at the end of Prices; the estimates fold into the past-price plate.
         check("reported humanitarian need is its own fold; the published models sit inside the past-price plate",
               page.locator('#subview-ensomoney #enso-people tr').count() >= 5
@@ -1122,15 +1146,19 @@ def main() -> int:
             # market, then the monitored countries outside the layer.
             valid = page.evaluate("""async feed => {
                 if (feed === 'staple') {
-                    // 2026-09-26: the Prices rail names every El Niño country once, grouped by where its exposed
-                    // harvest stands, largest move first within a group; the title counts them all.
-                    const R = (await (await fetch('data/enso_regions.json')).json()).data.regions;
-                    const tele = [...new Set(R.flatMap(r => r.iso3 || []))];
-                    const isos = [...document.querySelectorAll('#enso-map-ranking button')].map(b => b.dataset.mapCountry);
+                    // 2026-09-29: the Prices rail lists every staple series in the price outlook, largest rise since March
+                    // first; the title counts series and countries; Zimbabwe, with no series before 2024, is named as such.
+                    const P = (await (await fetch('data/enso_price_outlook.json')).json()).data;
+                    const rows = P.rows.filter(r => r.aftermath && r.aftermath.now);
+                    const btn = [...document.querySelectorAll('#enso-map-ranking button')];
+                    const vals = btn.map(b => parseFloat(b.querySelector('.enso-rank-value').textContent.replace('−', '-')));
                     const title = document.querySelector('#enso-map-ranking .enso-legend-t').textContent;
                     const m = document.getElementById('enso-map').getBoundingClientRect();
                     const a = document.getElementById('enso-map-ranking').getBoundingClientRect();
-                    return a.left >= m.right - 1 && isos.length === tele.length && tele.every(i => isos.includes(i)) && title.includes(tele.length + ' El Niño countries');
+                    const zwe = P.excluded.some(x => x.iso3 === 'ZWE' && /no El Niño on record/.test(x.reason));
+                    return a.left >= m.right - 1 && btn.length === rows.length && vals.every((v, i) => !i || v <= vals[i - 1])
+                        && title.includes(P.rows.length + ' staples, ' + new Set(P.rows.map(r => r.iso3)).size + ' countries')
+                        && (!zwe || document.getElementById('enso-map-ranking').textContent.includes('Zimbabwe'));
                 }
                 if (feed === 'reported') {
                     // 2026-09-27: the Reported rail lists El Niño countries with a report, a crisis classification or a
@@ -1425,11 +1453,13 @@ def main() -> int:
             return ramp && ramp.nextElementSibling.textContent === '0%50%100%'
                 && fills.USA && fills.ZAF && fills.USA !== fills.ZAF;
         }"""))
+        import json as _pjson
+        _pout_year = _pjson.load(open(ROOT / 'data' / 'enso_price_outlook.json'))['data']['rows'][0]['aftermath']['now']['from'][:4]
         for width, height in ((1280, 800), (1440, 900)):
             page.set_viewport_size({'width': width, 'height': height})
             for tab, labels in (
                 ('ensowater', ['No land layer', 'Shipping', 'Change nowEl Niño link']),
-                ('ensomoney', ['Staple prices', 'Grain imports', 'RealNominal', 'Price changeAgainst pattern']),
+                ('ensomoney', ['Staple prices', 'Grain imports', 'Since MarchWho paysYear on year', _pout_year + '2015-162023-24']),
                 ('elnino', ['Sea-surface']),
                 ('ensoharvest', ['Production shock', 'Strongest crop', 'Coverage', 'Crop stress now', 'Teleconnections']),
                 ('ensolive', ['Rain pattern', 'Hotspots', 'IPC', 'Hazards', 'Headlines', 'Elsewhere'])):
@@ -1451,14 +1481,19 @@ def main() -> int:
                 }""", labels))
             page.evaluate("showTab('ensomoney')")
             page.wait_for_timeout(150)
+            # 2026-09-29: the default view shades the price-outlook countries by their real change since March, the larger
+            # move where a country has two staples; other land stays neutral.
             check(f"Prices at {width}: El Niño countries shaded by their staple price class, labels on the largest moves", page.evaluate("""async () => {
-                const regions = (await (await fetch('data/enso_regions.json')).json()).data.regions;
-                const tele = new Set(regions.flatMap(r => r.iso3)), seen = new Set();
+                const P = (await (await fetch('data/enso_price_outlook.json')).json()).data;
+                const tele = new Set(P.rows.map(r => r.iso3)), seen = new Set();
+                const lead = {}; P.rows.forEach(r => { const v = r.aftermath.now && r.aftermath.now.pct; if (typeof v === 'number' && (lead[r.iso3] == null || Math.abs(v) > Math.abs(lead[r.iso3]))) lead[r.iso3] = v; });
+                const cls = v => { const B = [-10, -3, 3, 10, 20, 30]; for (let i = 0; i < B.length; i++) if (v < B[i]) return i; return B.length; };
                 let good = true;
                 _stageHMap.eachLayer(l => {
                     const p = l.feature && l.feature.properties, iso = p && (p.ISO_A3 || p.ADM0_A3 || p.iso_a3 || p.id);
                     if (!iso) return;
-                    if (tele.has(iso) && l.options.fillColor) { seen.add(iso); good = good && l.options.opacity >= .6 && l.options.weight >= .7; }
+                    if (tele.has(iso) && l.options.fillColor) { seen.add(iso); good = good && l.options.opacity >= .6 && l.options.weight >= .7
+                        && l.options.fillColor === ['#3f6f9c', '#8fb1cf', '#77797d', '#d9b27c', '#dd8a45', '#cc5a2e', '#9e2f1c'][cls(lead[iso])]; }
                 });
                 // 2026-09-27 (map research): a signed seven-class choropleth replaces the circles.
                 const classes = ['#3f6f9c', '#8fb1cf', '#77797d', '#d9b27c', '#dd8a45', '#cc5a2e', '#9e2f1c'];
@@ -1468,6 +1503,48 @@ def main() -> int:
                     && pane.querySelectorAll('.enso-grat-lab').length === 3
                     && document.querySelectorAll('.enso-price-lbl').length >= 3;
             }"""))
+
+        # 2026-09-29 audit, Prices. The stage switch repaints the same countries at the same stage of 2015-16; "Who pays"
+        # is a second, modelled view (dashed frame) with one circle per buyer; no price-model number is printed anywhere.
+        page.evaluate("showTab('ensomoney')"); page.wait_for_timeout(300)
+        page.click('[data-pstage="2015-16"]'); page.wait_for_timeout(900)
+        check("Prices stage switch paints the same stage of 2015-16 from the price outlook", page.evaluate("""async () => {
+            const P = (await (await fetch('data/enso_price_outlook.json')).json()).data;
+            const r = P.rows.find(x => x.iso3 === 'ZAF'), v = r.aftermath['2015-16'].pct, B = [-10, -3, 3, 10, 20, 30];
+            let k = B.length; for (let i = 0; i < B.length; i++) if (v < B[i]) { k = i; break; }
+            const want = ['#3f6f9c', '#8fb1cf', '#77797d', '#d9b27c', '#dd8a45', '#cc5a2e', '#9e2f1c'][k]; let got = null;
+            _stageHMap.eachLayer(l => { const p = l.feature && l.feature.properties; if (p && (p.ISO_A3 || p.ADM0_A3) === 'ZAF' && l.options.fillColor) got = l.options.fillColor; });
+            return got === want && document.getElementById('enso-maptag').textContent.startsWith('After inflation, Mar 2015 to the same stage');
+        }"""))
+        page.click('[data-pstage="now"]'); page.click('[data-pview="pays"]'); page.wait_for_timeout(900)
+        check("Prices 'Who pays' view: one circle per buyer from the outlook file, modelled frame, the old view one click away", page.evaluate("""async () => {
+            const W = (await (await fetch('data/enso_outlook.json')).json()).data.who_pays;
+            const isos = new Set(W.flatMap(c => (c.extra_import_kt ? [c.iso] : []).concat((c.buyers || []).map(b => b.iso))));
+            const outer = []; _stageHMap.eachLayer(l => { if (l instanceof L.CircleMarker && l.options.fillColor === '#8fb1cf' && /enso-pay-mark/.test(l.options.className || '')) outer.push(l); });
+            return outer.length === isos.size && document.getElementById('enso-mapwrap').dataset.kind === 'modelled'
+                && document.getElementById('enso-legend').textContent.includes('lost from its own harvest');
+        }"""))
+        page.click('[data-pview="since"]'); page.wait_for_timeout(600)
+        check("no price-model number on Prices: the model failed its skill test", page.evaluate("""async () => {
+            const P = (await (await fetch('data/enso_price_outlook.json')).json()).data;
+            const t = document.getElementById('subview-ensomoney').textContent + document.getElementById('enso-mapwrap').textContent;
+            return P.model_status !== 'no_skill' || (P.rows.every(r => r.model == null) && !/forecast of|price forecast:/i.test(t));
+        }"""))
+        check("Who pays follows the map; the past-price plate has a 2026 row from the FAO index and one fold", page.evaluate("""async () => {
+            const order = [...document.querySelectorAll('#subview-ensomoney > *')].map(e => e.id || e.className);
+            const F = (await (await fetch('data/fao_ffpi.json')).json()).data.series.map(x => x.fpi), n = F.length;
+            const avg = a => a.reduce((t, x) => t + x, 0) / a.length, prev = (avg(F.slice(n - 6)) / avg(F.slice(n - 12, n - 6)) - 1) * 100;
+            const pl = document.querySelector('.enso-pastprice-plate'), now = pl.querySelector('.enso-pp-nowrow');
+            const txt = now ? now.textContent.replace('−', '-') : '';
+            return order.indexOf('enso-whopays') === order.findIndex(x => /enso-mapgrid/.test(x)) + 1
+                && !!now && txt.includes((prev > 0 ? '+' : '') + prev.toFixed(1) + '%')
+                && pl.querySelectorAll('.plate-body > details').length === 1 && /up to 9% for food/.test(pl.textContent);
+        }"""))
+        check("maize panels are scaled to their own data and carry the replay's past misses", page.evaluate("""() => {
+            const tops = [...document.querySelectorAll('.enso-pa-svg')].map(s => Math.max(...[...s.querySelectorAll('text.enso-hw-t')].map(t => +t.textContent).filter(Number.isFinite)));
+            return tops.length >= 6 && new Set(tops).size >= 3 && document.querySelectorAll('.enso-pa-miss').length >= 3
+                && /missed the highest month by about \d+ points/.test(document.querySelector('.enso-pa-plate .enso-est-block').textContent);
+        }"""))
 
         # 2026-09-28: the El Niño month slider was removed at the owner's request (it mixed observed, estimated
         # and fitted values in one control); each lens keeps its dated plates instead.
