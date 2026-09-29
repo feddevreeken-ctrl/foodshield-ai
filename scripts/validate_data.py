@@ -141,6 +141,9 @@ EXPECTED_FILES = {
     # SOFT for the same reason; a failed step keeps the last good archive.
     'rain_weeks.json':            ('soft',     'rain_weeks'),
     'sst_weeks.json':             ('soft',     'sst_weeks'),
+    # The sea for the same map's month, 30-day and 14-day stops (refresh_sst_months.py; the 7-day stop is
+    # sst_anomaly.json). SOFT for the same reason as the rain.
+    'sst_months.json':            ('soft',     'sst_recent'),
     # Build-time commodity interpretation. SOFT, and additionally listed in
     # OPTIONAL_FILES below: on a repo that has never run the step (no provider key
     # and no prior build) the file legitimately does not exist yet.
@@ -325,6 +328,41 @@ def _check_sst_weeks(data, meta):
                   f"{sum(1 for w in weeks if w.get('final'))} final")
 
 
+def _check_sst_recent(data):
+    """refresh_sst_months.py: last30 and last14, each a full OISST anomaly grid in tenths of a degree C ending on the
+    same newest day, with the Nino box means; and the months list."""
+    from datetime import date, timedelta
+    blocks, out = [], []
+    for key, n_days, need in (('last30', 30, 27), ('last14', 14, 13)):
+        b = data.get(key)
+        if not isinstance(b, dict) or not b:
+            return False, f"no {key}"
+        g = b.get('grid') or {}
+        n = (g.get('nlat') or 0) * (g.get('nlon') or 0)
+        a = b.get('anom')
+        if n < 10000 or not isinstance(a, list) or len(a) != n:
+            return False, f"{key}.anom is not a {g.get('nlat')}x{g.get('nlon')} grid"
+        vals = [v for v in a if v is not None]
+        if len(vals) < 0.5 * n or any(type(v) is not int or not -150 <= v <= 150 for v in vals):
+            return False, f"{key}: {len(vals)} sea cells, or a value outside +-15 C / not tenths"
+        try:
+            s0, e0 = date.fromisoformat(b['start']), date.fromisoformat(b['end'])
+        except (KeyError, TypeError, ValueError):
+            return False, f"{key} has no ISO start/end"
+        if (e0 - s0).days != n_days - 1 or not need <= (b.get('days_averaged') or 0) <= n_days:
+            return False, f"{key} runs {s0}..{e0} with {b.get('days_averaged')} days averaged"
+        bm = b.get('box_means_c') or {}
+        if any(not isinstance(bm.get(k), (int, float)) or abs(bm[k]) > 6 for k in ('nino34', 'nino12', 'nino3', 'nino4')):
+            return False, f"{key}: Nino box means missing or implausible ({bm})"
+        blocks.append(b)
+        out.append(f"{key} {s0}..{e0} nino34 {bm['nino34']:+.2f} C")
+    if blocks[0]['end'] != blocks[1]['end'] or blocks[0]['grid'] != blocks[1]['grid']:
+        return False, "last30 and last14 do not end on the same day on the same grid"
+    if not data.get('months'):
+        return False, "no months"
+    return True, f"ok — {len(data['months'])} months, " + ", ".join(out)
+
+
 def validate_one(filename, spec):
     """Returns (ok: bool, message: str)."""
     criticality, shape = spec
@@ -365,9 +403,10 @@ def validate_one(filename, spec):
         # refresh_rain_anomaly.py: the page paints anom and week.anom cell by cell on the grid.
         if not isinstance(data, dict) or not data:
             return False, f"no rain grid yet ({notes[:60] if notes else 'no notes'})"
-        g, wk = data.get('grid') or {}, data.get('week') or {}
+        g, wk, d14 = data.get('grid') or {}, data.get('week') or {}, data.get('d14') or {}
         n = (g.get('nlat') or 0) * (g.get('nlon') or 0)
-        for key, arr in (('anom', data.get('anom')), ('week.anom', wk.get('anom')), ('week.mm', wk.get('mm'))):
+        for key, arr in (('anom', data.get('anom')), ('week.anom', wk.get('anom')), ('week.mm', wk.get('mm')),
+                         ('d14.anom', d14.get('anom')), ('d14.mm', d14.get('mm')), ('d14.norm_mm', d14.get('norm_mm'))):
             if not isinstance(arr, list) or len(arr) != n or n == 0:
                 return False, f"{key} is not a {g.get('nlat')}x{g.get('nlon')} grid"
         valid = sorted(v for v in data['anom'] if isinstance(v, (int, float)))
@@ -378,7 +417,7 @@ def validate_one(filename, spec):
         if abs(med) > 40:
             return False, f"median 30-day change over all cells is {med:+d}%: a biased base?"
         # A kept last-good file passes every shape test forever; the live window must also be recent.
-        from datetime import date, datetime, timezone
+        from datetime import date, datetime, timedelta, timezone
         end = (data.get('window') or {}).get('end')
         try:
             age = (datetime.now(timezone.utc).date() - date.fromisoformat(end)).days
@@ -386,12 +425,22 @@ def validate_one(filename, spec):
             return False, "no window.end"
         if age > 6:
             return False, f"30-day window ends {end}, {age} days ago: the CPC step has not refreshed"
+        # The 14 days (added 2026-09-29): the 14 days ending on the same newest day as the week and the 30 days.
+        if d14.get('end') != end or wk.get('end') != end or d14.get('start') != (
+                date.fromisoformat(end) - timedelta(days=13)).isoformat():
+            return False, f"d14 runs {d14.get('start')}..{d14.get('end')}, not the 14 days ending {end}"
+        if sum(v is not None for v in d14['anom']) < 600:
+            return False, f"only {sum(v is not None for v in d14['anom'])} valid 14-day CPC cells"
         # chirps_rain_fill.py: sparse CHIRPS block, parallel to fill.cells, only where CPC has no value.
         fl, extra = data.get('fill'), ''
         if fl is not None:
-            cells, fw = fl.get('cells') or [], fl.get('week') or {}
-            for key, arr, cpc in (('fill.anom', fl.get('anom'), data['anom']), ('fill.week.anom', fw.get('anom'), wk['anom']),
-                                  ('fill.mm', fl.get('mm'), None), ('fill.week.mm', fw.get('mm'), None)):
+            cells, fw, fd = fl.get('cells') or [], fl.get('week') or {}, fl.get('d14')
+            pairs = [('fill.anom', fl.get('anom'), data['anom']), ('fill.week.anom', fw.get('anom'), wk['anom']),
+                     ('fill.mm', fl.get('mm'), None), ('fill.week.mm', fw.get('mm'), None)]
+            if fd is not None:  # optional: the fill is written without it if its extra CHC file fails
+                pairs += [('fill.d14.anom', fd.get('anom'), d14['anom']), ('fill.d14.mm', fd.get('mm'), d14['mm']),
+                          ('fill.d14.norm_mm', fd.get('norm_mm'), None)]
+            for key, arr, cpc in pairs:
                 if not isinstance(arr, list) or len(arr) != len(cells):
                     return False, f"{key} is not parallel to fill.cells"
                 if cpc is not None and any(not 0 <= k < n or (v is not None and cpc[k] is not None)
@@ -403,10 +452,12 @@ def validate_one(filename, spec):
         # layer, and only on cells with a reading (mm). Since 2026-09-28 (evening) arid cells keep their SPI where the
         # percent is blank, so the rule is mm, not anom.
         fl, fw = fl or {}, (fl or {}).get('week') or {}
-        spi_n = []
+        fd, spi_n = fl.get('d14') or {}, []
         for key, arr, mm, size in (('spi', data.get('spi'), data.get('mm'), n), ('week.spi', wk.get('spi'), wk['mm'], n),
+                                   ('d14.spi', d14.get('spi'), d14['mm'], n),
                                    ('fill.spi', fl.get('spi'), fl.get('mm'), len(fl.get('cells') or [])),
-                                   ('fill.week.spi', fw.get('spi'), fw.get('mm'), len(fl.get('cells') or []))):
+                                   ('fill.week.spi', fw.get('spi'), fw.get('mm'), len(fl.get('cells') or [])),
+                                   ('fill.d14.spi', fd.get('spi'), fd.get('mm'), len(fl.get('cells') or []))):
             if arr is None:
                 continue
             if not isinstance(arr, list) or len(arr) != size or not isinstance(mm, list) or len(mm) != size:
@@ -417,6 +468,10 @@ def validate_one(filename, spec):
         extra += f", SPI cells: {', '.join(spi_n)}" if spi_n else ", no SPI"
         return True, (f"ok — {(data.get('window') or {}).get('start')}..{(data.get('window') or {}).get('end')}, "
                       f"{len(valid)} cells, median {med:+d}%{extra}")
+    elif shape == 'sst_recent':
+        if not isinstance(data, dict) or not data:
+            return False, f"no sea months yet ({notes[:60] if notes else 'no notes'})"
+        return _check_sst_recent(data)
     elif shape in ('rain_weeks', 'sst_weeks'):
         if not isinstance(data, dict) or not data:
             return False, f"no weekly archive yet ({notes[:60] if notes else 'no notes'})"

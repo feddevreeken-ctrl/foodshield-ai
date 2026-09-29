@@ -56,7 +56,7 @@ import refresh_enso
 import refresh_enso_indices
 import refresh_enso_bulletins
 import refresh_sst_anomaly   # v84 -- OISST anomaly grid for the El Nino map
-import refresh_sst_months    # OISST monthly means (last 6 complete months) + last 30 days, for the El Nino scrubber
+import refresh_sst_months    # OISST monthly means (last 6 complete months) + last 30 and 14 days, El Nino scrubber
 import refresh_sst_weeks     # OISST weekly means (Monday-Sunday, rolling 12 weeks), the same weeks as rain_weeks.json
 import refresh_aqueduct
 import refresh_asap
@@ -183,7 +183,7 @@ STEPS = [
     ("CPC RONI outlook",       refresh_cpc_roni_outlook.main,   "enso_strengths.json"),
     # Observed rain now: 30 CPC daily files (~55 MB of Range requests, ~1 min) against the
     # committed 1991-2020 normal in data/ref, plus the CHIRPS fill for cells CPC leaves blank
-    # (two 66 MB CHC files, capped at chirps_rain_fill.BUDGET_S; on its failure the CPC layers
+    # (three 66 MB CHC files, capped at chirps_rain_fill.BUDGET_S; on its failure the CPC layers
     # are written without it). On a CPC failure safe_run keeps the last-good file.
     ("CPC observed rain",      refresh_rain_anomaly.main,       "rain_anomaly.json"),
     # Weekly archive: reuses the CPC days and the CHIRPS pentad the step above just read (a few more CPC days and,

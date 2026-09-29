@@ -23,6 +23,10 @@ Data:
     two to seven days before the run, where CPC's end one to two days before; both windows
     are stated in the output. The Early Estimates' own Anomaly and % of average use a
     1996-2025 base, so they are not used.
+  * 14 days (added 29 September 2026, beside the CPC 14-day layer): the three pentads ending with the
+    newest (13 to 16 days). CHC posts no three-pentad total, so it is the newest single-pentad total
+    (already read for the week) plus the two-pentad total ending one pentad earlier (EE_TIF, n = 2),
+    one more 66 MB file; a cell needs its full pixel count in both. SPI from the p3 fit (below).
   * Normal: the 1991-2020 mean of CHIRPS v3.0 final pentads, same product, from CHC's
     pentad archive in BIL format (CHIRPS_BIL: 2,160 files of 2.4 MB). Built once, by hand,
     into NORMAL_CACHE by
@@ -239,14 +243,15 @@ def _cache() -> dict:
 
 # --- the fill block ------------------------------------------------------
 
-def fill(need30: list[bool], need7: list[bool], arid_mm_day: float) -> tuple[dict, dict]:
-    """need30/need7: per output cell, True where CPC has no reading on that layer.
+def fill(need30: list[bool], need7: list[bool], arid_mm_day: float,
+         need14: list[bool] | None = None) -> tuple[dict, dict]:
+    """need30/need7/need14: per output cell, True where CPC has no reading on that layer.
 
     Returns (block, diag). block is sparse: "cells" lists the output cells (row-major from the south, as
-    the CPC arrays) where CPC has no reading on the 30-day or the 7-day layer and CHIRPS has one; anom, mm
-    and norm_mm (and week.*) are parallel to "cells", null where that layer is not filled there (CPC has
-    it) or, for anom, where the cell is arid. diag holds the full CHIRPS grids, (obs, normal) in mm a
-    day per cell or None, for the checks."""
+    the CPC arrays) where CPC has no reading on the 30-day, 14-day or 7-day layer and CHIRPS has one; anom,
+    mm and norm_mm (and week.*, d14.*) are parallel to "cells", null where that layer is not filled there
+    (CPC has it) or, for anom, where the cell is arid. diag holds the full CHIRPS grids, (obs, normal) in
+    mm a day per cell or None, for the checks. The 14-day part is left out (no d14) if its file fails."""
     _deadline[0] = time.monotonic() + BUDGET_S
     y, p = _newest()
     end = pentad_dates(y, p)[1]
@@ -274,11 +279,22 @@ def fill(need30: list[bool], need7: list[bool], arid_mm_day: float) -> tuple[dic
 
     f30, short30 = layer(obs30, w30, days30)
     f7, short7 = layer(obs7, w7, days7)
+    w14, f14, short14 = _back(y, p, 3), None, 0
+    days14 = sum((pentad_dates(*w)[1] - pentad_dates(*w)[0]).days + 1 for w in w14)
+    if need14 is not None:
+        try:  # the newest pentad plus the two-pentad total before it; a cell needs its full pixel count in both
+            obs2 = _tif_cells(EE_TIF.format(n=2, y=w14[1][0], p=w14[1][1]))
+            f14, short14 = layer(([a + b for a, b in zip(obs7[0], obs2[0])],
+                                  [a if a == b else -1 for a, b in zip(obs7[1], obs2[1])]), w14, days14)
+        except Exception as e:  # noqa: BLE001 -- the 30-day and 7-day fill stand without it
+            print(f"[WARN] CHIRPS 14 days left out: {type(e).__name__}: {e}")
     pct = lambda x: None if x is None or x[1] < arid_mm_day else int(round(100 * (x[0] - x[1]) / x[1]))
     mm = lambda x, i, n: None if x is None else int(round(x[i] * n))
-    cells = [k for k in range(NCELL) if (need30[k] and f30[k]) or (need7[k] and f7[k])]
+    cells = [k for k in range(NCELL) if (need30[k] and f30[k]) or (need7[k] and f7[k])
+             or (f14 is not None and need14[k] and f14[k])]
     a30 = [f30[k] if need30[k] else None for k in cells]
     a7 = [f7[k] if need7[k] else None for k in cells]
+    a14 = None if f14 is None else [f14[k] if need14[k] else None for k in cells]
     start = pentad_dates(*w30[0])[0]
     fin = _final_through(y, p, w30)
     block = {
@@ -290,9 +306,9 @@ def fill(need30: list[bool], need7: list[bool], arid_mm_day: float) -> tuple[dic
         "base_read_from": f"committed cache data/ref/{NORMAL_CACHE.name}",
         "cells": cells,
         "encoding": ("cells: output grid indexes (row-major from the southern edge, as anom) where CPC has no "
-                     "reading on the 30-day or 7-day layer and CHIRPS has one. anom/mm/norm_mm here and in "
-                     "week are parallel to cells; null where that layer is CPC's, or (anom) arid. Percent and "
-                     "whole mm as the CPC fields, over this block's own windows."),
+                     "reading on the 30-day, 14-day or 7-day layer and CHIRPS has one. anom/mm/norm_mm here and in "
+                     "week and d14 are parallel to cells; null where that layer is CPC's, or (anom) arid. Percent "
+                     "and whole mm as the CPC fields, over this block's own windows."),
         "window": {"start": start.isoformat(), "end": end.isoformat(), "days": days30, "pentads": len(w30),
                    "final_through": fin},
         "anom": [pct(x) for x in a30], "mm": [mm(x, 0, days30) for x in a30],
@@ -319,9 +335,17 @@ def fill(need30: list[bool], need7: list[bool], arid_mm_day: float) -> tuple[dic
             "the gauge cells.",
         ],
     }
-    if short30 or short7:
+    if a14 is not None:
+        block["d14"] = {"start": pentad_dates(*w14[0])[0].isoformat(), "end": end.isoformat(), "days": days14,
+                        "pentads": 3, "anom": [pct(x) for x in a14], "mm": [mm(x, 0, days14) for x in a14],
+                        "norm_mm": [mm(x, 1, days14) for x in a14],
+                        "n_valid": sum(pct(x) is not None for x in a14), "n_cells": sum(x is not None for x in a14)}
+        block["notes"].append(f"Its 14-day layer is the three pentads {block['d14']['start']} to {end.isoformat()} "
+                              f"({days14} days).")
+    if short30 or short7 or short14:
         block["notes"].append(f"Cells with CHIRPS pixels missing are left out rather than averaged over less ground "
-                              f"than their normal: {short30} on the 30-day layer, {short7} on the week.")
+                              f"than their normal: {short30} on the 30-day layer, {short14} on the 14 days, "
+                              f"{short7} on the week.")
     try:  # an addition: the fill stands without it
         s = {}
         for kind, arr, nd in (("p6", a30, days30), ("p1", a7, days7)):
@@ -343,7 +367,18 @@ def fill(need30: list[bool], need7: list[bool], arid_mm_day: float) -> tuple[dic
                               "the same scale as the gauge cells.")
     except (OSError, ValueError, KeyError, TypeError, IndexError, RuntimeError) as e:
         print(f"[WARN] CHIRPS SPI left out: {type(e).__name__}: {e}")
-    return block, {"c30": f30, "c7": f7}
+    if a14 is not None and "spi_info" in block:
+        try:  # the p3 fit, on its own: the other SPI layers stand without it
+            fits, m = SPI.chirps_fits((LAT0, LON0, STEP, NLAT, NLON), "p3", p - 1)
+            block["d14"]["spi"] = [None if x is None or k not in fits
+                                   else SPI.to_x100(SPI.spi_chirps(x[0] * days14, days14, fits[k], m["zero_mm"],
+                                                                   m["n_years"]))
+                                   for k, x in zip(cells, a14)]
+            block["spi_info"]["d14_n_valid"] = sum(v is not None for v in block["d14"]["spi"])
+            block["spi_info"]["d14_fit"] = f"the three pentads (d14.spi, p3 fit) ending at pentad {p} of the year"
+        except (OSError, ValueError, KeyError, TypeError, IndexError, RuntimeError) as e:
+            print(f"[WARN] CHIRPS 14-day SPI left out: {type(e).__name__}: {e}")
+    return block, {"c30": f30, "c7": f7, "c14": f14}
 
 
 # --- checks printed by refresh_rain_anomaly.main ---------------------------

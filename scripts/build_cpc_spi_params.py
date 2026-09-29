@@ -47,7 +47,8 @@ Data:
     compares like any other.
 
 Windows (value fitted: the window's mean rain in mm a day, over the days kept):
-  * d7, d30: the 7 and 30 days ending on each pentad end day, day of year 5, 10, .., 365 (ENDS).
+  * d7, d14, d30: the 7, 14 and 30 days ending on each pentad end day, day of year 5, 10, .., 365 (ENDS).
+    (d14 added 29 September 2026, for the live 14-day layer; the other kinds are unchanged by it.)
     A live window ending on day d uses the nearest end, block() = ((d + 2) // 5 - 1) % 73. Each
     end pools the windows ending up to POOL = 5 days either side (wrapping round the year inside
     the same year, so every value is a window ending in 1991-2020): 11 x 30 = 330 values.
@@ -89,9 +90,16 @@ of the 30 years under their own fit below -1 / above +1 (normal 15.9 each), and 
 The 7-day and single-pentad fits keep 0.5: there most added windows are dry-class years and the
 scale is off -- CPC d7 19.8 / 14.7 (out of sample 22.0 / 16.0), CHIRPS p1 4.5 / 13.3 with 4.5%
 above +2 (normal 2.3) -- and capping the dry share at 1 in 6 fixed CPC d7 but not CHIRPS p1.
+The 14-day kinds (d14, p3; 29 September 2026), the same test:
+    CPC d14 at 0.1        17.7 / 15.6 (16.2 / 16.0);  out of sample 19.7 / 17.5 (17.7 / 17.9)
+    CPC d14, q <= 1/6     15.4 / 15.8;                out of sample 18.2 / 17.9   -> adopted (SPI_ARID_MAX_Q)
+    CHIRPS p3 at 0.1       7.6 / 15.4 (16.0 / 16.2);  out of sample 18.1 / 16.8 (18.3 / 18.1), 6.3% above +2
+    CHIRPS p3, dry <= 5   11.0 / 15.1;                out of sample 14.6 / 17.2, 7.4% above +2 -> p3 keeps 0.5
+(0.2 and 0.3 mm a day moved neither by more than 2 points.) The cap applies only below 0.5 mm a day, so
+every fit the 0.5 rule gives is unchanged.
 
 Storage (PARAMS, gzipped JSON, 1.6 MB): cells lists the output cells (row-major from the south)
-with a fit; d7 and d30 (73 ends) and month (12) hold rows "a", "b", "q" parallel to cells:
+with a fit; d7, d14 and d30 (73 ends) and month (12) hold rows "a", "b", "q" parallel to cells:
 round(LN_SCALE ln alpha), round(LN_SCALE ln beta) with beta in mm a day, round(1000 q); null =
 no fit. load() decodes them; the rounding moves SPI by at most 0.03 (the build prints it).
 Build of 28 September 2026: each climatology year's SPI under its own fit, 200 random cells, has
@@ -123,10 +131,12 @@ MIN_NONZERO = 2 / 3                      # share of values over ZERO_MM a fit ne
 SPI_CLIP = 3.0
 # A window whose 1991-2020 normal is under this (mm a day) gets no fit. d30 and month reach below the live percent's
 # arid mask (R.ARID_MM_DAY); d7 does not (the docstring has the calibration that decided it).
-SPI_ARID_MM_DAY = {"d7": R.ARID_MM_DAY, "d30": 0.1, "month": 0.1}
+SPI_ARID_MM_DAY = {"d7": R.ARID_MM_DAY, "d14": 0.1, "d30": 0.1, "month": 0.1}
+# ... and d14 only where the dry share q is at most this, below R.ARID_MM_DAY (fits at or above it are the 0.5 rule's).
+SPI_ARID_MAX_Q = {"d14": 1 / 6}
 LN_SCALE = 1000                          # a, b = round(LN_SCALE * ln(alpha, beta)): 0.1% steps
 MONTH_DAYS = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
-KINDS = {"d7": 7, "d30": 30}
+KINDS = {"d7": 7, "d14": 14, "d30": 30}
 _ND = NormalDist()
 
 
@@ -184,8 +194,9 @@ def load(path: Path = PARAMS) -> dict:
     if (g["lat0"], g["lon0"], g["step_deg"], g["nlat"], g["nlon"]) != (R.LAT0, R.LON0, R.STEP, R.NLAT, R.NLON):
         raise RuntimeError(f"{path.name}: grid does not match refresh_rain_anomaly.py")
     s = c["ln_scale"]
-    out = {"cells": c["cells"], "meta": {k: v for k, v in c.items() if k not in ("d7", "d30", "month")}}
-    for kind in ("d7", "d30", "month"):
+    kinds = [k for k in (*KINDS, "month") if k in c]
+    out = {"cells": c["cells"], "meta": {k: v for k, v in c.items() if k not in kinds}}
+    for kind in kinds:
         k = c[kind]
         out[kind] = [[None if a is None else (math.exp(a / s), math.exp(b / s), q / 1000)
                       for a, b, q in zip(ra, rb, rq)] for ra, rb, rq in zip(k["a"], k["b"], k["q"])]
@@ -264,7 +275,7 @@ def _kept_mean(W, nbar, L):
 
 
 def _windows(S, N):
-    """Mean rain rate per window after the spike filter, NaN where under NEED_SHARE: d7/d30 (years x 365
+    """Mean rain rate per window after the spike filter, NaN where under NEED_SHARE: d7/d14/d30 (years x 365
     end days x ncell) and month (years x 12 x ncell); the windows' normals; spike counts."""
     import numpy as np
     ny, nc = LAST - FIRST + 1, S.shape[2]
@@ -272,14 +283,16 @@ def _windows(S, N):
     yrs = np.arange(1, ny + 1) * 365          # day 0 of each year FIRST..LAST in flat
     first = np.cumsum((0,) + MONTH_DAYS[:-1])
     norms = {"d7": np.stack([N[np.arange(e - 6, e + 1) % 365].mean(0) for e in range(365)]),
+             "d14": np.stack([N[np.arange(e - 13, e + 1) % 365].mean(0) for e in range(365)]),
              "d30": np.stack([N[np.arange(e - 29, e + 1) % 365].mean(0) for e in range(365)]),
              "month": np.stack([N[first[m]:first[m] + L].mean(0) for m, L in enumerate(MONTH_DAYS)])}
-    out = {k: np.full((ny, 365 if k in KINDS else 12, nc), np.nan, np.float32) for k in ("d7", "d30", "month")}
+    out = {k: np.full((ny, 365 if k in KINDS else 12, nc), np.nan, np.float32) for k in (*KINDS, "month")}
     spikes = {"d30": 0, "month": 0}
     for e in range(365):
         W = flat[(yrs + e)[:, None] + np.arange(-29, 1)]          # ny x 30 x ncell
         out["d30"][:, e], n = _kept_mean(W, norms["d30"][e], 30)
         out["d7"][:, e] = _kept_mean(W, norms["d30"][e], 7)[0]  # as live: the 30-day window's normal
+        out["d14"][:, e] = _kept_mean(W, norms["d30"][e], 14)[0]  # ditto
         spikes["d30"] += n
     for m, L in enumerate(MONTH_DAYS):
         out["month"][:, m], n = _kept_mean(flat[(yrs + first[m])[:, None] + np.arange(L)], norms["month"][m], L)
@@ -347,13 +360,15 @@ def build(folder: Path) -> int:
     S, titles = _daily(folder, subs, bits)
     win, norms, spikes = _windows(S, N)
     fits, samples = {}, {}
-    for kind in ("d7", "d30", "month"):
+    for kind in (*KINDS, "month"):
         if kind == "month":
             a, b, q, fitted = _fit(np.moveaxis(win["month"], 0, 1), _zero_rate(kind)[..., None], LAST - FIRST + 1)
         else:
             a, b, q, fitted = _fit_blocks(win[kind], POOL, _zero_rate(kind))
         normal = norms[kind][[e - 1 for e in ENDS]] if kind != "month" else norms["month"]
         fitted &= normal >= SPI_ARID_MM_DAY[kind]
+        if kind in SPI_ARID_MAX_Q:
+            fitted &= (normal >= R.ARID_MM_DAY) | (q <= SPI_ARID_MAX_Q[kind] + 1e-9)
         fits[kind] = (a, b, q, fitted)
         samples[kind] = win[kind][:, [e - 1 for e in ENDS]] if kind != "month" else win["month"]  # years x rows x cells
     keep = np.logical_or.reduce([f[3].any(0) for f in fits.values()])      # cells with at least one fit
@@ -370,9 +385,9 @@ def build(folder: Path) -> int:
         "value": "the window's mean rain in mm a day over the days kept (spike filter as the live collector)",
         "ends": list(ENDS), "pool_end_days": POOL,
         "block_rule": "a window ending on day-of-year d (365-day calendar, 29 February reads 28 February) "
-                      "uses d7/d30 row ((d + 2) // 5 - 1) % 73, the nearest end; month rows are January..December",
+                      "uses d7/d14/d30 row ((d + 2) // 5 - 1) % 73, the nearest end; month rows are January..December",
         "zero_mm": ZERO_MM, "min_nonzero_share": MIN_NONZERO, "arid_mm_day": R.ARID_MM_DAY,
-        "spi_arid_mm_day": SPI_ARID_MM_DAY, "spi_clip": SPI_CLIP,
+        "spi_arid_mm_day": SPI_ARID_MM_DAY, "spi_arid_max_q": SPI_ARID_MAX_Q, "spi_clip": SPI_CLIP,
         "ln_scale": LN_SCALE,
         "encoding": "cells: output cell indexes, row-major from the southern edge, with at least one fit. "
                     "Per kind, a/b/q: one row per end day (d7, d30) or month, parallel to cells. alpha = "
@@ -476,7 +491,10 @@ def _report(S, N, cells, win, norms, spikes, fits, samples):
         zs = {}
         for pool in (0, 2, 5, 10):
             a, b, q, f = _fit_blocks(tr, pool, zr)
-            zs[pool] = np.where(f & (norms[kind][ends] >= SPI_ARID_MM_DAY[kind]), _spi_np(te, a, b, q, zr), np.nan)
+            keep = f & (norms[kind][ends] >= SPI_ARID_MM_DAY[kind])
+            if kind in SPI_ARID_MAX_Q:
+                keep &= (norms[kind][ends] >= R.ARID_MM_DAY) | (q <= SPI_ARID_MAX_Q[kind] + 1e-9)
+            zs[pool] = np.where(keep, _spi_np(te, a, b, q, zr), np.nan)
         common = np.logical_and.reduce([np.isfinite(z).any(0) for z in zs.values()])
         for pool, z in zs.items():
             z = z[:, common][np.isfinite(z[:, common])]
@@ -498,7 +516,9 @@ def _current():
                            ("central India", 21.25, 78.75)):
         k = round((lat - R.LAT0) / R.STEP) * R.NLON + round((lon - R.LON0) / R.STEP)
         parts = []
-        for label, kind, blk, days in (("30d", "d30", ra, 30), ("7d", "d7", ra["week"], 7)):
+        for label, kind, blk, days in (("30d", "d30", ra, 30), ("14d", "d14", ra.get("d14"), 14), ("7d", "d7", ra["week"], 7)):
+            if blk is None or kind not in P:
+                continue
             end = date.fromisoformat(blk.get("end") or ra["window"]["end"])
             mm, nm, n = blk["mm"][k], blk["norm_mm"][k], blk.get("days") or ra["window"]["days"]
             fit = P[kind][block(end)][idx[k]] if k in idx else None

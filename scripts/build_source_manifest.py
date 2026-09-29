@@ -479,7 +479,7 @@ SOURCES = [
     {
         "key": "rain_anomaly",
         "file": "rain_anomaly.json",
-        "label": "NOAA CPC gauge rain on land, last 30 and 7 days vs 1991-2020 (same-product daily normal); "
+        "label": "NOAA CPC gauge rain on land, last 30, 14 and 7 days vs 1991-2020 (same-product daily normal); "
                  "CHIRPS v3 satellite+station where gauges are sparse (its own 1991-2020 pentad normal)",
         "cadence": "6-hourly fetch / daily upstream (1-2d lag, newest days re-issued)",
         "mode": "live",

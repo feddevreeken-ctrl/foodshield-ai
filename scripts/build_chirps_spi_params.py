@@ -37,6 +37,8 @@ Data
 
 Windows (what the live fill shows; a window's year is the year its last pentad falls in)
   * p1: one pentad (the fill's "7 days"), ending at each of the 72 pentads of the year.
+  * p3: three pentads (the fill's "14 days", 13-16 days), ending at each of the 72 pentads (added 29
+    September 2026; the other kinds are unchanged by it).
   * p6: six pentads (the fill's "30 days", 28-31 days), ending at each of the 72 pentads.
   * month: each of the 12 calendar months.
   The fitted quantity is the window's cell-mean rate, total / days, in mm a day, so the leap-year
@@ -65,7 +67,7 @@ Fit, per cell and window, over the 30 years
     The page should say "-3 or below" rather than print the digits.
   * No parameters (null) where
       - the window's 1991-2020 normal in NORMAL_CACHE (the normal the live percent uses) is under
-        SPI_ARID_MM_DAY: p1 0.5 mm a day (ARID_MM_DAY, the live arid mask), p6 and month 0.1 (below);
+        SPI_ARID_MM_DAY: p1 and p3 0.5 mm a day (ARID_MM_DAY, the live arid mask), p6 and month 0.1 (below);
       - fewer than MIN_WET (15) of the 30 years are wet. Then the window's median total is a dry one,
         any rain at all ranks above it, and a gamma rests on under 15 points. This blanks 8.6% of the
         non-arid single-pentad windows (20 wet years would blank 20.7%), 13 six-pentad windows and 1
@@ -80,7 +82,7 @@ Fit, per cell and window, over the 30 years
         Blanks 173 single-pentad windows in 21 cells (one window in a full land cell: eastern Yemen,
         6-10 January), 12 six-pentad windows and 5 months in 2 cells (south Greenland, a 3.75S atoll).
 
-Since 28 September 2026 p6 and month fits reach down to a normal of 0.1 mm a day, p1 fits keep 0.5 (inland
+Since 28 September 2026 p6 and month fits reach down to a normal of 0.1 mm a day, p1 and p3 fits keep 0.5 (inland
 Australia's wet August 2026 read blank). The calibration that decided it, both products, is in
 build_cpc_spi_params.py's docstring.
 
@@ -143,8 +145,8 @@ MAX_SHAPE = 400           # gamma shape above which the wet years vary by under 
 ARID_MM_DAY = R.ARID_MM_DAY
 # A window whose 1991-2020 normal is under this (mm a day) gets no fit: p6 and month reach below the live percent's
 # arid mask, p1 does not (the docstring has the calibration that decided it).
-SPI_ARID_MM_DAY = {"p1": ARID_MM_DAY, "p6": 0.1, "month": 0.1}
-KINDS = (("p1", 72), ("p6", 72), ("month", 12))
+SPI_ARID_MM_DAY = {"p1": ARID_MM_DAY, "p3": ARID_MM_DAY, "p6": 0.1, "month": 0.1}
+KINDS = (("p1", 72), ("p3", 72), ("p6", 72), ("month", 12))
 PLACES = (("Para, Brazil", -6.25, -56.25), ("Congo basin", -1.25, 23.75), ("Borneo", 1.25, 113.75),
           ("western Niger", 13.75, 1.25), ("central Ethiopia", 8.75, 38.75))
 _ND = NormalDist()
@@ -272,16 +274,16 @@ def windows(P, M):
     yrs = range(Y0, Y1 + 1)
     t1 = P[1:]
     d1 = np.array([[_pdays(y, p) for p in range(1, 73)] for y in yrs], float)
-    t6 = np.zeros_like(t1)
-    d6 = np.zeros_like(d1)
+    t3, d3, t6, d6 = np.zeros_like(t1), np.zeros_like(d1), np.zeros_like(t1), np.zeros_like(d1)
     for iy, y in enumerate(yrs):
         for p in range(1, 73):
-            for yy, pp in F._back(y, p, 6):
-                t6[iy, p - 1] += P[yy - (Y0 - 1), pp - 1]
-                d6[iy, p - 1] += _pdays(yy, pp)
+            for n, t, d in ((3, t3, d3), (6, t6, d6)):
+                for yy, pp in F._back(y, p, n):
+                    t[iy, p - 1] += P[yy - (Y0 - 1), pp - 1]
+                    d[iy, p - 1] += _pdays(yy, pp)
     dm = np.array([[(date(y + (m == 12), m % 12 + 1, 1) - date(y, m, 1)).days for m in range(1, 13)] for y in yrs],
                   float)
-    out = {"p1": (t1, d1), "p6": (t6, d6), "month": (M, dm)}
+    out = {"p1": (t1, d1), "p3": (t3, d3), "p6": (t6, d6), "month": (M, dm)}
     for k, (t, _) in out.items():
         if np.isnan(t).any():
             raise RuntimeError(f"{k}: windows with unread files")
@@ -293,11 +295,11 @@ def cache_normals(c: dict):
     import numpy as np
     rate = np.array(c["rate"], float) / 1000
     d = np.array([_pdays(2019, p) for p in range(1, 73)], float)
-    n6 = np.stack([sum(rate[pp - 1] * _pdays(yy, pp) for yy, pp in F._back(2019, p, 6))
-                   / sum(_pdays(yy, pp) for yy, pp in F._back(2019, p, 6)) for p in range(1, 73)])
+    n3, n6 = (np.stack([sum(rate[pp - 1] * _pdays(yy, pp) for yy, pp in F._back(2019, p, n))
+                        / sum(_pdays(yy, pp) for yy, pp in F._back(2019, p, n)) for p in range(1, 73)]) for n in (3, 6))
     nm = np.stack([(rate[6 * m:6 * m + 6] * d[6 * m:6 * m + 6, None]).sum(0) / d[6 * m:6 * m + 6].sum()
                    for m in range(12)])
-    return {"p1": rate, "p6": n6, "month": nm}
+    return {"p1": rate, "p3": n3, "p6": n6, "month": nm}
 
 
 def fit(tot, days):
@@ -482,6 +484,7 @@ def main(argv: list[str]) -> int:
         "min_distinct_wet_totals": MIN_DISTINCT, "max_shape": MAX_SHAPE,
         "arid_mm_day": ARID_MM_DAY, "spi_arid_mm_day": SPI_ARID_MM_DAY,
         "windows": {"p1": "one CHIRPS pentad, ending at pentad 1..72 of the year (1-5 January first)",
+                    "p3": "three pentads, ending at pentad 1..72 (the first two reach into the previous year)",
                     "p6": "six pentads, ending at pentad 1..72 (the first five reach into the previous year)",
                     "month": "calendar months January..December, from CHIRPS v3.0 monthly files"},
         "fit": "gamma by exact maximum likelihood on the wet years (window total >= zero_mm), rate = total / days "

@@ -14,14 +14,14 @@ read off a standard normal. SPI -1 / -1.5 / -2 = moderately / severely / extreme
 
 This module only EVALUATES. The fits were made once, locally, with numpy and scipy:
   * CPC gauge cells: scripts/build_cpc_spi_params.py -> data/ref/cpc_spi_params_1991_2020.json.gz
-    (windows d7 and d30 ending on each of 73 pentad end days of a 365-day year, pooled +-5 days;
+    (windows d7, d14 and d30 ending on each of 73 pentad end days of a 365-day year, pooled +-5 days;
     calendar months). SPI rule of that build (its docstring has the reasons):
-        total = rate x nominal days (7, 30, or the month's days with February 28);
+        total = rate x nominal days (7, 14, 30, or the month's days with February 28);
         total < zero_mm (0.5 mm) and q > 0:  H = q / 2          (middle of the dry class)
         otherwise:                           H = q + (1 - q) P(alpha, rate / beta)
         H clipped to [Phi(-3), Phi(3)], SPI = Phi^-1(H).
   * CHIRPS fill cells: scripts/build_chirps_spi_params.py -> data/ref/chirps3_spi_params_1991_2020.json.gz
-    (windows p1 = one pentad and p6 = six pentads, ending at each of the 72 CHIRPS pentads of
+    (windows p1 = one pentad, p3 = three and p6 = six pentads, ending at each of the 72 CHIRPS pentads of
     the year; calendar months). SPI rule of that build:
         total < zero_mm (1 mm, the BIL archive's whole-mm floor):  H = (dry + 1) / (2 (n + 1))
         otherwise: q = dry / n, H = q + (1 - q) P(shape, x shape / wet_mean), x = total / days
@@ -36,9 +36,9 @@ This module only EVALUATES. The fits were made once, locally, with numpy and sci
   thresholds, clip and year counts are read from each file, not repeated here.
 
 Window to parameter row (the time of year closest to the window's end):
-  * CPC d7/d30: cpc_row(end) = ((doy + 2) // 5 - 1) % 73 on a 365-day calendar (29 February reads
+  * CPC d7/d14/d30: cpc_row(end) = ((doy + 2) // 5 - 1) % 73 on a 365-day calendar (29 February reads
     28 February): the pentad end day nearest the window's last day. Months: row month - 1.
-  * CHIRPS p1/p6: the fill's windows ARE CHIRPS pentads, so the row is the pentad of year of the
+  * CHIRPS p1/p3/p6: the fill's windows ARE CHIRPS pentads, so the row is the pentad of year of the
     window's last pentad, minus one. Months: row month - 1.
 
 Numerics:
@@ -146,13 +146,13 @@ def _load(path: Path, grid: tuple) -> dict:
 
 
 def cpc_row(end: date) -> int:
-    """d7/d30 row of a CPC window whose last day is `end`: the nearest pentad end day, 365-day calendar."""
+    """d7/d14/d30 row of a CPC window whose last day is `end`: the nearest pentad end day, 365-day calendar."""
     doy = date(2001, end.month, 28 if (end.month, end.day) == (2, 29) else end.day).timetuple().tm_yday
     return ((doy + 2) // 5 - 1) % 73
 
 
 def cpc_fits(grid: tuple, kind: str, row: int, path: Path = CPC_PARAMS) -> tuple[dict, dict]:
-    """({output cell: (alpha, beta mm/day, q)} for one row of kind 'd7', 'd30' or 'month'; the file's settings)."""
+    """({output cell: (alpha, beta mm/day, q)} for one row of kind 'd7', 'd14', 'd30' or 'month'; the file's settings)."""
     c = _load(path, grid)
     s, k = c["ln_scale"], c[kind]
     fits = {cell: (math.exp(a / s), math.exp(b / s), q / 1000)

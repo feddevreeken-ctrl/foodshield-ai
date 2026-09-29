@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""refresh_rain_anomaly.py -- observed rain on land, last 30 days and last 7 days, against 1991-2020.
+"""refresh_rain_anomaly.py -- observed rain on land, last 30, 14 and 7 days, against 1991-2020.
 
 Feeds the El Nino Ocean map. The past-El-Nino rain layer there shows what
 past events did; this file shows what the rain is doing now, on exactly the
@@ -64,6 +64,12 @@ Data:
   * Cells whose normal over the window is under 0.3 mm a day (the same arid
     threshold as the composites) are null on the percent layers, as are sea
     cells.
+  * 14 days (added 29 September 2026; owner: "last 7, 14, 30 thats the recent
+    ones that should auto update"): "d14", the 14 days ending on the same newest
+    day, beside "week". The same rules as the week: the 30-day gauge test and
+    spike filter, then the 14 days' own gauge test (MIN_GAUGES reports a day
+    over the days kept) and NEED_SHARE of them; SPI from the d14 fit; CHIRPS
+    fills its blank cells with three pentads (fill.d14, chirps_rain_fill.py).
   * SPI (added 28 September 2026). A percent does not read alike on 7 and 30
     days: a week varies far more than a month, so the week looked calmer than
     the 30-day layer. "spi" (30 days) and "week.spi" give each cell's
@@ -117,7 +123,7 @@ PSL_FTP = "ftp://ftp.cdc.noaa.gov/Datasets/cpc_global_precip/precip.day.ltm.1991
 NORMAL_CACHE = Path(__file__).resolve().parent.parent / "data" / "ref" / "cpc_rain_normal_1991_2020.json.gz"
 UA = {"User-Agent": "FoodShield-AI data refresh (github.com/feddevreeken-ctrl/foodshield-ai)"}
 
-DAYS, WEEK = 30, 7
+DAYS, WEEK, D14 = 30, 7, 14
 NEED_SHARE = 0.85          # share of the window's days a cell needs after the spike filter
 # 0.5, not the composites' 0.3: over 7 or 30 days a normal of a few tenths of a mm a day is one shower, and the
 # dry-season percents it gives (+183% over southern Africa in September 2026) read as a wet spell that is not there.
@@ -345,7 +351,7 @@ def _pct(cells) -> list:
 
 
 def _spi(cells: list, pct: list, kind: str, end: date, days: int) -> tuple[list, dict]:
-    """SPI x 100 per cell of one CPC layer (kind 'd30' or 'd7'), from the unrounded mean rain per day; null where
+    """SPI x 100 per cell of one CPC layer (kind 'd30', 'd14' or 'd7'), from the unrounded mean rain per day; null where
     the cell has no reading or no fit for this window and time of year (see the docstring). pct is not used: SPI
     is not blanked with the percent's arid mask."""
     fits, m = SPI.cpc_fits((LAT0, LON0, STEP, NLAT, NLON), kind, SPI.cpc_row(end))
@@ -371,15 +377,19 @@ def build() -> tuple[dict, dict]:
     days = [start + timedelta(days=i) for i in range(DAYS) if start + timedelta(days=i) in listed]
     wstart = end - timedelta(days=WEEK - 1)
     wdays = [d for d in days if d >= wstart]
-    if len(days) < NEED_SHARE * DAYS or len(wdays) < NEED_SHARE * WEEK:
-        raise RuntimeError(f"CPC has {len(days)}/{DAYS} days and {len(wdays)}/{WEEK} this week")
+    dstart = end - timedelta(days=D14 - 1)
+    ddays = [d for d in days if d >= dstart]
+    if len(days) < NEED_SHARE * DAYS or len(wdays) < NEED_SHARE * WEEK or len(ddays) < NEED_SHARE * D14:
+        raise RuntimeError(f"CPC has {len(days)}/{DAYS} days, {len(ddays)}/{D14} in 14 days and {len(wdays)}/{WEEK} "
+                           "this week")
 
     norm, normal_from = _normal(days)  # no fallback base: see the module docstring
     per = {d: _cell_day(_cpc_day(d), norm[d]) for d in days}
     del norm
     c30, c7, dropped, ungauged, gauges = _windows(per, days, wdays)
+    _, c14, _, _, _ = _windows(per, days, ddays)  # the week's rules on 14 days: same 30-day test, own gauge test
 
-    anom, wanom = _pct(c30), _pct(c7)
+    anom, wanom, danom = _pct(c30), _pct(c7), _pct(c14)
     tot = lambda cells, i, n: [None if x is None else int(round(x[i] * n)) for x in cells]
     wmm = tot(c7, 0, len(wdays))
     missing = [(start + timedelta(days=i)).isoformat() for i in range(DAYS)
@@ -402,6 +412,9 @@ def build() -> tuple[dict, dict]:
                  "mm": wmm, "norm_mm": tot(c7, 1, len(wdays)),
                  "mm_encoding": "row-major from the southern edge, whole millimetres over the window: mm what "
                                 "fell, norm_mm the 1991-2020 normal for the same days; null over sea or missing"},
+        "d14": {"start": dstart.isoformat(), "end": end.isoformat(), "days": len(ddays),
+                "anom": danom, "n_valid": sum(v is not None for v in danom),
+                "mm": tot(c14, 0, len(ddays)), "norm_mm": tot(c14, 1, len(ddays))},
         "min_gauges_per_day": MIN_GAUGES,
         "cells_without_gauges": ungauged,
         "spike_cell_days_dropped": len(dropped),
@@ -409,8 +422,8 @@ def build() -> tuple[dict, dict]:
             f"Observed rain from rain gauges, not a model or a forecast. The last {len(days)} days end on "
             f"{end.isoformat()}, the newest day NOAA CPC had posted when this ran; CPC's gauge analysis runs "
             "one to two days behind, and it re-issues its newest days as late reports arrive.",
-            "Colour is the percent change against the 1991-2020 average for the same calendar days. The week "
-            "layer does the same for the last seven days and also gives the rain that fell, in millimetres.",
+            "Colour is the percent change against the 1991-2020 average for the same calendar days. The 14-day "
+            "and week layers do the same for the last 14 and 7 days, and give the rain that fell in millimetres.",
             f"Each 2.5-degree cell is the average of the 0.5-degree gauge analysis inside it, over land only. "
             f"Land that averages under {ARID_MM_DAY} mm of rain a day at this time of year is left blank on the "
             "percent layers, where a small shower reads as a huge percent. Sea cells are blank.",
@@ -454,16 +467,24 @@ def build() -> tuple[dict, dict]:
             "week reads only mildly dry, even inside a severe 30-day drought.")
     except (OSError, ValueError, KeyError, TypeError, IndexError, RuntimeError) as e:
         print(f"[WARN] SPI left out: {type(e).__name__}: {e}")
+    if "spi_info" in payload:
+        try:  # the d14 fit, on its own: the 30-day and week SPI stand without it
+            payload["d14"]["spi"], _ = _spi(c14, danom, "d14", end, D14)
+            payload["spi_info"]["d14_n_valid"] = sum(v is not None for v in payload["d14"]["spi"])
+            payload["spi_info"]["encoding"] += "; d14.spi the same over the 14 days (d14 fit)"
+        except (OSError, ValueError, KeyError, TypeError, IndexError, RuntimeError) as e:
+            print(f"[WARN] 14-day SPI left out: {type(e).__name__}: {e}")
     cf, fdiag = chirps_rain_fill, None
     if (cf.LAT0, cf.LON0, cf.STEP, cf.NLAT, cf.NLON) != (LAT0, LON0, STEP, NLAT, NLON):
         raise RuntimeError("chirps_rain_fill.py grid differs from this script's")
     try:  # a fill only: CPC is written without it, never the reverse
-        payload["fill"], fdiag = chirps_rain_fill.fill([x is None for x in c30], [x is None for x in c7], ARID_MM_DAY)
+        payload["fill"], fdiag = chirps_rain_fill.fill([x is None for x in c30], [x is None for x in c7], ARID_MM_DAY,
+                                                       [x is None for x in c14])
     except Exception as e:  # noqa: BLE001 -- any CHC failure leaves the CPC layers as they are
         print(f"[WARN] CHIRPS fill left out: {e}")
     LAST.clear()
     LAST.update(per=per, listed=listed, end=end, payload=payload, chirps=fdiag)
-    return payload, {"c30": c30, "c7": c7, "dropped": dropped, "gauges": gauges, "chirps": fdiag}
+    return payload, {"c30": c30, "c14": c14, "c7": c7, "dropped": dropped, "gauges": gauges, "chirps": fdiag}
 
 
 def _region(cells, pct, s, n, w, e):
@@ -492,15 +513,17 @@ def main() -> int:
     # envelope, no whitespace (as build_sst_composites does).
     path.write_text(json.dumps(json.loads(path.read_text()), ensure_ascii=False, separators=(",", ":")))
     w, wk = payload["window"], payload["week"]
-    print(f"[OK] CPC rain {w['start']}..{w['end']} ({w['days']} days), week {wk['start']}..{wk['end']} "
-          f"| valid cells 30d {payload['n_valid']}, week {wk['n_valid']} | {payload['cells_without_gauges']} "
+    d14 = payload["d14"]
+    print(f"[OK] CPC rain {w['start']}..{w['end']} ({w['days']} days), 14 days {d14['start']}..{d14['end']}, week "
+          f"{wk['start']}..{wk['end']} | valid cells 30d {payload['n_valid']}, 14d {d14['n_valid']}, week "
+          f"{wk['n_valid']} | {payload['cells_without_gauges']} "
           f"cells without gauges | {len(diag['dropped'])} spike cell-days dropped | {path.stat().st_size / 1e3:.0f} KB")
     vals = sorted(v for v in payload["anom"] if v is not None)
     print(f"[check] all valid cells, 30d: median {vals[len(vals) // 2]:+d}%, "
           f"IQR {vals[len(vals) // 4]:+d}..{vals[3 * len(vals) // 4]:+d}% (a large offset would mean a biased base)")
     print("[check] largest dropped cell-days (mm, day, lat, lon): "
           + ", ".join(map(str, sorted(diag["dropped"], reverse=True)[:8])))
-    for key, blk in (("30d", payload), ("7d", wk)):
+    for key, blk in (("30d", payload), ("14d", payload["d14"]), ("7d", wk)):
         s = [v for v in blk.get("spi") or [] if v is not None]
         if s:
             share = lambda t: 100 * sum(abs(v) >= t for v in s) / len(s)  # noqa: E731
@@ -508,7 +531,7 @@ def main() -> int:
                   f"percent, median {sorted(s)[len(s) // 2] / 100:+.2f}, |SPI| >= 1 in {share(100):.0f}%, >= 2 in "
                   f"{share(200):.0f}% (a normal year: 32% and 5%)")
     for label, s, n, we, e in CHECKS:
-        for key, pct in (("30d", payload["anom"]), ("7d", wk["anom"])):
+        for key, pct in (("30d", payload["anom"]), ("14d", payload["d14"]["anom"]), ("7d", wk["anom"])):
             k, kv, med, obs, nrm = _region(diag["c" + key[:-1]], pct, s, n, we, e)
             print(f"[check] {label} {key}: {k} land cells, {kv} not arid, median {med if med is None else f'{med:+d}%'}"
                   f", observed {obs:.1f} vs normal {nrm:.1f} mm/day")

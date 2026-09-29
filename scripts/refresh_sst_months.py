@@ -13,6 +13,11 @@ fields. A complete month does not change once the final (non-preliminary)
 dataset covers it, so months are cached in data/sst_months.json and fetched
 once; a month first taken from the near-real-time dataset is fetched again when
 the final one covers it. Pure Python (requests only), like the weekly collector.
+
+last30 and last14 (added 29 September 2026): the mean of the last 30 and the last
+14 days of the freshest dataset, from one 30-day fetch, for the scrubber's 30-day
+and 14-day stops (owner: "last 7, 14, 30 thats the recent ones that should auto
+update"); the 7-day stop is sst_anomaly.json.
 """
 from __future__ import annotations
 
@@ -28,6 +33,7 @@ import refresh_sst_anomaly as W  # noqa: E402
 MONTHS = 6    # owner: "I want the temp to go back 6 months for the slider"
 LAST = 30     # the scrubber's 30-day stop pairs a 30-day sea mean with the 30-day rain
 OUT = Path(__file__).resolve().parent.parent / "data" / "sst_months.json"
+RECENT14 = 14  # the scrubber's 14-day stop: the last 14 of the same daily fields, no second request
 # The last30 fetch's dataset and daily rows, kept in this process for refresh_sst_weeks.py (the next run_all step),
 # so the weekly archive needs no second ERDDAP request (a 30-day fetch takes 80 s).
 LAST30: dict = {}
@@ -39,10 +45,13 @@ def _month_bounds(y: int, m: int) -> tuple[datetime, datetime]:
     return first, datetime(nxt.year, nxt.month, nxt.day, 12, tzinfo=timezone.utc) - timedelta(days=1)
 
 
-def _mean_field(ds: str, t0: datetime, t1: datetime):
-    rows = W._fetch(ds, t0, t1)
-    LAST30.clear()
-    LAST30.update(ds=ds, rows=rows)
+def _mean_field(ds: str, t0: datetime, t1: datetime, rows: list | None = None):
+    """Mean anomaly of the daily fields from t0 to t1 (fetched, or from rows already fetched)."""
+    if rows is None:
+        rows = W._fetch(ds, t0, t1)
+    else:
+        lo, hi = t0.date().isoformat(), t1.date().isoformat()
+        rows = [r for r in rows if lo <= r["time"][:10] <= hi]
     lats = sorted({r["latitude"] for r in rows})
     lons = sorted({r["longitude"] for r in rows})
     li = {v: i for i, v in enumerate(lats)}
@@ -75,20 +84,29 @@ def _boxes(lats, lons, grid) -> dict:
     return out
 
 
-def _last_days(newest: dict) -> dict:
-    """The last LAST days of the freshest dataset: the sea half of the scrubber's 30-day stop."""
+def _last_days(newest: dict) -> tuple[dict, dict]:
+    """The last LAST and last RECENT14 days of the freshest dataset, from one fetch: the sea half of the scrubber's
+    30-day and 14-day stops ({} each when no dataset has enough days)."""
     for ds, label in W.DATASETS:  # near-real-time first, as the weekly map does
         if ds not in newest:
             continue
         t1 = newest[ds]
         t0 = t1 - timedelta(days=LAST - 1)
-        lats, lons, days, grid = _mean_field(ds, t0, t1)
-        if len(days) >= LAST - 3:
-            return {"start": t0.date().isoformat(), "end": t1.date().isoformat(), "dataset": ds, "product": label,
-                    "preliminary": ds.startswith("ncdcOisst21Nrt"), "days_averaged": len(days),
-                    "grid": {"lat0": lats[0], "lon0": lons[0], "step_deg": W.STEP * 0.25, "nlat": len(lats), "nlon": len(lons)},
-                    "anom": grid, "box_means_c": _boxes(lats, lons, grid)}
-    return {}
+        rows = W._fetch(ds, t0, t1)
+        LAST30.clear()
+        LAST30.update(ds=ds, rows=rows)
+        out = []
+        for n, need in ((LAST, LAST - 3), (RECENT14, RECENT14 - 1)):
+            s0 = t1 - timedelta(days=n - 1)
+            lats, lons, days, grid = _mean_field(ds, s0, t1, rows)
+            out.append({} if len(days) < need else {
+                "start": s0.date().isoformat(), "end": t1.date().isoformat(), "dataset": ds, "product": label,
+                "preliminary": ds.startswith("ncdcOisst21Nrt"), "days_averaged": len(days),
+                "grid": {"lat0": lats[0], "lon0": lons[0], "step_deg": W.STEP * 0.25, "nlat": len(lats), "nlon": len(lons)},
+                "anom": grid, "box_means_c": _boxes(lats, lons, grid)})
+        if out[0]:
+            return out[0], out[1]
+    return {}, {}
 
 
 def _one_month(y: int, m: int, newest: dict) -> dict | None:
@@ -177,9 +195,10 @@ def build() -> dict:
             months.append(prev)
     if not months:
         raise RuntimeError("no complete month available")
-    last30 = _last_days(newest)
+    last30, last14 = _last_days(newest)
     return {
         "last30": last30,
+        "last14": last14,
         "product": "NOAA OISST v2.1 daily anomaly, monthly mean", "base": "1971-2000 (OISST daily climatology)",
         "source_url": f"{W.ERDDAP}/{W.DATASETS[1][0]}.html",
         "encoding": "row-major from the southern edge, tenths of a degree C, null over land",
@@ -198,8 +217,10 @@ def main() -> int:
     path.write_text(json.dumps(json.loads(path.read_text()), ensure_ascii=False, separators=(",", ":")))
     for x in payload["months"]:
         print(f"[OK] {x['month']} {x['product']} days {x['days_averaged']} nino34 {x['box_means_c'].get('nino34')} nino12 {x['box_means_c'].get('nino12')}")
-    l30 = payload.get("last30") or {}
-    print(f"[OK] last 30 days {l30.get('start')}..{l30.get('end')} ({l30.get('days_averaged')} days) nino34 {(l30.get('box_means_c') or {}).get('nino34')}")
+    for key in ("last30", "last14"):
+        x = payload.get(key) or {}
+        print(f"[OK] {key} {x.get('start')}..{x.get('end')} ({x.get('days_averaged')} days) nino34 "
+              f"{(x.get('box_means_c') or {}).get('nino34')}")
     return 0
 
 
