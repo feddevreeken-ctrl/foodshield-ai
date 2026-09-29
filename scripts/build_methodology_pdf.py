@@ -103,7 +103,7 @@ def main():
     gen = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     F.append(Paragraph("FoodShield FDRS", S["h1"]))
-    F.append(Paragraph(f"Methodology &amp; Validation &nbsp;·&nbsp; generated {gen} &nbsp;·&nbsp; foodshield-ai-fv.vercel.app", S["sub"]))
+    F.append(Paragraph(f"Methodology &amp; Validation &nbsp;·&nbsp; generated {gen} &nbsp;·&nbsp; foodshield.nl", S["sub"]))
     F.append(HRFlowable(width="100%", thickness=0.6, color=colors.HexColor("#d6d8de"), spaceAfter=8))
 
     F.append(Paragraph("What the score is", S["h2"]))

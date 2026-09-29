@@ -39,7 +39,7 @@ from refresh_comtrade import _clean_rows  # noqa: E402
 
 DATA = Path(__file__).resolve().parents[2] / "data"
 OUT_FILE = DATA / "comtrade_staples.json"
-UA = "FoodShield-AI/23 (+https://foodshield-ai-fv.vercel.app)"
+UA = "FoodShield-AI/23 (+https://www.foodshield.nl)"
 
 
 def fetch_one(session, key, reporter_m49, cmd_code, flow="M"):

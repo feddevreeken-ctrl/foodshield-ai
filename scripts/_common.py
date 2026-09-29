@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-UA = "FoodShield-AI/21 (+https://foodshield-ai-fv.vercel.app)"
+UA = "FoodShield-AI/21 (+https://www.foodshield.nl)"
 DEFAULT_TIMEOUT = 30
 
 # v40 — per-feed wall-clock cap for safe_run(). http_get has a per-REQUEST

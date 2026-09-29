@@ -300,7 +300,7 @@ def draw(c, iso, row, names):
             line = t
     if line:
         c.drawString(ML, ly, line)
-    text(ML, 8 * mm, "foodshield-ai-fv.vercel.app", 7, NAVY, "Helvetica-Bold")
+    text(ML, 8 * mm, "foodshield.nl", 7, NAVY, "Helvetica-Bold")
 
 
 def build(iso, names):
