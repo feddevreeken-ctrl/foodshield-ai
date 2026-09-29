@@ -43,6 +43,13 @@ forecast within a few hundredths of zero (build meta, null_forecast_m3).
 rain_p_dry / rain_p_wet: chance of the month's SPI at or below -1 / at or above +1, normal around
 rain_spi with SD = the ENSO fit's residual SD where skilful, else 1 (climatology: 15.9%).
 
+Island cells (island_cells): sea on the PREC/L grid but holding inhabited land, so PREC/L has no record
+there. They use GPCP v2.3 instead (data/ref/gpcp_island_model.json.gz, scripts/build_gpcp_island_model.py
+says how the cells are chosen): the same fits, El Nino fit and month stats in the same schema, passed to
+precl_model with path=. refresh_seasonal_outlook reads the NMME change over the whole cell there.
+Cells with an NMME change but no month fit of their own (PREC/L too thin or too dry) read that change on
+CHIRPS v3's month spread (else CPC's gauge spread), NMME alone; their rain_spi3 stays blank.
+
 Inputs are only committed data files, so this runs on every refresh, including the one that only
 re-stamps an unchanged NMME run; the carry-in and the ONI then still update.
 
@@ -69,6 +76,8 @@ from spi import to_x100  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 STATS = DATA / "ref" / "precl_month_stats_1991_2020.json.gz"
+ISLANDS = DATA / "ref" / "gpcp_island_model.json.gz"   # scripts/build_gpcp_island_model.py
+GPCP_URL = "https://www.ncei.noaa.gov/data/global-precipitation-climatology-project-gpcp-monthly/access"
 SEASONS = "DJF JFM FMA MAM AMJ MJJ JJA JAS ASO SON OND NDJ".split()   # index = centre month - 1
 PROB_LEAN = 40
 PRECL_URL = "https://downloads.psl.noaa.gov/Datasets/precl/2.5deg/precip.mon.mean.2.5x2.5.nc"
@@ -100,6 +109,28 @@ def _moments(st: dict, cell: int, month: int) -> tuple[float, float] | None:
     if i is None:
         return None
     return st["mean"][month - 1][i] / 10, (st["sd"][month - 1][i] / 10) ** 2
+
+
+def island_cells() -> list[int]:
+    """Rain-grid cells that are sea on PREC/L but hold inhabited land, read on GPCP (gpcp_island_model.json.gz)."""
+    return list(P.load(ISLANDS)["cells"])
+
+
+def _island_stats() -> dict:
+    """The island file's 1991-2020 month means and SDs in the form _moments reads."""
+    m = P.load(ISLANDS)
+    return {"_pos": m["_pos"], "mean": m["stats"]["mean"], "sd": m["stats"]["sd"]}
+
+
+def _fallback_fit(fits: tuple, cell: int) -> tuple[float, float, float] | None:
+    """(shape, 1, dry share) of the cell's CHIRPS v3 month fit, else (alpha, 1, 0) of its CPC gauge month fit.
+    Only the shape and the dry share matter to the ratio transfer, so the scale is 1."""
+    (ch, n_years), cp = fits
+    if cell in ch:
+        return ch[cell][0], 1.0, ch[cell][2] / n_years
+    if cell in cp:
+        return cp[cell][0], 1.0, 0.0
+    return None
 
 
 def oni_by_month() -> tuple[dict, str | None, str]:
@@ -198,7 +229,11 @@ def add_rain_spi(payload: dict) -> dict:
     obs, obs_info = observed()
     mons = payload["months"]
     n = payload["rain_grid"]["nlat"] * payload["rain_grid"]["nlon"]
-    land = [any(x["maps"]["rain"][c] is not None for x in mons) for c in range(n)]
+    # Island cells (sea on PREC/L, inhabited land) are read on GPCP: their own fits, El Nino fit and month stats.
+    isl, st_isl = set(island_cells()), _island_stats()
+    pth = [ISLANDS if c in isl else P.PARAMS for c in range(n)]
+    sts = [st_isl if c in isl else st for c in range(n)]
+    land = [c in isl or any(x["maps"]["rain"][c] is not None for x in mons) for c in range(n)]
     fc_ab = {_ab(x["key"]): j for j, x in enumerate(mons)}
     scale, oni_rows = {}, []          # scale[(j, cell)] = k of forecast month j
 
@@ -210,17 +245,27 @@ def add_rain_spi(payload: dict) -> dict:
                          "oni_used": None if so is None else round(min(max(so[1], lo), hi), 2),
                          "fit_range": [lo, hi]})
         f_nmme, f_enso, f_spi, p_dry, p_wet = ([None] * n for _ in range(5))
+        ch, ch_meta = SPI.chirps_fits(P.GRID, "month", mth - 1)
+        fb_fits = ((ch, ch_meta["n_years"]), SPI.cpc_fits(P.GRID, "month", mth - 1)[0])
         for c in range(n):
             r = mp["rain"][c]
-            ft = P.fit(c, "m1", mth)
+            ft = P.fit(c, "m1", mth, pth[c])
             if r is None or ft is None:
+                fb = None if r is None else _fallback_fit(fb_fits, c)
+                if fb is not None:
+                    # No fit of its own but an NMME change: read the change on CHIRPS's (else CPC's) month spread,
+                    # NMME alone, no El Nino fit. The three-month map stays blank there (no three-month fit).
+                    z = P.spi_of(max(0.0, 1 + r / 100) * P.total_of(0.0, fb, clip), fb, -1.0, clip)
+                    f_nmme[c] = f_spi[c] = to_x100(z)
+                    p_dry[c] = int(round(100 * _ND.cdf(-1 - z)))
+                    p_wet[c] = int(round(100 * _norm_sf(1 - z)))
                 if land[c]:
                     scale[(j, c)] = 1.0 if r is None else max(0.0, 1 + r / 100)
                 continue
             k = max(0.0, 1 + r / 100)
             med0 = P.total_of(0.0, ft, clip)
-            z_n = P.spi_from_total(c, "m1", mth, k * med0)
-            pr = P.enso_predict(c, "m1", mth, so[1]) if so else None
+            z_n = P.spi_from_total(c, "m1", mth, k * med0, pth[c])
+            pr = P.enso_predict(c, "m1", mth, so[1], pth[c]) if so else None
             z_e, sd = (pr[0], pr[1]) if pr and pr[2] else (None, 1.0)
             z = z_n if z_e is None else (z_n + z_e) / 2
             f_nmme[c], f_enso[c], f_spi[c] = to_x100(z_n), to_x100(z_e), to_x100(z)
@@ -240,13 +285,13 @@ def add_rain_spi(payload: dict) -> dict:
         gap_months.update(windows[-1]["climatology"])
         out, p3d, p3w = [None] * n, [None] * n, [None] * n
         for c in range(n):
-            if not land[c] or P.fit(c, "m3", mth) is None:
+            if not land[c] or P.fit(c, "m3", mth, pth[c]) is None:
                 continue
             o_tot = mu = var = 0.0
             ok = True
             for b in parts:
                 bm = b % 12 + 1
-                mv = _moments(st, c, bm)
+                mv = _moments(sts[c], c, bm)
                 if mv is None:
                     ok = False
                     break
@@ -262,17 +307,17 @@ def add_rain_spi(payload: dict) -> dict:
                         mu, var = mu + mv[0], var + mv[1]
                         windows[-1]["unobserved_cells"] = windows[-1].get("unobserved_cells", 0) + 1
                         continue
-                    if o[2] is not None and P.fit(c, "m1", bm) is not None:
-                        o_tot += P.total_from_spi(c, "m1", bm, o[2] / 100)   # same rarity on PREC/L
+                    if o[2] is not None and P.fit(c, "m1", bm, pth[c]) is not None:
+                        o_tot += P.total_from_spi(c, "m1", bm, o[2] / 100, pth[c])   # same rarity on PREC/L (GPCP)
                     else:
-                        o_tot += o[0] / o[1] * mv[0] if o[1] > 0 else o[0]   # share of normal x PREC/L mean
+                        o_tot += o[0] / o[1] * mv[0] if o[1] > 0 else o[0]   # share of normal x PREC/L (GPCP) mean
                 else:
                     mu, var = mu + mv[0], var + mv[1]
             if ok:
-                out[c] = to_x100(P.spi_from_total(c, "m3", mth, o_tot + _median_gamma(mu, var, clip)))
+                out[c] = to_x100(P.spi_from_total(c, "m3", mth, o_tot + _median_gamma(mu, var, clip), pth[c]))
                 # The chance the three months end at least moderately dry (SPI <= -1) or wet (>= +1): the same
                 # distribution of the months still to come, measured against the window's own 1991-2020 fit.
-                lo, hi = P.total_from_spi(c, "m3", mth, -1.0), P.total_from_spi(c, "m3", mth, 1.0)
+                lo, hi = P.total_from_spi(c, "m3", mth, -1.0, pth[c]), P.total_from_spi(c, "m3", mth, 1.0, pth[c])
                 p3d[c] = int(round(100 * _p_below(lo, o_tot, mu, var)))
                 p3w[c] = int(round(100 * (1 - _p_below(hi, o_tot, mu, var))))
         x["maps"]["rain_spi3"] = out
@@ -284,14 +329,15 @@ def add_rain_spi(payload: dict) -> dict:
 
 # ---------------------------------------------------------------- notes
 def _notes(model, st, oni_rows, issued, oni_url, obs_info, windows, gaps, payload) -> dict:
-    cv, meta = model["meta"]["cv"], model["meta"]
+    cv, meta, isl = model["meta"]["cv"], model["meta"], P.load(ISLANDS)
     used = {m for w in windows for m in w["observed"]}
     regions = [f"{r['region']}: {r['verdict']}" for r in meta["regions_at_oni_2_5"]]
     return {
         "computed": date.today().isoformat(),
         "method": [
             "All fields are on the rain grid. SPI fields are the Standardized Precipitation Index times 100, "
-            "clamped to -300..300, against NOAA PREC/L 1991-2020 for the same calendar month: -100, -150, -200 "
+            "clamped to -300..300, against NOAA PREC/L 1991-2020 for the same calendar month (GPCP in "
+            "island_cells, see island_note): -100, -150, -200 "
             "moderately, severely, extremely dry; the same above zero for wet. Chances are integer percent.",
             "rain_spi_nmme: the NMME month read as SPI. The cell's 1991-2020 month distribution is scaled by the "
             "models' own rain change (1 + rain / 100), so each model's rain bias drops out, and the SPI of the "
@@ -314,7 +360,19 @@ def _notes(model, st, oni_rows, issued, oni_url, obs_info, windows, gaps, payloa
             "where it has no SPI, by its share of its own normal times the PREC/L average.",
             "Forecast months enter the three-month total as a spread of outcomes, not as one number, and the "
             "middle of the combined spread is used, so a forecast of no change reads close to SPI 0.",
+            "Where the cell's own record (PREC/L, or GPCP in island_cells) has no fit for the month, because it "
+            "has too few gauges or is too dry, but the NMME has a change, rain_spi is that change read on "
+            "CHIRPS v3's 1991-2020 spread for the month, else on CPC's gauge spread, with no El Nino fit. "
+            "rain_spi3 stays blank there.",
         ],
+        "island_cells": list(isl["cells"]),
+        "island_points": [{k: q[k] for k in ("cell", "lat", "lon", "name")} for q in isl["points"]],
+        "island_note": "island_cells are sea on the PREC/L grid but hold inhabited land (a GeoNames place of 500 "
+                       "people or more, or a local seat of government). Their rain is read on GPCP v2.3 "
+                       "(satellite and gauges, land and sea), not PREC/L: the NMME change over the whole "
+                       "2.5-degree cell, sea included, on GPCP's 1991-2020 spread, joined with an El Nino fit on "
+                       "GPCP 1979-2020 under the same skill rule. An outlook ONI beyond that record is read at "
+                       "the record. island_points puts each cell at its most populous place.",
         "oni": oni_rows, "oni_issued": issued, "oni_source_url": oni_url,
         "oni_note": "ONI is CPC's RONI outlook median moved onto the ONI scale by the site's gap "
                     "(enso_strengths.json oni_equiv.median); the ENSO fit uses CPC's ONI table.",
@@ -339,6 +397,9 @@ def _notes(model, st, oni_rows, issued, oni_url, obs_info, windows, gaps, payloa
              "url": "https://www.cpc.ncep.noaa.gov/products/predictions/90day/fxus05.html"},
             {"name": "NOAA CPC gauge rain and CHIRPS v3.0 (observed months)",
              "url": "https://ftp.cpc.ncep.noaa.gov/precip/CPC_UNI_PRCP/GAUGE_GLB/RT/"},
+            {"name": "GPCP v2.3 monthly rain, NOAA NCEI Climate Data Record (island cells, 1979-2020)", "url": GPCP_URL},
+            {"name": "GeoNames cities500 populated places (which sea cells hold inhabited land)",
+             "url": isl["island_rule"]["places_url"]},
         ],
     }
 

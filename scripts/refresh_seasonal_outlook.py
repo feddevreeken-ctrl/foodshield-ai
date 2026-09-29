@@ -351,8 +351,11 @@ def build(init: tuple) -> dict:
             ws = [(i, w) for i, w in _weights(g["lat0"] + r * g["step_deg"], g["lon0"] + c * g["step_deg"], 1.0)
                   if ocean[i]]
             sea_w.append(ws)
+    # Island cells (sea on PREC/L, inhabited land; outlook_rain_spi reads them on GPCP) get rain too, over the
+    # whole cell like every land cell.
+    isl = set(outlook_rain_spi.island_cells())
     rain_w = [_weights(rg["lat0"] + r * rg["step_deg"], rg["lon0"] + c * rg["step_deg"], 1.25)
-              if land[r * rg["nlon"] + c] else None
+              if land[r * rg["nlon"] + c] or r * rg["nlon"] + c in isl else None
               for r in range(rg["nlat"]) for c in range(rg["nlon"])]
 
     def layer(sst_f, anom_f, clim_f, below_f, above_f):
@@ -433,7 +436,7 @@ def build(init: tuple) -> dict:
         "rain_grid": {**{k: rg[k] for k in ("lat0", "lon0", "step_deg", "nlat", "nlon")},
                       "encoding": "row-major from the southern edge; rain is integer percent change, "
                                   "rain_prob_below and rain_prob_above integer percent chance; "
-                                  "null over sea or dry land"},
+                                  "null over sea (but for rain_model.island_cells) or dry land"},
         "seasons": seasons,
         "maps": maps,
         "box_means_c": boxes,
@@ -515,7 +518,9 @@ def main() -> int:
     except (OSError, ValueError):
         old = {}
     ym = f"{init[3][:4]}-{init[3][4:]}"
-    if old.get("initialized") == ym and old.get("schema") == SCHEMA and old.get("maps"):
+    # Rain on island cells is only computed by build(), so a new island list rebuilds.
+    if old.get("initialized") == ym and old.get("schema") == SCHEMA and old.get("maps") \
+            and (old.get("rain_model") or {}).get("island_cells") == outlook_rain_spi.island_cells():
         # The SPI fields are recomputed from the stored rain percent, so new observed months and a new
         # CPC ENSO outlook reach the map even when the NMME run has not changed.
         outlook_rain_spi.add_rain_spi(old)

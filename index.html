@@ -13140,6 +13140,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-src-keys .enso-legend-explain { max-width:none; margin:4px 0; }
 #tab-elnino .enso-src-keys .enso-legend-explain > b { display:block; margin-bottom:2px; font:500 11.5px/1.4 'Geist',sans-serif; color:var(--t1); }
 #tab-elnino .enso-src-keys .enso-legend-explain .ctr-note { margin:0; font:11.5px/1.5 'Geist',sans-serif; color:var(--t2); }
+#tab-elnino .enso-isl i { display:block; width:8px; height:8px; box-sizing:border-box; border:1px solid #0b1017; }
 #tab-elnino .enso-pev-key .enso-pk { display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
 @media (max-width:900px) { #tab-elnino .enso-srcs, #tab-elnino .enso-src-keys { grid-template-columns:minmax(0, 1fr); } }
 @media (max-width:700px) { #tab-elnino #enso-legend .enso-legend-t { white-space:normal; } #tab-elnino #enso-legend .enso-key > .enso-legend-block { flex:1 1 100% !important; min-width:0 !important; max-width:100%; } #tab-elnino #enso-legend .enso-legend-block > .enso-legend-t { flex:1 1 100%; min-width:0; } }
@@ -45824,6 +45825,9 @@ function showCommodityDetail(key) {
        outlook month paints its own prediction; the rain already fallen stays in the hover. */
     var k = sstSceneKey(), avg = !ol && !sstWinter(), spi = ol ? m.rain_spi || m.rain_spi3 : m.rain_spi, odds = !spi && !!(ol && m.rain_prob_above && m.rain_prob_below); S._rainG = S._rainG || {};
     RAIN_KIND = spi ? (ol ? 'fc' : 'spi') : odds ? 'odds' : 'pct';
+    /* Island cells (GPCP) are drawn as dots at their islands (syncIslandDots), never as a 2.5-degree square of sea. */
+    var isl = ol && S.seasonal.rain_model && S.seasonal.rain_model.island_cells;
+    if (spi && isl && isl.length && !S._rainG[k]) { spi = spi.slice(); isl.forEach(function (c) { spi[c] = null; }); }
     return S._rainG[k] || (S._rainG[k] = gridOf(g, spi ? spi : odds ? m.rain_prob_below.map(function (pd, i) { var pw = m.rain_prob_above[i];
         return pd == null || pw == null || m.rain[i] == null ? null : pd >= pw ? -pd : pw; }) : m.rain,
       { kind: RAIN_KIND, pct: m.rain, agree: avg ? m.rain_agree : null, n: avg ? m.n : null, pwet: ol && !spi ? m.rain_prob_above : null, pdry: ol && !spi ? m.rain_prob_below : null,
@@ -46132,7 +46136,29 @@ function showCommodityDetail(key) {
     if (!S.rainOver) S.rainOver = new RainOver();
     if (wantO) { if (!S.map.hasLayer(S.rainOver)) S.rainOver.addTo(S.map); else S.rainOver._schedule(); }
     else if (S.map.hasLayer(S.rainOver)) S.map.removeLayer(S.rainOver);
+    syncIslandDots(want);
     syncPastEvents();
+  }
+  /* 2026-09-29 (Asia-Oceania check: 22 of 29 blank checks were small Pacific islands with no land cell): island cells
+     carry the outlook on GPCP's record (seasonal_outlook.rain_model.island_points); a 2.5-degree square would paint open
+     sea, so each island gets a dot in the rain colours at its own place. Outlook months only. */
+  function syncIslandDots(want) {
+    if (S.islLayer) { S.map.removeLayer(S.islLayer); S.islLayer = null; }
+    var ol = want && sstView() === 'outlook' && olMap(), P = ol && S.seasonal && S.seasonal.rain_model && S.seasonal.rain_model.island_points;
+    if (!P || !P.length || typeof L === 'undefined' || !L.circleMarker) return;
+    var m = ol.rain_spi, pd = ol.rain_p_dry, pw = ol.rain_p_wet, season = (olSeason() || {}).label || '';
+    if (!S.map.getPane('ensoIsl')) { S.map.createPane('ensoIsl'); S.map.getPane('ensoIsl').style.zIndex = 600; }
+    S.islLayer = L.layerGroup(P.filter(function (q) { return m && m[q.cell] != null; }).map(function (q) {
+      var v = m[q.cell], col = rainColor(v, 'fc'), lean = col && col !== 'rgba(0,0,0,0)', fill = lean ? col.replace(/,[\d.]+\)$/, ',1)') : 'transparent';
+      /* A small square, not a circle: it stands for the island's grid cell and never reads as a forecast mark. Near
+         normal is hollow. */
+      var dot = L.marker([q.lat, q.lon], { pane: 'ensoIsl', keyboard: false, alt: q.name || 'Island',
+        icon: L.divIcon({ className: 'enso-isl', iconSize: [8, 8], iconAnchor: [4, 4], html: '<i style="background:' + fill + (lean ? '' : ';border-color:#8b8980') + '"></i>' }) });
+      var p1 = pd && pd[q.cell], q1 = pw && pw[q.cell];
+      dot.bindTooltip('<b>' + esc(q.name || 'Island') + '</b><br>' + esc(season) + ' · forecast: ' + esc(spiWord(v).replace(/ for the time of year$/, '')) + ' (drought index ' + num(v / 100, 1) + ')' +
+        (p1 != null && q1 != null ? '<br><span style="color:#8b8980">' + (q1 > p1 ? 'Chance of a very wet month ' + q1 : 'Chance of a drought month ' + p1) + '%, about 16% in a normal year</span>' : '') +
+        '<br><span style="color:#8b8980">Island rain from GPCP (satellite + gauges), 1991–2020</span>', { direction: 'top', offset: [0, -6], opacity: .97 });
+      return dot; })).addTo(S.map);
   }
   /* 2026-09-28 (owner: "check the past el nino data on map and include where there were natural events"): the floods,
      droughts and fires of the winters on the map, from data/enso_past_events.json, one source per mark. The picked
@@ -46500,7 +46526,7 @@ function showCommodityDetail(key) {
       (rk === 'odds' ? box(rramp, 'likely dry', 'no lean', 'likely wet') : rk === 'fc' ? box(rramp, 'drier ' + num(-fcScale()[1] / 100, 2), 'no lean', 'wetter ' + num(fcScale()[1] / 100, 2)) : rk === 'spi' ? box(rramp, 'extremely dry', 'normal', 'extremely wet') : rk === 'wk' ? box(rramp, 'drier', 'clear −80% to +75%', 'wetter') : box(rramp, rk === 'live' ? '−80%' : 'drier', rk === 'live' ? 'normal ±15%' : 'normal', rk === 'live' ? '+80%' : 'wetter')) +
       '<div class="ctr-note">' + ({ now: both(rn0.fstart ? ', ' + dayRange(rn0.fstart, rn0.fend) : '') + (rk === 'spi' ? 'Blank where the season is normally dry.' : rk === 'wk' ? 'Clear from −80% to +75%, where most weeks of 1991–2020 fell; blank where the week normally brings under 7 mm. A CHIRPS week is one five-day pentad.' : 'Within ±15% is ordinary variation and left clear; blank where the season is normally dry.') + ' Hover for the percent, millimetres and source.',
         month: both(rm0 && rm0.fillFinal === false ? ', preliminary' : '') + (rk === 'spi' ? '' : 'Within ±15% is left clear. ') + 'Blank where the month is normally dry. Hover for the percent, millimetres and source.',
-        outlook: sc.view === 'outlook' && rk === 'fc' ? 'The month’s forecast rain as a drought index: NOAA’s six-model average (NMME) blended, where it has shown skill, with a statistical model of how each place’s rain answered El Niño in 1951–2020, run at CPC’s official outlook. ' + (function () { var q = olAgree(); return q ? 'Checked against ' + q.n + ' official forecasts for these months: at their places it agrees on ' + q.agree + ' month points, differs on ' + q.differ + ', near normal on ' + q.flat + '. ' : ''; })() + 'Forecast scale: clear within ±0.35, full at ±1.35, about half the observed scale, because a forecast averages many possible months. Hover for both models, the chance of a drought month and, where months have already fallen, that rain plus the forecast.' :
+        outlook: sc.view === 'outlook' && rk === 'fc' ? 'The month’s forecast rain as a drought index: NOAA’s six-model average (NMME) blended, where it has shown skill, with a statistical model of how each place’s rain answered El Niño in 1951–2020, run at CPC’s official outlook. ' + (function () { var q = olAgree(); return q ? 'Checked against ' + q.n + ' official forecasts for these months: at their places it agrees on ' + q.agree + ' month points, differs on ' + q.differ + ', near normal on ' + q.flat + '. ' : ''; })() + 'Forecast scale: clear within ±0.35, full at ±1.35, about half the observed scale, because a forecast averages many possible months.' + (((S.seasonal || {}).rain_model || {}).island_points ? ' Dots: small islands and coasts the gauge grid misses, on GPCP’s satellite and gauge record.' : '') + ' Hover for both models, the chance of a drought month and, where months have already fallen, that rain plus the forecast.' :
           rk === 'odds' ? 'CPC’s odds that the month lands in the driest or wettest third of the models’ own past months; 33% each is no lean. Coloured from about 40%, full at 70%. Hover for the forecast change in rain. Blank where the month is normally dry.' : 'Masked where the month is normally dry. The average of many model runs: a real month swings further.',
         winter: (rk === 'spi' ? 'Drought index of this season’s three months against 1991–2020 (NOAA PREC/L gauges). ' : '') + 'Masked where the season is arid. One winter: local swings are its own, not a rule.' }[sc.view] ||
         (rk === 'spi' ? 'Drought index of the season’s three months against 1991–2020 (NOAA PREC/L gauges), averaged over the winters. ' : '') + 'Masked where the season is arid. Hover a place for how many of the winters agreed.') + '</div></div>' : '';
