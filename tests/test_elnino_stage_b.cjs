@@ -83,22 +83,22 @@ test('calendar retains eligible crop rows, month names, and stage groups',()=>{
  assert.equal((out.match(/data-st=/g)||[]).length,Math.min(30,expected));assert.equal((out.match(/class="cal-group"/g)||[]).length,4);
  for(const m of ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'])assert(out.includes('>'+m+'</i>'));
 });
-test('shipping opens with the nine-lane board, then Panama month by month with its slot limits, then day by day',()=>{
+/* 2026-09-29 audit: El Niño-linked lanes as rows, the lanes with no ENSO link as one folded list; slot limits as a dated ladder. */
+test('shipping opens with the lane board (linked rows, the rest folded), then Panama month by month with its slot ladder, then day by day',()=>{
  api.renderWater();const out=nodes['enso-water'].innerHTML;assert(out.includes('enso-pan-since'));assert(out.indexOf('enso-pan-since')<out.indexOf('id="enso-c-panama-daily"'));
  /* 2026-09-27 (Codex order review): the map leads, then the lane board as the answer, then Panama. */
  assert(out.indexOf('enso-lane-board')<out.indexOf('enso-pan-since'));assert(!out.includes('id="enso-c-panama"'));
  assert.equal((out.match(/data-board-lane=/g)||[]).length,9);
  const pan=S.lanes.lanes.find(l=>l.id==='panama');assert(out.includes(pan.live_2026.steps.at(-1).total+' slots/day for transits from'));
- for (const id of ['amazon','rhine','mississippi']) { const row=out.match(new RegExp('data-board-lane="'+id+'"[\\s\\S]*?</tr>'))[0]; assert(row.includes('2026'),id+' has a dated September observation'); }
- assert(out.includes('Booking slots a day, Canal advisories'));assert(out.includes('Advisories and operating context'));assert(out.includes('Sep 2025'));assert(out.includes('Sep 2026'));
+ for (const id of ['amazon','rhine','mississippi']) { const row=out.match(new RegExp('data-board-lane="'+id+'"[\\s\\S]*?(?=data-board-lane=|</figure>)'))[0]; assert(row.includes('2026'),id+' has a dated September observation'); }
+ assert(out.includes('Booking slots a day, from the Canal’s advisories'));assert(out.includes('Advisories and operating context'));assert(out.includes('Sep 2025'));assert(out.includes('Sep 2026'));
  assert.equal((out.match(/data-lane=/g)||[]).length,S.lanes.lanes.length);
  for(const l of S.lanes.lanes){if(l.counter_evidence) assert(out.includes(l.counter_evidence.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')));}
 });
-test('Panama monthly chart draws every dated slot advisory as a step in true time',()=>{
+test('Panama slot ladder lists every dated slot advisory',()=>{
  api.renderWater();const out=nodes['enso-water'].innerHTML,p=S.lanes.lanes.find(l=>l.id==='panama');
- const svg=out.match(/<svg class="enso-hw enso-pan-since"[\s\S]*?<\/svg>/)[0],paths=svg.match(/<path class="pan-slot" d="[^"]+"[^>]*\/>/g)||[];
- assert.equal(paths.length,2);assert.equal(paths.join('').split('H').length-1,p.precedent_2023.steps.length+p.live_2026.steps.length);
- const low=Math.min(...p.precedent_2023.steps.map(x=>x.total));assert(svg.includes('>'+low+'</text>'));assert(svg.includes('>'+p.live_2026.steps.at(-1).total+' slots</text>'));
+ assert.equal((out.match(/class="enso-pan-step"/g)||[]).length,p.precedent_2023.steps.length+p.live_2026.steps.length);
+ const low=Math.min(...p.precedent_2023.steps.map(x=>x.total));assert(out.includes('<span class="enso-pan-step">'+low+' <i>'));assert(out.includes('<span class="enso-pan-step">'+p.live_2026.steps.at(-1).total+' <i>'));
  api.drawCharts('ensowater');assert(!ctx.charts['enso-c-panama']);
  assert(ctx.charts['enso-c-panama-daily'].plugins[0].id==='ensoRules');
 });

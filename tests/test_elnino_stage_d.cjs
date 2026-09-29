@@ -66,18 +66,21 @@ S.ready=true;S.names={};S.drawn={live:true,frame:true,limits:true,mech:true,map:
 S.sel='ZWE';
 test('lane geometry is data-only, validated and phase coloured',()=>{
  assert(S.lanes.lanes.every(l=>api.laneGeometry(l).length===0));
- api.drawLanes();assert.equal(S.laneLines.length,0);assert.equal(S.lanePins.length,S.lanes.lanes.length);
+ /* 2026-09-29 audit: the map draws only lanes with a published ENSO link. */
+ const LINKED=S.lanes.lanes.filter(l=>l.phase&&l.phase!=='none'), LINKEDC=S.corridors.corridors.filter(c=>LINKED.some(l=>l.id===c.lane&&l.phase===c.phase));
+ api.drawLanes();assert.equal(S.laneLines.length,0);assert.equal(S.lanePins.length,LINKED.length);
  S.lanePins.forEach(p=>assert(p.options.icon.html.includes('enso-choke-label')));
  const original=S.lanes;
  S.lanes={lanes:['el_nino','la_nina','none'].map((phase,i)=>({id:'test'+i,name:'test',phase,lat:0,lng:0,geometry:{type:'LineString',coordinates:[[10,20],[11,21]]}}))};
- api.drawLanes();assert.deepEqual(S.laneLines.map(l=>l.options.color),['#e0673c','#5b9bd0','#7b8491']);
+ api.drawLanes();assert.deepEqual(S.laneLines.map(l=>l.options.color),['#e0673c','#5b9bd0']);
  assert(S.laneLines.every(l=>l.options.weight>=3&&!l.options.dashArray));assert.equal(S.laneLines[0].coords[0][0],20);
  assert.equal(api.laneGeometry({geometry:{type:'LineString',coordinates:[[999,20],[0,0]]}}).length,0);
  S.lanes=original;S.lanePins=[];S.laneLines=[];S.shipView='enso';api.drawLanes();  /* 2026-09-27: link inks live in the El Niño link view */
 });
-test('Shipping draws nine corridors weighted by published ENSO link, with names in tooltips',()=>{
- assert.equal(S.corridorLines.length,9);assert.equal(S.corridorLabels.length,0);assert.equal(S.corridorArrows.length,0);
- S.corridors.corridors.forEach((c,i)=>{
+test('Shipping draws the corridors of ENSO-linked lanes weighted by published link, with names in tooltips',()=>{
+ const LINKED=S.lanes.lanes.filter(l=>l.phase&&l.phase!=='none'), LINKEDC=S.corridors.corridors.filter(c=>LINKED.some(l=>l.id===c.lane&&l.phase===c.phase));
+ assert.equal(S.corridorLines.length,LINKEDC.length);assert.equal(S.corridorLabels.length,0);assert.equal(S.corridorArrows.length,0);
+ LINKEDC.forEach((c,i)=>{
   const lane=S.lanes.lanes.find(l=>l.id===c.lane),line=S.corridorLines.find(l=>l.options.ensoCorridorId===c.id);
   /* 2026-09-26: tier 1 = moderate/strong ENSO link (phase ink, 2px), tier 2 = weak (phase ink, 1.25px), tier 3 = none (grey hairline). */
   const tier=lane.phase==='none'?3:lane.attribution==='weak'?2:1, ink={el_nino:'#e0673c',la_nina:'#5b9bd0',none:'#7b8491'}[lane.phase];
@@ -86,10 +89,10 @@ test('Shipping draws nine corridors weighted by published ENSO link, with names 
   for(const text of [c.name,c.basis,'schematic corridor through named waypoints, not vessel tracks',...c.commodities,...c.sources])assert(line.tooltip.includes(text.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')));
  });
  const old=S.corridorLines.concat(S.corridorEdges);old.forEach(l=>l.addTo(S.map));api.drawLanes();
- assert(old.every(l=>!S.map.hasLayer(l)));assert.equal(S.corridorLines.length,9);
+ assert(old.every(l=>!S.map.hasLayer(l)));assert.equal(S.corridorLines.length,LINKEDC.length);
 });
 test('Stage I transit rings join actual lane values and distinguish zero, missing and increases',()=>{
- S.lanes.lanes.forEach((ln,i)=>{
+ S.lanes.lanes.filter(l=>l.phase&&l.phase!=='none').forEach((ln,i)=>{
   const m=api.laneMeasurement(ln),html=S.lanePins[i].options.icon.html,pw=S.portwatch[ln.portwatch_key];
   if(!pw){assert.equal(m,null);assert(!html.includes('no transit data'));assert(S.lanePins[i].options.icon.className.includes('no-transit'));assert(!html.includes('enso-transit-ring'));}
   else {const dry=Number.isFinite(pw.yoy.dry_bulk_pct)&&Number.isFinite(pw.transits_per_day.dry_bulk),pct=dry?pw.yoy.dry_bulk_pct:pw.yoy.total_pct;assert.equal(m.pct,pct);assert.equal(m.total,pw.transits_per_day.total);assert(html.includes('data-yoy="'+pct+'"'));assert(html.includes('<circle'));assert(html.includes('stroke="'+(ln.phase==='none'?'#7b8491':{el_nino:'#e0673c',la_nina:'#5b9bd0'}[ln.phase])+'"'));}
@@ -310,7 +313,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    /* The solid-line swatch keyed a mark the map never draws: no lane in enso_lanes.json carries a geometry, so S.laneLines is always empty. The observed mark is the diamond and its ring. */
    assert.equal(key.includes('diamond and ring: observed, measured at the chokepoint'),view==='ensowater');
    assert.equal(key.includes('dashed: published schematic corridor through named ports'),view==='ensowater');
-   if(view==='ensowater'){assert.equal(S.corridorLines.filter(l=>S.map.hasLayer(l)).length,9);assert.equal(S.corridorLabels.length,0);for(const c of S.corridors.corridors){assert(legend.querySelector('details').textContent.includes(c.basis.replace(/'/g,'&#39;')));}}
+   if(view==='ensowater'){const LC=S.corridors.corridors.filter(c=>S.lanes.lanes.some(l=>l.id===c.lane&&l.phase===c.phase&&l.phase!=='none'));assert.equal(S.corridorLines.filter(l=>S.map.hasLayer(l)).length,LC.length);assert.equal(S.corridorLabels.length,0);for(const c of LC){assert(legend.querySelector('details').textContent.includes(c.basis.replace(/'/g,'&#39;')));}}
    assert.equal(key.includes('Does it fit the usual pattern?'),view==='ensolive');
    if(view==='ensolive')for(const label of ['usually drier in El Niño years','usually wetter','a possible early sign','runs against it','no rainfall expectation','Fitting is not attribution'])assert(key.includes(label),label+' | '+key.slice(0,600));
    if(view==='ensowater')for(const l of S.lanes.lanes)assert(legend.querySelector('details').textContent.includes(l.name));

@@ -68,12 +68,11 @@ test('measured labels stay inside a phone plate and clear graticule text on repe
  }
  S.showLanes=false;
 });
-test('Panama plots every dated advisory and no undated normal step',()=>{
+test('Panama lists every dated advisory and no undated normal step',()=>{
  const p=S.lanes.lanes.find(l=>l.id==='panama');
  assert.equal(p.precedent_2023.normal_transits_per_day,undefined);
- const svg=(api.panamaSincePlate(p).match(/<svg class="enso-hw enso-pan-since"[\s\S]*?<\/svg>/)||[''])[0];
- const d=(svg.match(/<path class="pan-slot" d="([^"]+)"/g)||[]).join('');
- assert.equal(d.split('H').length-1,p.precedent_2023.steps.length+p.live_2026.steps.length);
+ /* 2026-09-29 audit: the slot limits are a dated ladder in words, one step per advisory. */
+ assert.equal((api.panamaSincePlate(p).match(/class="enso-pan-step"/g)||[]).length,p.precedent_2023.steps.length+p.live_2026.steps.length);
 });
 test('all five analog connectors end exactly at measured label edges after resize',()=>{
  const out=api.analogPlate();assert.equal((out.match(/class="enso-analog-past"/g)||[]).length,5);
