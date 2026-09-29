@@ -1,5 +1,7 @@
-"""Synthetic-fixture tests for build_enso_price_outlook: event list, analog band, skill gate, end-to-end null model."""
+"""Synthetic-fixture tests for build_enso_price_outlook: event list, analog band, skill gate, seasonal normal,
+world pass-through gate, El Niño excess path, end-to-end null model."""
 import json
+import math
 import random
 import sys
 from datetime import date
@@ -82,6 +84,85 @@ def test_gate(fails):
         fails.append("gate: two events are not enough to judge skill")
 
 
+SEASON = [0.04, 0.03, -0.02, -0.06, -0.05, -0.02, 0.0, 0.01, 0.02, 0.02, 0.01, 0.02]  # log step into each month
+
+
+def seasonal_series(shock_years, shock=0.2, start="2000-01", end="2026-08"):
+    lv, out = 0.0, {}
+    for m in range(b.mi(start), b.mi(end) + 1):
+        lv += SEASON[m % 12] + (shock if (m // 12) in shock_years else 0.0)
+        out[m] = 100 * math.exp(lv)
+    return out
+
+
+def test_seasonal_normal(fails):
+    enso_hist = hist([(2003, 0.9), (2010, 1.5), (2016, 2.5), (2024, 1.8), (2012, -0.5)])
+    bad = b.nino_years(enso_hist)
+    if bad != {2002, 2003, 2009, 2010, 2015, 2016, 2023, 2024, 2026}:
+        fails.append(f"nino_years: El Niño year (DJF year - 1), the year after, and the current year; got {sorted(bad)}")
+    # Every El Niño year carries a big monthly jump; the normal must ignore it and recover SEASON exactly.
+    real = seasonal_series({2002, 2009, 2015, 2023})
+    med, n = b.seasonal_normal(real, bad)
+    if any(abs(med[c] - SEASON[c]) > 1e-9 for c in range(12)):
+        fails.append(f"seasonal normal must recover the non-El-Niño step per calendar month: {med}")
+    if min(n.values()) < 10:
+        fails.append(f"seasonal normal: expected >= 10 non-El-Niño years per month, got {n}")
+    # A steady real trend on top is not season: the steps are centred, so they still recover SEASON.
+    trend = {m: v * math.exp(0.01 * (m - b.mi("2000-01"))) for m, v in real.items()}
+    med_t, _ = b.seasonal_normal(trend, bad)
+    if any(abs(med_t[c] - SEASON[c]) > 1e-9 for c in range(12)):
+        fails.append(f"seasonal normal must be centred (a trend is not season): {med_t}")
+    path = b.normal_path(med, b.mi("2026-08"), 12)
+    if abs(path[12] - sum(SEASON)) > 1e-9 or path[0] != 0.0 or abs(path[1] - SEASON[8]) > 1e-9:
+        fails.append(f"normal path must cumulate the steps from the month after the origin: {path[:3]} .. {path[12]}")
+    few, _ = b.seasonal_normal({m: v for m, v in real.items() if m >= b.mi("2022-01")}, bad)
+    if few:
+        fails.append(f"seasonal normal: fewer than {b.SEASON_MIN_YEARS} years in any month must give no normal year, got {few}")
+
+
+def test_beta_gate(fails):
+    rng = random.Random(11)
+    bad = {2002, 2003, 2009, 2010, 2015, 2016, 2023, 2024, 2026}
+    months = range(b.mi("2000-01"), b.mi("2026-08") + 1)
+    wl, world = 0.0, {}
+    for m in months:
+        wl += rng.gauss(0, 0.05)
+        world[m] = 200 * math.exp(wl)
+
+    def dom(beta, noise, rng2):
+        lv, out = 0.0, {}
+        for m in months:
+            lv += (beta * math.log(world[m] / world[m - 1]) if (m - 1) in world else 0.0) + rng2.gauss(0, noise)
+            out[m] = 100 * math.exp(lv)
+        return out
+    pt = b.pass_through(dom(0.6, 0.01, random.Random(1)), world, {}, bad)
+    if not pt["used"] or abs(pt["beta"] - 0.6) > 0.05 or pt["n_months"] < b.BETA_MIN_MONTHS:
+        fails.append(f"beta: a clean 0.6 pass-through must be kept near 0.6, got {pt}")
+    if b.pass_through(dom(1.6, 0.01, random.Random(2)), world, {}, bad)["beta"] != 1.0:
+        fails.append("beta: a pass-through above 1 must be clipped to 1")
+    if b.pass_through(dom(-0.8, 0.01, random.Random(4)), world, {}, bad)["beta"] != 0.0:
+        fails.append("beta: a negative pass-through must be clipped to 0")
+    pt = b.pass_through(dom(0.0, 0.05, random.Random(3)), world, {}, bad)
+    if pt["beta"] != 0.0 or pt["used"]:
+        fails.append(f"beta: an unrelated series must not be significant, got {pt}")
+    short = {m: v for m, v in dom(0.6, 0.01, random.Random(1)).items() if m >= b.mi("2020-01")}
+    pt = b.pass_through(short, world, {}, bad)
+    if pt["beta"] != 0.0 or pt["n_months"] >= b.BETA_MIN_MONTHS:
+        fails.append(f"beta: fewer than {b.BETA_MIN_MONTHS} non-El-Niño months must give 0, got {pt}")
+    if b.pass_through(short, None, {}, bad)["why"] != "no world benchmark for this staple":
+        fails.append("beta: no benchmark must say so")
+    # Excess path: an event whose domestic path is exactly normal + 0.5 x world has zero El Niño excess.
+    o, n = b.mi("2015-08"), 19
+    norm = [0.01 * j for j in range(n + 1)]
+    real = {o + j: 100 * math.exp(norm[j] + 0.5 * math.log(world[o + j] / world[o])) for j in range(n + 1)}
+    ex = b.excess_path(real, world, 0.5, norm, o, n)
+    if len(ex) != n + 1 or max(abs(v) for v in ex.values()) > 1e-9:
+        fails.append(f"excess path must be 0 when the event is a normal year plus world pass-through: {ex}")
+    real[o + 5] *= 1.3
+    if abs(b.excess_path(real, world, 0.5, norm, o, n)[5] - math.log(1.3)) > 1e-9:
+        fails.append("excess path must keep a local 30% jump")
+
+
 def test_build_null_model(fails):
     """End to end on one synthetic series: too few samples, so no model numbers anywhere, analog still present."""
     uid = "u-zaf"
@@ -111,14 +192,28 @@ def test_build_null_model(fails):
         fails.append("build: the analog path must still be published")
     if not any(e["iso3"] == "ZWE" and "2024-04" in e["reason"] for e in out["excluded"]):
         fails.append(f"build: ZWE (harm documented, series starts 2024) must be listed as excluded: {out['excluded']}")
-    for k in ("iso3", "country", "commodity", "series", "latest", "aftermath", "analog", "model", "skill"):
+    for k in ("iso3", "country", "commodity", "series", "latest", "aftermath", "analog", "effect_replay", "model", "skill"):
         if k not in r:
             fails.append(f"build: row lacks {k}")
+    er = r.get("effect_replay") or {}
+    if er.get("world", {}).get("beta") != 0.0 or not er.get("normal", {}).get("available") or er.get("n_paths") != 2:
+        fails.append(f"build: effect replay must be published with beta 0 when no world series is passed: {er.get('world')}")
+    for lab, v in (er.get("paths") or {}).items():
+        a = dict(er["normal"]["points"])[v["peak_month"]]
+        if round(a - 100, 1) != v["normal_at_peak_pct"]:
+            fails.append(f"build: normal_at_peak_pct must be the normal path at the replay's peak month ({lab})")
+    if not out.get("replay_skill") or "mae_adjusted" not in out["replay_skill"]:
+        fails.append("build: pooled replay skill must be published")
+    # With beta 0 the normal year cancels: normal + excess must equal the plain real replay.
+    for lab, v in (er.get("paths") or {}).items():
+        plain = dict(r["analog"]["paths"][lab]["points"])
+        if any(abs(plain[mo] - ix) > 0.11 for mo, ix in v["points"]):
+            fails.append(f"build: with no world pass-through the El Niño-effect path must equal the plain replay ({lab})")
 
 
 def main():
     fails = []
-    for t in (test_events, test_analog_band, test_gate, test_build_null_model):
+    for t in (test_events, test_analog_band, test_gate, test_seasonal_normal, test_beta_gate, test_build_null_model):
         t(fails)
     for f in fails:
         print("FAIL", f)
