@@ -493,6 +493,21 @@ def main() -> int:
         }""")
         check("Harvests says 'no other usual supplier' once, on the producer callout, not under each buyer",
               said["once"] == 1 and said["onCall"] == 1 and said["buyers"] == 0, str(said))
+        # 2026-09-30 (V2 audit, "show a zoomed out map first and then you can click to zoom in"): the map opens on the
+        # world view with every callout on screen; a chip click frames that harvest; Reset returns to the world view.
+        world = page.evaluate("""async () => {
+            const box = document.getElementById('enso-map').getBoundingClientRect();
+            const seen = () => [...document.querySelectorAll('#enso-map .enso-hcall')].filter(c => { const r = c.getBoundingClientRect(); return r.width > 0 && getComputedStyle(c.closest('.enso-flab-b') || c).visibility !== 'hidden' && r.left >= box.left - 1 && r.right <= box.right + 1 && r.top >= box.top - 1 && r.bottom <= box.bottom + 1; }).length;
+            const all = document.querySelectorAll('#enso-map .enso-hcall').length, before = seen();
+            document.querySelectorAll('#enso-map .enso-follow [data-story]')[0].click();
+            await new Promise(r => setTimeout(r, 900));
+            const zoomed = seen();
+            document.querySelector('#enso-mapwrap [data-z="0"]').click();
+            await new Promise(r => setTimeout(r, 1200));
+            return {all, before, zoomed, after: seen()};
+        }""")
+        check("Harvests opens on the world view with every callout on screen; a chip zooms in, Reset returns",
+              world["all"] > 1 and world["before"] == world["all"] and world["zoomed"] < world["all"] and world["after"] == world["all"], str(world))
         switched = page.evaluate("""async () => {
             const O = (await (await fetch('data/enso_outlook.json')).json()).data;
             const w = O.who_pays.filter(x => (x.buyers || []).length).slice(-1)[0];
@@ -513,7 +528,9 @@ def main() -> int:
             return {shape: ['mode', 'oni', 'year', 'flows', 'buyers'].every(k => k in d) && d.oni === O.cases[O.who_pays_case].oni,
                     lost: lost.length === wantLost, noShort: rep.every(f => !shortOf.has(f.from + '/' + f.crop)),
                     cap: Object.values(perBuyer).every(n => n <= 2), noBan: rep.every(f => !R.some(m => m.iso === f.from && /ban/i.test(m.measure || '') && m.status !== 'historical' && (f.crop === 'corn' ? /maize|corn/i : new RegExp(f.crop, 'i')).test(m.commodity || ''))),
-                    atrisk: a && a.mode === 'atrisk' && a.flows.every(f => f.role === 'export')};
+                    atrisk: a && a.mode === 'atrisk' && a.flows.every(f => f.role === 'export'),
+                    // 2026-09-30 logic check: a replacement ships at least 10 kt a year to that buyer (no 7 kt Swiss record).
+                    floor: rep.every(f => f.t >= 10000 && f.share_pct >= 1)};
         }""")
         check("ensoTradeFlows: one lost arc per named buyer, replacements capped and never from a short or banned exporter, atrisk mode ready",
               all(flows.values()), str(flows))
@@ -995,22 +1012,28 @@ def main() -> int:
               page.locator('.enso-lcard[data-board-lane]').count() + page.locator('.enso-lanes-other li[data-board-lane]').count() == lane_count
               and page.locator('.enso-lanes-other').get_attribute('open') is None
               and f'{board_slots} slots/day' in page.locator('[data-board-lane="panama"]').text_content())
-        # 2026-09-29 audit (owner: "Should include trade from production El Niño countries"): the Shipping map follows one
-        # harvest's usual exports on the Harvests grammar, and lanes with no published ENSO link are off the map.
-        page.wait_for_function("() => document.querySelectorAll('#enso-map path.enso-flow').length > 0", timeout=20_000)
+        # 2026-09-30 (V2 audit: "it overlays a lot with the shipping map ... should first be a full view of map with lines
+        # on what trade/ shipping is exposed"): the harvest story is Harvests-only. Shipping draws the grain trade through
+        # Panama as solid bands, width in tonnes (FAOSTAT), every linked lane's status after its name, and no story.
+        page.wait_for_function("() => document.querySelectorAll('#enso-map path.enso-xtrade').length > 0", timeout=20_000)
         page.wait_for_timeout(700)
         ship_map = page.evaluate("""async () => {
-            const O = (await (await fetch('data/enso_outlook.json')).json()).data, L = (await (await fetch('data/enso_lanes.json')).json()).data.lanes;
-            const keys = O.rows_all.filter(r => r.status === 'shown' && !r.in_season && Math.abs(r.change_kt_record || 0) >= 150).sort((a, b) => Math.abs(b.change_kt_record) - Math.abs(a.change_kt_record)).map(r => r.iso + '/' + r.crop);
-            const d = await ensoStoryFlows(keys[0], 'atrisk');
-            return {chips: document.querySelectorAll('#enso-map .enso-follow [data-story]').length, want_chips: keys.length,
-                    risk: document.querySelectorAll('#enso-map path.enso-flow.is-lost').length, want: d.lines.filter(f => f.role === 'risk').length,
-                    buyers: document.querySelectorAll('#enso-map .enso-flab-b.is-buy').length, title: document.querySelector('#enso-mapwrap .enso-plate-t').textContent,
-                    unlinked: L.filter(l => l.phase === 'none').every(l => !document.querySelector('.enso-choke-label[data-lane="' + l.id + '"]'))};
+            const L = (await (await fetch('data/enso_lanes.json')).json()).data.lanes, xt = await ensoExposedTrade();
+            const bands = [...document.querySelectorAll('#enso-map path.enso-xtrade')], w = bands.map(b => Number(b.getAttribute('stroke-width')));
+            const today = new Date().toISOString().slice(0, 10), pan = L.find(l => l.id === 'panama');
+            const state = id => (document.querySelector('.enso-choke-label[data-lane="' + id + '"] .enso-lane-state') || {}).textContent || '';
+            return {story: document.querySelectorAll('#enso-map .enso-follow:not([hidden]) [data-story], #enso-map path.enso-flow, #enso-map .enso-hcall').length,
+                    bands: bands.length, want: xt.buyers.length + (xt.buyers.some(b => b.side === 'asia') ? 2 : 1), trunk: Math.max(...w) === 12,
+                    solid: bands.every(b => !b.hasAttribute('stroke-dasharray')), floor: xt.buyers.every(b => b.t >= 100000), year: xt.year,
+                    title: document.querySelector('#enso-mapwrap .enso-plate-t').textContent,
+                    unlinked: L.filter(l => l.phase === 'none').every(l => !document.querySelector('.enso-choke-label[data-lane="' + l.id + '"]')),
+                    lanina: L.filter(l => l.phase === 'la_nina').every(l => state(l.id) === ' · La Niña side'),
+                    panama: ((pan.live_2026 || {}).steps || []).some(s => (s.booking_from || s.effective) <= today) ? state('panama') === ' · restricted now' : state('panama').length > 3,
+                    key: document.getElementById('enso-legend').textContent.includes('FAOSTAT ' + xt.year)};
         }""")
-        check("Shipping map follows one harvest's usual exports, buyers labelled, only El Niño-linked lanes drawn",
-              ship_map["chips"] == ship_map["want_chips"] and ship_map["want"] > 0 and ship_map["risk"] == ship_map["want"] == ship_map["buyers"]
-              and ship_map["unlinked"] and 'El Niño' in ship_map["title"], str(ship_map))
+        check("Shipping map draws the grain through Panama in tonnes, each lane's status, no harvest story, only El Niño-linked lanes",
+              ship_map["story"] == 0 and ship_map["bands"] == ship_map["want"] and ship_map["trunk"] and ship_map["solid"] and ship_map["floor"]
+              and ship_map["unlinked"] and ship_map["lanina"] and ship_map["panama"] and ship_map["key"] and 'El Niño' in ship_map["title"], str(ship_map))
         check("Panama reads month by month, with the last twelve months day by day in a fold of the same plate", page.evaluate("""() => {
             const a = document.querySelector('.enso-pansince-plate'), b = document.querySelector('.enso-panama-daily');
             return !!a && !!b && a.contains(b) && b.tagName === 'DETAILS' && !document.querySelector('.enso-panama-pair');
@@ -1428,12 +1451,12 @@ def main() -> int:
         check("Stage I visible key distinguishes observed transits from published schematic corridors",
               'diamond: observed, measured at the chokepoint' in visible_key and 'Ring size' not in visible_key
               and 'dashed: published schematic corridor through named ports' in visible_key)
-        # 2026-09-29: Shipping opens on the world view with the default story's lines drawn; it zooms only on a chip click.
-        check("Stage I Shipping opens on the world view: every El Niño lane on screen, the default story's lines drawn", page.evaluate("""() => {
+        # 2026-09-30: Shipping opens on the world view with the Panama trade bands drawn (the harvest story is Harvests-only).
+        check("Stage I Shipping opens on the world view: every El Niño lane on screen, the Panama trade drawn", page.evaluate("""() => {
             const box = document.getElementById('enso-map').getBoundingClientRect();
             const pins = [...document.querySelectorAll('.enso-choke')];
             return pins.length === LINKED && pins.every(p => { const r = p.getBoundingClientRect(); return r.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom; })
-                && document.querySelectorAll('#enso-map path.enso-flow').length > 0;
+                && document.querySelectorAll('#enso-map path.enso-xtrade').length > 0 && !document.querySelector('#enso-map path.enso-flow');
         }""".replace("LINKED", str(linked_lanes))))
         check("Stage I magnitude joins each lane to PortWatch and names missing values", page.evaluate("""async () => {
             const lanes = (await (await fetch('data/enso_lanes.json')).json()).data.lanes;
@@ -1978,7 +2001,8 @@ def main() -> int:
             const chips = document.querySelectorAll('#enso-land-head .enso-country-list .enso-chip').length;
             return chips === want.size && /passes on its own/.test(document.getElementById('enso-land-head').textContent);
         }"""))
-        # 2026-09-29 audit: the 2027 plate opens with one plain sentence and at most three bullets; the chart
+        # 2026-09-29 audit: the 2027 plate opens with one plain sentence and at most three bullets (two since the
+        # 2026-09-30 V2 audit, "declutter"; the source details moved into the method fold); the chart
         # legend moved into the method fold; the fitted-responses plate became a "Show per country" button;
         # the calendar is open and shows only the outlook's pairs until "All N pairs" is pressed.
         audit = page.evaluate("""async () => {
@@ -1996,7 +2020,7 @@ def main() -> int:
             const allRows = [...document.querySelectorAll('#enso-calendar .cal-row:not(.cal-head)')].filter(r => r.firstElementChild.getBoundingClientRect().height > 0).length;
             document.querySelector('#enso-calendar .enso-cal-all').click();
             return {lede: !!lede && lede.textContent.includes((Math.abs(worst.change_kt_record) / 1000).toFixed(1) + ' Mt') && lede.textContent.includes(worst.harvest),
-                    bullets: bullets > 0 && bullets <= 3, legendFolded: !!legendLine && !!legendLine.closest('details'),
+                    bullets: bullets > 0 && bullets <= 2, legendFolded: !!legendLine && !!legendLine.closest('details'),
                     noCoefPlate: [...document.querySelectorAll('#tab-elnino .enso-plate-t')].every(t => t.textContent !== 'Fitted crop responses')
                         && /Show per country/.test(document.querySelector('#enso-harvest-fig > summary').textContent),
                     calOpen: !document.querySelector('#enso-calendar details.enso-cal-fold') && shortRows === calRows && allRows === cal.querySelectorAll('.cal-row:not(.cal-head)').length && allRows > shortRows,
