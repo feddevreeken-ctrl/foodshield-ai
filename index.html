@@ -13,8 +13,9 @@
      static copy in step with data/source_manifest.json summary.total_sources. -->
 <meta name="description" content="Open-data dashboard tracking food-supply shock exposure across 193 countries + 50 US states and 67 public pipelines. FDRS scores trade, climate and conflict exposure: not how many people are currently hungry; hunger indicators are shown separately per country.">
 <meta name="theme-color" content="#0b0b0d">
-<!-- No static canonical: every path serves this same file, so updatePageTitle() writes
-     the canonical for the URL actually shown (Google: set it in HTML or in JS, not both). -->
+<!-- middleware.js rewrites the title, description, og:* and twitter:* tags below and adds
+     the canonical for each page path, from seo.json; updatePageTitle() keeps them in step
+     as the reader moves between tabs. These static values are the home page's. -->
 
 <!-- Open Graph -->
 <meta property="og:type" content="website">
@@ -32,6 +33,7 @@
 <meta name="twitter:title" content="FoodShield AI: Global Food Disruption Risk">
 <meta name="twitter:description" content="Open-data food-security risk dashboard tracking 193 countries + 50 US states across 67 public pipelines.">
 <meta name="twitter:image" content="https://www.foodshield.nl/og-image.png">
+<meta name="twitter:image:alt" content="FoodShield AI: global food-security risk dashboard">
 
 <!-- JSON-LD: WebSite + Organization. Helps Google build the knowledge panel
      and enables sitelinks search box. Country-specific JSON-LD would require
@@ -83,8 +85,6 @@
 </script>
 
 <script defer src="/_vercel/insights/script.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
 <!-- Favicon — inline SVG shield mark (matches the brand-mark in the header).
      Data-URI so it needs no external file and renders crisp at any size.
@@ -98,29 +98,29 @@
      swap so text paints immediately with Inter/system-ui and re-flows to Geist
      once it lands. Eliminates the half-second FOIT on first paint. -->
 <link rel="preload"
-      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&display=swap"
+      href="js/vendor/fonts/fonts-critical.css"
       as="style">
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&display=swap"
+<link href="js/vendor/fonts/fonts-critical.css"
       rel="stylesheet">
 
 <!-- Secondary font weights — loaded async so they don't block first paint.
      Inline media-swap trick: load as print, then swap to all once parsed. -->
 <link rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Geist:wght@300;500;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap"
+      href="js/vendor/fonts/fonts-rest.css"
       media="print" onload="this.media='all'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;500;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap"></noscript>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+<noscript><link rel="stylesheet" href="js/vendor/fonts/fonts-rest.css"></noscript>
+<link rel="stylesheet" href="js/vendor/leaflet-1.9.4/leaflet.css"/>
+<script src="js/vendor/leaflet-1.9.4/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <!-- v80 — MapLibre GL + the maplibre-gl-leaflet bridge. The basemap is now
      vector tiles (OpenFreeMap dark, CARTO dark-matter as fallback) rendered by
      MapLibre inside the existing Leaflet map, so every overlay in this file —
      choropleth, flow arcs, disturbance markers, scenario paint — keeps working
      against the Leaflet API it was written for. See the map module's "Base"
      block for why the raster basemap had to go. -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css"/>
-<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js" integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="js/vendor/maplibre-gl-4.7.1/maplibre-gl.css"/>
+<script src="js/vendor/maplibre-gl-4.7.1/maplibre-gl.js"></script>
+<script src="js/vendor/leaflet-maplibre-gl-0.0.22.js"></script>
+<script src="js/vendor/d3-7.9.0.min.js" integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous"></script>
 <!-- v20.34 — Chart.js is only needed once the user opens a country panel or
      the commodity/score tab. Removed the eager <script> tag from the critical
      path and replaced it with on-demand loadChartJS() (defined below) which
@@ -133,7 +133,7 @@
       if (_chartPromise) return _chartPromise;
       _chartPromise = new Promise((resolve, reject) => {
         const s = document.createElement('script');
-        s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+        s.src = 'js/vendor/chart-4.4.0.umd.min.js';
         s.async = true;
         s.onload = () => resolve(window.Chart);
         s.onerror = () => { _chartPromise = null; reject(new Error('Chart.js failed to load')); };
@@ -24797,11 +24797,8 @@ function _simulateScenario(c, selected, severityById, paramsById) {
     // ~1.2MB over the wire from jsDelivr, measured at ~260ms cold.
     // The 110m file stays as the last resort: coarse, but the map draws.
     const _geoUrls = [
-      'https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_50m_admin_0_countries.geojson',
-      'https://cdn.statically.io/gh/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson',
-      'https://cdn.jsdelivr.net/gh/holtzy/D3-graph-gallery@master/DATA/world.geojson',
-      'https://cdn.statically.io/gh/holtzy/D3-graph-gallery/master/DATA/world.geojson',
-      'https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson',
+      'data/geo/ne_50m_admin_0_countries.geojson',
+      'data/geo/world.geojson',
     ];
     const _tryGeo = async (urls) => {
       for (const url of urls) {
@@ -25246,8 +25243,7 @@ function _simulateScenario(c, selected, severityById, paramsById) {
   function buildCityLabels() {
     if (!G.map) return;
     const urls = [
-      'https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_50m_populated_places_simple.geojson',
-      'https://cdn.statically.io/gh/nvkelso/natural-earth-vector/master/geojson/ne_50m_populated_places_simple.geojson',
+      'data/geo/ne_50m_populated_places_simple.geojson',
     ];
     (async () => {
       let data = null;
@@ -27086,19 +27082,31 @@ window.addEventListener('popstate', () => {
    commodity links override these below. No live numbers here: these sit in search
    results for days, and a number would go stale in them. */
 const SITE_URL = 'https://www.foodshield.nl';
+/* TAB_SEO:BEGIN generated by scripts/build_seo.py from seo.json; edit seo.json, not these lines */
 const TAB_SEO = {
-  elnino:      ['El Niño 2026 and the food supply · FoodShield AI', 'The 2026-27 El Niño traced from the Pacific to harvests, shipping lanes and food prices, from NOAA, BoM and FAO data. Observed data and model output are labelled apart.'],
-  ensoharvest: ['El Niño and harvests: crops at risk · FoodShield AI', 'Which harvests past El Niños hit hardest, fitted on FAOSTAT yields since 1961, with the tonnes at stake and the countries that would need to import more.'],
-  ensowater:   ['El Niño and shipping: Panama, rivers, ports · FoodShield AI', 'Panama Canal water levels, chokepoint transits from IMF PortWatch, river gauges and grain port loadings, set against the 2023-24 El Niño.'],
-  ensomoney:   ['El Niño and food prices · FoodShield AI', 'Staple food prices in countries El Niño has hit before, from FAO GIEWS and the World Bank, beside the price paths of past El Niños.'],
-  ensolive:    ['El Niño impacts reported now · FoodShield AI', 'Floods, droughts and export decisions reported during the 2026-27 El Niño, from GDACS, ReliefWeb and agency bulletins, mapped by country.'],
-  country:     ['Country food-security reports · FoodShield AI', 'Trade dependency, climate exposure, governance and conflict indicators for 193 countries and 50 US states, each figure with its source and date.'],
-  commodities: ['Staple crops: who depends on whom · FoodShield AI', 'Producers, importers and supplier concentration for staple crops, from FAOSTAT bilateral trade and USDA supply data.'],
-  disturbances:['Live food-supply disturbances · FoodShield AI', 'Hazards, conflict and export restrictions that touch food supply, from GDACS, ReliefWeb and HDX, refreshed every six hours.'],
-  scenario:    ['Food-supply stress test · FoodShield AI', 'Close a chokepoint, add a heatwave, a drought, a port outage, a rate shock or sanctions, and see which constraint breaks first for a country.'],
-  methodology: ['Methodology: how the FDRS score works · FoodShield AI', 'How the Food Disruption Risk Score is built, weighted and checked, which public sources feed it, and what it does not measure.'],
+  global: ["FoodShield AI: Global Food Disruption Risk", "How exposed each country's food supply is to trade, climate and conflict shocks, for 193 countries and 50 US states, every figure sourced and dated."],
+  elnino: ["El Niño 2026 and the food supply · FoodShield AI", "The 2026-27 El Niño traced from the Pacific to harvests, shipping lanes and food prices, from NOAA, BoM and FAO data, observed and modelled kept apart."],
+  ensoharvest: ["El Niño and harvests: crops at risk · FoodShield AI", "Which harvests past El Niños hit hardest, fitted on FAOSTAT yields since 1961, with the tonnes at stake and the countries that would need to import more."],
+  ensowater: ["El Niño and shipping: Panama, rivers, ports · FoodShield AI", "Panama Canal water levels, chokepoint transits from IMF PortWatch, river gauges and grain port loadings, set against the 2023-24 El Niño."],
+  ensomoney: ["El Niño and food prices · FoodShield AI", "Staple food prices in countries El Niño has hit before, from FAO GIEWS and the World Bank, beside the price paths of past El Niños."],
+  ensolive: ["El Niño impacts reported now · FoodShield AI", "Floods, droughts and export decisions reported during the 2026-27 El Niño, from GDACS, ReliefWeb and agency bulletins, mapped by country."],
+  ensomech: ["How El Niño works · FoodShield AI", "How El Niño works across the Pacific: trade winds, the Walker circulation, the warm pool and upwelling, each step shown with this week's readings."],
+  country: ["Country food-security reports · FoodShield AI", "Trade dependency, climate exposure, governance and conflict indicators for 193 countries and 50 US states, each figure with its source and date."],
+  commodities: ["Staple crops: who depends on whom · FoodShield AI", "Producers, importers and supplier concentration for staple crops, from FAOSTAT bilateral trade and USDA supply data."],
+  disturbances: ["Live food-supply disturbances · FoodShield AI", "Hazards, conflict and export restrictions that touch food supply, from GDACS, ReliefWeb and HDX, refreshed every six hours."],
+  scenario: ["Food-supply stress test · FoodShield AI", "Close a chokepoint, add a heatwave, a drought, a port outage, a rate shock or sanctions, and see which constraint breaks first for a country."],
+  forecast: ["2030 structural outlook, not a forecast · FoodShield AI", "Where import pressure builds by 2030 if population and food-output trends hold: today's structural score rescored, not a prediction."],
+  score: ["Rankings: every country by food disruption risk · FoodShield AI", "All 193 countries ranked by the Food Disruption Risk Score, with the components and the formula behind each score."],
+  compare: ["Compare countries' food-supply risk · FoodShield AI", "Pin up to four countries to see their risk scores, score components and sourced indicators side by side."],
+  news: ["Commodity Wire: food trade headlines · FoodShield AI", "Food and commodity headlines from publisher feeds, matched to the trade corridors they touch. Headlines are publisher claims; corridor tonnes are sourced."],
+  companies: ["Where food and fertilizer companies source · FoodShield AI", "Sourcing countries of major grain traders and fertilizer producers, taken from each company's own annual reports and filings, with citations."],
+  livedata: ["Food price benchmarks: FAO and World Bank · FoodShield AI", "The market benchmarks behind the score: the FAO Food Price Index and World Bank Pink Sheet commodity prices, each with its release date."],
+  datastatus: ["Data status: every source and its last refresh · FoodShield AI", "Every public data pipeline behind FoodShield: what it provides, when it last refreshed and whether it is healthy now, read from the source manifest."],
+  about: ["About FoodShield AI", "Which countries run short of food first when a shock hits, and why: what FoodShield measures, who built it, and the public data behind it."],
+  methodology: ["Methodology: how the FDRS score works · FoodShield AI", "How the Food Disruption Risk Score is built, weighted and checked, which public sources feed it, and what it does not measure."],
 };
-TAB_SEO.about = TAB_SEO.methodology;
+TAB_SEO.trade = TAB_SEO.country;
+/* TAB_SEO:END */
 
 /* The canonical URL for what is on screen: the clean path on the main host, with only
    the parameters that change the content. Unknown paths fall back to the home page. */
@@ -31181,7 +31189,7 @@ function loadJsPDF(){
   if (_jspdfPromise) return _jspdfPromise;
   _jspdfPromise = new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js';
+    s.src = 'js/vendor/jspdf-2.5.2.umd.min.js';
     s.async = true;
     s.onload = () => resolve(window.jspdf && window.jspdf.jsPDF);
     s.onerror = () => { _jspdfPromise = null; reject(new Error('jsPDF failed to load')); };
@@ -49561,9 +49569,8 @@ function showCommodityDetail(key) {
 
   /* ── §2 THE MAP ──────────────────────────────────────────────────────── */
   var GEO_URLS = [
-    'https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_50m_admin_0_countries.geojson',
-    'https://cdn.statically.io/gh/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson',
-    'https://cdn.jsdelivr.net/gh/holtzy/D3-graph-gallery@master/DATA/world.geojson'
+    'data/geo/ne_50m_admin_0_countries.geojson',
+    'data/geo/world.geojson'
   ];
   var LAND_TONE = '#e6e3da', OCEAN_TONE = '#0b1017';
 
