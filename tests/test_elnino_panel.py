@@ -989,6 +989,27 @@ def main() -> int:
                   return r.every(x => !/earthquake|monsoon|cyclone|charity/.test(x));
               }"""))
 
+        # 2026-09-29 audit (Reported): the three plates follow the Ocean and Harvests grammar (one lede, at most three
+        # bullets), the ledger has one small "note" marker per hotspot row instead of a fold per row, the note opens in
+        # place, and no plate runs past ~820 px at 1440 wide.
+        check("Reported plates carry one lede and at most three bullets, and stay under ~820 px",
+              page.evaluate("""() => [...document.querySelectorAll('#enso-live > .enso-plate')].every(f =>
+                  f.querySelectorAll(':scope > .plate-body > .enso-plate-lede').length === 1
+                  && f.querySelectorAll(':scope > .plate-body > .enso-bullets > li').length <= 3
+                  && f.getBoundingClientRect().height <= 830)"""))
+        check("ledger hotspot notes are one marker per row, closed by default, and open in place",
+              page.evaluate("""() => {
+                  const led = document.querySelector('#enso-live .enso-ledger-plate');
+                  if (led.querySelector('details.enso-live-comment')) return false;
+                  const b = led.querySelector('.enso-asap-btn'); if (!b) return false;
+                  const n = document.getElementById(b.getAttribute('aria-controls'));
+                  const closed = n.hidden && b.getAttribute('aria-expanded') === 'false';
+                  b.click();
+                  const open = !n.hidden && b.getAttribute('aria-expanded') === 'true' && n.textContent.trim().length > 20;
+                  b.click();
+                  return closed && open && n.hidden;
+              }"""))
+
         print("\nstage H map interactions and ranked readings")
         # Capture the actual rebuilt Leaflet instance without adding a production test API.
         page.evaluate("""async () => {
