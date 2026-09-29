@@ -1506,7 +1506,8 @@ def main() -> int:
             page.set_viewport_size({'width': width, 'height': height})
             for tab, labels in (
                 ('ensowater', ['No land layer', 'Shipping', 'Change nowEl Niño link']),
-                ('ensomoney', ['Staple prices', 'Grain imports', 'Since MarchWho paysYear on year', _pout_year + '2015-162023-24']),
+                # 2026-09-29 round 2 (?pmap, default a): the past sits on the map as chips, so the stage switch is gone.
+                ('ensomoney', ['Staple prices', 'Grain imports', 'Since MarchWho paysYear on year']),
                 ('elnino', ['Sea-surface']),
                 ('ensoharvest', ['Production shock', 'Strongest crop', 'Coverage', 'Crop stress now', 'Teleconnections']),
                 ('ensolive', ['Rain pattern', 'Hotspots', 'IPC', 'Hazards', 'Headlines', 'Elsewhere'])):
@@ -1546,29 +1547,35 @@ def main() -> int:
                 const classes = ['#3f6f9c', '#8fb1cf', '#77797d', '#d9b27c', '#dd8a45', '#cc5a2e', '#9e2f1c'];
                 let shaded = 0, circles = 0; _stageHMap.eachLayer(l => { if (l.feature && classes.includes(l.options.fillColor)) shaded++; if (l instanceof L.CircleMarker && !l.feature && l.options.radius >= 4) circles++; });
                 const pane = _stageHMap.getPane('ensoGraticule');
+                // 2026-09-29 round 2: text labels became one chip per country (no size encoding); every country fits.
                 return good && seen.size === tele.size && shaded >= 10 && circles === 0 && pane.style.zIndex === '210'
                     && pane.querySelectorAll('.enso-grat-lab').length === 3
-                    && document.querySelectorAll('.enso-price-lbl').length >= 3;
+                    && document.querySelectorAll('#enso-map .enso-pchip').length === tele.size;
             }"""))
 
-        # 2026-09-29 audit, Prices. The stage switch repaints the same countries at the same stage of 2015-16; "Who pays"
-        # is a second, modelled view (dashed frame) with one circle per buyer; no price-model number is printed anywhere.
-        page.evaluate("showTab('ensomoney')"); page.wait_for_timeout(300)
-        page.click('[data-pstage="2015-16"]'); page.wait_for_timeout(900)
-        check("Prices stage switch paints the same stage of 2015-16 from the price outlook", page.evaluate("""async () => {
+        # 2026-09-29 audit, Prices, round 2 ("I prefer not to have circles on maps"; ?pmap default a). The same months
+        # of 2023-24 and 2015-16 sit on each country's chip instead of behind a stage switch; "Who pays" is a second,
+        # modelled view (dashed frame) that fills buyers by tonnes, with no circles; no price-model number anywhere.
+        page.evaluate("showTab('ensomoney')"); page.wait_for_timeout(900)
+        check("Prices chips carry the same months of 2023-24 and 2015-16 from the price outlook; no stage switch", page.evaluate("""async () => {
             const P = (await (await fetch('data/enso_price_outlook.json')).json()).data;
-            const r = P.rows.find(x => x.iso3 === 'ZAF'), v = r.aftermath['2015-16'].pct, B = [-10, -3, 3, 10, 20, 30];
-            let k = B.length; for (let i = 0; i < B.length; i++) if (v < B[i]) { k = i; break; }
-            const want = ['#3f6f9c', '#8fb1cf', '#77797d', '#d9b27c', '#dd8a45', '#cc5a2e', '#9e2f1c'][k]; let got = null;
-            _stageHMap.eachLayer(l => { const p = l.feature && l.feature.properties; if (p && (p.ISO_A3 || p.ADM0_A3) === 'ZAF' && l.options.fillColor) got = l.options.fillColor; });
-            return got === want && document.getElementById('enso-maptag').textContent.startsWith('After inflation, Mar 2015 to the same stage');
+            const pct = v => Math.round(v) === 0 ? '0%' : (v > 0 ? '+' : '−') + Math.abs(v).toFixed(0) + '%';
+            const r = P.rows.find(x => x.iso3 === 'ZAF'), a = r.aftermath;
+            const chip = [...document.querySelectorAll('#enso-map .enso-pchip')].find(c => c.textContent.startsWith('South Africa'));
+            const t = chip ? chip.textContent.replace(/\s+/g, ' ') : '';
+            return !!chip && t.includes(pct(a.now.pct)) && t.includes('2023-24 ' + pct(a['2023-24'].pct)) && t.includes('2015-16 ' + pct(a['2015-16'].pct))
+                && !document.querySelector('[data-pstage]') && document.getElementById('enso-maptag').textContent.startsWith('After inflation, Mar ');
         }"""))
-        page.click('[data-pstage="now"]'); page.click('[data-pview="pays"]'); page.wait_for_timeout(900)
-        check("Prices 'Who pays' view: one circle per buyer from the outlook file, modelled frame, the old view one click away", page.evaluate("""async () => {
+        page.click('[data-pview="pays"]'); page.wait_for_timeout(900)
+        check("Prices 'Who pays' view: buyers filled by tonnes from the outlook file, a chip each, no circles, modelled frame", page.evaluate("""async () => {
             const W = (await (await fetch('data/enso_outlook.json')).json()).data.who_pays;
             const isos = new Set(W.flatMap(c => (c.extra_import_kt ? [c.iso] : []).concat((c.buyers || []).map(b => b.iso))));
-            const outer = []; _stageHMap.eachLayer(l => { if (l instanceof L.CircleMarker && l.options.fillColor === '#8fb1cf' && /enso-pay-mark/.test(l.options.className || '')) outer.push(l); });
-            return outer.length === isos.size && document.getElementById('enso-mapwrap').dataset.kind === 'modelled'
+            const cols = ['#2c3f52', '#3f5f7d', '#6388ab', '#9dbfdc']; const filled = new Set(); let circles = 0;
+            _stageHMap.eachLayer(l => { const p = l.feature && l.feature.properties, iso = p && (p.ISO_A3 || p.ADM0_A3);
+                if (iso && isos.has(iso) && cols.includes(l.options.fillColor)) filled.add(iso);
+                if (l instanceof L.CircleMarker && !l.feature && l.options.radius >= 4) circles++; });
+            return filled.size === isos.size && circles === 0 && document.querySelectorAll('#enso-map .enso-pchip').length === isos.size
+                && document.getElementById('enso-mapwrap').dataset.kind === 'modelled'
                 && document.getElementById('enso-legend').textContent.includes('lost from its own harvest');
         }"""))
         page.click('[data-pview="since"]'); page.wait_for_timeout(600)
@@ -1577,6 +1584,32 @@ def main() -> int:
             const t = document.getElementById('subview-ensomoney').textContent + document.getElementById('enso-mapwrap').textContent;
             return P.model_status !== 'no_skill' || (P.rows.every(r => r.model == null) && !/forecast of|price forecast:/i.test(t));
         }"""))
+        # 2026-09-29 round 2: the two other candidate Prices maps (?pmap=b, ?pmap=c) paint from the same files.
+        vpage = browser.new_page(viewport={"width": 1440, "height": 900})
+        vpage.add_init_script("try { localStorage.setItem('foodshield_skip_intro', '1'); localStorage.setItem('foodshield_hint_shown', '1'); } catch (e) {}")
+        vpage.goto(f"{base}/index.html?tab=ensomoney&pmap=b", wait_until='networkidle')
+        vpage.wait_for_selector('#enso-map-ranking button'); vpage.wait_for_timeout(1200)
+        check("Prices ?pmap=b: every El Niño country in the rail with its best reading, local currency, no chips", vpage.evaluate("""async () => {
+            const R = (await (await fetch('data/enso_regions.json')).json()).data.regions, P = (await (await fetch('data/enso_price_outlook.json')).json()).data;
+            const isos = new Set(R.flatMap(r => r.iso3 || []).concat(P.rows.map(r => r.iso3)));
+            const n = document.querySelectorAll('#enso-map-ranking button').length;
+            return n >= isos.size - 2 && n <= isos.size && !document.querySelector('#enso-map .enso-pchip')
+                && document.getElementById('enso-maptag').textContent.startsWith('Year on year, local currency before inflation')
+                && !document.querySelector('[data-pview="change"]');
+        }"""))
+        vpage.goto(f"{base}/index.html?tab=ensomoney&pmap=c", wait_until='networkidle')
+        vpage.wait_for_selector('#enso-map .enso-pchip'); vpage.wait_for_timeout(900)
+        check("Prices ?pmap=c: chips carry 2023-24 March-to-highest-month from the file and today's move", vpage.evaluate("""async () => {
+            const P = (await (await fetch('data/enso_price_outlook.json')).json()).data;
+            const pct = v => Math.round(v) === 0 ? '0%' : (v > 0 ? '+' : '−') + Math.abs(v).toFixed(0) + '%';
+            const r = P.rows.find(x => x.iso3 === 'ZMB'), a = r.aftermath['2023-24'], pk = r.analog.paths['2023-24'].peak_pct;
+            const hi = ((1 + a.pct / 100) * (1 + pk / 100) - 1) * 100;
+            const chip = [...document.querySelectorAll('#enso-map .enso-pchip')].find(c => c.textContent.startsWith('Zambia'));
+            const t = chip ? chip.textContent : '';
+            return !!chip && t.includes(pct(hi)) && t.includes(pct(r.aftermath.now.pct)) && document.querySelectorAll('[data-pev]').length === 2
+                && document.querySelectorAll('#enso-map .enso-pchip').length === new Set(P.rows.map(x => x.iso3)).size;
+        }"""))
+        vpage.close()
         check("Who pays follows the map; the past-price plate has a 2026 row from the FAO index and one fold", page.evaluate("""async () => {
             const order = [...document.querySelectorAll('#subview-ensomoney > *')].map(e => e.id || e.className);
             const F = (await (await fetch('data/fao_ffpi.json')).json()).data.series.map(x => x.fpi), n = F.length;

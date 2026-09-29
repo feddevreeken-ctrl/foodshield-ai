@@ -10148,6 +10148,20 @@ body::before {
 .enso-legend-block { min-width:200px; }
 .leaflet-tooltip.enso-price-lbl,#enso-map .leaflet-tooltip.enso-price-lbl{background:transparent !important;border:none !important;box-shadow:none !important;padding:0 0 0 2px !important;color:#ebe9e2 !important;white-space:nowrap;font-family:'Geist Mono',monospace;font-size:10.5px;text-shadow:0 0 3px #0b1017,0 0 3px #0b1017,0 0 6px #0b1017;}
 .leaflet-tooltip.enso-price-lbl::before{display:none;}
+/* Prices map chips (2026-09-29 round 2, ?pmap=a|c): a flat dark plate per country, colour stripe = its class. */
+#enso-map .leaflet-marker-icon.enso-pchip { position:absolute; box-sizing:border-box; background:rgba(11,16,23,.9); border:1px solid #3a3d44; padding:3px 6px 3px 8px; color:#c9c6bd; font:10.5px/1.25 'Geist',sans-serif; white-space:nowrap; cursor:pointer; overflow:hidden; }
+.enso-pchip { position:relative; box-sizing:border-box; background:rgba(11,16,23,.9); border:1px solid #3a3d44; padding:3px 6px 3px 8px; font:10.5px/1.25 'Geist',sans-serif; white-space:nowrap; width:max-content; }
+#enso-map .enso-pchip:hover, #enso-map .enso-pchip:focus-visible { border-color:#8b8980; outline:none; z-index:1000 !important; }
+.enso-pchip > .enso-pchip-s { position:absolute; left:0; top:0; bottom:0; width:3px; }
+.enso-pchip > .enso-pchip-h { display:flex; gap:8px; justify-content:space-between; align-items:baseline; }
+.enso-pchip-h > .enso-pchip-n { color:#c9c6bd; }
+.enso-pchip-h > b { color:#ebe9e2; font:500 11.5px/1.2 'Geist Mono',monospace; }
+.enso-pchip > .enso-pchip-p { display:flex; gap:8px; align-items:center; margin-top:1px; color:#8b8980; font:9.5px/1.3 'Geist Mono',monospace; }
+.enso-pchip-p > span > i { display:inline-block; width:6px; height:6px; margin-right:3px; vertical-align:0; }
+.enso-pchip-p > .is-none { opacity:.7; }
+.enso-pchip-bar { display:block; }
+.enso-pchip-h > .enso-pchip-p { display:flex; gap:6px; align-items:center; color:#8b8980; font:9.5px/1.3 'Geist Mono',monospace; }
+#tab-elnino .enso-pchip .enso-num { font:inherit !important; color:inherit; }
 .enso-legend-t { font-size:var(--enso-fs-meta); font-weight:600; letter-spacing:var(--enso-tr-body); color:var(--t2); margin-bottom:5px; }
 .enso-legend-row { display:flex; align-items:center; gap:7px; font-size:var(--enso-fs-meta); color:var(--t2); margin:3px 0; }
 .enso-sw { width:16px; height:11px; border-radius:2px; flex:none; border:1px solid rgba(255,255,255,.08); }
@@ -48865,10 +48879,12 @@ function showCommodityDetail(key) {
         return '<button type="button" class="enso-basis-b" data-sview="' + b[0] + '" aria-pressed="' + ((S.shipView || 'now') === b[0]) + '">' + b[1] + '</button>'; }).join('') + '</span>' : '') +
       /* 2026-09-29 audit: the map leads with staple prices since March where El Niño hits harvests; who pays is the
          second view; the older 37-country year-on-year layer stays as the third, with its own two switches. */
-      (S.mode === 'staple' ? (poutRows().length ? '<span class="enso-basis" role="group" aria-label="Show">' + [['since', 'Since March', 'Staple prices since March, after inflation, where El Niño hits harvests'], ['pays', 'Who pays', 'Grain to buy elsewhere if the harvests fall (FoodShield model)'], ['change', 'Year on year', 'Staple prices in all ' + ensoTeleIsos().length + ' El Niño countries']].map(function (b) {
+      /* Round 2 (?pmap): a puts the past on the map as chips, so the stage switch is gone; b's first view covers every
+         El Niño country, so it has no separate year-on-year view; c picks which past El Niño fills the map. */
+      (S.mode === 'staple' ? (poutRows().length ? '<span class="enso-basis" role="group" aria-label="Show">' + [['since', pmap() === 'b' ? 'All countries' : pmap() === 'c' ? 'Last El Niño' : 'Since March', pmap() === 'b' ? 'Food prices in every El Niño country, year on year' : pmap() === 'c' ? 'Where staple prices went after the last El Niño, and where they are now' : 'Staple prices since March, after inflation, against the same months of past El Niños'], ['pays', 'Who pays', 'Grain to buy elsewhere if the harvests fall (FoodShield model)'], ['change', 'Year on year', 'Staple prices in all ' + ensoTeleIsos().length + ' El Niño countries']].filter(function (b) { return !(pmap() === 'b' && b[0] === 'change'); }).map(function (b) {
         return '<button type="button" class="enso-basis-b" data-pview="' + b[0] + '" title="' + b[2] + '" aria-pressed="' + (stapleView() === b[0] || (b[0] === 'change' && stapleView() === 'fit')) + '">' + b[1] + '</button>'; }).join('') + '</span>' : '') +
-        (stapleView() === 'since' ? '<span class="enso-basis" role="group" aria-label="Same stage of">' + [['now', poutNowYear()], ['2015-16', '2015-16'], ['2023-24', '2023-24']].map(function (b) {
-          return '<button type="button" class="enso-basis-b" data-pstage="' + b[0] + '" aria-pressed="' + (poutStage() === b[0]) + '">' + b[1] + '</button>'; }).join('') + '</span>' : '') +
+        (stapleView() === 'since' && pmap() === 'c' ? '<span class="enso-basis" role="group" aria-label="Past El Niño">' + ['2023-24', '2015-16'].map(function (k) {
+          return '<button type="button" class="enso-basis-b" data-pev="' + k + '" aria-pressed="' + (pastEv() === k) + '">' + k + '</button>'; }).join('') + '</span>' : '') +
         (stapleView() === 'change' || stapleView() === 'fit' ? '<span class="enso-basis" role="group" aria-label="Price basis">' + [['real', 'Real', 'After inflation'], ['nominal', 'Nominal', 'Local currency, before inflation']].map(function (b) {
         return '<button type="button" class="enso-basis-b" data-basis="' + b[0] + '" title="' + b[2] + '" aria-pressed="' + ((S.priceBasis || 'real') === b[0]) + '">' + b[1] + '</button>'; }).join('') + '</span>' +
         '<span class="enso-basis" role="group" aria-label="Colour by">' + [['change', 'Price change'], ['fit', 'Against pattern']].map(function (b) {
@@ -48935,9 +48951,9 @@ function showCommodityDetail(key) {
         paint(); renderControls(); renderLegend();
       };
     });
-    el.querySelectorAll('[data-pstage]').forEach(function (b) {
+    el.querySelectorAll('[data-pev]').forEach(function (b) {
       b.onclick = function () {
-        S.stapleStage = b.getAttribute('data-pstage');
+        S.pastEv = b.getAttribute('data-pev');
         (S.pricePins || []).forEach(function (m) { try { S.map.removeLayer(m); } catch (e) {} }); S.pricePins = [];
         paint(); renderControls(); renderLegend();
       };
@@ -49362,6 +49378,91 @@ function showCommodityDetail(key) {
     var yr = st === 'now' ? poutNowYear() : st.slice(0, 4), m1 = ms[ms.length - 1];
     return 'After inflation, Mar ' + yr + ' to ' + (st === 'now' ? 'the latest month' : 'the same stage') + (m1 ? ' (up to ' + poutMon(m1) + ')' : '') + ' · FAO GIEWS FPMA · ' + poutVerdict();
   }
+  /* 2026-09-29, round 2 ("prices map rethink", "I prefer not to have circles on maps"): three answers to "what should
+     this map show", picked by ?pmap=a|b|c until the owner chooses. a: now against last time, a chip per country with
+     the same months of 2023-24 and 2015-16; b: food prices in every El Niño country, the high-effect staples outlined;
+     c: where staple prices went after the last El Niño, today's move as a tick. None uses size-scaled marks. */
+  function pmap() {
+    if (!S._pmap) { var v = ''; try { v = new URLSearchParams(window.location.search).get('pmap') || ''; } catch (e) {} S._pmap = /^[abc]$/.test(v) ? v : 'a'; }
+    return S._pmap;
+  }
+  function pastEv() { return S.pastEv === '2015-16' ? '2015-16' : '2023-24'; }
+  /* A past event from March to its highest month after the stage we are at now, after inflation: the file's
+     same-stage change compounded with the replay's highest step (both real FPMA prices, no model). */
+  function poutHigh(r, ev) {
+    var a = r.aftermath && r.aftermath[ev], p = r.analog && r.analog.paths && r.analog.paths[ev];
+    if (!a || typeof a.pct !== 'number' || !p || typeof p.peak_pct !== 'number') return null;
+    var shift = monIdx(r.analog.base_month) - monIdx(a.to);
+    return { v: ((1 + a.pct / 100) * (1 + p.peak_pct / 100) - 1) * 100, month: monIdx(p.peak_month) - shift, from: a.from, stage: a.to };
+  }
+  function poutHighLead(iso, ev) { var best = null; poutOf(iso).forEach(function (r) { var h = poutHigh(r, ev); if (h && (!best || Math.abs(h.v) > Math.abs(best.h.v))) best = { r: r, h: h }; }); return best; }
+  var PAST_BREAKS = [-10, -3, 3, 15, 30, 60];
+  function pastClass(v) { for (var i = 0; i < PAST_BREAKS.length; i++) if (v < PAST_BREAKS[i]) return i; return PAST_BREAKS.length; }
+  /* Variant b: the best domestic food price reading per country, year on year in local currency (the one basis all
+     three sources share): FAO GIEWS staple prices, else World Bank market food prices, else the official food CPI. */
+  var FOOD_SRC = { fpma: 'FAO GIEWS staple prices', rtfp: 'World Bank market food prices', cpi: 'official food CPI (FAOSTAT)' };
+  function foodSignal(iso) {
+    var f = S.fpma && S.fpma[iso], r = S.rtfp && S.rtfp[iso], c = fcpiOf(iso);
+    if (f && typeof f.staple_price_yoy_pct === 'number') return { v: f.staple_price_yoy_pct, src: 'fpma', month: monIdx(f.latest_month), what: stapleWord(f) === 'staples' ? 'Staple prices' : stapleWord(f).replace(/^\w/, function (x) { return x.toUpperCase(); }) + ' price' };
+    if (hasRtfp(iso)) return { v: r.food_inflation_pct, src: 'rtfp', month: monIdx(r.as_of), what: 'Food prices' };
+    if (c) return { v: c.v, src: 'cpi', month: monIdx(c.month), what: 'Food CPI' };
+    return null;
+  }
+  function pmapIsos() { var o = {}; ensoTeleIsos().forEach(function (i) { o[i] = 1; }); poutRows().forEach(function (r) { o[r.iso3] = 1; }); return Object.keys(o); }
+  function stepsSvg(breaks) {
+    return '<svg class="enso-key-steps" aria-hidden="true" width="' + (STAPLE_COLS.length * 30 + 8) + '" height="26" viewBox="0 0 ' + (STAPLE_COLS.length * 30 + 8) + ' 26">' +
+      STAPLE_COLS.map(function (c, i) { return '<rect x="' + (4 + i * 30) + '" y="2" width="29" height="10" fill="' + c + '"/>'; }).join('') +
+      breaks.map(function (b, i) { return '<text x="' + (4 + (i + 1) * 30 - .5) + '" y="24" text-anchor="middle" font-size="9.5" fill="#9a978d" font-family="Geist Mono, monospace">' + (b > 0 ? '+' : b < 0 ? '−' : '') + Math.abs(b) + '</text>'; }).join('') + '</svg>';
+  }
+  function wholesaleNote() {
+    var w = poutRows().filter(function (r) { return r.series && r.series.price_type === 'wholesale'; }).map(function (r) { return nameFor(r.iso3) + ' ' + poutName(r) + (r.iso3 === 'THA' ? ' (Bangkok)' : ''); });
+    return w.length ? '<p>Wholesale series, not shop prices: ' + esc(w.join(', ')) + '.</p>' : '';
+  }
+  function pmapTag() {
+    var V = pmap();
+    if (V === 'b') {
+      var n = { fpma: 0, rtfp: 0, cpi: 0 }, all = pmapIsos(); all.forEach(function (i) { var s = foodSignal(i); if (s) n[s.src]++; });
+      return 'Year on year, local currency before inflation · FAO GIEWS staples in ' + n.fpma + ', World Bank markets in ' + n.rtfp + ', official food CPI in ' + n.cpi + ' of ' + all.length + ' · outlined: El Niño hits the harvest';
+    }
+    if (V === 'c') return 'After inflation, March ' + pastEv().slice(0, 4) + ' to the highest month after this stage; tick: ' + poutNowYear() + ' since March · FAO GIEWS FPMA · ' + poutVerdict();
+    return poutTag();
+  }
+  function pmapTitle() {
+    var V = pmap();
+    return V === 'b' ? ['Food prices in every El Niño country', 'FAO GIEWS FPMA · World Bank RTFP · FAOSTAT']
+      : V === 'c' ? ['Where staple prices went after ' + pastEv(), 'FAO GIEWS FPMA · FoodShield harvest model']
+      : ['Staple prices since March, against the last two El Niños', 'FAO GIEWS FPMA · FoodShield harvest model'];
+  }
+  function pmapLegend() {
+    var V = pmap(), P = S.pout || {};
+    if (V === 'b') {
+      var all = pmapIsos(), none = all.filter(function (i) { return !foodSignal(i); }), hit = {}; poutRows().forEach(function (r) { hit[r.iso3] = 1; });
+      return '<div class="enso-legend-block"><div class="enso-legend-t">Food prices on a year earlier, local currency, % · observed</div>' + stepsSvg(STAPLE_BREAKS) +
+        krow('<svg aria-hidden="true" width="18" height="12" viewBox="0 0 18 12"><rect x="1" y="1" width="16" height="10" fill="#77797d" stroke="#ebe9e2" stroke-width="1.6"/></svg>', 'El Niño hits the harvest', Object.keys(hit).length + ' countries; hover for staple prices since March') +
+        (none.length ? krow('<svg aria-hidden="true" width="18" height="12" viewBox="0 0 18 12"><rect x="1" y="1" width="16" height="10" fill="none" stroke="#8a8578" stroke-width="1.2" stroke-dasharray="1 3"/></svg>', 'No reading', esc(none.map(nameFor).join(', '))) : '') +
+        '<div class="enso-key-foldable"><p>Every country El Niño reaches, coloured by the best domestic reading it has: FAO GIEWS staple prices (cereals, flour, bread) where FAO tracks them, else the World Bank’s market food price index, else the official food CPI. All three are year on year in local currency, before inflation, so high-inflation countries read high. Hover names the source and month.</p>' +
+        '<p>Outlined countries are where El Niño’s harvest damage is documented; their hover adds the staple price since March after inflation, the same months of 2015-16 and 2023-24, and the replay of past El Niños.</p></div></div>';
+    }
+    if (V === 'c') {
+      var ev = pastEv(), gaps = poutRows().filter(function (r) { return !poutHigh(r, ev); }).map(function (r) { return nameFor(r.iso3) + ' ' + poutName(r); });
+      return '<div class="enso-legend-block"><div class="enso-legend-t">Staple price in ' + ev + ', March to its highest month, after inflation, % · observed</div>' + stepsSvg(PAST_BREAKS) +
+        krow('<svg aria-hidden="true" width="40" height="10" viewBox="0 0 40 10"><line x1="0" x2="40" y1="5" y2="5" stroke="#3a3d44"/><rect x="8" y="2.5" width="28" height="5" fill="#dd8a45"/><line x1="8" x2="8" y1="0" y2="10" stroke="#8b8980"/><rect x="16" y="0" width="2" height="10" fill="#ebe9e2"/></svg>', 'Chip bar: ' + ev + ' · tick: ' + poutNowYear() + ' so far, both from March', '') +
+        (gaps.length ? krow('<svg aria-hidden="true" width="18" height="12" viewBox="0 0 18 12"><rect x="1" y="1" width="16" height="10" fill="none" stroke="#8a8578" stroke-width="1.2" stroke-dasharray="1 3"/></svg>', 'No series then', esc(gaps.join(', '))) : '') +
+        '<div class="enso-key-foldable"><p>Each country: the real staple price from March ' + ev.slice(0, 4) + ' to its highest month after the stage ' + poutNowYear() + ' has reached, up to March two years on. It is the file’s change to this stage compounded with the highest later month, both FAO GIEWS FPMA after inflation. The chip’s tick is ' + poutNowYear() + ' since March on the same scale: where it sits short of the bar, prices have further to go if they follow ' + ev + '. A replay of the past, not a forecast.</p>' + wholesaleNote() +
+        (P.model_status === 'no_skill' ? '<p>' + esc(poutVerdict()) + '</p>' : '') + '</div></div>';
+    }
+    return sinceLegend();
+  }
+  /* Who pays on the map: buyers filled by the tonnes they must find elsewhere (four steps, one hue); an ochre outline
+     where part of it is lost from the country's own harvest. Labels carry both parts. */
+  var PAY_BREAKS = [100, 250, 1000], PAY_COLS = ['#2c3f52', '#3f5f7d', '#6388ab', '#9dbfdc'];
+  function payBy() {
+    if (S._payByFor === S.outlook && S._payBy) return S._payBy;
+    var by = {};
+    whoPayers().payers.forEach(function (q) { if (!q.iso) return; var o = by[q.iso] || (by[q.iso] = { iso: q.iso, total: 0, own: 0 }); o.total += q.total; q.parts.forEach(function (x) { if (x.src === 'own' || x.src === 'unsplit') o.own += x.kt; }); });
+    S._payByFor = S.outlook; S._payBy = by; return by;
+  }
+  function payClass(kt) { for (var i = 0; i < PAY_BREAKS.length; i++) if (kt < PAY_BREAKS[i]) return i; return PAY_BREAKS.length; }
   function sinceLegend() {
     var st = poutStage(), yr = st === 'now' ? poutNowYear() : st.slice(0, 4), P = S.pout || {}, k = P.skill || {}, be = k.by_event || {};
     var n = poutRows().length, isos = {}; poutRows().forEach(function (r) { isos[r.iso3] = 1; });
@@ -49371,21 +49472,23 @@ function showCommodityDetail(key) {
       STAPLE_BREAKS.map(function (b, i) { return '<text x="' + (4 + (i + 1) * 30 - .5) + '" y="24" text-anchor="middle" font-size="9.5" fill="#9a978d" font-family="Geist Mono, monospace">' + (b > 0 ? '+' : b < 0 ? '−' : '') + Math.abs(b) + '</text>'; }).join('') + '</svg>';
     var lost = Object.keys(be).filter(function (e) { return be[e].mae_model > be[e].mae_analog; });
     return '<div class="enso-legend-block"><div class="enso-legend-t">Staple price since March ' + yr + ', after inflation, % · observed</div>' + steps +
+      krow('<svg aria-hidden="true" width="26" height="14" viewBox="0 0 26 14"><rect x=".5" y=".5" width="25" height="13" fill="#0b1017" stroke="#3a3d44"/><rect x=".5" y=".5" width="3" height="13" fill="#dd8a45"/><line x1="7" x2="22" y1="5" y2="5" stroke="#ebe9e2"/><line x1="7" x2="18" y1="9.5" y2="9.5" stroke="#8b8980"/></svg>', 'Chip: since March ' + yr + ', then the same months of 2023-24 and 2015-16', '') +
       (gaps.length ? krow('<svg aria-hidden="true" width="18" height="12" viewBox="0 0 18 12"><rect x="1" y="1" width="16" height="10" fill="none" stroke="#8a8578" stroke-width="1.2" stroke-dasharray="1 3"/></svg>', 'No series then', esc(gaps.join(', '))) : '') +
-      '<div class="enso-key-foldable"><p>' + n + ' staple prices in ' + Object.keys(isos).length + ' countries where El Niño’s harvest damage is documented; other land stays grey. Blue falling, grey flat (within ±3%), ochre to red rising. A country with two staples takes the colour of the larger move. Wholesale series are named as wholesale on hover: they are not shop prices.</p>' +
+      '<div class="enso-key-foldable"><p>' + n + ' staple prices in ' + Object.keys(isos).length + ' countries where El Niño’s harvest damage is documented; other land stays grey. Blue falling, grey flat (within ±3%), ochre to red rising. A country with two staples takes the colour of the larger move. Each chip’s second line is the same months, March to the same stage, in 2023-24 and 2015-16.</p>' + wholesaleNote() +
       (P.model_status === 'no_skill' ? '<p>The price model was tested on ' + k.n_events + ' past El Niños, each left out in turn: it missed the highest month by ' + num(k.mae_model, 1).replace('+', '') + ' points on average, against ' + num(k.mae_analog, 1).replace('+', '') + ' for replaying past paths and ' + num(k.mae_nochange, 1).replace('+', '') + ' for assuming no change. It beat the replay in ' + esc(k.events_model_beats_analog || '') + ' events' + (lost.length ? ', and lost in ' + esc(lost.join(', ')) : '') + ', so it is not shown.</p>' : '') + '</div></div>';
   }
   function paysTag() {
     var O = S.outlook || {}, rec = O.cases && O.cases.record;
-    return 'Modelled, not a forecast: grain to find if this winter reaches ONI ' + (rec ? num(rec.oni, 1) : 'n/a') + ' · circle area = tonnes, ochre centre = lost from its own harvest.';
+    return 'Modelled, not a forecast: grain to find if this winter reaches ONI ' + (rec ? num(rec.oni, 1) : 'n/a') + ' · fill = tonnes, ochre outline = part lost from its own harvest.';
   }
-  function payRadius(kt, max) { return 3 + 19 * Math.sqrt(Math.max(0, kt) / (max || 1)); }
   function paysLegend() {
-    var ps = whoPayers().payers.filter(function (q) { return q.iso; }), max = Math.max.apply(null, ps.map(function (q) { return q.total; }).concat([1]));
-    var c = function (kt, own) { var r = payRadius(kt, max), ro = own ? payRadius(own, max) : 0, d = Math.ceil(2 * r + 4), m = d / 2;
-      return '<svg class="enso-sw-round" aria-hidden="true" width="' + d + '" height="' + d + '" viewBox="0 0 ' + d + ' ' + d + '"><circle cx="' + m + '" cy="' + m + '" r="' + r.toFixed(1) + '" fill="#8fb1cf" fill-opacity=".85" stroke="#0b1017" stroke-width="1"/>' + (own ? '<circle cx="' + m + '" cy="' + m + '" r="' + ro.toFixed(1) + '" fill="#c8622f" stroke="#0b1017" stroke-width="1"/>' : '') + '</svg>'; };
-    return '<div class="enso-legend-block"><div class="enso-legend-t">Grain to find · FoodShield model · modelled</div>' +
-      '<div class="enso-legend-row" style="align-items:flex-end;gap:6px;">' + c(100) + c(500) + c(max, max) + '<span>100 kt · 500 kt · ' + esc(fmtKt(max).replace('+', '')) + ': area = tonnes; ochre centre = lost from its own harvest, blue = a supplier’s harvest short</span></div>' +
+    var lab = ['under 100 kt', '100–250 kt', '250 kt–1 Mt', '1 Mt and more'];
+    var sw = '<svg class="enso-key-steps" aria-hidden="true" width="' + (PAY_COLS.length * 30 + 8) + '" height="26" viewBox="0 0 ' + (PAY_COLS.length * 30 + 8) + ' 26">' +
+      PAY_COLS.map(function (c, i) { return '<rect x="' + (4 + i * 30) + '" y="2" width="29" height="10" fill="' + c + '"/>'; }).join('') +
+      ['100', '250', '1k'].map(function (b, i) { return '<text x="' + (4 + (i + 1) * 30 - .5) + '" y="24" text-anchor="middle" font-size="9.5" fill="#9a978d" font-family="Geist Mono, monospace">' + b + '</text>'; }).join('') + '</svg>';
+    return '<div class="enso-legend-block"><div class="enso-legend-t">Grain to find, kt · FoodShield model · modelled</div>' + sw +
+      krow('<svg aria-hidden="true" width="18" height="12" viewBox="0 0 18 12"><rect x="1" y="1" width="16" height="10" fill="#6388ab" stroke="#c9773a" stroke-width="2"/></svg>', 'Part lost from its own harvest', 'the rest: a supplier’s harvest short') +
+      '<div class="enso-key-foldable"><p>Steps: ' + esc(lab.join(', ')) + '. Each chip gives the total, then the part lost from its own harvest (ochre square) and the part a supplier no longer sends (blue).</p></div>' +
       '<div class="enso-key-foldable"><p>Same rows as “Who pays for the harvest changes” below: the FoodShield harvest model at ONI ' + num(((S.outlook || {}).cases || { record: {} }).record.oni, 1) + '; a supplier’s lost exports fall on its buyers by UN Comtrade share, capped at each buyer’s usual imports (USDA).</p></div></div>';
   }
   /* World benchmark: the Pink Sheet month against the same month a year earlier, nominal USD. */
@@ -49444,7 +49547,31 @@ function showCommodityDetail(key) {
           (outside.length ? '<div class="enso-legend-t enso-rank-t2">Also painted · ' + outside.length + ' monitored countries outside the layer</div>' +
             '<ol class="enso-rank-list">' + outside.map(priceRow).join('') + '</ol>' : '') + '</details>';
       }
-      if (staple && stapleView() === 'since') {
+      if (staple && stapleView() === 'since' && pmap() === 'b') {
+        /* Every El Niño country by its reading, highest first; the source and month under each. */
+        var hitB = {}; poutRows().forEach(function (r) { hitB[r.iso3] = 1; });
+        var allB = pmapIsos(), hasB = allB.filter(function (i) { return foodSignal(i); }).sort(function (x, y) { return foodSignal(y).v - foodSignal(x).v; }), noB = allB.filter(function (i) { return !foodSignal(i); });
+        var brow = function (iso) { var s = foodSignal(iso);
+          return '<li><button type="button" data-map-country="' + esc(iso) + '" aria-pressed="' + (S.sel === iso) + '"><span class="enso-rank-main"><b>' + esc(nameFor(iso)) + (hitB[iso] ? ' <svg width="9" height="9" viewBox="0 0 9 9" role="img" aria-label="El Niño hits the harvest"><rect x=".75" y=".75" width="7.5" height="7.5" fill="none" stroke="#ebe9e2" stroke-width="1.5"/></svg>' : '') + '</b><span class="enso-rank-value" style="color:var(--t1)">' + esc(signedPct(s.v)) + '</span></span>' +
+            '<span class="enso-rank-meta">' + esc((s.src === 'cpi' ? 'official food CPI' : s.what.toLowerCase()) + ' · ' + { fpma: 'FAO GIEWS', rtfp: 'World Bank markets', cpi: 'FAOSTAT' }[s.src] + ' · ' + monTxt(s.month)) + '</span></button></li>'; };
+        el.innerHTML = '<div class="enso-legend-t">Year on year, local currency · ' + allB.length + ' countries · outlined: El Niño hits the harvest</div>' +
+          '<ol class="enso-rank-list">' + hasB.slice(0, 7).map(brow).join('') + '</ol>' +
+          (hasB.length > 7 ? '<details class="enso-rank-more"><summary>' + (hasB.length - 7) + ' more</summary><ol class="enso-rank-list" start="8">' + hasB.slice(7).map(brow).join('') + '</ol></details>' : '') +
+          (noB.length ? '<p class="enso-rank-missing">No reading: ' + esc(noB.map(nameFor).join(', ')) + '.</p>' : '');
+      } else if (staple && stapleView() === 'since' && pmap() === 'c') {
+        /* Largest past rise first; under each, where it stands now and the replay from here. */
+        var evC = pastEv(), hasC = poutRows().filter(function (r) { return poutHigh(r, evC); }).sort(function (x, y) { return poutHigh(y, evC).v - poutHigh(x, evC).v; }), gapC = poutRows().filter(function (r) { return !poutHigh(r, evC); });
+        var crow = function (r) { var h = poutHigh(r, evC), nw = poutVal(r, 'now'), p = r.analog && r.analog.paths && r.analog.paths[evC];
+          return '<li><button type="button" data-map-country="' + esc(r.iso3) + '" aria-pressed="' + (S.sel === r.iso3) + '"><span class="enso-rank-main"><b>' + esc(nameFor(r.iso3) + ' ' + poutName(r)) + '</b><span class="enso-rank-value" style="color:var(--t1)">' + esc(poutPct(h.v)) + '</span></span>' +
+            '<span class="enso-rank-meta">' + esc('highest ' + monTxt(h.month) + ' · ' + poutNowYear() + ' so far ' + (nw == null ? 'no series' : poutPct(nw)) + (r.series && r.series.price_type === 'wholesale' ? ' · wholesale' : '')) + '</span>' +
+            (p && typeof p.peak_pct === 'number' ? '<span class="enso-rank-meta">' + esc('if prices follow ' + evC + ' from here: ' + poutPct(p.peak_pct) + ' by ' + poutMon(p.peak_month)) + '</span>' : '') + '</button></li>'; };
+        var exC = ((S.pout && S.pout.excluded) || []).filter(function (x) { return /no El Niño on record/i.test(x.reason || ''); });
+        el.innerHTML = '<div class="enso-legend-t">' + esc(evC) + ', March to peak · ' + hasC.length + ' staples</div>' +
+          '<ol class="enso-rank-list">' + hasC.slice(0, 6).map(crow).join('') + '</ol>' +
+          (hasC.length > 6 ? '<details class="enso-rank-more"><summary>' + (hasC.length - 6) + ' more</summary><ol class="enso-rank-list" start="7">' + hasC.slice(6).map(crow).join('') + '</ol></details>' : '') +
+          (gapC.length ? '<p class="enso-rank-missing">No series in ' + esc(evC) + ': ' + esc(gapC.map(function (r) { return nameFor(r.iso3) + ' ' + poutName(r); }).join(', ')) + '.</p>' : '') +
+          exC.map(function (x) { return '<p class="enso-rank-missing">' + esc(nameFor(x.iso3) + ' ' + x.staple + ': ' + String(x.reason).replace(/(\d{4})-(\d{2})/g, function (m) { return poutMon(m); })) + '.</p>'; }).join('');
+      } else if (staple && stapleView() === 'since') {
         /* Largest rise first at the chosen stage; each row names the other two stages and, for now, the replay. */
         var st2 = poutStage(), yr2 = st2 === 'now' ? poutNowYear() : st2.slice(0, 4), isos2 = {};
         poutRows().forEach(function (r) { isos2[r.iso3] = 1; });
@@ -49578,8 +49705,8 @@ function showCommodityDetail(key) {
       'collected ' + stamp(metaDate(key)) + (modelled ? '' : '; assessment periods vary by record');
     if (S.mode === 'rtfp') date = rtfpNote();
     if (S.mode === 'asap') date = asapNote();
-    if (S.mode === 'staple') date = stapleView() === 'since' ? poutTag() : stapleView() === 'pays' ? paysTag() : priceVerdict();
-    if (S.mode === 'staple' && stapleView() === 'since') { title = 'Staple prices since March where El Niño hits harvests'; source = 'FAO GIEWS FPMA · FoodShield harvest model'; }
+    if (S.mode === 'staple') date = stapleView() === 'since' ? pmapTag() : stapleView() === 'pays' ? paysTag() : priceVerdict();
+    if (S.mode === 'staple' && stapleView() === 'since') { title = pmapTitle()[0]; source = pmapTitle()[1]; }
     if (S.mode === 'staple' && stapleView() === 'pays') { title = 'Who has to buy grain elsewhere'; source = 'FoodShield model × USDA trade balances × UN Comtrade buyers'; kind = 'modelled'; }
     if (S.mode === 'rain') date = (S.alertCounts && S.alertCounts.newest) ? 'newest report ' + stamp(new Date(S.alertCounts.newest)) : 'no reports loaded yet';
     var sc = S.mode === 'sst' && sstScene();
@@ -49770,7 +49897,7 @@ function showCommodityDetail(key) {
     if (!sb && tools && tools.appendChild) { sb = document.createElement('button'); sb.type = 'button'; sb.id = 'enso-share-map'; sb.className = 'enso-share-b'; sb.textContent = 'Save image';
       sb.setAttribute('aria-label', 'Save this map as a 1200 by 627 image with its caption'); sb.onclick = function () { exportCard('reported'); }; tools.appendChild(sb); }
     if (sb) sb.hidden = S.sub !== 'ensolive';
-    if (S.mode === 'staple') el.textContent = stapleView() === 'since' ? poutTag() : stapleView() === 'pays' ? paysTag() : priceVerdict();
+    if (S.mode === 'staple') el.textContent = stapleView() === 'since' ? pmapTag() : stapleView() === 'pays' ? paysTag() : priceVerdict();
     instrumentNumbers(el);
     mapChrome();
     var st = document.getElementById('enso-status'); if (st) st.textContent = el.textContent;
@@ -49903,7 +50030,7 @@ function showCommodityDetail(key) {
           (o.ring === 'ahead' ? '<circle cx="' + c + '" cy="' + c + '" r="' + (r + 3) + '" fill="none" stroke="#d8c9a8" stroke-width="1.2" stroke-dasharray="2 3"/>' : o.ring === 'fits' ? '<circle cx="' + c + '" cy="' + c + '" r="' + (r + 3.2) + '" fill="none" stroke="#f2efe6" stroke-width="2"/>' : o.ring === 'against' ? '<circle cx="' + c + '" cy="' + c + '" r="' + (r + 1.6) + '" fill="none" stroke="#8b8980" stroke-width="1"/>' : '') +
           (o.none ? '<circle cx="' + c + '" cy="' + c + '" r="3" fill="none" stroke="#8a8578" stroke-width="1"/>' :
           '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="' + rtfpColor(Math.max(-10, v)) + '" fill-opacity="' + (o.faded ? .45 : .9) + '" stroke="#ebe9e2" stroke-opacity=".55" stroke-width="1"/>' + (o.dot ? '<circle cx="' + c + '" cy="' + c + '" r="1.3" fill="#ebe9e2"/>' : '')) + '</svg>'; };
-      if (stapleView() === 'since' || stapleView() === 'pays') { el.innerHTML = '<div class="enso-legend">' + (stapleView() === 'pays' ? paysLegend() : sinceLegend()) + (S.showImports ? importLegend() : '') + '</div>'; compactLegend(); return; }
+      if (stapleView() === 'since' || stapleView() === 'pays') { el.innerHTML = '<div class="enso-legend">' + (stapleView() === 'pays' ? paysLegend() : pmapLegend()) + (S.showImports ? importLegend() : '') + '</div>'; compactLegend(); return; }
       var q0 = stapleSummary(), pk = peakIdx(), fitView = stapleView() === 'fit';
       /* A stepped bar that reads like a number line: seven classes, the breaks between them. */
       var steps = '<svg class="enso-key-steps" aria-hidden="true" width="' + (STAPLE_COLS.length * 30 + 8) + '" height="26" viewBox="0 0 ' + (STAPLE_COLS.length * 30 + 8) + ' 26">' +
@@ -50096,7 +50223,9 @@ function showCommodityDetail(key) {
   function isTele(iso) { if (!S._teleSet) { S._teleSet = {}; ensoTeleIsos().forEach(function (i) { S._teleSet[i] = 1; }); } return !!S._teleSet[iso]; }
   function stapleFill(iso) {
     var vw = stapleView();
-    if (vw === 'pays') return null;
+    if (vw === 'pays') { var pb = payBy()[iso]; return pb ? PAY_COLS[payClass(pb.total)] : null; }
+    if (vw === 'since' && pmap() === 'b') { var fs = isTele(iso) || poutOf(iso).length ? foodSignal(iso) : null; return fs ? STAPLE_COLS[stapleClass(fs.v)] : null; }
+    if (vw === 'since' && pmap() === 'c') { var hl = poutHighLead(iso, pastEv()); return hl ? STAPLE_COLS[pastClass(hl.h.v)] : null; }
     if (vw === 'since') { var pl = poutLead(iso); return pl ? STAPLE_COLS[stapleClass(pl.v)] : null; }
     if (!isTele(iso)) return null;
     var sp = stapleOf(iso); if (!sp) return null;
@@ -50157,13 +50286,16 @@ function showCommodityDetail(key) {
       return parts.join('<br>') + '<br><span style="color:#8b8980">FoodShield model at ONI ' + esc(num(((S.outlook || {}).cases || { record: {} }).record.oni, 1)) + '; not a forecast.</span>';
     }
     if (S.mode === 'staple' && stapleView() === 'since') {
-      var prs = poutOf(iso), ex = poutExcluded(iso);
-      if (!prs.length) return parts[0] + '<br><span style="color:#8b8980">' + (ex ? esc(ex.reason) + '.' : 'Outside the countries where El Niño’s harvest damage is documented.') + '</span>';
+      var prs = poutOf(iso), ex = poutExcluded(iso), fsg = pmap() === 'b' && (isTele(iso) || prs.length) && foodSignal(iso);
+      if (fsg) parts.push(esc(fsg.what) + ' ' + esc(signedPct(fsg.v)) + ' on a year earlier, local currency · ' + esc(monTxt(fsg.month)) + '<br><span style="color:#8b8980">' + esc(FOOD_SRC[fsg.src]) + '</span>');
+      if (!prs.length) return (fsg ? parts.join('<br>') : parts[0]) + '<br><span style="color:#8b8980">' + (ex ? esc(ex.reason) + '.' : 'Outside the countries where El Niño’s harvest damage is documented.') + '</span>';
       prs.forEach(function (r) {
         var a = r.aftermath || {}, now = a.now, ms = poutMiss(r);
+        var hi = ['2015-16', '2023-24'].map(function (k) { var h = poutHigh(r, k); return h ? k + ' ' + esc(poutPct(h.v)) + ' (' + esc(monTxt(h.month)) + ')' : ''; }).filter(Boolean);
         parts.push('<b>' + esc(r.commodity) + '</b> <span style="color:#8b8980">' + esc(poutSeries(r)) + '</span>' +
-          (now ? '<br>' + esc(poutPct(now.pct)) + ' since ' + esc(poutMon(now.from)) + ' (to ' + esc(poutMon(now.to)) + ')' : '') +
+          (now ? '<br>' + esc(poutPct(now.pct)) + ' since ' + esc(poutMon(now.from)) + ' (to ' + esc(poutMon(now.to)) + '), after inflation' : '') +
           '<br>Same stage: ' + ['2015-16', '2023-24'].map(function (k) { return k + ' ' + (a[k] ? esc(poutPct(a[k].pct)) : 'no series'); }).join(' · ') +
+          (hi.length ? '<br>March to the highest month after: ' + hi.join(' · ') : '') +
           (poutReplay(r) ? '<br><span style="color:#8b8980">' + esc(poutReplay(r)) + '. A replay, not a forecast' + (ms ? '; past replays missed by about ' + Math.round(ms.v) + ' points' : '') + '.</span>' : ''));
       });
       return parts.join('<br>');
@@ -50275,9 +50407,9 @@ function showCommodityDetail(key) {
     S.pricePins = [];
     /* Countries carry the colour; marks here are only label anchors: the selected country, then the largest
        moves, at most six (none on a phone unless selected). Labels never cover one another or the inset. */
-    if (stapleView() === 'pays') { syncPayMarks(); return; }
+    if ((stapleView() === 'since' && pmap() !== 'b') || stapleView() === 'pays') { syncPriceChips(); return; }
     var since = stapleView() === 'since';
-    var rows = since ? Object.keys(poutRows().reduce(function (o, r) { o[r.iso3] = 1; return o; }, {})).map(function (iso) { var b = poutLead(iso); return b ? { iso: iso, sp: { v: b.v }, txt: nameFor(iso) + ' ' + poutName(b.r) + ' ' + poutPct(b.v) } : null; }).filter(Boolean)
+    var rows = since ? pmapIsos().map(function (iso) { var s = foodSignal(iso); return s ? { iso: iso, sp: { v: s.v }, txt: nameFor(iso) + ' ' + signedPct(s.v) } : null; }).filter(Boolean)
       : ensoTeleIsos().map(function (iso) { return { iso: iso, sp: stapleOf(iso) }; }).filter(function (r) { return r.sp; });
     rows.sort(function (a, b) { return (b.iso === S.sel ? 1e6 : 0) + Math.abs(b.sp.v) - ((a.iso === S.sel ? 1e6 : 0) + Math.abs(a.sp.v)); });
     var max = (window.innerWidth || 1440) < 600 ? (S.sel ? 1 : 0) : 6, boxes = [], size = S.map.getSize ? S.map.getSize() : { x: 1e4, y: 1e4 };
@@ -50301,24 +50433,145 @@ function showCommodityDetail(key) {
     });
     S.pricePins.forEach(function (m) { m.addTo(S.map); });
   }
-  /* Who pays on the map: one circle per payer, area = tonnes to find, an ochre centre for the part lost from its own
-     harvest (both SVG circle markers; the tab's radius rule covers CSS boxes only). Hover gives the split. */
-  function syncPayMarks() {
-    var ps = whoPayers().payers.filter(function (q) { return q.iso; }), by = {};
-    ps.forEach(function (q) { var o = by[q.iso] || (by[q.iso] = { iso: q.iso, total: 0, own: 0 }); o.total += q.total; q.parts.forEach(function (x) { if (x.src === 'own' || x.src === 'unsplit') o.own += x.kt; }); });
-    var list = Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) { return b.total - a.total; });
-    var max = list.length ? list[0].total : 1;
-    list.forEach(function (o, i) {
-      var ll = (typeof COUNTRY_LL !== 'undefined' && COUNTRY_LL[o.iso]) || centroidOf(o.iso); if (!ll) return;
-      var tip = tooltipFor(o.iso, nameFor(o.iso));
-      var outer = L.circleMarker(ll, { radius: payRadius(o.total, max), color: '#0b1017', weight: 1, fillColor: '#8fb1cf', fillOpacity: .85, className: 'enso-pay-mark' });
-      outer.bindTooltip(tip, { direction: 'top', opacity: .96 });
-      outer.on('click', function () { selectCountry(o.iso, { fly: false }); });
-      S.pricePins.push(outer);
-      if (o.own > 0) { var inner = L.circleMarker(ll, { radius: payRadius(o.own, max), color: '#0b1017', weight: 1, fillColor: '#c8622f', fillOpacity: 1, className: 'enso-pay-mark' });
-        inner.bindTooltip(tip, { direction: 'top', opacity: .96 }); inner.on('click', function () { selectCountry(o.iso, { fly: false }); }); S.pricePins.push(inner); }
-      if (i < 2) { var an = L.circleMarker(ll, { radius: 0, stroke: false, fillOpacity: 0, interactive: false });
-        an.bindTooltip(esc(nameFor(o.iso)) + ' ' + esc(fmtKt(o.total).replace('+', '')), { permanent: true, direction: 'right', offset: [payRadius(o.total, max), 0], className: 'enso-price-lbl', interactive: false }); S.pricePins.push(an); }
+  /* Chips (variants a and c): one per country in the price outlook, on the country when it is big enough, else in
+     open water with a hairline leader to a point on it. Greedy, the most crowded countries first; each takes the
+     cheapest free spot (distance, plus coloured land it would cover). Rebuilt on zoom and resize. No sizes encode data. */
+  /* On a small map (under 820 px wide, as at 1280x800) chips drop the staple name and the event years and run on one
+     line; the key states the order (2023-24, then 2015-16). */
+  function chipHead(name, val, col, tail) {
+    return '<i class="enso-pchip-s" style="background:' + col + '"></i><span class="enso-pchip-h"><span class="enso-pchip-n">' + esc(name) + '</span><b>' + esc(val) + '</b>' + (S._chipCompact && tail ? tail : '') + '</span>' + (!S._chipCompact && tail ? tail : '');
+  }
+  function chipA(r, v) {
+    var a = r.aftermath || {}, c = S._chipCompact;
+    return chipHead(nameFor(r.iso3) + (c ? '' : ' ' + poutName(r)), poutPct(v), STAPLE_COLS[stapleClass(v)], '<span class="enso-pchip-p">' + ['2023-24', '2015-16'].map(function (k) { var x = a[k] && a[k].pct;
+      return typeof x === 'number' ? '<span><i style="background:' + STAPLE_COLS[stapleClass(x)] + '"></i>' + (c ? '' : k + ' ') + esc(poutPct(x)) + '</span>' : '<span class="is-none">' + (c ? 'none' : k + ' none') + '</span>'; }).join('') + '</span>');
+  }
+  function chipC(r, h, nw, dom) {
+    var c = S._chipCompact, W = c ? 48 : 78, x = function (v) { return (Math.max(dom[0], Math.min(dom[1], v)) - dom[0]) / ((dom[1] - dom[0]) || 1) * W; }, x0 = x(0), xh = x(h.v);
+    var bar = '<svg class="enso-pchip-bar" width="' + W + '" height="9" viewBox="0 0 ' + W + ' 9" aria-hidden="true"><line x1="0" x2="' + W + '" y1="4.5" y2="4.5" stroke="#3a3d44"/>' +
+      '<rect x="' + Math.min(x0, xh).toFixed(1) + '" y="2" width="' + Math.max(1, Math.abs(xh - x0)).toFixed(1) + '" height="5" fill="' + STAPLE_COLS[pastClass(h.v)] + '"/>' +
+      '<line x1="' + x0.toFixed(1) + '" x2="' + x0.toFixed(1) + '" y1="0" y2="9" stroke="#8b8980"/>' + (nw != null ? '<rect x="' + (x(nw) - 1).toFixed(1) + '" y="0" width="2" height="9" fill="#ebe9e2"/>' : '') + '</svg>';
+    return chipHead(nameFor(r.iso3) + (c ? '' : ' ' + poutName(r)), poutPct(h.v), STAPLE_COLS[pastClass(h.v)], '<span class="enso-pchip-p">' + bar + '<span>' + (c ? '' : 'now ') + (nw == null ? 'none' : esc(poutPct(nw))) + '</span></span>');
+  }
+  function chipPay(o) {
+    var k = function (v) { return fmtKt(v).replace('+', ''); }, parts = {}, mine = whoPayers().payers.filter(function (q) { return q.iso === o.iso; }), c = S._chipCompact;
+    mine.forEach(function (q) { q.parts.forEach(function (x) { var key = x.src === 'own' || x.src === 'unsplit' ? 'own harvest' : 'from ' + nameFor(x.src); parts[key] = (parts[key] || 0) + x.kt; }); });
+    var keys = Object.keys(parts).sort(function (a, b) { return (a === 'own harvest' ? 0 : 1) - (b === 'own harvest' ? 0 : 1) || parts[b] - parts[a]; });
+    var crops = mine.map(function (q) { return payCrop(q.crop); }).filter(function (x, i, a) { return a.indexOf(x) === i; });
+    return chipHead(nameFor(o.iso) + (c ? '' : ' ' + crops.join(', ')), k(o.total), PAY_COLS[payClass(o.total)], keys.length > 1 || !c ? '<span class="enso-pchip-p">' + keys.map(function (key) {
+      return '<span><i style="background:' + (key === 'own harvest' ? '#c9773a' : '#8fb1cf') + '"></i>' + esc(k(parts[key]) + (c ? '' : ' ' + key)) + '</span>'; }).join('') + '</span>' : '');
+  }
+  function syncPriceChips() {
+    var V = pmap(), ev = pastEv(), map = S.map, seen = {}, cover = {};
+    if (!map || !map.getContainer || !map.getSize) return;
+    if (!S._pchipHook && map.on) { S._pchipHook = true; map.on('zoomend resize', function () {
+      if (S.mode !== 'staple' || !((stapleView() === 'since' && pmap() !== 'b') || stapleView() === 'pays')) return;
+      (S.pricePins || []).forEach(function (m) { try { map.removeLayer(m); } catch (e) {} }); S.pricePins = []; syncStapleMarks(); }); }
+    var pays = stapleView() === 'pays', pby = pays ? payBy() : null;
+    var items = pays ? Object.keys(pby).map(function (iso) { cover[iso] = 1; return { iso: iso, v: pby[iso].total }; }) : poutRows().map(function (r) { return r.iso3; }).filter(function (i) { if (seen[i]) return false; seen[i] = cover[i] = 1; return true; }).map(function (iso) {
+      if (V === 'c') { var hl = poutHighLead(iso, ev); return hl ? { iso: iso, r: hl.r, h: hl.h, v: hl.h.v, now: poutVal(hl.r, 'now') } : null; }
+      var pl = poutLead(iso, 'now'); return pl ? { iso: iso, r: pl.r, v: pl.v } : null;
+    }).filter(Boolean);
+    if (!pays) ((S.pout && S.pout.excluded) || []).forEach(function (x) { if (poutExcluded(x.iso3)) cover[x.iso3] = 1; });
+    if ((window.innerWidth || 1440) < 600) items = items.filter(function (it) { return it.iso === S.sel; });
+    if (!items.length) return;
+    var dom = [0, 0]; if (V === 'c' && !pays) items.forEach(function (it) { [it.v, it.now].forEach(function (v) { if (typeof v === 'number') { dom[0] = Math.min(dom[0], v); dom[1] = Math.max(dom[1], v); } }); });
+    var box = map.getContainer(), size = map.getSize(), meas = document.createElement('div');
+    S._chipCompact = size.x < 820;
+    meas.style.cssText = 'position:absolute;left:0;top:0;visibility:hidden;pointer-events:none;';
+    box.appendChild(meas);
+    items.forEach(function (it) {
+      it.html = pays ? chipPay(pby[it.iso]) : V === 'c' ? chipC(it.r, it.h, it.now, dom) : chipA(it.r, it.v);
+      var d = document.createElement('div'); d.className = 'enso-pchip'; d.innerHTML = it.html; meas.appendChild(d);
+      it.w = Math.ceil(d.offsetWidth || 0) + 1; it.h = Math.ceil(d.offsetHeight || 0) + 1;
+      it.ll = (typeof COUNTRY_LL !== 'undefined' && COUNTRY_LL[it.iso]) || centroidOf(it.iso); it.pt = it.ll ? map.latLngToContainerPoint(it.ll) : null;
+    });
+    if (meas.remove) meas.remove();
+    items = items.filter(function (it) { return it.pt && it.w > 1; });
+    var taken = [], mb = box.getBoundingClientRect ? box.getBoundingClientRect() : null;
+    if (mb && box.querySelectorAll) box.querySelectorAll('.enso-map-tools, .leaflet-control').forEach(function (e) { var b = e.getBoundingClientRect(); if (b.width && b.height) taken.push({ x: b.left - mb.left - 4, y: b.top - mb.top - 4, w: b.width + 8, h: b.height + 8 }); });
+    var polys = [];
+    if (S.layerBase) S.layerBase.eachLayer(function (lyr) { var iso = isoOf(lyr.feature); if (!cover[iso]) return;
+      try { var b = lyr.getBounds(), p1 = map.latLngToContainerPoint(b.getNorthWest()), p2 = map.latLngToContainerPoint(b.getSouthEast()); polys.push({ iso: iso, lyr: lyr, x0: p1.x, y0: p1.y, x1: p2.x, y1: p2.y }); } catch (e) {} });
+    var landAt = function (x, y, own) { var n = 0, o = 0;
+      polys.forEach(function (p) { if (x < p.x0 || x > p.x1 || y < p.y0 || y > p.y1) return;
+        var inside = typeof p.lyr._containsPoint === 'function' ? p.lyr._containsPoint(map.containerPointToLayerPoint([x, y])) : true;
+        if (inside) { if (p.iso === own) o = 1; else n = 1; } });
+      return [n, o]; };
+    var overlaps = function (b, o, g) { return b.x < o.x + o.w + g && b.x + b.w + g > o.x && b.y < o.y + o.h + g && b.y + b.h + g > o.y; };
+    var near = function (b, pt) { return [Math.max(b.x, Math.min(pt.x, b.x + b.w)), Math.max(b.y, Math.min(pt.y, b.y + b.h))]; };
+    /* Static cost per spot (distance, coloured land covered, other countries' points covered), computed once; the
+       layout then tries a few fixed orders plus seeded shuffles and keeps the cheapest, adding a penalty where a
+       leader would run under a chip. Deterministic for a given map size. */
+    /* A crowded cluster (southern Africa: nine countries in about 100 px) gets two stacked columns, one each side,
+       in the order of its points, so leaders run side by side instead of crossing. */
+    var T = .058 * size.x, inC = {}, near2 = function (a, b) { return Math.hypot(a.pt.x - b.pt.x, a.pt.y - b.pt.y) < T; };
+    items.forEach(function (it) { if (inC[it.iso]) return; var comp = [it], q = [it]; inC[it.iso] = 1;
+      while (q.length) { var cur = q.shift(); items.forEach(function (o) { if (!inC[o.iso] && near2(cur, o)) { inC[o.iso] = 1; comp.push(o); q.push(o); } }); }
+      if (comp.length < 5) return;
+      var cx = comp.reduce(function (t, o) { return t + o.pt.x; }, 0) / comp.length, minX = Math.min.apply(null, comp.map(function (o) { return o.pt.x; })), maxX = Math.max.apply(null, comp.map(function (o) { return o.pt.x; }));
+      [comp.filter(function (o) { return o.pt.x < cx; }), comp.filter(function (o) { return o.pt.x >= cx; })].forEach(function (g, side) {
+        g.sort(function (a, b) { return a.pt.y - b.pt.y; });
+        var H = g.reduce(function (t, o) { return t + o.h + 4; }, -4), y0 = Math.max(4, Math.min(size.y - H - 4, g.reduce(function (t, o) { return t + o.pt.y; }, 0) / (g.length || 1) - H / 2));
+        g.forEach(function (o) { var x = side ? maxX + 22 : minX - 22 - o.w, b = { x: x, y: y0, w: o.w, h: o.h, np: [side ? x : x + o.w, y0 + o.h / 2] };
+          if (x >= 3 && x + o.w <= size.x - 3 && !taken.some(function (t) { return overlaps(b, t, 3); })) { o.b = b; taken.push(b); } y0 += o.h + 4; });
+      }); });
+    var free = items.filter(function (it) { return !it.b; });
+    var fixed = taken.slice();
+    free.forEach(function (it) {
+      var cands = [{ x: it.pt.x - it.w / 2, y: it.pt.y - it.h / 2, d: 0 }];
+      [6, 18, 32, 48, 66, 86, 110, 140, 175, 215, 260].forEach(function (r) { for (var a = 0; a < 16; a++) { var t = a * Math.PI / 8, dx = Math.cos(t), dy = Math.sin(t);
+        cands.push({ x: it.pt.x + dx * (r + it.w / 2) - it.w / 2, y: it.pt.y + dy * (r + it.h / 2) - it.h / 2, d: r + 6 * Math.abs(dy) }); } });
+      it.cands = cands.map(function (b) {
+        b.w = it.w; b.h = it.h;
+        if (b.x < 3 || b.y < 3 || b.x + b.w > size.x - 3 || b.y + b.h > size.y - 3 || fixed.some(function (o) { return overlaps(b, o, 3); })) return null;
+        var other = 0, own = 0, k = 0;
+        for (var i = 0; i <= 4; i++) for (var j = 0; j <= 2; j++) { var q = landAt(b.x + b.w * i / 4, b.y + b.h * j / 2, it.iso); other += q[0]; own += q[1]; k++; }
+        var pins = items.filter(function (o) { return o !== it && o.pt.x > b.x - 5 && o.pt.x < b.x + b.w + 5 && o.pt.y > b.y - 5 && o.pt.y < b.y + b.h + 5; }).length;
+        /* Small countries slip between the samples, so the share of each coloured country's box it covers counts too. */
+        var boxCost = 0; polys.forEach(function (p) { var w = Math.min(b.x + b.w, p.x1) - Math.max(b.x, p.x0), h = Math.min(b.y + b.h, p.y1) - Math.max(b.y, p.y0);
+          if (w > 0 && h > 0) boxCost += (p.iso === it.iso ? 300 : 400) * w * h / Math.max(1, (p.x1 - p.x0) * (p.y1 - p.y0)); });
+        b.np = near(b, it.pt); b.c = b.d + 400 * other / k + 300 * own / k + boxCost + 400 * pins; return b;
+      }).filter(Boolean).sort(function (x, y) { return x.c - y.c; }).slice(0, 80);
+    });
+    var inRect = function (x, y, o) { return x > o.x && x < o.x + o.w && y > o.y && y < o.y + o.h; };
+    var layout = function (order) {
+      var placed = [], total = 0, pick = {};
+      order.forEach(function (it) {
+        var best = null;
+        it.cands.forEach(function (b) {
+          if (best && b.c >= best.cc) return;
+          if (placed.some(function (p) { return overlaps(b, p.b, 3); })) return;
+          var cross = 0;
+          for (var i = 1; i < 6; i++) { var sx = it.pt.x + (b.np[0] - it.pt.x) * i / 6, sy = it.pt.y + (b.np[1] - it.pt.y) * i / 6;
+            if (placed.some(function (p) { return inRect(sx, sy, p.b); })) cross = 1;
+            var px = function (p) { return p.it.pt.x + (p.b.np[0] - p.it.pt.x) * i / 6; }, py = function (p) { return p.it.pt.y + (p.b.np[1] - p.it.pt.y) * i / 6; };
+            if (placed.some(function (p) { return inRect(px(p), py(p), b); })) cross = 1; }
+          var cc = b.c + 300 * cross; if (!best || cc < best.cc) best = { b: b, cc: cc };
+        });
+        if (best) { placed.push({ it: it, b: best.b }); pick[it.iso] = best.b; total += best.cc; } else total += 2000;
+      });
+      return { total: total, pick: pick };
+    };
+    free.forEach(function (it) { it.crowd = items.filter(function (o) { return o !== it && Math.abs(o.pt.x - it.pt.x) < 140 && Math.abs(o.pt.y - it.pt.y) < 140; }).length; });
+    var seed = 7, rnd = function () { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    var orders = [function (a, b) { return b.crowd - a.crowd || Math.abs(b.v) - Math.abs(a.v); }, function (a, b) { return a.crowd - b.crowd; },
+      function (a, b) { return a.pt.x - b.pt.x; }, function (a, b) { return b.pt.x - a.pt.x; }, function (a, b) { return a.pt.y - b.pt.y; }, function (a, b) { return b.pt.y - a.pt.y; }]
+      .map(function (f) { return free.slice().sort(f); });
+    for (var sh = 0; sh < 30; sh++) orders.push(free.map(function (it) { return [rnd(), it]; }).sort(function (x, y) { return x[0] - y[0]; }).map(function (q) { return q[1]; }));
+    var bestL = null; orders.forEach(function (o) { var L0 = layout(o); if (!bestL || L0.total < bestL.total) bestL = L0; });
+    free.forEach(function (it) { it.b = bestL.pick[it.iso] || null; });
+    items.forEach(function (it) {
+      if (!it.b) return;
+      var b = it.b, np = b.np || near(b, it.pt);
+      if (Math.abs(np[0] - it.pt.x) + Math.abs(np[1] - it.pt.y) > 5) S.pricePins.push(L.polyline([it.ll, map.containerPointToLatLng(np)], { color: '#b9b5aa', weight: 1, opacity: .75, interactive: false, className: 'enso-pchip-lead' }));
+      S.pricePins.push(L.circleMarker(it.ll, { radius: 2, stroke: false, fillColor: '#ebe9e2', fillOpacity: .95, interactive: false, className: 'enso-price-anchor' }));
+      var mk = L.marker(map.containerPointToLatLng([b.x, b.y]), { icon: L.divIcon({ className: 'enso-pchip', html: it.html, iconSize: [b.w, b.h], iconAnchor: [0, 0] }), keyboard: true, riseOnHover: true });
+      mk._iso = it.iso;
+      mk.bindTooltip(tooltipFor(it.iso, nameFor(it.iso)), { direction: 'top', opacity: .96 });
+      mk.on('click', function () { selectCountry(it.iso, { fly: false }); });
+      mk.on('add', function () { var e = mk.getElement && mk.getElement(); if (e) { e.setAttribute('role', 'button'); e.setAttribute('aria-label', nameFor(it.iso) + ': ' + (e.textContent || '')); } });
+      S.pricePins.push(mk);
     });
     S.pricePins.forEach(function (m) { m.addTo(S.map); });
   }
@@ -50358,10 +50611,16 @@ function showCommodityDetail(key) {
       /* Published-only hatching needs a visible fill for its pattern to show. */
       if (pubOnly && outSign(iso)) { style.fillOpacity = 1; style.color = '#a9a597'; style.opacity = .6; style.weight = .7; }
       /* Since March: the countries in the price universe carry an outline; one with no series at this stage is dotted. */
-      if (S.mode === 'staple' && stapleView() === 'since') {
+      if (S.mode === 'staple' && stapleView() === 'since' && pmap() === 'b') {
+        /* Every El Niño country carries an outline; where El Niño's harvest damage is documented it is cream. */
+        if (isTele(iso) || poutOf(iso).length) { style.color = '#8a8578'; style.opacity = .75; style.weight = .7; style.fillOpacity = col ? .92 : .04; if (!col) { style.dashArray = '1 3'; style.opacity = .9; }
+          if (poutOf(iso).length || poutExcluded(iso)) { style.color = '#ebe9e2'; style.weight = 1.5; style.opacity = .95; } }
+      } else if (S.mode === 'staple' && stapleView() === 'since') {
         if (poutOf(iso).length || poutExcluded(iso)) { style.color = '#8a8578'; style.opacity = .75; style.weight = .7; style.fillOpacity = col ? .92 : .04; if (!col) { style.dashArray = '1 3'; style.opacity = .9; } }
       } else if (S.mode === 'staple' && stapleView() === 'pays') {
-        /* Land stays neutral; the circles carry the tonnes. */
+        /* Buyers carry the tonnes as fill; an ochre outline where part is lost from the buyer's own harvest. */
+        var pbo = payBy()[iso];
+        if (pbo) { style.fillOpacity = .92; style.color = pbo.own > 0 ? '#c9773a' : '#8a8578'; style.weight = pbo.own > 0 ? 1.8 : .7; style.opacity = .95; }
       } else if (S.mode === 'staple' && isTele(iso)) {
         /* No series: a dotted outline, no fill. A reading 3+ months old keeps its colour under a dashed outline. */
         var spS = stapleOf(iso);
