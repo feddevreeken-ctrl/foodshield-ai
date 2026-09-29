@@ -30,7 +30,7 @@ function extractShippedFdrs(html) {
 
 function main() {
   const html = fs.readFileSync(HTML, 'utf8');
-  assert(JSON.parse(fs.readFileSync(path.join(ROOT,'vercel.json'),'utf8')).builds.some(b=>b.src==='js/**'), 'deployment must ship shared scorer');
+  assert(/^!\/js$/m.test(fs.readFileSync(path.join(ROOT,'.vercelignore'),'utf8')), 'deployment must ship shared scorer (js/ allowlisted in .vercelignore)');
   const { fdrsV2, weightsSrc } = extractShippedFdrs(html);
   const fx = JSON.parse(fs.readFileSync(FIX, 'utf8'));
   const fixtureWeights = fx._meta.weights;
