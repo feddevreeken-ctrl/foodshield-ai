@@ -116,7 +116,7 @@ test('native controls coexist with observed mode, nine rungs and labelled instru
  assert.equal((out.match(/data-native="enso-level" data-value="observed"/g)||[]).length,1);
  assert.equal((out.match(/class="is-observed-rung"/g)||[]).length,1);
  for(const id of ['enso-level','enso-mode','enso-country','enso-tog-regions','enso-tog-lanes','enso-tog-alerts','enso-tog-sst'])assert(out.includes('id="'+id+'"'));
- assert.equal((out.match(/class="enso-instrument-row/g)||[]).length,1);assert(out.includes('type="search"'));assert(out.includes('<summary>All layers</summary>'));
+ assert.equal((out.match(/class="enso-instrument-row/g)||[]).length,1);assert(!out.includes('type="search"'));assert(out.includes('<summary>All layers</summary>'));
 });
 test('Natural Earth fallback keeps France as a named country option',()=>{
  const saved=S.names,feature={properties:{ISO_A3:'-99',ADM0_A3:'FRA',name:'France'}};

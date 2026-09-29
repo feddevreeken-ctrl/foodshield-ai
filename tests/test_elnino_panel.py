@@ -865,7 +865,12 @@ def main() -> int:
         check("Ocean audit: the forecast plate gives the September forecasts' track record from the data file", page.evaluate("""async () => {
             const F = (await (await fetch('data/enso_forecast_skill.json')).json()).data, t = (document.querySelector('.enso-oni-plate .enso-skill') || {}).textContent || '';
             const title = document.querySelector('.enso-oni-plate .enso-plate-t').textContent;
-            return !/ONI|RONI/.test(title) && t.includes(F.summary.mae.toFixed(2)) && t.includes(F.summary.years + ' winters') && t.includes('in ' + F.summary.within_0_5 + ')')
+            // 2026-09-30 round 3 (owner: "improve"): a shorter lead plus one tick per winter, strong El Ninos highlighted.
+            const ticks = document.querySelectorAll('.enso-oni-plate .enso-skill-strip .enso-skill-tick');
+            const strongN = F.rows.filter(r => typeof r.error === 'number' && r.observed_oni >= 1.5).length;
+            return !/ONI|RONI/.test(title) && t.includes(F.summary.mae.toFixed(2)) && t.includes(F.summary.years + ' winters')
+                && ticks.length === F.rows.filter(r => typeof r.error === 'number').length
+                && document.querySelectorAll('.enso-oni-plate .enso-skill-tick.is-strong').length === strongN
                 && (!F.current || !!document.querySelector('.enso-oni-plate .enso-skill-mark'));
         }"""))
         check("one persistent map instance across all five views", page.evaluate("""() =>
@@ -937,9 +942,11 @@ def main() -> int:
               and 'La Ni' in page.locator('#enso-legend').inner_text())
         country_name = page.locator('#enso-country option[value="ZWE"]').text_content()
         page.locator('#enso-harvest-fig').evaluate('e => e.open = true')   # 2026-09-29: the table sits behind "Show per country"
-        page.locator('#enso-country-search').fill(country_name)
+        # 2026-09-30 round 3 (owner: "Search country feature can go away"): no search box; the native select still drives the detail.
+        page.select_option('#enso-country', 'ZWE')
         page.wait_for_function("() => document.getElementById('enso-harvest-fig').dataset.iso === 'ZWE'")
-        check("country search synchronises native selection and fitted coefficients",
+        check("no country search box; the country select synchronises the fitted coefficients",
+              page.locator('#enso-country-search, .enso-country-search').count() == 0 and
               page.input_value('#enso-country') == 'ZWE'
               and country_name in page.locator('#enso-detail').inner_text()
               and page.locator('#enso-harvest-fig td[data-direction="fall"]').count() > 0
@@ -1597,19 +1604,20 @@ def main() -> int:
                 ('ensolive', ['Rain pattern', 'Hotspots', 'IPC', 'Hazards', 'Headlines', 'Elsewhere'])):
                 page.evaluate('tab => showTab(tab)', tab)
                 page.wait_for_timeout(150)
-                # Search and zoom sit on the map (2026-09-23), so the header is
+                # Zoom sits on the map (2026-09-23; search removed 2026-09-30 round 3), so the header is
                 # title/source, one layer row and a caption: map within 110px.
-                check(f"map instruments at {width}: {tab} has its lens chips, map within 110px of the plate head, search and zoom on the map", page.evaluate("""expected => {
+                check(f"map instruments at {width}: {tab} has its lens chips, map within 110px of the plate head, zoom on the map, no search", page.evaluate("""expected => {
                     const row = document.querySelector('.enso-instrument-row');
                     const labels = [...row.children].filter(e => e.tagName !== 'DETAILS').map(e => e.textContent.trim());
                     const head = document.querySelector('#enso-mapwrap > .enso-plate-h').getBoundingClientRect();
                     const map = document.querySelector('#enso-map').getBoundingClientRect();
-                    const search = document.querySelector('#enso-map .enso-map-tools .enso-country-search');
+                    const search = document.querySelector('.enso-country-search');
+                    const zb = [...document.querySelectorAll('#enso-map .enso-map-tools button')].map(b => b.textContent.trim()), zoom = ['Zoom in', 'Zoom out', 'Reset'].every(t => zb.includes(t));
                     const tools = document.querySelector('#enso-map .enso-map-tools');
                     const t = tools && tools.getBoundingClientRect();
                     return JSON.stringify(labels) === JSON.stringify(expected)
                         && !row.querySelector('details').open && map.top - head.top <= 110
-                        && !!search && !!t && t.left >= map.left && t.right <= map.right && t.top >= map.top && t.bottom <= map.bottom;
+                        && !search && zoom && !!t && t.left >= map.left && t.right <= map.right && t.top >= map.top && t.bottom <= map.bottom;
                 }""", labels))
                 if tab == 'elnino':
                     # 2026-09-29 round 2 (owner: "remove Sea-surface. so its one straight line"): title, source and All layers on one line.

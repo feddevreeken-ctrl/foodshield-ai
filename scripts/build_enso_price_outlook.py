@@ -657,7 +657,9 @@ def main():
     rs = out["replay_skill"] or {}
     print(f"[price outlook] replay MAE El Niño-effect {rs.get('mae_adjusted')} / plain {rs.get('mae_plain')} / "
           f"normal year {rs.get('mae_normal')} / no change {rs.get('mae_nochange')} on {rs.get('n')} samples")
-    path = write_json("enso_price_outlook.json", out, source=SOURCE, status=out["model_status"],
+    # _meta.status is feed health (the page flags anything but "ok"); the model's own verdict
+    # (ok / no_skill / insufficient_data) lives in data.model_status, which the page and validate_data read.
+    path = write_json("enso_price_outlook.json", out, source=SOURCE, status="ok",
                notes=("Domestic staple prices (FPMA, CPI-deflated) in countries where El Niño's harvest damage is "
                       "documented, against 2015-16 and 2023-24 at the same stage. The model is published only when "
                       "it passes its leave-one-event-out skill gate against no change and the analog average; see data.method."))
