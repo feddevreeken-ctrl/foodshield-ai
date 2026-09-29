@@ -3,7 +3,8 @@ El Niño price outlook — domestic staple prices in the countries El Niño hits
 two strong El Niños at the same stage, with an analog path and a skill-gated model.
 
 Sources (all already feeding the site): FAO GIEWS FPMA Tool domestic price API (the one refresh_fpma_prices.py
-and refresh_enso_price_analogs.py read; attribute FAO GIEWS FPMA), FoodShield's harvest model
+and refresh_enso_price_analogs.py read; attribute FAO GIEWS FPMA), the World Bank Pink Sheet monthly workbook (the
+one refresh_worldbank_pink_sheet.py reads) and US CPI (FRED CPIAUCSL), FoodShield's harvest model
 (data/enso_model.json, data/enso_outlook.json), the region cards and published effects
 (data/enso_regions.json, data/enso_published_effects.json) and CPC's ONI (data/enso.json).
 
@@ -20,6 +21,11 @@ Per row, all in real (CPI-deflated) terms:
              same month offset from the December peak.
   analog     the latest value carried along each past event's own path (index: latest month = 100), through
              March after the peak (+15 months). A replay, not a forecast.
+  effect_replay  the El Niño part only: each past event's real path minus the normal seasonal swing (median real
+             change per calendar month in non-El-Niño years) minus the series' world-market pass-through (beta x the
+             World Bank Pink Sheet price, deflated by US CPI; beta fitted on non-El-Niño months, kept only if
+             significant on 48+ months, clipped to 0..1). Forward view = a normal year + that excess. Scored
+             leave-one-event-out against no change, the plain replay and the normal year alone; published regardless.
   model      peak real-price rise from the latest month over the 16 months December..March+1, from a pooled
              OLS on two predictors fixed before fitting (n_specs_tried = 1): the country's own fitted El Niño
              yield slope x the event's DJF ONI, and the price at the origin month vs its own 3-year median.
@@ -39,7 +45,9 @@ from _common import DATA_DIR, http_get, write_json
 
 API = "https://fpma.fao.org/giews/v4/global/price_module/api/v1"
 TOOL_URL = "https://fpma.fao.org/giews/fpmat4/"
-SOURCE = "FAO GIEWS FPMA Tool (domestic prices API, CPI-deflated); FoodShield El Niño harvest model; NOAA CPC ONI"
+SOURCE = ("FAO GIEWS FPMA Tool (domestic prices API, CPI-deflated); World Bank Pink Sheet (monthly, deflated by US CPI, "
+          "FRED CPIAUCSL); FoodShield El Niño harvest model; NOAA CPC ONI")
+FRED_CPI = "https://fred.stlouisfed.org/graph/fredgraph.csv"
 
 # iso3, market, commodity, price type (as FPMA names them), staple key
 SERIES = [
@@ -89,6 +97,11 @@ MIN_WINDOW = 12               # of the 16 target months, at least this many obse
 MIN_SAMPLES, MIN_EVENTS = 10, 3
 ROW_MIN_EVENTS = 5           # a row shows model numbers only with this many held-out events of its own
 PREDICTORS = ["shortfall_pct", "rel_3y_pct"]
+# World-market benchmark per staple (World Bank Pink Sheet column label). Beans and teff have none: beta = 0.
+WORLD = {"maize": ("Maize", "World Bank Pink Sheet maize (US Gulf), deflated by US CPI"),
+         "rice": ("Rice, Thai 5%", "World Bank Pink Sheet rice (Thai 5% broken), deflated by US CPI")}
+SEASON_MIN_YEARS = 3          # every calendar month needs this many non-El-Niño years, else the series has no normal year
+BETA_MIN_MONTHS, BETA_T = 48, 1.96
 
 
 def mi(iso):
@@ -160,6 +173,162 @@ def analog(real, latest_m, k0, peaks):
     return {"base_month": month(latest_m), "index_base": "latest month = 100 (real)", "paths": paths, "band": band,
             "lo": min(v["peak_pct"] for v in paths.values()), "hi": max(v["peak_pct"] for v in paths.values()),
             "peak_month": paths[hi_lab]["peak_month"], "n_paths": len(paths)}
+
+
+def nino_years(history, current=CURRENT[1]):
+    """Calendar years left out of the normal-year fits: every El Niño year in CPC's ONI (a DJF ONI >= 0.5 in year y
+    marks an El Niño that started in year y-1) and the year after it (y), plus the current event's year."""
+    ys = {int(current[:4])}
+    for h in history:
+        if h.get("season") == "DJF" and isinstance(h.get("anom"), (int, float)) and h["anom"] >= 0.5:
+            ys |= {h["year"] - 1, h["year"]}
+    return ys
+
+
+def dlog(s, m):
+    return math.log(s[m] / s[m - 1]) if m in s and (m - 1) in s and s[m] > 0 and s[m - 1] > 0 else None
+
+
+def _clean_steps(real, bad):
+    """Months m whose step m-1 -> m lies wholly in non-El-Niño years."""
+    return [m for m in sorted(real) if (m // 12) not in bad and ((m - 1) // 12) not in bad and dlog(real, m) is not None]
+
+
+def seasonal_normal(real, bad):
+    """Median real log change per calendar month over non-El-Niño years, centred so the twelve sum to zero (a seasonal
+    swing with no trend: medians of monthly steps do not add up to a typical year, so their sum is bias, not signal).
+    Returns ({month 0..11: step}, {month: n years}). All or nothing: if any calendar month has fewer than
+    SEASON_MIN_YEARS years the steps are {} (no normal year)."""
+    by = {}
+    for m in _clean_steps(real, bad):
+        by.setdefault(m % 12, []).append(dlog(real, m))
+    n = {c: len(by.get(c, [])) for c in range(12)}
+    if min(n.values()) < SEASON_MIN_YEARS:
+        return {}, n
+    med = {c: statistics.median(v) for c, v in by.items()}
+    mean = sum(med.values()) / 12
+    return {c: v - mean for c, v in med.items()}, n
+
+
+def normal_path(med, origin, n):
+    """Cumulative normal-year log change from month `origin` over j = 0..n (j = 0 is 0)."""
+    out = [0.0]
+    for j in range(1, n + 1):
+        out.append(out[-1] + med.get((origin + j) % 12, 0.0))
+    return out
+
+
+def pass_through(real, world, med, bad):
+    """OLS of the series' deseasonalised monthly real log change on the world real log change, non-El-Niño months
+    only. beta is kept only with >= BETA_MIN_MONTHS months and |t| >= BETA_T, then clipped to 0..1; else 0."""
+    if not world:
+        return {"beta": 0.0, "beta_raw": None, "t": None, "n_months": 0, "used": False, "why": "no world benchmark for this staple"}
+    pairs = [(dlog(world, m), dlog(real, m) - med.get(m % 12, 0.0)) for m in _clean_steps(real, bad) if dlog(world, m) is not None]
+    n = len(pairs)
+    if n < BETA_MIN_MONTHS:
+        return {"beta": 0.0, "beta_raw": None, "t": None, "n_months": n, "used": False, "why": f"only {n} non-El-Niño months"}
+    mx, my = statistics.mean(p[0] for p in pairs), statistics.mean(p[1] for p in pairs)
+    sxx = sum((x - mx) ** 2 for x, _ in pairs)
+    b = sum((x - mx) * (y - my) for x, y in pairs) / sxx
+    s2 = sum((y - my - b * (x - mx)) ** 2 for x, y in pairs) / (n - 2)
+    t = b / math.sqrt(s2 / sxx) if s2 > 0 else float("inf")
+    used = abs(t) >= BETA_T
+    why = ("significant" if used and 0 <= b <= 1 else "significant, clipped to 0..1" if used else "not significant")
+    return {"beta": round(min(1.0, max(0.0, b)), 3) if used else 0.0, "beta_raw": round(b, 3),
+            "t": round(t, 2) if math.isfinite(t) else None, "n_months": n, "used": used and b > 0, "why": why}
+
+
+def excess_path(real, world, beta, norm, o, n):
+    """El Niño excess of one past event from origin month o over j = 0..n (log): real change minus the normal year
+    minus beta x the world real change. Months without data are skipped."""
+    base, wb = real.get(o), (world or {}).get(o)
+    out = {}
+    for j in range(n + 1):
+        v = real.get(o + j)
+        if not base or v is None:
+            continue
+        w = 0.0
+        if beta:
+            wv = (world or {}).get(o + j)
+            if wv is None or not wb:
+                continue
+            w = beta * math.log(wv / wb)
+        out[j] = math.log(v / base) - norm[j] - w
+    return out
+
+
+def window_peak(idx_by_j, k0):
+    """Peak rise (%) of an index path (j -> index, 100 at j = 0) over the target window December..March+1."""
+    win = [idx_by_j[j] for j in range(max(0, -k0), K_END - k0 + 1) if j in idx_by_j]
+    return round(max(win) - 100, 1) if len(win) >= MIN_WINDOW else None
+
+
+def effect_replay(real, world, pt, med, n_years, latest_m, k0, peaks, bench):
+    """Forward view, El Niño part only: today's real price x (normal year + each analog event's El Niño excess)."""
+    n = K_END - k0
+    norm = normal_path(med, latest_m, n)
+    has_normal = bool(med)
+    normal_pts = [[month(latest_m + j), round(100 * math.exp(norm[j]), 1)] for j in range(n + 1)] if has_normal else None
+    paths, adj_y = {}, {}
+    for lab in ANALOGS:
+        ex = excess_path(real, world, pt["beta"], norm, peaks[lab] + k0, n)
+        if len(ex) < 2:
+            continue
+        idx = {j: 100 * math.exp(norm[j] + e) for j, e in ex.items()}
+        pts = [[month(latest_m + j), round(v, 1)] for j, v in sorted(idx.items())]
+        top = max(pts[1:], key=lambda q: q[1])
+        jt = mi(top[0]) - latest_m
+        paths[lab] = {"points": pts, "peak_pct": round(top[1] - 100, 1), "peak_month": top[0],
+                      "normal_at_peak_pct": round(100 * math.exp(norm[jt]) - 100, 1) if has_normal else None}
+        y = window_peak(idx, k0)
+        if y is not None:
+            adj_y[lab] = y
+    normal_y = window_peak({j: 100 * math.exp(v) for j, v in enumerate(norm)}, k0) if has_normal else None
+    out = {"base_month": month(latest_m), "index_base": "latest month = 100 (real)",
+           "normal": {"available": has_normal, "points": normal_pts,
+                      "end_pct": round(normal_pts[-1][1] - 100, 1) if has_normal else None,
+                      "n_years_min": min(n_years.values()), "n_years_max": max(n_years.values()),
+                      "why": None if has_normal else f"a calendar month has fewer than {SEASON_MIN_YEARS} non-El-Niño years"},
+           "world": {"benchmark": bench, **pt}, "paths": paths}
+    if paths:
+        months_ = sorted({q[0] for v in paths.values() for q in v["points"]})
+        out["band"] = [[mo, min(q[1] for v in paths.values() for q in v["points"] if q[0] == mo),
+                        max(q[1] for v in paths.values() for q in v["points"] if q[0] == mo)] for mo in months_]
+        hi_lab = max(paths, key=lambda k: paths[k]["peak_pct"])
+        out.update({"lo": min(v["peak_pct"] for v in paths.values()), "hi": paths[hi_lab]["peak_pct"],
+                    "peak_month": paths[hi_lab]["peak_month"], "n_paths": len(paths)})
+    return out, adj_y, normal_y
+
+
+def evaluate_replay(samples):
+    """Leave-one-event-out score of the replays, same target and samples as the model table: each held-out event's
+    peak rise vs no change, the plain replay (mean of the series' other analog events' real peak rises), the normal
+    year alone, and the El Niño-effect replay (normal year + mean excess of the other analog events)."""
+    rows = []
+    for s in samples:
+        plain = [v for lab, v in s["analog_y"].items() if lab != s["event"]]
+        adj = [v for lab, v in (s.get("adj_y") or {}).items() if lab != s["event"]]
+        if not plain or not adj or s.get("normal_y") is None:
+            continue
+        rows.append({**s, "p_nochange": 0.0, "p_plain": statistics.mean(plain), "p_normal": s["normal_y"],
+                     "p_adjusted": statistics.mean(adj)})
+    kinds = ("adjusted", "plain", "normal", "nochange")
+
+    def score(rs):
+        if not rs:
+            return None
+        out = {"n": len(rs), "n_events": len({r["event"] for r in rs})}
+        for k in kinds:
+            out[f"mae_{k}"] = round(statistics.mean(abs(r[f"p_{k}"] - r["y"]) for r in rs), 1)
+            out[f"hits_{k}"] = sum((r[f"p_{k}"] > 0) == (r["y"] > 0) for r in rs)
+        return out
+
+    pooled = score(rows)
+    if pooled:
+        pooled["by_event"] = {e: {k: v for k, v in score([r for r in rows if r["event"] == e]).items() if k.startswith(("n", "mae"))}
+                              for e in sorted({r["event"] for r in rows})}
+        pooled["best"] = min(kinds, key=lambda k: pooled[f"mae_{k}"])
+    return pooled, {k: score([r for r in rows if r["key"] == k]) for k in {r["key"] for r in rows}}
 
 
 def ols(X, y):
@@ -271,9 +440,11 @@ def _monthly(s):
     return "", ""
 
 
-def build(listing, datapoints, enso_hist, model, outlook, regions, effects, today=None):
+def build(listing, datapoints, enso_hist, model, outlook, regions, effects, today=None, world=None):
+    """world: {staple: {month index: world real price}} (see world_real); None leaves pass-through at 0."""
     today_m = mi((today or date.today()).isoformat())
     events = el_nino_events(enso_hist)
+    bad = nino_years(enso_hist)
     peaks = {e["label"]: mi(e["peak"]) for e in events}
     missing = [a for a in ANALOGS if a not in peaks]
     if missing:
@@ -323,9 +494,14 @@ def build(listing, datapoints, enso_hist, model, outlook, regions, effects, toda
             x = [round(slope * e["oni"], 2), rel] if slope is not None and rel is not None else None
             samples.append({"key": key, "event": e["label"], "y": y, "x": x, "analog_y": {}})
         ay = {smp["event"]: smp["y"] for smp in samples if smp["key"] == key and smp["event"] in ANALOGS}
+        wr = (world or {}).get(staple)
+        med, n_years = seasonal_normal(real, bad)
+        pt = pass_through(real, wr, med, bad)
+        eff, adj_y, normal_y = effect_replay(real, wr, pt, med, n_years, L, k0, peaks,
+                                             WORLD[staple][1] if staple in WORLD else None)
         for smp in samples:
             if smp["key"] == key:
-                smp["analog_y"] = ay
+                smp.update(analog_y=ay, adj_y=adj_y, normal_y=normal_y)
         rel_now = rel_3y(real, L)
         rows.append({
             "iso3": iso, "country": s.get("country_name"), "commodity": commodity, "staple": staple,
@@ -337,6 +513,7 @@ def build(listing, datapoints, enso_hist, model, outlook, regions, effects, toda
             "latest": {"month": month(L), "value": nom.get(L), "real_value": real[L], "months_from_peak": k0},
             "aftermath": {"now": aftermath(real, p_now, k0), **after},
             "analog": analog(real, L, k0, peaks),
+            "effect_replay": eff,
             "_x_now": [round(slope * oni_now, 2), rel_now] if slope is not None and rel_now is not None else None,
             "price_vs_3y_median_pct": rel_now,
         })
@@ -354,10 +531,13 @@ def build(listing, datapoints, enso_hist, model, outlook, regions, effects, toda
         excluded.append({"iso3": iso, "staple": st, "basis": why, "reason": reason})
 
     pooled, per_key, resid, status = evaluate(samples)
+    replay_pooled, replay_key = evaluate_replay(samples)
     usable = [s for s in samples if s["x"] is not None]
     beta = ols([s["x"] for s in usable], [s["y"] for s in usable]) if status == "ok" else None
     for r in rows:
         key = f"{r['iso3']}:{r['commodity']}"
+        rk = replay_key.get(key)
+        r["effect_replay"]["skill"] = ({k: rk[k] for k in rk if k.startswith(("mae_", "hits_", "n"))} if rk else None)
         x = r.pop("_x_now")
         sk = per_key.get(key)
         r["skill"] = ({"mae_model": sk["mae_model"], "mae_nochange": sk["mae_nochange"], "mae_analog": sk["mae_analog"],
@@ -378,6 +558,8 @@ def build(listing, datapoints, enso_hist, model, outlook, regions, effects, toda
         "rows": rows,
         "model_status": status,
         "skill": pooled,
+        "replay_skill": replay_pooled,
+        "nino_years_excluded": sorted(y for y in bad if y >= 1990),
         "coefficients": dict(zip(["intercept"] + PREDICTORS, [round(b, 3) for b in beta])) if beta else None,
         "events": [{**e, "used": any(s["event"] == e["label"] for s in samples)} for e in events],
         "current": {"label": CURRENT[0], "peak_month": CURRENT[1], "oni": oni_now,
@@ -393,6 +575,27 @@ def build(listing, datapoints, enso_hist, model, outlook, regions, effects, toda
             "n_specs_tried": 1,
             "validation": "leave-one-event-out; baselines: no change (0%) and the analog average (mean of the same series' 2015-16 / 2023-24 peak rises, excluding the held-out event; pooled median if the series has none). Gate: pooled MAE below both baselines, the model beats the analog on at least half of the held-out events, at least 3 events and 10 samples. The half-of-events condition was added after the first run (pooled MAE edge over the analog of about 2 points); it makes the gate stricter, not looser. Row gate (added after the first run showed the pooled fit losing badly to no change on the managed rice markets): a row shows model numbers only if it has at least 5 held-out events of its own and its own MAE beats both baselines; its p10/p90 are its own leave-one-event-out misses around p50.",
             "hits": "direction = rise (>0) or not; no change always calls 'not'.",
+            "effect_replay": ("The El Niño-only forward view. Taken out: general inflation (FPMA CPI-deflated prices); the "
+                              "normal seasonal swing (per series, the median real log change of each calendar month in "
+                              "non-El-Niño years, centred so a year sums to zero (no trend), cumulated from the latest month; El Niño years = every year with a DJF "
+                              "ONI >= 0.5 in December of it, the year after, and the current year; n years per month in "
+                              "normal.n_years_min/max; a series with any calendar month under 3 years gets no normal year, normal.available = "
+                              "false); world-market moves (per series, beta x the World Bank Pink Sheet "
+                              "price of the staple deflated by US CPI, beta from an OLS of the deseasonalised monthly "
+                              "real log change on the world real log change over non-El-Niño months, kept only with 48+ "
+                              "months and |t| >= 1.96, clipped to 0..1; beans and teff have no world benchmark, beta 0). "
+                              "Excess path of a past event = its real path minus the normal year minus beta x the world "
+                              "change over the same months. Forward view = latest real price x (normal year + that "
+                              "excess), i.e. a normal year plus the El Niño effect last time; normal.points is the "
+                              "normal year alone. NOT taken out: currency moves beyond what CPI captures, local policy "
+                              "(export bans, strategic reserve sales, price controls), conflict and other local shocks "
+                              "in the past event; any El Niño part of world-price moves is removed with them. The "
+                              "normal year is built from calendar-month steps because full 19-month windows free of "
+                              "El Niño years leave only 2-4 years per series. Because the normal year is calendar-based, "
+                              "it cancels in the total: normal year + excess = the past real path minus beta x the world "
+                              "change; the split says how much of that is the usual season and how much is the El Niño "
+                              "effect. A replay, not a forecast. Scored "
+                              "leave-one-event-out in replay_skill (same target and events as the model table)."),
             "caveat": "Series in one region move together and each El Niño is one draw, so the effective sample is closer to the number of events than the number of rows.",
         },
         "tool_url": TOOL_URL,
@@ -410,6 +613,33 @@ def fetch_prices(uuids):
     return out
 
 
+def world_real():
+    """{staple: {month index: Pink Sheet nominal USD price / US CPI}} for the staples in WORLD."""
+    import refresh_worldbank_pink_sheet as pink
+    rows = pink.load_workbook_rows(pink.resolve_workbook_url())
+    labels, _units, _codes, data_rows, _i = pink._find_header_block(rows)
+    col = {str(c).strip(): i for i, c in enumerate(labels) if c}
+    cpi = {}
+    for line in http_get(FRED_CPI, params={"id": "CPIAUCSL"}, headers={"Accept": "text/csv"}, timeout=60).text.splitlines()[1:]:
+        d, _, v = line.partition(",")
+        try:
+            cpi[mi(d)] = float(v)
+        except ValueError:
+            continue
+    out = {}
+    for staple, (label, _desc) in WORLD.items():
+        i = col.get(label)
+        if i is None:
+            raise RuntimeError(f"Pink Sheet column {label!r} not found")
+        ser = {}
+        for r in data_rows:
+            mo, v = pink.parse_month(r[0] if r else None), pink.normalize_num(r[i] if i < len(r) else None)
+            if mo and v and mi(mo) in cpi:
+                ser[mi(mo)] = v / cpi[mi(mo)]
+        out[staple] = ser
+    return out
+
+
 def main():
     listing = http_get(f"{API}/FpmaSerieDomestic/", params={"format": "json"}, timeout=120, patient=True).json().get("results") or []
     want = {(i, m, c, t) for i, m, c, t, _ in SERIES}
@@ -418,11 +648,15 @@ def main():
     if not uuids:
         raise RuntimeError("FPMA series list matched none of the outlook series")
     out = build(listing, fetch_prices(uuids), _load("enso.json")["history"], _load("enso_model.json"),
-                _load("enso_outlook.json"), _load("enso_regions.json")["regions"], _load("enso_published_effects.json"))
+                _load("enso_outlook.json"), _load("enso_regions.json")["regions"], _load("enso_published_effects.json"),
+                world=world_real())
     sk = out["skill"] or {}
     print(f"[price outlook] {len(out['rows'])} rows; model {out['model_status']}; "
           f"MAE model {sk.get('mae_model')} / no change {sk.get('mae_nochange')} / analog {sk.get('mae_analog')} "
           f"on {sk.get('n')} samples, {sk.get('n_events')} events")
+    rs = out["replay_skill"] or {}
+    print(f"[price outlook] replay MAE El Niño-effect {rs.get('mae_adjusted')} / plain {rs.get('mae_plain')} / "
+          f"normal year {rs.get('mae_normal')} / no change {rs.get('mae_nochange')} on {rs.get('n')} samples")
     path = write_json("enso_price_outlook.json", out, source=SOURCE, status=out["model_status"],
                notes=("Domestic staple prices (FPMA, CPI-deflated) in countries where El Niño's harvest damage is "
                       "documented, against 2015-16 and 2023-24 at the same stage. The model is published only when "
@@ -431,6 +665,8 @@ def main():
     env["_meta"].update({"method": out["method"], "universe_rule": UNIVERSE_RULE, "sources": [
         {"name": "FAO GIEWS FPMA Tool", "url": TOOL_URL, "api": API},
         {"name": "FoodShield El Niño harvest model", "file": "data/enso_model.json, data/enso_outlook.json"},
+        {"name": "World Bank Commodity Markets (Pink Sheet), monthly", "url": "https://www.worldbank.org/en/research/commodity-markets"},
+        {"name": "US CPI, all urban consumers (FRED CPIAUCSL)", "url": "https://fred.stlouisfed.org/series/CPIAUCSL"},
         {"name": "El Niño region cards and published effects", "file": "data/enso_regions.json, data/enso_published_effects.json"},
         {"name": "NOAA CPC ONI", "url": "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt", "file": "data/enso.json"}]})
     path.write_text(json.dumps(env, indent=2, ensure_ascii=False))
