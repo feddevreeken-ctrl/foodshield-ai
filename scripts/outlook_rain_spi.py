@@ -49,6 +49,8 @@ says how the cells are chosen): the same fits, El Nino fit and month stats in th
 precl_model with path=. refresh_seasonal_outlook reads the NMME change over the whole cell there.
 Cells with an NMME change but no month fit of their own (PREC/L too thin or too dry) read that change on
 CHIRPS v3's month spread (else CPC's gauge spread), NMME alone; their rain_spi3 stays blank.
+Peru/Ecuador coast (scripts/coastal_nino12.py): in its three cells the statistical half is a Nino 1+2 fit
+instead of the ONI one, where skilful, read at the NMME's Nino 1+2 box (rain_model.coastal says where and when).
 
 Inputs are only committed data files, so this runs on every refresh, including the one that only
 re-stamps an unchanged NMME run; the carry-in and the ONI then still update.
@@ -69,6 +71,7 @@ from pathlib import Path
 from statistics import NormalDist
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import coastal_nino12 as CO  # noqa: E402
 import precl_model as P  # noqa: E402
 import spi as SPI  # noqa: E402
 from spi import to_x100  # noqa: E402
@@ -240,10 +243,14 @@ def add_rain_spi(payload: dict) -> dict:
     land = [c in isl or any(x["maps"]["rain"][c] is not None for x in mons) for c in range(n)]
     fc_ab = {_ab(x["key"]): j for j, x in enumerate(mons)}
     scale, oni_rows = {}, []          # scale[(j, cell)] = k of forecast month j
+    # Peru/Ecuador coast: a Nino 1+2 fit replaces the ONI fit where skilful (scripts/coastal_nino12.py).
+    co, n12 = CO.load(), {k: (v or {}).get("nino12") for k, v in (payload.get("box_means_c_months") or {}).items()}
+    coast_rows = []
 
     for j, x in enumerate(mons):
         a, mth, mp = _ab(x["key"]), int(x["key"][5:7]), x["maps"]
         so = oni.get(a)
+        coast_rows.append({"month": x["key"], "nino12_nmme": n12.get(x["key"]), "cells": []})
         lo, hi = model["enso_rule"]["oni_range"]["m1"][mth - 1]
         oni_rows.append({"month": x["key"], "season": so[0] if so else None, "oni_outlook": so[1] if so else None,
                          "oni_used": None if so is None else round(min(max(so[1], lo), hi), 2),
@@ -254,15 +261,25 @@ def add_rain_spi(payload: dict) -> dict:
         for c in range(n):
             r = mp["rain"][c]
             ft = P.fit(c, "m1", mth, pth[c])
+            zc = CO.month_z(co, c, mth, n12.get(x["key"])) if co and c in co["m1"] else None
+            if zc is not None:
+                coast_rows[-1]["cells"].append(c)
             if r is None or ft is None:
                 fb = None if r is None else _fallback_fit(fb_fits, c)
+                z, sd = None, 1.0
                 if fb is not None:
                     # No fit of its own but an NMME change: read the change on CHIRPS's (else CPC's) month spread,
                     # NMME alone, no El Nino fit. The three-month map stays blank there (no three-month fit).
                     z = P.spi_of(max(0.0, 1 + r / 100) * P.total_of(0.0, fb, clip), fb, -1.0, clip)
-                    f_nmme[c] = f_spi[c] = to_x100(z)
-                    p_dry[c] = int(round(100 * _ND.cdf(-1 - z)))
-                    p_wet[c] = int(round(100 * _norm_sf(1 - z)))
+                    f_nmme[c] = to_x100(z)
+                if zc is not None:
+                    # A coastal cell: its Nino 1+2 fit joins the change read above, or stands alone where NMME masks it.
+                    f_enso[c], sd = to_x100(zc[0]), zc[1]
+                    z = zc[0] if z is None else (z + zc[0]) / 2
+                if z is not None:
+                    f_spi[c] = to_x100(z)
+                    p_dry[c] = int(round(100 * _ND.cdf((-1 - z) / sd)))
+                    p_wet[c] = int(round(100 * _norm_sf((1 - z) / sd)))
                 if land[c]:
                     scale[(j, c)] = 1.0 if r is None else max(0.0, 1 + r / 100)
                 continue
@@ -275,8 +292,11 @@ def add_rain_spi(payload: dict) -> dict:
                 # agreement with 1,025 official forecasts, 30-40% fewer cells at |SPI| >= 2, closer to CPC's calibrated odds).
                 nb = (ch[c][0], 1.0, ch[c][2] / ch_meta["n_years"])
                 z_n = P.spi_of(k * P.total_of(0.0, nb, clip), nb, -1.0, clip)
-            pr = P.enso_predict(c, "m1", mth, so[1], pth[c]) if so else None
-            z_e, sd = (pr[0], pr[1]) if pr and pr[2] else (None, 1.0)
+            if zc is not None:
+                z_e, sd = zc
+            else:
+                pr = P.enso_predict(c, "m1", mth, so[1], pth[c]) if so else None
+                z_e, sd = (pr[0], pr[1]) if pr and pr[2] else (None, 1.0)
             z = z_n if z_e is None else (z_n + z_e) / 2
             f_nmme[c], f_enso[c], f_spi[c] = to_x100(z_n), to_x100(z_e), to_x100(z)
             p_dry[c] = int(round(100 * _ND.cdf((-1 - z) / sd)))
@@ -330,19 +350,29 @@ def add_rain_spi(payload: dict) -> dict:
                 lo, hi = P.total_from_spi(c, "m3", mth, -1.0, pth[c]), P.total_from_spi(c, "m3", mth, 1.0, pth[c])
                 p3d[c] = int(round(100 * _p_below(lo, o_tot, mu, var)))
                 p3w[c] = int(round(100 * (1 - _p_below(hi, o_tot, mu, var))))
+        # Coastal cells, windows made only of forecast months: the mean with the three-month Nino 1+2 fit where skilful
+        # (it alone where the window has no PREC/L fit). rain_p3_* stay on the rule above.
+        nw = [n12.get(mons[fc_ab[b]]["key"]) if b in fc_ab else None for b in parts]
+        if co and None not in nw:
+            for c in co["cells"]:
+                v = CO.window_z(co, c, mth, sum(nw) / 3)
+                if v is not None:
+                    out[c] = to_x100(v if out[c] is None else (out[c] / 100 + v) / 2)
+                    windows[-1].setdefault("coastal_cells", []).append(c)
         x["maps"]["rain_spi3"] = out
         x["maps"]["rain_p3_dry"], x["maps"]["rain_p3_wet"] = p3d, p3w
 
-    payload["rain_model"] = _notes(model, st, oni_rows, oni_issued, oni_url, obs_info, windows, sorted(gap_months), payload)
+    payload["rain_model"] = _notes(model, st, oni_rows, oni_issued, oni_url, obs_info, windows, sorted(gap_months), payload,
+                                   co, coast_rows)
     return payload
 
 
 # ---------------------------------------------------------------- notes
-def _notes(model, st, oni_rows, issued, oni_url, obs_info, windows, gaps, payload) -> dict:
+def _notes(model, st, oni_rows, issued, oni_url, obs_info, windows, gaps, payload, co=None, coast_rows=()) -> dict:
     cv, meta, isl = model["meta"]["cv"], model["meta"], P.load(ISLANDS)
     used = {m for w in windows for m in w["observed"]}
     regions = [f"{r['region']}: {r['verdict']}" for r in meta["regions_at_oni_2_5"]]
-    return {
+    out = {
         "computed": date.today().isoformat(),
         "method": [
             "All fields are on the rain grid. SPI fields are the Standardized Precipitation Index times 100, "
@@ -412,6 +442,21 @@ def _notes(model, st, oni_rows, issued, oni_url, obs_info, windows, gaps, payloa
              "url": isl["island_rule"]["places_url"]},
         ],
     }
+    if co:
+        out["method"].append(
+            "Peru/Ecuador coast (coastal.cells): rain there follows the sea just offshore (Nino 1+2) more than ONI. In "
+            "these cells, in the months where it is skilful, rain_spi_enso is instead a fit of the month's SPI on Nino 1+2 "
+            "(CHIRPS v3 1981-2020, SPI on its 1991-2020 gamma, z = a + b x max(0, N - 0.5), 0.5 being ENFEN's weak warm "
+            "threshold), read at the NMME ensemble-mean Nino 1+2 box of that month, and rain_p_dry / rain_p_wet use its "
+            "leftover spread. Where NMME masks the month (normally dry) it is used alone. rain_spi3 of a window made only "
+            "of forecast months is the mean with the same kind of fit on the three-month total where that is skilful. "
+            "Fits, skill and hindcast scores: data/ref/coastal_nino12_model.json (scripts/build_coastal_nino12_model.py).")
+        out["coastal"] = {"cells": co["cells"], "names": {str(k): v for k, v in co["names"].items()},
+                          "months": list(coast_rows), "validation": co["validation"],
+                          "model_file": "data/ref/coastal_nino12_model.json", "built": co["meta"].get("built")}
+        known = {q["url"] for q in out["sources"]}
+        out["sources"] += [q for q in co["meta"].get("sources", []) if q["url"] not in known]
+    return out
 
 
 # ---------------------------------------------------------------- printed checks
