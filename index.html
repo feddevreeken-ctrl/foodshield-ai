@@ -12787,16 +12787,33 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-wp-span .enso-wp-bar { width:calc(50% - 14px); }
 @media (max-width:800px) { #tab-elnino .enso-wp-row { grid-template-columns:1fr; } #tab-elnino .enso-wp-span { grid-column:auto; } #tab-elnino .enso-wp-head { display:none; } }
 
-/* Harvests map: 2027 circles, their labels and the trade arcs (2026-09-29 audit) */
-#tab-elnino .enso-shift-lab { pointer-events:none; }
-#tab-elnino .enso-shift-lab > span { display:block; width:max-content; font:500 11.5px/1.2 'Geist',sans-serif; color:#ebe9e2; text-shadow:0 0 3px #0b1017,0 0 3px #0b1017,0 0 6px #0b1017; white-space:nowrap; }
-#tab-elnino .enso-shift-lab b { font:600 11.5px/1.2 'Geist Mono',monospace; }
-#tab-elnino .enso-shift-lab b.is-down { color:#f0a36c; } #tab-elnino .enso-shift-lab b.is-up { color:#86c7cc; }
-#tab-elnino .enso-shift-lab .enso-num { font:inherit; color:inherit; }
+/* Harvests map: one harvest at a time, callouts, labelled line ends and the chooser (2026-09-29 second pass) */
+#tab-elnino #enso-map .enso-follow { position:absolute; left:10px; bottom:10px; z-index:800; width:max-content; max-width:calc(100% - 20px); padding:6px 7px 7px; background:rgba(11,16,23,.9); border:1px solid var(--b3); }
+#tab-elnino #enso-map .enso-follow[hidden] { display:none; }
+#tab-elnino #enso-map .enso-follow-c { display:flex; flex-wrap:wrap; gap:4px; }
+#tab-elnino #enso-map .enso-follow-t { display:block; margin:0 0 5px; font:500 11.5px/1.3 'Geist',sans-serif; color:var(--t1); }
+#tab-elnino #enso-map .enso-follow-t i { font-style:normal; font-weight:400; color:var(--t3); }
+#tab-elnino #enso-map .enso-follow button { min-height:24px; height:24px; padding:0 8px; font:11px/1 'Geist',sans-serif; background:transparent; border:1px solid var(--b3); color:var(--t2); cursor:pointer; }
+#tab-elnino #enso-map .enso-follow button:hover { color:var(--t1); border-color:var(--t3); }
+#tab-elnino #enso-map .enso-follow button[aria-pressed="true"] { color:#0b1017; background:#ebe9e2; border-color:#ebe9e2; }
+#tab-elnino .enso-flab { pointer-events:none; }
+#tab-elnino .enso-flab.is-call { pointer-events:auto; cursor:pointer; }
+#tab-elnino .enso-flab-b { position:absolute; left:0; top:0; width:max-content; white-space:nowrap; font:500 11px/1.25 'Geist',sans-serif; color:#ebe9e2; text-shadow:0 0 3px #0b1017,0 0 3px #0b1017,0 0 6px #0b1017; }
+#tab-elnino .enso-flab-b b { font:600 11px/1.25 'Geist Mono',monospace; }
+#tab-elnino .enso-flab-b b.is-down { color:#f0a36c; }
+#tab-elnino .enso-flab-b > i { display:block; font-style:normal; font-weight:400; font-size:10.5px; color:var(--t3); }
+#tab-elnino .enso-flab-b.is-sup { font-weight:400; font-size:10.5px; color:#cfc9ba; }
+#tab-elnino .enso-flab-b .enso-num { font:inherit; color:inherit; }
+#tab-elnino .enso-flab-b.enso-hcall { padding:4px 7px 5px; background:rgba(11,16,23,.86); border:1px solid #2a3038; text-shadow:none; opacity:.6; }
+#tab-elnino .enso-flab-b.enso-hcall.is-on { opacity:1; background:rgba(11,16,23,.95); border-color:#56606b; font-size:12px; }
+#tab-elnino .enso-flab-b.enso-hcall.is-on b { font-size:12px; }
+#tab-elnino .enso-hcall-t svg { margin-right:5px; vertical-align:0; }
+#tab-elnino .enso-hcall-bar { display:block; height:3px; margin:4px 0 0 14px; background:#c9773a; }
+#tab-elnino .enso-hcall.is-up .enso-hcall-bar { background:#4f9fa8; }
+#tab-elnino .enso-hcall-s { display:block; margin:4px 0 0 14px; font-weight:400; font-size:11px; color:var(--t2); }
+#tab-elnino .enso-farrow { pointer-events:none; }
+#tab-elnino .enso-farrow svg { display:block; overflow:visible; }
 #tab-elnino #enso-map .enso-tip-src { color:var(--t3); font-size:11px; }
-#tab-elnino .enso-flow-inks { display:flex; flex-wrap:wrap; gap:2px 10px; margin:4px 0 0; font:11.5px/1.4 'Geist',sans-serif; color:var(--t2); }
-#tab-elnino .enso-flow-inks > span { display:inline-flex; align-items:center; gap:5px; }
-#tab-elnino .enso-flow-inks i { width:12px; height:3px; }
 #tab-elnino .flow-pop .flow-card-route { font:500 15px/1.3 'Geist',sans-serif; }
 /* Harvests 2027 plate: plain sentence, three bullets, then the switch (2026-09-29 audit) */
 #tab-elnino .enso-ol-lead { margin:4px 0 16px; }
@@ -50653,7 +50670,7 @@ function showCommodityDetail(key) {
     S.map.on('zoomend moveend resize', function () {
       if (typeof requestAnimationFrame !== 'function') { placeChokepointLabels(); return; }
       if (placeRaf) cancelAnimationFrame(placeRaf);
-      placeRaf = requestAnimationFrame(function () { placeRaf = null; placeChokepointLabels(); });
+      placeRaf = requestAnimationFrame(function () { placeRaf = null; placeChokepointLabels(); placeFollowLabels(); });
     });
 
     // Reference furniture sits below SST and country fills in its own pane.
@@ -51103,14 +51120,12 @@ function showCommodityDetail(key) {
   }
 
   /* ── Harvests map: the 2027 harvests and the trade around them ─────────────
-     2026-09-29 audit (Fedde: "include the trade flows of who would compensate"). Circles carry each fitted
-     2027 change in tonnes at the map's ONI; arcs carry the supply the short harvests' buyers lose and the
-     buyers' other usual suppliers. Nothing is typed: rows from enso_outlook.json, corridors from the FAOSTAT
+     2026-09-29 audit (Fedde: "include the trade flows of who would compensate"). Callouts carry each fitted
+     2027 change in tonnes at the 2027 plate's winter; lines carry the supply the chosen harvest's buyers lose and
+     the buyers' other usual suppliers. Nothing is typed: rows from enso_outlook.json, corridors from the FAOSTAT
      matrix (data/tm/<ISO>.json), export bans from trade_restrictions.json. */
   var SHIFT_AT = { USA: [38.5, -98.4], ZAF: [-28.6, 26.2] };   /* wheat belt and maize triangle: the capital and the Alaska-skewed centre both mislead */
   var REPLACE_CAP = 2, REPLACE_MIN_SHARE = 1;
-  /* The site's exporter colours (FLOW_EXPORTER_COLORS) without the two that read as the falls ochre and rises teal. */
-  var FLOW_INKS = ['#7fd3ff', '#ffd166', '#f7a8c4', '#c7b8ff', '#9ee493', '#f2efe6'];
   var TM_KEY = { corn: 'maize' };
   function cropRx(crop) { return crop === 'corn' ? /maize|corn/i : new RegExp(crop, 'i'); }
   function anchorOf(iso) { return SHIFT_AT[iso] || centroidOf(iso) || (typeof COUNTRY_LL !== 'undefined' && COUNTRY_LL[iso]) || null; }
@@ -51174,119 +51189,267 @@ function showCommodityDetail(key) {
     return S._tradeFlows[mode];
   }
   window.ensoTradeFlows = ensoTradeFlows;
-  /* Colour follows the exporter: ranked by the tonnes it carries on the map, the rest share a warm grey. */
-  function flowInks(data) {
-    var tot = {}, ink = {};
-    ((data && data.flows) || []).forEach(function (f) { if (f.role === 'replace') tot[f.from] = (tot[f.from] || 0) + f.t; });
-    Object.keys(tot).sort(function (a, b) { return tot[b] - tot[a]; }).forEach(function (iso, i) { ink[iso] = FLOW_INKS[i] || '#8b939c'; });
-    return ink;
-  }
+  /* 2026-09-29 second pass (Fedde: "the circles are kinda ugly. and make the lines make more sense"): one harvest
+     at a time. The land fill stays the main mark; each 2027 harvest gets a text callout with a bar in tonnes, and only
+     the chosen harvest's trade draws, in two inks by role. This story map breaks the site's colour-per-exporter rule
+     on purpose: who loses supply and where buyers could turn matter more here than who ships. Callouts, lines and the
+     2027 plate all read the who_pays winter, so the map and the plate print the same numbers. */
+  var RISK_INK = '#ee9a5c', TURN_INK = '#d8d2c2', STORY_MIN_KT = 150, STORY_BUYERS = 6, STORY_MIN_T = 10000;
   /* A gentle arc bowed to the left of travel, in degrees (none of these routes crosses the dateline). */
   function arcPath(a, b) {
     var dx = b[1] - a[1], dy = b[0] - a[0], c = [(a[0] + b[0]) / 2 + dx * .18, (a[1] + b[1]) / 2 - dy * .18], out = [];
     for (var i = 0; i <= 24; i++) { var t = i / 24, u = 1 - t; out.push([u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]]); }
     return out;
   }
-  function shiftKt(r, oni) { return r.production_kt * (Math.exp(r.slope_pct_per_oni / 100 * oni) - 1); }
-  function shiftRows() {
-    return ((S.outlook && S.outlook.rows_all) || []).filter(function (r) { return r.status === 'shown' && !r.in_season && typeof r.slope_pct_per_oni === 'number' && typeof r.production_kt === 'number'; });
+  function cropName(c) { return { corn: 'maize' }[c] || c; }
+  function storyCase() { var O = S.outlook || {}; return (O.cases && (O.cases[O.who_pays_case] || O.cases.record)) || null; }
+  /* The harvests the 2027 plate names: fitted, not yet in the field, 150 kt or more at its winter; largest first. */
+  function harvestStories() {
+    var O = S.outlook, W = (O && O.who_pays) || [];
+    return ((O && O.rows_all) || []).filter(function (r) { return r.status === 'shown' && !r.in_season && typeof r.change_kt_record === 'number' && Math.abs(r.change_kt_record) >= STORY_MIN_KT; })
+      .sort(function (a, b) { return Math.abs(b.change_kt_record) - Math.abs(a.change_kt_record); })
+      .map(function (r) { return { key: r.iso + '/' + r.crop, iso: r.iso, crop: r.crop, kt: r.change_kt_record, harvest: r.harvest || '',
+        pay: W.filter(function (w) { return w.iso === r.iso && w.crop === r.crop; })[0] || null }; });
   }
+  function storyNow(list) { list = list || harvestStories(); return list.filter(function (s) { return s.key === S.hvStory; })[0] || list[0] || null; }
   function shiftOn() { var oni = modelOni(); return S.sub === 'ensoharvest' && S.mode === 'impact' && !!(S.outlook && S.outlook.rows_all) && typeof oni === 'number' && oni > 0; }
+  function storyMode() { return shiftOn() ? 'compensate' : null; }
+  /* The chosen harvest's lines. 'compensate' (Harvests): a fall draws the supply each named buyer loses (risk) and the
+     buyers' other usual suppliers (turn), from ensoTradeFlows; a rise draws its usual buyers (turn). 'atrisk' (Shipping):
+     the producer's usual exports (risk for a fall, turn for a rise). Usual trade: FAOSTAT, at least REPLACE_MIN_SHARE %
+     and STORY_MIN_T tonnes, at most STORY_BUYERS partners. Resolves to { lines, ends, own, year }; never rejects. */
+  function storyFlows(st, mode) {
+    if (S._storyOf !== S.outlook) { S._storyOf = S.outlook; S._storyP = {}; S._storyData = {}; }
+    var ck = mode + ':' + st.key; if (S._storyP[ck]) return S._storyP[ck];
+    var out = { lines: [], ends: {}, own: null, year: null }, key = TM_KEY[st.crop] || st.crop;
+    function usual(role) {
+      if (typeof loadCountryTrade !== 'function' || typeof countryTrade !== 'function') return Promise.resolve();
+      return Promise.resolve(loadCountryTrade(st.iso)).then(function () {
+        var ex = ((countryTrade(st.iso) || {}).exp || {})[key]; if (!ex) return;
+        out.year = ex.year;
+        (ex.partners || []).filter(function (p) { return p.iso !== st.iso && p.share_pct >= REPLACE_MIN_SHARE && p.t >= STORY_MIN_T; }).slice(0, STORY_BUYERS).forEach(function (p) {
+          out.lines.push({ from: st.iso, to: p.iso, crop: st.crop, t: p.t, role: role, kind: 'usual', basis: p.basis, share_pct: p.share_pct, year: ex.year });
+          out.ends[p.iso] = { kind: 'buyer', role: role, t: p.t };
+        });
+      });
+    }
+    var p = mode === 'atrisk' || st.kt > 0 ? usual(mode === 'atrisk' && st.kt < 0 ? 'risk' : 'turn') : ensoTradeFlows('compensate').then(function (d) {
+      S._tradeCompOf = S.outlook; S._tradeComp = d;
+      if (!d) return;
+      out.year = d.year;
+      d.buyers.filter(function (b) { return b.from === st.iso && b.crop === st.crop; }).forEach(function (b) {
+        var none = !b.replace.length;
+        if (b.own) out.own = { t: b.need_t, none: none, matrix: b.matrix };
+        else {
+          out.lines.push({ from: st.iso, to: b.iso, crop: st.crop, t: b.need_t, role: 'risk', kind: 'lost', basis: 'modelled', share_pct: null, year: null });
+          out.ends[b.iso] = { kind: 'buyer', role: 'risk', t: b.need_t, none: none, matrix: b.matrix };
+        }
+        d.flows.forEach(function (f) {
+          if (f.role !== 'replace' || f.to !== b.iso || f.crop !== b.crop || b.replace.indexOf(f.from) < 0) return;
+          out.lines.push({ from: f.from, to: f.to, crop: f.crop, t: f.t, role: 'turn', kind: 'replace', basis: f.basis, share_pct: f.share_pct, year: f.year });
+          if (!out.ends[f.from]) out.ends[f.from] = { kind: 'supplier' };
+        });
+      });
+    });
+    S._storyP[ck] = p.catch(function () {}).then(function () { S._storyData[ck] = out; return out; });
+    return S._storyP[ck];
+  }
+  window.ensoStoryFlows = function (key, mode) { var st = harvestStories().filter(function (s) { return s.key === key; })[0]; return st ? storyFlows(st, mode || 'compensate') : Promise.resolve(null); };
+  function setStory(key) {
+    S.hvStory = key;
+    drawHarvestShift();
+    try { renderLegend(); } catch (e) {}
+  }
+  /* The chooser sits on the map's lower-left corner (the plate head keeps its one layer row). */
+  function renderFollow(mode) {
+    if (!S.map || typeof S.map.getContainer !== 'function') return;
+    var host = S.map.getContainer(); if (!host || !host.querySelector) return;
+    var box = host.querySelector('.enso-follow'), list = mode ? harvestStories() : [], wc = storyCase();
+    if (!list.length) { if (box) box.hidden = true; return; }
+    if (!box) {
+      box = document.createElement('div'); box.className = 'enso-follow'; box.setAttribute('role', 'group'); box.setAttribute('aria-label', 'Follow a harvest');
+      host.appendChild(box);
+      if (L.DomEvent) { L.DomEvent.disableClickPropagation(box); L.DomEvent.disableScrollPropagation(box); }
+      box.addEventListener('click', function (e) { var b = e.target && e.target.closest && e.target.closest('[data-story]'); if (b) setStory(b.getAttribute('data-story')); });
+    }
+    box.hidden = false;
+    var st = storyNow(list);
+    box.innerHTML = '<span class="enso-follow-t">Follow a harvest' + (wc ? ' <i>at ONI ' + num(wc.oni, 1) + ', the 2027 plate’s scenario</i>' : '') + '</span>' +
+      '<span class="enso-follow-c">' + list.map(function (s) { return '<button type="button" data-story="' + esc(s.key) + '" aria-pressed="' + (s === st) + '">' + esc(nameFor(s.iso)) + ' ' + esc(cropName(s.crop)) + '</button>'; }).join('') + '</span>';
+  }
+  function tri(fall) { return '<svg aria-hidden="true" width="9" height="8" viewBox="0 0 9 8"><path d="' + (fall ? 'M0 0H9L4.5 8Z' : 'M0 8H9L4.5 0Z') + '" fill="' + (fall ? '#e0864a' : '#6fb8bf') + '"/></svg>'; }
+  function storySub(s, fl, mode) {
+    if (!fl) return '';
+    if (mode === 'atrisk') return fl.lines.length ? (s.kt < 0 ? 'its usual buyers, FAOSTAT ' : 'its usual buyers, FAOSTAT ') + esc(String(fl.year || '')) : 'exports under ' + (STORY_MIN_T / 1000) + ' kt a year to any buyer';
+    if (s.kt > 0) return fl.lines.length ? 'more to sell; its usual buyers, FAOSTAT ' + esc(String(fl.year || '')) : 'more to sell';
+    return fl.own ? fmtKt(fl.own.t / 1000).replace('+', '') + ' to buy abroad' + (fl.own.none ? ', no other usual supplier' : '') : '';
+  }
   function drawHarvestShift() {
     if (!S.map) return;
     (S.shiftLayers || []).forEach(function (l) { try { S.map.removeLayer(l); } catch (e) {} });
     S.shiftLayers = [];
-    if (!shiftOn()) return;
+    var mode = storyMode();
+    renderFollow(mode);
+    if (!mode) { S._storyFit = null; return; }
     if (typeof S.map.getPane === 'function' && !S.map.getPane('ensoFlows')) {
       S.map.createPane('ensoFlows'); S.map.getPane('ensoFlows').style.zIndex = 425;
-      S.map.createPane('ensoShift'); S.map.getPane('ensoShift').style.zIndex = 430;
+      S.map.createPane('ensoShift'); S.map.getPane('ensoShift').style.zIndex = 630;
     }
     var pane = function (p) { return typeof S.map.getPane === 'function' && S.map.getPane(p) ? p : undefined; };
-    var oni = modelOni(), rec = S.outlook.cases && S.outlook.cases.record, crop = function (c) { return { corn: 'maize' }[c] || c; };
-    /* One circle per country and direction; area = tonnes. The largest change at the fit's strongest winter sets the scale,
-       so the circles grow as the scenario rises. */
-    var by = {}, ref = 0, refBy = {};
-    shiftRows().forEach(function (r) {
-      var v = shiftKt(r, oni), k = r.iso + (v < 0 ? '-' : '+');
-      (by[k] = by[k] || { iso: r.iso, kt: 0, rows: [] }).kt += v; by[k].rows.push({ r: r, v: v });
-      if (rec) refBy[k] = (refBy[k] || 0) + Math.abs(shiftKt(r, rec.oni));
+    var list = harvestStories(), st = storyNow(list); if (!st) return;
+    var fl = S._storyOf === S.outlook && S._storyData && S._storyData[mode + ':' + st.key];
+    if (!fl) storyFlows(st, mode).then(function () { var now = storyNow(); if (storyMode() === mode && now && now.key === st.key) { drawHarvestShift(); try { renderLegend(); } catch (e) {} } });
+    var wc = storyCase(), wcOni = wc ? num(wc.oni, 1) : '', labels = [], arcs = {};
+    var label = function (ll, html, pri, cls, key, arc) {
+      var m = L.marker(ll, { pane: pane('ensoShift'), interactive: !!key, keyboard: false, alt: '',
+        icon: L.divIcon({ className: 'enso-flab' + (key ? ' is-call' : ''), iconSize: [0, 0], iconAnchor: [0, 0], html: '<div class="enso-flab-b ' + cls + '">' + html + '</div>' }) });
+      m._flab = pri; m._arc = arc || null;
+      if (key) m.on('click', function () { setStory(key); });
+      labels.push(m);
+    };
+    /* Callouts: one per 2027 harvest, the plate's number and harvest months, a bar on one tonnes scale. */
+    var maxKt = Math.max.apply(null, list.map(function (s) { return Math.abs(s.kt); }).concat([1]));
+    list.forEach(function (s) {
+      var at = anchorOf(s.iso); if (!at) return;
+      var on = s === st, fall = s.kt < 0, sub = on ? storySub(s, fl, mode) : '';
+      label(at, '<span class="enso-hcall-t">' + tri(fall) + esc(nameFor(s.iso)) + ' ' + esc(cropName(s.crop)) + ' <b>' + fmtKt(s.kt) + '</b> · ' + esc(s.harvest) + '</span>' +
+        '<i class="enso-hcall-bar" style="width:' + Math.max(3, Math.round(80 * Math.abs(s.kt) / maxKt)) + 'px"></i>' + (sub ? '<span class="enso-hcall-s">' + sub + '</span>' : ''),
+        on ? 0 : 2, 'enso-hcall ' + (fall ? 'is-down' : 'is-up') + (on ? ' is-on' : ''), on ? null : s.key);
     });
-    Object.keys(refBy).forEach(function (k) { ref = Math.max(ref, refBy[k]); });
-    if (!ref) Object.keys(by).forEach(function (k) { ref = Math.max(ref, Math.abs(by[k].kt)); });
-    var R = 24, radius = function (kt) { return Math.max(3.5, R * Math.sqrt(Math.abs(kt) / (ref || 1))); };
-    var data = S._tradeData && S._tradeData.oni != null ? S._tradeData : null;
-    if (data) {
-      var ink = flowInks(data), maxT = Math.max.apply(null, data.flows.filter(function (f) { return f.role === 'lost'; }).map(function (f) { return f.t; }).concat([1]));
-      var nm = function (i) { return esc(nameFor(i)); }, wcOni = num(data.oni, 1);
-      var nodes = {};
-      data.flows.forEach(function (f) {
+    if (fl) {
+      /* Width carries tonnes on the risk lines, capped at 5 px; the turn lines stay thin (their tonnes are in the tooltip). */
+      var riskT = mode === 'compensate' ? ((S.outlook.who_pays || []).reduce(function (m, w) { return (w.buyers || []).reduce(function (n, b) { return Math.max(n, b.kt * 1000); }, m); }, 1))
+        : fl.lines.reduce(function (m, f) { return Math.max(m, f.t); }, 1);
+      var nm = function (i) { return esc(nameFor(i)); }, dots = {};
+      fl.lines.forEach(function (f) {
         var a = anchorOf(f.from), b = anchorOf(f.to); if (!a || !b) return;
-        /* Width carries the tonnes lost; the replacement arcs stay thin so the options never outweigh the event (their tonnes are in the tooltip). */
-        var lost = f.role === 'lost', col = lost ? '#e0864a' : ink[f.from], w = lost ? 1.5 + 4 * Math.sqrt(f.t / maxT) : 1.6, cn = crop(f.crop);
+        var risk = f.role === 'risk', lost = f.kind === 'lost', col = risk ? RISK_INK : TURN_INK, cn = cropName(f.crop);
+        var w = risk ? Math.min(5, 1.4 + 3.6 * Math.sqrt(f.t / riskT)) : 1.3, pts = arcPath(a, b);
+        if (!arcs[f.from]) arcs[f.from] = pts;
+        if (!arcs[f.to]) arcs[f.to] = pts.slice().reverse();
         var amount = fmtKt(f.t / 1000).replace('+', '').replace('−', '');
+        var usualTip = '<b>' + nm(f.from) + ' → ' + nm(f.to) + '</b><br>' + amount + ' of ' + cn + ' in ' + esc(String(f.year)) + ', ';
         var tip = lost
           ? '<b>' + nm(f.from) + ' → ' + nm(f.to) + '</b><br>About ' + amount + ' of ' + cn + ' ' + nm(f.to) + ' would not get, at ONI ' + wcOni + '<br><span class="enso-tip-src">Modelled: the shortfall cut from exports by UN Comtrade share, capped at USDA imports</span>'
-          : '<b>' + nm(f.from) + ' → ' + nm(f.to) + '</b><br>' + amount + ' of ' + cn + ' in ' + esc(String(f.year)) + ', ' + num(f.share_pct, 1).replace('+', '') + '% of ' + nm(f.to) + '’s ' + cn + ' imports<br><span class="enso-tip-src">A usual supplier it could turn to, not a forecast of trade · FAOSTAT, ' + (f.basis === 'mirror' ? 'exporter-reported' : 'importer-reported') + '</span>';
-        var line = L.polyline(arcPath(a, b), { pane: pane('ensoFlows'), color: col, weight: w, opacity: lost ? .9 : .75, dashArray: lost || f.basis === 'mirror' ? '5 4' : null, lineCap: 'butt', className: 'enso-flow' + (lost ? ' is-lost' : ''), ensoSource: lost ? 'outlook' : 'tm' });
+          : f.kind === 'replace'
+          ? usualTip + num(f.share_pct, 1).replace('+', '') + '% of ' + nm(f.to) + '’s ' + cn + ' imports<br><span class="enso-tip-src">A usual supplier it could turn to, not a forecast of trade · FAOSTAT, ' + (f.basis === 'mirror' ? 'exporter-reported' : 'importer-reported') + '</span>'
+          : usualTip + num(f.share_pct, 1).replace('+', '') + '% of ' + nm(f.from) + '’s ' + cn + ' exports<br><span class="enso-tip-src">Usual trade, not a forecast of trade · FAOSTAT, ' + (f.basis === 'mirror' ? 'importer-reported' : 'exporter-reported') + '</span>';
+        /* A dark casing keeps the ochre line readable where it crosses ochre land. */
+        if (risk) S.shiftLayers.push(L.polyline(pts, { pane: pane('ensoFlows'), color: '#0b1017', weight: w + 1.5, opacity: .5, lineCap: 'butt', interactive: false }));
+        var line = L.polyline(pts, { pane: pane('ensoFlows'), color: col, weight: w, opacity: risk ? .92 : .78, dashArray: risk ? '6 4' : null, lineCap: 'butt', className: 'enso-flow' + (risk ? ' is-lost' : ' is-turn'), ensoSource: lost ? 'outlook' : 'tm' });
         line.bindTooltip(tip, { sticky: true, direction: 'top', opacity: .96 });
         line.on('click', function (e) {
           /* The site's one card for every trade arc (Globe.state.flowCard), opened on this map. */
           var fc = window.Globe && Globe.state && Globe.state.flowCard;
           if (typeof fc === 'function') fc(e.latlng, { map: S.map, from: f.from, to: f.to, color: col, label: cn.charAt(0).toUpperCase() + cn.slice(1), year: lost ? 'at ONI ' + wcOni : f.year,
-            amount: amount, share: lost ? 'lost to ' + nameFor(f.to) + ' if ' + nameFor(f.from) + '’s harvest falls as modelled' : num(f.share_pct, 1).replace('+', '') + '% of ' + nameFor(f.to) + '’s ' + cn + ' imports',
-            basis: lost ? 'Modelled from the FoodShield fit and UN Comtrade export shares, capped at USDA imports; not a forecast.' : 'FAOSTAT Detailed Trade Matrix · ' + (f.basis === 'mirror' ? 'exporter-reported (the importer did not report)' : 'importer-reported') + '. Where trade could come from, not a forecast of trade.' });
+            amount: amount, share: lost ? 'lost to ' + nameFor(f.to) + ' if ' + nameFor(f.from) + '’s harvest falls as modelled' : f.kind === 'replace' ? num(f.share_pct, 1).replace('+', '') + '% of ' + nameFor(f.to) + '’s ' + cn + ' imports' : num(f.share_pct, 1).replace('+', '') + '% of ' + nameFor(f.from) + '’s ' + cn + ' exports',
+            basis: lost ? 'Modelled from the FoodShield fit and UN Comtrade export shares, capped at USDA imports; not a forecast.' : 'FAOSTAT Detailed Trade Matrix · ' + (f.kind === 'replace' ? (f.basis === 'mirror' ? 'exporter-reported (the importer did not report)' : 'importer-reported') + '. Where trade could come from, not a forecast of trade.' : (f.basis === 'mirror' ? 'importer-reported (the exporter did not report)' : 'exporter-reported') + '. Usual trade, not a forecast of trade.') });
         });
         S.shiftLayers.push(line);
-        if (!lost) nodes[f.from] = nodes[f.from] || { ex: col };
-        nodes[f.to] = nodes[f.to] || {};
+        /* Arrowhead at the buyer, turned along the last step of the arc (Mercator keeps angles at every zoom). */
+        if (typeof S.map.project === 'function') {
+          var p1 = S.map.project(L.latLng(pts[22][0], pts[22][1]), 3), p2 = S.map.project(L.latLng(pts[24][0], pts[24][1]), 3), ang = Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI, k = risk ? Math.max(1, w / 2.2) : 1;
+          S.shiftLayers.push(L.marker(b, { pane: pane('ensoFlows'), interactive: false, keyboard: false, alt: '',
+            icon: L.divIcon({ className: 'enso-farrow', iconSize: [20, 20], iconAnchor: [10, 10], html: '<svg aria-hidden="true" width="20" height="20" viewBox="-10 -10 20 20"><path transform="rotate(' + ang.toFixed(1) + ') scale(' + k.toFixed(2) + ')" d="M0 0L-7 -3.4L-5.4 0L-7 3.4Z" fill="' + col + '"/></svg>' }) }));
+        }
+        if (!dots[f.from + col]) { dots[f.from + col] = 1; S.shiftLayers.push(L.circleMarker(a, { pane: pane('ensoFlows'), radius: 2.6, color: '#0b1017', weight: 1, fillColor: col, fillOpacity: 1, interactive: false })); }
       });
-      Object.keys(nodes).forEach(function (iso) {
-        if (by[iso + '-'] || by[iso + '+']) return;                 /* the harvest circle already marks it */
-        var at = anchorOf(iso); if (!at) return;
-        var ex = nodes[iso].ex;
-        S.shiftLayers.push(L.circleMarker(at, { pane: pane('ensoShift'), radius: 3.2, color: ex ? '#0b1017' : '#f2efe6', weight: ex ? 1 : 1.3, fillColor: ex || '#0b1017', fillOpacity: ex ? 1 : .2, interactive: false }));
-      });
-    } else if (!S._tradeLoading) {
-      S._tradeLoading = true;
-      ensoTradeFlows('compensate').then(function (d) {
-        S._tradeLoading = false; S._tradeData = d || { oni: null, flows: [], buyers: [] };
-        if (shiftOn()) { drawHarvestShift(); try { renderLegend(); } catch (e) {} }
+      Object.keys(fl.ends).forEach(function (iso) {
+        var e = fl.ends[iso], at = anchorOf(iso); if (!at) return;
+        if (e.kind === 'supplier') return label(at, esc(nameFor(iso)), 4, 'is-sup', null, arcs[iso]);
+        var n = e.role === 'risk' ? ' <b class="is-down">' + (mode === 'compensate' ? fmtKt(-e.t / 1000) : fmtKt(e.t / 1000).replace('+', '')) + '</b>' : '';
+        label(at, esc(nameFor(iso)) + n + (e.none ? '<i>' + (e.matrix === false ? 'no import record' : 'no other usual supplier') + '</i>' : ''), e.role === 'risk' ? 1 + 1 / (1 + e.t) : 3, e.role === 'risk' ? 'is-buy' : 'is-sup', null, arcs[iso]);
       });
     }
-    Object.keys(by).sort(function (a, b) { return Math.abs(by[b].kt) - Math.abs(by[a].kt); }).forEach(function (k) {
-      var g = by[k], at = anchorOf(g.iso); if (!at) return;
-      var r = radius(g.kt), fall = g.kt < 0;
-      var tip = '<b>' + esc(nameFor(g.iso)) + '</b><br>' + g.rows.map(function (x) { return esc(crop(x.r.crop)) + ' ' + fmtKt(x.v) + ' (' + num((Math.exp(x.r.slope_pct_per_oni / 100 * oni) - 1) * 100, 0) + '%), ' + esc(x.r.harvest); }).join('<br>') +
-        '<br><span class="enso-tip-src">Modelled at ONI ' + num(oni, 1) + ': the FoodShield fit × ' + esc(g.rows[0].r.production_basis || 'production') + '</span>';
-      var c = L.circleMarker(at, { pane: pane('ensoShift'), radius: r, color: '#f2efe6', weight: 1.2, opacity: .95, fillColor: fall ? '#c9773a' : '#4f9fa8', fillOpacity: .78, className: 'enso-shift', ensoSource: 'outlook' });
-      c.bindTooltip(tip, { direction: 'top', opacity: .96 });
-      c.on('click', function () { selectCountry(g.iso, { fly: false }); });
-      S.shiftLayers.push(c);
-      if (Math.abs(g.kt) >= 300) S.shiftLayers.push(L.marker(at, { pane: pane('ensoShift'), interactive: false, keyboard: false,
-        icon: L.divIcon({ className: 'enso-shift-lab', iconSize: null, iconAnchor: [-(Math.round(r) + 5), 8], html: '<span>' + esc(nameFor(g.iso)) + ' <b class="' + (fall ? 'is-down' : 'is-up') + '">' + fmtKt(g.kt) + '</b></span>' }) }));
-    });
+    S.shiftLayers = S.shiftLayers.concat(labels);
+    /* Frame the chosen harvest once per choice (and again after leaving the lens); Reset returns to the world view. */
+    if (fl && S._storyFit !== mode + st.key && typeof S.map.fitBounds === 'function' && anchorOf(st.iso)) {
+      S._storyFit = mode + st.key;
+      /* On the risk lines when there are any (the story), else on every line, else on the producer; far suppliers
+         enter from the edge, labelled there. */
+      var core = fl.lines.filter(function (f) { return f.role === 'risk'; }), a0 = anchorOf(st.iso), pts0 = [a0];
+      (core.length ? core : fl.lines).forEach(function (f) { pts0.push(anchorOf(f.from), anchorOf(f.to)); });
+      if (pts0.length < 2) pts0.push([a0[0] - 10, a0[1] - 14], [a0[0] + 10, a0[1] + 14]);
+      S.map.fitBounds(pts0.filter(Boolean), { paddingTopLeft: [90, 80], paddingBottomRight: [90, 100], maxZoom: 4, animate: false });
+    }
     S.shiftLayers.forEach(function (l) { l.addTo(S.map); });
+    placeFollowLabels();
   }
-  /* The key for the circles and arcs: marks and names on the line, the method in the fold. */
+  /* Labels in pixels: each tries 16 directions on five rings around its point, clear of the map's tools, the chooser,
+     the graticule and lane labels, every line end and the labels placed before it; the chosen harvest first. */
+  function placeFollowLabels() {
+    if (!S.map || typeof S.map.getContainer !== 'function' || typeof S.map.latLngToContainerPoint !== 'function') return;
+    var host = S.map.getContainer(), box = host.getBoundingClientRect(), W = box.width, H = box.height;
+    var items = (S.shiftLayers || []).filter(function (l) { return typeof l._flab === 'number' && l._icon; });
+    if (!W || !H || !items.length) return;
+    var rel = function (r, m) { m = m || 0; return { left: r.left - box.left - m, top: r.top - box.top - m, right: r.right - box.left + m, bottom: r.bottom - box.top + m }; };
+    var obst = [];
+    host.querySelectorAll('.enso-map-tools, .enso-follow, .enso-grat-lab, .enso-choke-label, .enso-choke > i').forEach(function (n) { var r = n.getBoundingClientRect(); if (r.width && !n.hidden) obst.push(rel(r, 4)); });
+    (S.shiftLayers || []).forEach(function (l) {
+      if (typeof l.getLatLng !== 'function') return;
+      var q = S.map.latLngToContainerPoint(l.getLatLng()); obst.push({ left: q.x - 5, top: q.y - 5, right: q.x + 5, bottom: q.y + 5 });
+    });
+    var ov = function (a, b) { var x = Math.min(a.right, b.right) - Math.max(a.left, b.left), y = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top); return x > 0 && y > 0 ? x * y : 0; };
+    /* The lines themselves are soft obstacles: a label may cross one, but not when a clear spot is near. */
+    var soft = [];
+    (S.shiftLayers || []).forEach(function (l) {
+      if (typeof l.getLatLngs !== 'function' || !/enso-flow/.test(l.options.className || '')) return;
+      l.getLatLngs().forEach(function (ll, i) { if (i % 2) return; var q = S.map.latLngToContainerPoint(ll); soft.push({ left: q.x - 3, top: q.y - 3, right: q.x + 3, bottom: q.y + 3 }); });
+    });
+    items.sort(function (a, b) { return a._flab - b._flab; }).forEach(function (l) {
+      var icon = l._icon, el = icon.querySelector && icon.querySelector('.enso-flab-b'); if (!el || !el.style) return;
+      var old = icon.querySelector('.enso-leader'); if (old && old.parentNode) old.parentNode.removeChild(old);
+      el.style.transform = '';
+      var w = el.offsetWidth, h = el.offsetHeight, p0 = S.map.latLngToContainerPoint(l.getLatLng()), p = p0, best = null;
+      /* An end off the map is labelled where its line comes in. */
+      if (!l._arc && (p0.x < 0 || p0.y < 0 || p0.x > W || p0.y > H)) { el.style.visibility = 'hidden'; return; }
+      if (l._arc && (p0.x < 0 || p0.y < 0 || p0.x > W || p0.y > H)) {
+        for (var ai = 0; ai < l._arc.length; ai++) { var q = S.map.latLngToContainerPoint(l._arc[ai]); if (q.x >= 12 && q.y >= 12 && q.x <= W - 12 && q.y <= H - 12) { p = q; break; } }
+        if (p === p0) { el.style.visibility = 'hidden'; return; }
+      }
+      el.style.visibility = '';
+      [8, 24, 42, 64, 90].forEach(function (d) {
+        for (var k = 0; k < 16; k++) {
+          var th = k * Math.PI / 8, cx = Math.cos(th), cy = Math.sin(th);
+          var x = p.x + cx * d - w / 2 + cx * w / 2, y = p.y + cy * d - h / 2 + cy * h / 2, r = { left: x, top: y, right: x + w, bottom: y + h };
+          var pen = 0; obst.forEach(function (o) { pen += ov(r, o); }); soft.forEach(function (o) { pen += ov(r, o) / 6; });
+          pen += Math.max(0, 6 - x) * h + Math.max(0, r.right - W + 6) * h + Math.max(0, 6 - y) * w + Math.max(0, r.bottom - H + 6) * w;
+          var score = pen * 40 + d + (cx < -.1 ? 6 : 0) + Math.abs(cy) * 3;
+          if (!best || score < best.score) best = { score: score, x: x, y: y, r: r, d: d };
+        }
+      });
+      el.style.transform = 'translate(' + Math.round(best.x - p0.x) + 'px,' + Math.round(best.y - p0.y) + 'px)';
+      obst.push({ left: best.r.left - 3, top: best.r.top - 3, right: best.r.right + 3, bottom: best.r.bottom + 3 });
+      /* A label moved off its point gets a hairline back to it. */
+      if (best.d > 8 && icon.insertAdjacentHTML) {
+        var tx = Math.max(best.r.left, Math.min(p.x, best.r.right)) - p0.x, ty = Math.max(best.r.top, Math.min(p.y, best.r.bottom)) - p0.y;
+        icon.insertAdjacentHTML('beforeend', '<svg class="enso-leader" aria-hidden="true"><line x1="' + (p.x - p0.x).toFixed(1) + '" y1="' + (p.y - p0.y).toFixed(1) + '" x2="' + tx.toFixed(1) + '" y2="' + ty.toFixed(1) + '" stroke="#8b8980" stroke-width=".75"/></svg>');
+      }
+    });
+  }
+  /* The key: two line swatches on one line; the method, the exclusions and the colour-rule exception in the fold. */
   function shiftLegend() {
-    if (!shiftOn()) return '';
-    var d = S._tradeData, line = function (col, dash, w) { return '<svg aria-hidden="true" width="26" height="10" viewBox="0 0 26 10"><path d="M1 8 Q13 1 25 8" fill="none" stroke="' + col + '" stroke-width="' + (w || 2) + '"' + (dash ? ' stroke-dasharray="' + dash + '"' : '') + '/></svg>'; };
-    var circ = '<svg class="enso-sw-round" aria-hidden="true" width="30" height="16" viewBox="0 0 30 16"><circle cx="8" cy="8" r="6.5" fill="#c9773a" fill-opacity=".78" stroke="#f2efe6" stroke-width="1"/><circle cx="22" cy="8" r="4.5" fill="#4f9fa8" fill-opacity=".78" stroke="#f2efe6" stroke-width="1"/></svg>';
-    var out = '<div class="enso-legend-block enso-shift-key"><div class="enso-legend-t">2027 harvests and the trade around them</div>' +
-      krow(circ, 'Harvest change in tonnes at ONI ' + num(modelOni(), 1), 'Circle area: the fitted change for each country’s 2027 harvests (FoodShield fit × USDA 2026/27 production), falls ochre, rises teal. Labels name changes of 300 kt or more.');
-    if (!d || d.oni == null) return out + '</div>';
-    var ink = flowInks(d), ex = Object.keys(ink), wcOni = num(d.oni, 1);
-    var none = []; d.buyers.forEach(function (b) { if (b.matrix && !b.replace.length && none.indexOf(nameFor(b.iso)) < 0) none.push(nameFor(b.iso)); });
-    var dropped = d.buyers.reduce(function (n, b) { return n + b.dropped; }, 0);
-    var left = {}; d.buyers.forEach(function (b) { b.left_out.forEach(function (x) { (left[x.why] = left[x.why] || {})[nameFor(x.iso)] = 1; }); });
-    out += krow(line('#e0864a', '5 4'), 'Supply its buyers lose, at ONI ' + wcOni, 'Dashed: modelled. Arc width: tonnes lost. The fit’s shortfall is cut from exports first and shared among the usual buyers by UN Comtrade value, each capped at its USDA imports.') +
-      krow(line('#7fd3ff', '', 2), 'Their other usual suppliers', 'Replacement suppliers = the buyer’s other suppliers in FAOSTAT’s trade matrix (' + esc(String(d.year || '')) + '); where trade could come from, not a forecast of trade. Thin arcs: the tonnes the buyer imported from each are in its tooltip; dashed where only the exporter reported it. Up to ' + REPLACE_CAP + ' per buyer with at least ' + REPLACE_MIN_SHARE + '% of its imports' +
+    var mode = storyMode(); if (!mode) return '';
+    var st = storyNow(), fl = st && S._storyOf === S.outlook && S._storyData && S._storyData[mode + ':' + st.key], wc = storyCase(), wcOni = wc ? num(wc.oni, 1) : '';
+    var line = function (col, dash, w) { return '<svg aria-hidden="true" width="30" height="10" viewBox="0 0 30 10"><path d="M1 8 Q12 1 23 5" fill="none" stroke="' + col + '" stroke-width="' + w + '"' + (dash ? ' stroke-dasharray="' + dash + '"' : '') + '/><path d="M29 7L22 2.4L23.4 5.6L21 8.6Z" fill="' + col + '"/></svg>'; };
+    var left = {}, none = [], dropped = 0, TF = S._tradeCompOf === S.outlook ? S._tradeComp : null;
+    if (TF && st) {
+      TF.buyers.filter(function (b) { return b.from === st.iso && b.crop === st.crop; }).forEach(function (b) {
+        dropped += b.dropped;
+        b.left_out.forEach(function (x) { (left[x.why] = left[x.why] || {})[nameFor(x.iso)] = 1; });
+        if (b.matrix && !b.replace.length && none.indexOf(nameFor(b.iso)) < 0) none.push(nameFor(b.iso));
+      });
+    }
+    var yr = (TF && TF.year) || (fl && fl.year) || '';
+    return '<div class="enso-legend-block enso-shift-key"><div class="enso-legend-t">Follow a harvest · at ONI ' + wcOni + '</div>' +
+      krow(line(RISK_INK, '5 4', 2.4), 'Supply at risk', 'Dashed ochre, arrow at the buyer, width in tonnes. The fit’s shortfall is cut from exports first and shared among the usual buyers by UN Comtrade value, each capped at its USDA imports. Modelled at ONI ' + wcOni + ', the winter the 2027 plate uses.') +
+      krow(line(TURN_INK, '', 1.4), 'Where buyers could turn', 'Replacement suppliers = the buyer’s other suppliers in FAOSTAT’s trade matrix (' + esc(String(yr)) + '); where trade could come from, not a forecast of trade. Up to ' + REPLACE_CAP + ' per buyer with at least ' + REPLACE_MIN_SHARE + '% of its imports' +
         (dropped ? '; ' + dropped + ' more such supplier' + (dropped === 1 ? '' : 's') + ' not drawn' : '') + '.' +
         (Object.keys(left).length ? ' Left out: ' + Object.keys(left).map(function (w) { return Object.keys(left[w]).join(', ') + ' (' + w + ')'; }).join('; ') + '.' : '') +
-        (none.length ? ' No other supplier above ' + REPLACE_MIN_SHARE + '% outside the shortfall: ' + none.join(', ') + '.' : '')) +
-      (ex.length ? '<div class="enso-flow-inks">' + ex.slice(0, FLOW_INKS.length).map(function (i) { return '<span><i style="background:' + ink[i] + '"></i>' + esc(nameFor(i)) + '</span>'; }).join('') +
-        (ex.length > FLOW_INKS.length ? '<span><i style="background:#8b939c"></i>' + (ex.length - FLOW_INKS.length) + ' more</span>' : '') + '</div>' : '');
-    return out + '</div>';
+        (none.length ? ' No other usual supplier above ' + REPLACE_MIN_SHARE + '% outside the shortfall: ' + none.join(', ') + '.' : '') +
+        ' For a harvest that rises, the thin lines go to its usual buyers (FAOSTAT, at least ' + (STORY_MIN_T / 1000) + ' kt).') +
+      '<div class="ctr-note">Callouts: each 2027 harvest’s fitted change at ONI ' + wcOni + ' (FoodShield fit × USDA 2026/27 production), the same numbers as the 2027 plate; bar length in tonnes on one scale. The land colour is today’s ONI ' + num(modelOni(), 1) + ', all crops together. Two inks by role here, not one colour per exporter as on the site’s other trade maps: on this map, who loses supply and where buyers could turn matter more than who ships.</div>' +
+      '</div>';
   }
   function toggleAlerts() {
     if (!S.map) return;
@@ -53459,7 +53622,7 @@ function showCommodityDetail(key) {
       }
       toggleSST(); toggleRegions(); toggleLanes(); toggleAlerts(); toggleImports(); drawAnnotations();
       renderControls(); renderDetail(); renderLegend();
-      setTimeout(function () { resizeEnsoMap(); if (S.map) { if (S.mapLens !== S.sub) { fitMapView(); S.mapLens = S.sub; } buildDefs(); paint(); } }, 60);
+      setTimeout(function () { resizeEnsoMap(); if (S.map) { if (S.mapLens !== S.sub) { fitMapView(); S.mapLens = S.sub; S._storyFit = null; } buildDefs(); paint(); } }, 60);
     }
     if (S.sub === 'ensowater' && !S.drawn.water) {
       renderWater(); S.drawn.water = true;

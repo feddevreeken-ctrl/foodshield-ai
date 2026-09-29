@@ -451,25 +451,48 @@ def main() -> int:
               (style["fsBody"], style["fsMeta"], style["fsHead"]) == ("12px", "10px", "18px"),
               f'{style["fsBody"]}/{style["fsMeta"]}/{style["fsHead"]}')
 
-        print("\nHarvests map: 2027 circles and trade arcs (2026-09-29 audit)")
-        # The Kansas and Free State callouts gave way to labelled 2027 circles and the trade arcs around them.
+        print("\nHarvests map: one harvest at a time, callouts and two kinds of lines (2026-09-29 audit, second pass)")
+        # The circles gave way to text callouts with a tonnes bar; only the chosen harvest's lines draw, in two inks by role.
         page.evaluate("showTab('ensoharvest')")
         page.wait_for_selector('#subview-ensoharvest.active .enso-subview-meta')
         page.wait_for_function("() => document.querySelectorAll('#enso-map path.enso-flow').length > 0", timeout=20_000)
+        page.wait_for_timeout(900)
         marks = page.evaluate("""async () => {
             const O = (await (await fetch('data/enso_outlook.json')).json()).data;
-            const want = new Set(O.rows_all.filter(r => r.status === 'shown' && !r.in_season && typeof r.change_kt_observed === 'number').map(r => r.iso));
-            const labs = [...document.querySelectorAll('#enso-map .enso-shift-lab > span')];
-            return {annos: document.querySelectorAll('.enso-anno').length, circles: document.querySelectorAll('#enso-map path.enso-shift').length, want: want.size,
-                    labels: labs.length, oneLine: labs.every(l => l.getBoundingClientRect().height < 20),
+            const fk = v => { const a = Math.abs(v), g = v > 0 ? '+' : v < 0 ? '\u2212' : ''; return a >= 1000 ? g + (a / 1000).toFixed(1) + ' Mt' : g + Math.round(a) + ' kt'; };
+            const rows = O.rows_all.filter(r => r.status === 'shown' && !r.in_season && typeof r.change_kt_record === 'number' && Math.abs(r.change_kt_record) >= 150)
+                .sort((a, b) => Math.abs(b.change_kt_record) - Math.abs(a.change_kt_record));
+            const calls = [...document.querySelectorAll('#enso-map .enso-hcall')];
+            const chips = [...document.querySelectorAll('#enso-map .enso-follow [data-story]')];
+            const top = rows[0], w = O.who_pays.find(x => x.iso === top.iso && x.crop === top.crop);
+            const buyerLabs = [...document.querySelectorAll('#enso-map .enso-flab-b.is-buy')].map(e => e.textContent);
+            return {annos: document.querySelectorAll('.enso-anno').length, circles: document.querySelectorAll('#enso-map path.enso-shift').length,
+                    calls: calls.length, want: rows.length, on: document.querySelectorAll('#enso-map .enso-hcall.is-on').length,
+                    plateNums: rows.every(r => calls.some(c => c.textContent.includes(fk(r.change_kt_record)) && c.textContent.includes(r.harvest))),
+                    chips: chips.length, pressed: chips.filter(c => c.getAttribute('aria-pressed') === 'true').map(c => c.dataset.story),
+                    topKey: top.iso + '/' + top.crop, oni: (document.querySelector('#enso-map .enso-follow') || {}).textContent || '',
+                    wcOni: O.cases[O.who_pays_case].oni,
                     lost: document.querySelectorAll('#enso-map path.enso-flow.is-lost').length, arcs: document.querySelectorAll('#enso-map path.enso-flow').length,
+                    wantLost: w ? w.buyers.length : 0, labelled: !w || w.buyers.every(b => buyerLabs.some(t => t.includes(fk(-b.kt)))),
+                    oneLine: [...document.querySelectorAll('#enso-map .enso-hcall-t')].every(l => l.getBoundingClientRect().height < 20),
                     key: (document.getElementById('enso-legend') || {}).textContent || ''};
         }""")
-        check("Harvests draws one 2027 circle per fitted country and no callout cards",
-              marks["annos"] == 0 and marks["circles"] == marks["want"] and marks["labels"] > 0 and marks["oneLine"], str({k: v for k, v in marks.items() if k != 'key'}))
-        check("trade arcs show lost supply and replacement suppliers, with the method in the key",
-              marks["lost"] > 0 and marks["arcs"] > marks["lost"]
-              and "where trade could come from, not a forecast of trade" in marks["key"], str({k: marks[k] for k in ('lost', 'arcs')}))
+        check("Harvests draws one callout per 2027 harvest with the plate's numbers, no circles, the largest harvest chosen",
+              marks["annos"] == 0 and marks["circles"] == 0 and marks["calls"] == marks["want"] == marks["chips"] and marks["on"] == 1
+              and marks["plateNums"] and marks["oneLine"] and marks["pressed"] == [marks["topKey"]]
+              and ("ONI +%.1f" % marks["wcOni"]) in marks["oni"], str({k: v for k, v in marks.items() if k != 'key'}))
+        check("only the chosen harvest's lines: supply at risk to each labelled buyer, and where buyers could turn, method in the key",
+              marks["lost"] == marks["wantLost"] and marks["arcs"] > marks["lost"] and marks["labelled"]
+              and "where trade could come from, not a forecast of trade" in marks["key"] and "Two inks by role" in marks["key"], str({k: marks[k] for k in ('lost', 'wantLost', 'arcs', 'labelled')}))
+        switched = page.evaluate("""async () => {
+            const O = (await (await fetch('data/enso_outlook.json')).json()).data;
+            const w = O.who_pays.filter(x => (x.buyers || []).length).slice(-1)[0];
+            document.querySelector(`#enso-map .enso-follow [data-story="${w.iso}/${w.crop}"]`).click();
+            await new Promise(r => setTimeout(r, 1200));
+            return {lost: document.querySelectorAll('#enso-map path.enso-flow.is-lost').length, want: w.buyers.length,
+                    on: (document.querySelector('#enso-map .enso-hcall.is-on') || {}).textContent || '', name: w.iso};
+        }""")
+        check("a harvest chip swaps the lines to that harvest alone", switched["lost"] == switched["want"] and switched["on"] != "", str(switched))
         flows = page.evaluate("""async () => {
             const O = (await (await fetch('data/enso_outlook.json')).json()).data;
             const R = (await (await fetch('data/trade_restrictions.json')).json()).data;
@@ -487,7 +510,7 @@ def main() -> int:
               all(flows.values()), str(flows))
         page.evaluate("document.querySelector('#enso-map path.enso-flow:not(.is-lost)').dispatchEvent(new MouseEvent('click', {bubbles: true, clientX: 10, clientY: 10}))")
         card = page.locator('#enso-map .flow-pop .flow-card')
-        check("a replacement arc opens the shared flow card on the El Niño map",
+        check("a where-buyers-could-turn line opens the shared flow card on the El Niño map",
               card.count() == 1 and "not a forecast of trade" in card.inner_text(), card.inner_text()[:160] if card.count() else "no card")
         page.evaluate("document.querySelectorAll('#enso-map .leaflet-popup-close-button').forEach(b => b.click())")
 
