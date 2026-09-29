@@ -1032,12 +1032,30 @@ def main() -> int:
             const D = O.distribution, t = fit.textContent;
             const sonar = fit.querySelector('.enso-gatun-sonar'), st = sonar ? sonar.textContent : '';
             return !!sonar && st.includes('Now ' + g.latest.value.toFixed(1) + ' ft') && st.includes('median ' + D.p50.toFixed(1) + ' ft') && st.includes('Record low ' + D.record_ft.toFixed(1) + ' ft')
-                && fit.querySelector('.enso-gatun-fit').closest('details') !== null
+                && fit.querySelector('.enso-gatun-fit').closest('details') === null
                 && fit.dataset.kind === 'modelled' && getComputedStyle(fit).borderTopStyle === 'dashed'
                 && D.p10 <= D.p50 && D.p50 <= D.p90 && O.loo_rmse_ft < O.loo_rmse_average_ft && O.n_seasons >= 40
                 && t.includes(D.p50.toFixed(1) + ' ft') && t.includes(D.p10.toFixed(1) + '–' + D.p90.toFixed(1))
                 && fit.querySelectorAll('.enso-gatun-fit circle').length === O.points.length
                 && since.querySelectorAll('svg path').length >= 3;
+        }"""))
+        # 2026-09-30 round 3: the lake section (Codex art) and the fit are one figure on one feet scale; dashed guides for
+        # today, the 2027 median and 80% edges and the record low run from the water across both panels.
+        check("Gatún: the lake section and the fit share one feet scale, guides run across both", page.evaluate("""async () => {
+            const g = (await (await fetch('data/enso_gauges.json')).json()).data.gauges.gatun, D = g.outlook.distribution;
+            const svg = document.querySelector('.enso-gatunfit-plate svg.enso-gatun-fit'); if (!svg) return false;
+            const img = svg.querySelector('image.enso-gx-art'), href = img ? img.getAttribute('href') : '';
+            if (!/gatun-section(-768)?\.webp$/.test(href) || !(await fetch(href)).ok) return false;
+            const gs = [...svg.querySelectorAll('.enso-gx-guide')].map(l => ({ ft: +l.dataset.ft, y: +l.getAttribute('y1'), x1: +l.getAttribute('x1'), x2: +l.getAttribute('x2') }));
+            const want = [g.latest.value, D.p50, D.p10, D.p90, D.record_ft];
+            if (!want.every(v => gs.some(q => Math.abs(q.ft - v) < 1e-9))) return false;
+            const a = gs[0], b = gs.find(q => Math.abs(q.ft - a.ft) > 0.5), k = (b.y - a.y) / (b.ft - a.ft), yOf = v => a.y + k * (v - a.ft);
+            const artW = +svg.querySelector('#enso-gx-clip rect').getAttribute('width');
+            const dots = [...svg.querySelectorAll('circle[data-v]')], maxCx = Math.max(...dots.map(c => +c.getAttribute('cx')));
+            const water = svg.querySelector('.enso-gx-water').getAttribute('d').match(/^M[\d.]+,([\d.]+)/);
+            return k < 0 && gs.every(q => Math.abs(q.y - yOf(q.ft)) < 0.2 && q.x1 < artW && q.x2 > maxCx)
+                && dots.length === g.outlook.points.length && dots.every(c => Math.abs(+c.getAttribute('cy') - yOf(+c.dataset.v)) < 0.2)
+                && !!water && Math.abs(+water[1] - yOf(g.latest.value)) < 0.2;
         }"""))
         # 2026-09-24: the import end of the chain, from PortWatch's daily ports feed.
         check("Shipping measures the gateway import ports, one row per port in the feed", page.evaluate("""async () => {
