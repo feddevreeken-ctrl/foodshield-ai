@@ -782,8 +782,8 @@ def main() -> int:
         # 2026-09-29 audit (Ocean): read everything from the data files, never from typed numbers.
         check("Ocean audit: the strip says when the newest El Niño feed was collected", page.evaluate("""async () => {
             // The page's rule: every loaded feed named enso*, sst_*, rain_* or seasonal_outlook, except the hand-run forecast track record.
-            const names = ['enso','enso_exposure','enso_model','enso_regions','enso_lanes','enso_corridors','enso_econ','enso_mechanism','enso_indices','enso_bulletins','sst_anomaly','enso_news','enso_outlook','enso_gauges','enso_situation','enso_strengths','enso_ports','enso_hindcast','enso_freight','enso_price_analogs','enso_published_effects','sst_composites','seasonal_outlook','rain_anomaly','enso_past_events','sst_months','rain_months','enso_recent_events','enso_auto_events','enso_outlook_events'];
-            const ds = (await Promise.all(names.map(n => fetch('data/' + n + '.json').then(r => r.json()).catch(() => null)))).filter(Boolean).map(j => new Date(j._meta.generated_at || j._meta.generated)).filter(d => !isNaN(d));
+            const names = ['enso','enso_exposure','enso_model','enso_regions','enso_lanes','enso_corridors','enso_econ','enso_mechanism','enso_indices','enso_bulletins','sst_anomaly','enso_news','enso_outlook','enso_gauges','enso_situation','enso_strengths','enso_ports','enso_hindcast','enso_freight','enso_price_analogs','enso_published_effects','sst_composites','seasonal_outlook','rain_anomaly','enso_past_events','sst_months','rain_months','enso_recent_events','enso_auto_events','enso_outlook_events','enso_price_outlook'];
+            const ds =(await Promise.all(names.map(n => fetch('data/' + n + '.json').then(r => r.json()).catch(() => null)))).filter(Boolean).map(j => new Date(j._meta.generated_at || j._meta.generated)).filter(d => !isNaN(d));
             const t = (document.querySelector('#enso-status-home .enso-now-upd') || {}).textContent || '';
             const hm = d => String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0');
             const newest = new Date(Math.max(...ds));
@@ -813,7 +813,7 @@ def main() -> int:
         }"""))
         check("Ocean audit: the twelve months adds the map's forecasts by region and stays within 14 rows", page.evaluate("""async () => {
             const J = await (await fetch('data/enso_outlook_events.json')).json(), E = (J.data || J).events || [];
-            const rows = document.querySelectorAll('.enso-next12-rows > .enso-next12-row'), text = document.querySelector('.enso-next12').innerHTML;
+            const rows = document.querySelectorAll('#enso-next12 .enso-next12-rows > .enso-next12-row'), text = document.querySelector('#enso-next12 .enso-next12').innerHTML;
             const linked = E.filter(e => e.source && e.source.url && text.includes(e.source.url.replace(/&/g, '&amp;'))).length;
             return rows.length <= 14 && document.querySelectorAll('.enso-next12 li.is-modelled').length >= 2 && /modelled: (drier|wetter)/.test(text) && linked >= 10;
         }"""))
