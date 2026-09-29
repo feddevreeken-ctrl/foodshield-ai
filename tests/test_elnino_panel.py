@@ -43,9 +43,9 @@ PANAMA_PROBE = """async () => {
     const svg = document.querySelector('.enso-pan-since');
     if (!svg) return null;
     const p = (await (await fetch('data/enso_lanes.json')).json()).data.lanes.find(l => l.id === 'panama');
-    const d = [...svg.querySelectorAll('path.pan-slot')].map(x => x.getAttribute('d')).join('');
+    // 2026-09-29 audit: the slot limits read as a dated ladder in words under the chart, one step per advisory.
     const cap = svg.closest('.enso-plate').querySelector('.enso-log');
-    return {steps: d.split('H').length - 1, want: p.precedent_2023.steps.length + p.live_2026.steps.length,
+    return {steps: svg.closest('.enso-plate').querySelectorAll('.enso-pan-slots .enso-pan-step').length, want: p.precedent_2023.steps.length + p.live_2026.steps.length,
             years: [...svg.querySelectorAll('text')].map(t => t.textContent).filter(t => /^20\\d\\d(-\\d\\d)?$/.test(t)), cap: cap ? cap.textContent : ''};
 }"""
 
@@ -452,25 +452,48 @@ def main() -> int:
               (style["fsBody"], style["fsMeta"], style["fsHead"]) == ("12px", "10px", "18px"),
               f'{style["fsBody"]}/{style["fsMeta"]}/{style["fsHead"]}')
 
-        print("\nHarvests map: 2027 circles and trade arcs (2026-09-29 audit)")
-        # The Kansas and Free State callouts gave way to labelled 2027 circles and the trade arcs around them.
+        print("\nHarvests map: one harvest at a time, callouts and two kinds of lines (2026-09-29 audit, second pass)")
+        # The circles gave way to text callouts with a tonnes bar; only the chosen harvest's lines draw, in two inks by role.
         page.evaluate("showTab('ensoharvest')")
         page.wait_for_selector('#subview-ensoharvest.active .enso-subview-meta')
         page.wait_for_function("() => document.querySelectorAll('#enso-map path.enso-flow').length > 0", timeout=20_000)
+        page.wait_for_timeout(900)
         marks = page.evaluate("""async () => {
             const O = (await (await fetch('data/enso_outlook.json')).json()).data;
-            const want = new Set(O.rows_all.filter(r => r.status === 'shown' && !r.in_season && typeof r.change_kt_observed === 'number').map(r => r.iso));
-            const labs = [...document.querySelectorAll('#enso-map .enso-shift-lab > span')];
-            return {annos: document.querySelectorAll('.enso-anno').length, circles: document.querySelectorAll('#enso-map path.enso-shift').length, want: want.size,
-                    labels: labs.length, oneLine: labs.every(l => l.getBoundingClientRect().height < 20),
+            const fk = v => { const a = Math.abs(v), g = v > 0 ? '+' : v < 0 ? '\u2212' : ''; return a >= 1000 ? g + (a / 1000).toFixed(1) + ' Mt' : g + Math.round(a) + ' kt'; };
+            const rows = O.rows_all.filter(r => r.status === 'shown' && !r.in_season && typeof r.change_kt_record === 'number' && Math.abs(r.change_kt_record) >= 150)
+                .sort((a, b) => Math.abs(b.change_kt_record) - Math.abs(a.change_kt_record));
+            const calls = [...document.querySelectorAll('#enso-map .enso-hcall')];
+            const chips = [...document.querySelectorAll('#enso-map .enso-follow [data-story]')];
+            const top = rows[0], w = O.who_pays.find(x => x.iso === top.iso && x.crop === top.crop);
+            const buyerLabs = [...document.querySelectorAll('#enso-map .enso-flab-b.is-buy')].map(e => e.textContent);
+            return {annos: document.querySelectorAll('.enso-anno').length, circles: document.querySelectorAll('#enso-map path.enso-shift').length,
+                    calls: calls.length, want: rows.length, on: document.querySelectorAll('#enso-map .enso-hcall.is-on').length,
+                    plateNums: rows.every(r => calls.some(c => c.textContent.includes(fk(r.change_kt_record)) && c.textContent.includes(r.harvest))),
+                    chips: chips.length, pressed: chips.filter(c => c.getAttribute('aria-pressed') === 'true').map(c => c.dataset.story),
+                    topKey: top.iso + '/' + top.crop, oni: (document.querySelector('#enso-map .enso-follow') || {}).textContent || '',
+                    wcOni: O.cases[O.who_pays_case].oni,
                     lost: document.querySelectorAll('#enso-map path.enso-flow.is-lost').length, arcs: document.querySelectorAll('#enso-map path.enso-flow').length,
+                    wantLost: w ? w.buyers.length : 0, labelled: !w || w.buyers.every(b => buyerLabs.some(t => t.includes(fk(-b.kt)))),
+                    oneLine: [...document.querySelectorAll('#enso-map .enso-hcall-t')].every(l => l.getBoundingClientRect().height < 20),
                     key: (document.getElementById('enso-legend') || {}).textContent || ''};
         }""")
-        check("Harvests draws one 2027 circle per fitted country and no callout cards",
-              marks["annos"] == 0 and marks["circles"] == marks["want"] and marks["labels"] > 0 and marks["oneLine"], str({k: v for k, v in marks.items() if k != 'key'}))
-        check("trade arcs show lost supply and replacement suppliers, with the method in the key",
-              marks["lost"] > 0 and marks["arcs"] > marks["lost"]
-              and "where trade could come from, not a forecast of trade" in marks["key"], str({k: marks[k] for k in ('lost', 'arcs')}))
+        check("Harvests draws one callout per 2027 harvest with the plate's numbers, no circles, the largest harvest chosen",
+              marks["annos"] == 0 and marks["circles"] == 0 and marks["calls"] == marks["want"] == marks["chips"] and marks["on"] == 1
+              and marks["plateNums"] and marks["oneLine"] and marks["pressed"] == [marks["topKey"]]
+              and ("ONI +%.1f" % marks["wcOni"]) in marks["oni"], str({k: v for k, v in marks.items() if k != 'key'}))
+        check("only the chosen harvest's lines: supply at risk to each labelled buyer, and where buyers could turn, method in the key",
+              marks["lost"] == marks["wantLost"] and marks["arcs"] > marks["lost"] and marks["labelled"]
+              and "where trade could come from, not a forecast of trade" in marks["key"] and "Two inks by role" in marks["key"], str({k: marks[k] for k in ('lost', 'wantLost', 'arcs', 'labelled')}))
+        switched = page.evaluate("""async () => {
+            const O = (await (await fetch('data/enso_outlook.json')).json()).data;
+            const w = O.who_pays.filter(x => (x.buyers || []).length).slice(-1)[0];
+            document.querySelector(`#enso-map .enso-follow [data-story="${w.iso}/${w.crop}"]`).click();
+            await new Promise(r => setTimeout(r, 1200));
+            return {lost: document.querySelectorAll('#enso-map path.enso-flow.is-lost').length, want: w.buyers.length,
+                    on: (document.querySelector('#enso-map .enso-hcall.is-on') || {}).textContent || '', name: w.iso};
+        }""")
+        check("a harvest chip swaps the lines to that harvest alone", switched["lost"] == switched["want"] and switched["on"] != "", str(switched))
         flows = page.evaluate("""async () => {
             const O = (await (await fetch('data/enso_outlook.json')).json()).data;
             const R = (await (await fetch('data/trade_restrictions.json')).json()).data;
@@ -488,7 +511,7 @@ def main() -> int:
               all(flows.values()), str(flows))
         page.evaluate("document.querySelector('#enso-map path.enso-flow:not(.is-lost)').dispatchEvent(new MouseEvent('click', {bubbles: true, clientX: 10, clientY: 10}))")
         card = page.locator('#enso-map .flow-pop .flow-card')
-        check("a replacement arc opens the shared flow card on the El Niño map",
+        check("a where-buyers-could-turn line opens the shared flow card on the El Niño map",
               card.count() == 1 and "not a forecast of trade" in card.inner_text(), card.inner_text()[:160] if card.count() else "no card")
         page.evaluate("document.querySelectorAll('#enso-map .leaflet-popup-close-button').forEach(b => b.click())")
 
@@ -523,7 +546,7 @@ def main() -> int:
         page.wait_for_selector(".enso-pan-since", timeout=20_000)
         page.wait_for_timeout(2000)
         pan = page.evaluate(PANAMA_PROBE)
-        check("every dated slot advisory is a step on the monthly chart",
+        check("every dated slot advisory is a step on the Panama plate's slot ladder",
               bool(pan) and pan["steps"] == pan["want"], str(pan and (pan["steps"], pan["want"])))
         check("the Panama chart sets the last El Niño against this one",
               bool(pan) and "2023-24" in pan["years"] and "2026" in pan["years"], str(pan and pan["years"]))
@@ -938,9 +961,27 @@ def main() -> int:
               water['lead'] and water['slot'] == 'observed' and water['ais'] == 'observed'
               and iso_text(history[0]) in water['source'] and iso_text(history[-1]) in water['source'])
         board_slots = page.evaluate("async () => (await (await fetch('data/enso_lanes.json')).json()).data.lanes.find(l => l.id === 'panama').live_2026.steps.at(-1).total")
-        check("Shipping leads with nine lane answers sourced from the current JSON",
-              page.locator('.enso-status-table tbody tr').count() == 9
-              and f'{board_slots} slots/day' in page.locator('[data-board-lane="panama"]').inner_text())
+        # 2026-09-29 audit: El Niño-linked lanes as tight rows, the lanes with no ENSO link in one closed fold.
+        check("Shipping answers every lane from the current JSON: linked lanes as rows, the rest folded",
+              page.locator('.enso-lcard[data-board-lane]').count() + page.locator('.enso-lanes-other li[data-board-lane]').count() == lane_count
+              and page.locator('.enso-lanes-other').get_attribute('open') is None
+              and f'{board_slots} slots/day' in page.locator('[data-board-lane="panama"]').text_content())
+        # 2026-09-29 audit (owner: "Should include trade from production El Niño countries"): the Shipping map follows one
+        # harvest's usual exports on the Harvests grammar, and lanes with no published ENSO link are off the map.
+        page.wait_for_function("() => document.querySelectorAll('#enso-map path.enso-flow').length > 0", timeout=20_000)
+        page.wait_for_timeout(700)
+        ship_map = page.evaluate("""async () => {
+            const O = (await (await fetch('data/enso_outlook.json')).json()).data, L = (await (await fetch('data/enso_lanes.json')).json()).data.lanes;
+            const keys = O.rows_all.filter(r => r.status === 'shown' && !r.in_season && Math.abs(r.change_kt_record || 0) >= 150).sort((a, b) => Math.abs(b.change_kt_record) - Math.abs(a.change_kt_record)).map(r => r.iso + '/' + r.crop);
+            const d = await ensoStoryFlows(keys[0], 'atrisk');
+            return {chips: document.querySelectorAll('#enso-map .enso-follow [data-story]').length, want_chips: keys.length,
+                    risk: document.querySelectorAll('#enso-map path.enso-flow.is-lost').length, want: d.lines.filter(f => f.role === 'risk').length,
+                    buyers: document.querySelectorAll('#enso-map .enso-flab-b.is-buy').length, title: document.querySelector('#enso-mapwrap .enso-plate-t').textContent,
+                    unlinked: L.filter(l => l.phase === 'none').every(l => !document.querySelector('.enso-choke-label[data-lane="' + l.id + '"]'))};
+        }""")
+        check("Shipping map follows one harvest's usual exports, buyers labelled, only El Niño-linked lanes drawn",
+              ship_map["chips"] == ship_map["want_chips"] and ship_map["want"] > 0 and ship_map["risk"] == ship_map["want"] == ship_map["buyers"]
+              and ship_map["unlinked"] and 'El Niño' in ship_map["title"], str(ship_map))
         check("Panama reads month by month, with the last twelve months day by day in a fold of the same plate", page.evaluate("""() => {
             const a = document.querySelector('.enso-pansince-plate'), b = document.querySelector('.enso-panama-daily');
             return !!a && !!b && a.contains(b) && b.tagName === 'DETAILS' && !document.querySelector('.enso-panama-pair');
@@ -949,12 +990,13 @@ def main() -> int:
         # print the agencies' own latest readings, and Gatún is read against its record.
         check("Shipping gives every lane an outlook and prints each gauge's latest reading", page.evaluate("""async () => {
             const G = (await (await fetch('data/enso_gauges.json')).json()).data.gauges;
-            const verdicts = [...document.querySelectorAll('.enso-status-table .enso-lane-verdict b')].map(b => b.textContent);
+            const lanes = (await (await fetch('data/enso_lanes.json')).json()).data.lanes.filter(l => l.phase && l.phase !== 'none');
+            const verdicts = [...document.querySelectorAll('.enso-lcard[data-board-lane] .enso-lcard-o')].map(b => b.textContent.trim());
             const cards = [...document.querySelectorAll('.enso-gauge:not(.is-freight) .enso-gauge-v b')].map(b => parseFloat(b.textContent));
             const want = ['stlouis', 'barge_stlouis', 'gulf_loadings', 'kaub', 'rosario', 'manaus'].filter(k => G[k]).map(k => G[k].latest.value);
             const g = Chart.getChart(document.getElementById('enso-c-gatun'));
             const labels = g ? g.data.datasets.map(d => d.label) : [];
-            return verdicts.length === 9 && verdicts.every(v => v.length > 0)
+            return verdicts.length === lanes.length && verdicts.every(v => v.length > 0)
                 && cards.length === want.length && cards.every((v, i) => Math.abs(v - want[i]) < 1)
                 && ['1997-98', '2015-16', '2023-24', '2026'].every(l => labels.includes(l))
                 && document.getElementById('enso-lane-record-panama').textContent.includes('Japan maize');
@@ -966,7 +1008,10 @@ def main() -> int:
             const since = document.querySelector('.enso-pansince-plate'), fit = document.querySelector('.enso-gatunfit-plate');
             if (!O || !since || !fit || pm.length < 24) return false;
             const D = O.distribution, t = fit.textContent;
-            return fit.dataset.kind === 'modelled' && getComputedStyle(fit).borderTopStyle === 'dashed'
+            const sonar = fit.querySelector('.enso-gatun-sonar'), st = sonar ? sonar.textContent : '';
+            return !!sonar && st.includes('Now ' + g.latest.value.toFixed(1) + ' ft') && st.includes('median ' + D.p50.toFixed(1) + ' ft') && st.includes('Record low ' + D.record_ft.toFixed(1) + ' ft')
+                && fit.querySelector('.enso-gatun-fit').closest('details') !== null
+                && fit.dataset.kind === 'modelled' && getComputedStyle(fit).borderTopStyle === 'dashed'
                 && D.p10 <= D.p50 && D.p50 <= D.p90 && O.loo_rmse_ft < O.loo_rmse_average_ft && O.n_seasons >= 40
                 && t.includes(D.p50.toFixed(1) + ' ft') && t.includes(D.p10.toFixed(1) + '–' + D.p90.toFixed(1))
                 && fit.querySelectorAll('.enso-gatun-fit circle').length === O.points.length
@@ -977,7 +1022,8 @@ def main() -> int:
             const P = (await (await fetch('data/enso_ports.json')).json()).data.ports;
             const rows = [...document.querySelectorAll('.enso-ports-table tbody tr:not(.enso-ol-year)')];
             return P.length >= 5 && rows.length === P.length && rows.every((r, i) => r.textContent.includes(P[i].name) || P.some(p => r.textContent.includes(p.name)))
-                && !document.querySelector('.enso-meet-plate') && document.querySelector('.enso-ports-plate').textContent.includes('South Africa’s maize');
+                && !document.querySelector('.enso-meet-plate') && document.querySelector('.enso-ports-plate').textContent.includes('South Africa’s maize')
+                && document.querySelector('#enso-water > figure') === document.querySelector('.enso-ports-plate');
         }"""))
         # 2026-09-24 (court): hand-checked facts expire. A hand-kept file older than its review window,
         # or an export measure past its end date still marked in force, fails the gate.
@@ -1006,7 +1052,8 @@ def main() -> int:
                 && !txt.includes('has not been scored') && txt.includes('held-out harvests');
         }"""))
         page.evaluate("showTab('ensowater')")
-        page.wait_for_selector('#subview-ensowater.active .enso-status-table')
+        page.wait_for_selector('#subview-ensowater.active .enso-lane-board')
+        page.evaluate("document.querySelector('.enso-lanes-other').open = true")
         page.locator('[data-open-lane="rhine"]').click()
         check("lane board opens the matching folded record",
               page.locator('#enso-lane-record-rhine details').get_attribute('open') is not None
@@ -1282,9 +1329,13 @@ def main() -> int:
                 document.getElementById('enso-map').getBoundingClientRect().bottom - 1"""))
         check("Stage H both ranked lists stack below the map on phones", all(stacked))
         page.evaluate("showTab('ensowater')")
+        # 2026-09-29 audit: only lanes (and their corridors) with a published ENSO link are drawn.
+        linked_corridors = page.evaluate("""async () => { const L = (await (await fetch('data/enso_lanes.json')).json()).data.lanes, C = (await (await fetch('data/enso_corridors.json')).json()).data.corridors;
+            return C.filter(c => L.some(l => l.id === c.lane && l.phase === c.phase && l.phase !== 'none')).length; }""")
+        linked_lanes = page.evaluate("async () => (await (await fetch('data/enso_lanes.json')).json()).data.lanes.filter(l => l.phase && l.phase !== 'none').length")
         check("Stage H phones show no corridor chips and retain all routes in the fold",
               page.locator('.enso-corridor-chip').count() == 0
-              and page.locator('path.enso-corridor').count() == 9
+              and page.locator('path.enso-corridor').count() == linked_corridors
               and 'all corridors are listed here' in page.locator('#enso-legend details').text_content())
         page.set_viewport_size({'width':1440,'height':1000})
         page.locator('#enso-mapwrap [data-z="0"]').click()
@@ -1300,7 +1351,7 @@ def main() -> int:
         }"""))
         check("Stage H chokepoint labels use unboxed text with a ground halo", page.evaluate("""() => {
             const labels = [...document.querySelectorAll('.enso-choke-label')];
-            return labels.length === 9 && document.querySelectorAll('.enso-anno').length === 0 && labels.every(label => {
+            return labels.length === LINKED && document.querySelectorAll('.enso-anno').length === 0 && labels.every(label => {
                 const style = getComputedStyle(label), text = label.querySelector('text'), ink = getComputedStyle(text);
                 return style.borderTopWidth === '0px' && style.backgroundColor === 'rgba(0, 0, 0, 0)'
                     && ink.paintOrder.startsWith('stroke') && ink.strokeWidth === '2px'
@@ -1308,7 +1359,7 @@ def main() -> int:
                     && ink.fontSize === ({t1: '12px', t2: '11px', t3: '10px'}[[...label.closest('.enso-choke').classList].find(c => /^t[123]$/.test(c))] || '11px')
                     && ink.stroke === 'rgb(11, 16, 23)';
             });
-        }"""))
+        }""".replace("LINKEDC", str(linked_corridors)).replace("LINKED", str(linked_lanes))))
 
         print("\nStage I shipping marks and measurements")
         check("Stage I corridor polylines are dashed and lane polylines remain solid", page.evaluate("""() => {
@@ -1318,10 +1369,10 @@ def main() -> int:
                 if (l.options.className === 'enso-lane') lanes.push(l);
             });
             // The supplied lanes have no line geometry; Stage D exercises solid lane fixtures.
-            return corridors.length === 9 && corridors.every(l => l.options.dashArray === '6 4'
+            return corridors.length === LINKEDC && corridors.every(l => l.options.dashArray === '6 4'
                 && l.getElement().getAttribute('stroke-dasharray') === '6 4')
                 && lanes.every(l => !l.options.dashArray && !l.getElement().hasAttribute('stroke-dasharray'));
-        }"""))
+        }""".replace("LINKEDC", str(linked_corridors)).replace("LINKED", str(linked_lanes))))
         visible_key = page.locator('#enso-legend').text_content()  # 2026-09-27: meanings sit in the key's fold
         # The key used to show a solid-line swatch for "observed transits". No
         # lane in enso_lanes.json carries a geometry, so that line is never
@@ -1337,7 +1388,7 @@ def main() -> int:
             const key = document.getElementById('enso-legend').textContent;
             const date = s => new Date(s).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
             let measured = 0, missing = 0;
-            return lanes.every(ln => {
+            return lanes.filter(ln => ln.phase && ln.phase !== 'none').every(ln => {
                 const label = document.querySelector('.enso-choke-label[data-lane="' + ln.id + '"]');
                 if (!label) return false;
                 const pin = label.closest('.enso-choke'), ring = pin.querySelector('.enso-transit-ring');
@@ -1346,7 +1397,7 @@ def main() -> int:
                     missing++;
                     return !ring && pin.classList.contains('no-transit') && !label.textContent.includes('no transit data')
                         && key.includes('no PortWatch transit change available')
-                        && key.includes(label.querySelector('text').textContent);
+                        && key.includes(label.querySelector('text').textContent.split(' · ')[0]);
                 }
                 measured++;
                 const expected = 2 * Math.sqrt(81 + 10.08 * Math.min(Math.abs(pct),100));
@@ -1379,11 +1430,12 @@ def main() -> int:
         # 2026-09-26: corridors are weighted by the lane's published ENSO link (tier 1 phase ink 2px, tier 2 1.25px, tier 3 grey 1px).
         page.locator('[data-sview="enso"]').click()  # the link inks are the El Niño link view (2026-09-27)
         page.wait_for_timeout(400)
-        check("Stage I nine routes are focusable, weighted by ENSO link, with corridor names in tooltips", page.evaluate("""async () => {
-            const feed = (await (await fetch('data/enso_corridors.json')).json()).data.corridors;
+        # 2026-09-29 audit: only the corridors of lanes with a published ENSO link are drawn.
+        check("Stage I routes of ENSO-linked lanes are focusable, weighted by ENSO link, with corridor names in tooltips", page.evaluate("""async () => {
             const lanes = (await (await fetch('data/enso_lanes.json')).json()).data.lanes;
+            const feed = (await (await fetch('data/enso_corridors.json')).json()).data.corridors.filter(c => lanes.some(l => l.id === c.lane && l.phase === c.phase && l.phase !== 'none'));
             const lines = [...document.querySelectorAll('path.enso-corridor')];
-            return lines.length === 9 && !document.querySelector('.enso-corridor-chip') && feed.every(c => {
+            return lines.length === feed.length && !document.querySelector('.enso-corridor-chip') && feed.every(c => {
                 const line = lines.find(e => e.dataset.corridor === c.id), ln = lanes.find(l => l.id === c.lane);
                 const tier = ln.phase === 'none' ? 3 : ln.attribution === 'weak' ? 2 : 1;
                 const ink = tier === 3 ? '#7b8491' : {el_nino: '#e0673c', la_nina: '#5b9bd0'}[ln.phase];
@@ -1402,7 +1454,7 @@ def main() -> int:
             focus_results.append(page.locator('.enso-corridor-tip').is_visible())
             route.evaluate('e => e.blur()')
             focus_results.append(page.locator('.enso-corridor-tip').count() == 0)
-        check("Stage I route tooltips open on keyboard focus and close on blur", len(focus_results) == 18 and all(focus_results))
+        check("Stage I route tooltips open on keyboard focus and close on blur", len(focus_results) == 2 * linked_corridors and all(focus_results))
         route = routes.first
         route.dispatch_event('mouseover')
         hovered = page.locator('.enso-corridor-tip').is_visible()
@@ -1434,13 +1486,13 @@ def main() -> int:
         check("Stage J all chokepoint labels fit the plate at 390px", page.evaluate("""() => {
             const box = document.getElementById('enso-map').getBoundingClientRect();
             const labels = [...document.querySelectorAll('.enso-choke-label')];
-            return labels.length === 9 && labels.every(e => {
+            return labels.length === LINKED && labels.every(e => {
                 const r = e.getBoundingClientRect();
                 return r.width > 0 && r.left >= box.left && r.right <= box.right
                     && r.top >= box.top && r.bottom <= box.bottom;
             });
-        }"""))
-        check("Stage J Panama has dated advisories and no ordinal slot chart", page.evaluate("""() => !document.getElementById('enso-c-panama') && !!document.querySelector('.enso-pan-since path.pan-slot')"""))
+        }""".replace("LINKEDC", str(linked_corridors)).replace("LINKED", str(linked_lanes))))
+        check("Stage J Panama has dated advisories and no ordinal slot chart", page.evaluate("""() => !document.getElementById('enso-c-panama') && !!document.querySelector('.enso-pansince-plate .enso-pan-step')"""))
         page.set_viewport_size({"width": 1440, "height": 1000})
         page.locator('#enso-mapwrap [data-z="0"]').click()
         page.wait_for_timeout(350)
