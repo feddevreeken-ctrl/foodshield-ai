@@ -49384,7 +49384,15 @@ function showCommodityDetail(key) {
     var st = poutStage(), ms = poutRows().map(function (r) { var a = r.aftermath && r.aftermath[st]; return a && a.to; }).filter(Boolean).sort();
     var yr = st === 'now' ? poutNowYear() : st.slice(0, 4), m1 = ms[ms.length - 1];
     /* One line: the period, the model verdict, and what the replays leave out (FAO GIEWS FPMA is in the plate head). */
-    return 'After inflation, Mar' + (m1 ? '–' + MON3[monIdx(m1) % 12] : '') + ' ' + yr + ' · ' + poutVerdict() + ' Replays also leave out the season and world prices.';
+    return 'After inflation, Mar' + (m1 ? '–' + MON3[monIdx(m1) % 12] : '') + ' ' + yr + ' · ' + poutVerdict() + ' Replays take out inflation and world-price moves.';
+  }
+  /* How the hatched replay scored against a normal year in the two El Niños it replays (price test, event left out). */
+  function poutReplayScore() {
+    var b = ((S.pout || {}).replay_skill || {}).by_event || {};
+    var ev = ['2015-16', '2023-24'].filter(function (e) { return b[e] && b[e].mae_adjusted != null && b[e].mae_normal != null; });
+    if (!ev.length) return '';
+    var m = function (key) { return Math.round(ev.reduce(function (s, e) { return s + b[e][key]; }, 0) / ev.length); };
+    return ' · in ' + ev.join(' and ') + ' it missed by about ' + m('mae_adjusted') + ' points, a normal year alone by ' + m('mae_normal');
   }
   /* 2026-09-29, round 2 ("prices map rethink", "I prefer not to have circles on maps"). The owner looked at three
      candidates and kept one: "I like C but have main % be the price now vs idk then under what it was last el nino.
@@ -49440,7 +49448,7 @@ function showCommodityDetail(key) {
       STAPLE_BREAKS.map(function (b, i) { return '<text x="' + (4 + (i + 1) * 30 - .5) + '" y="24" text-anchor="middle" font-size="9.5" fill="#9a978d" font-family="Geist Mono, monospace">' + (b > 0 ? '+' : b < 0 ? '−' : '') + Math.abs(b) + '</text>'; }).join('') + '</svg>';
     var lost = Object.keys(be).filter(function (e) { return be[e].mae_model > be[e].mae_analog; });
     return '<div class="enso-legend-block"><div class="enso-legend-t">Staple price since March ' + yr + ', after inflation, % · observed</div>' + steps +
-      krow('<svg aria-hidden="true" width="40" height="12" viewBox="0 0 40 12"><defs><pattern id="enso-pchip-key-h" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.2" height="3" fill="#b9b5aa"/></pattern></defs><line x1="0" x2="40" y1="6" y2="6" stroke="#3a3d44"/><rect x="6" y="4" width="22" height="4" fill="#8b8980"/><rect x="13" y="3.5" width="24" height="5" fill="url(#enso-pchip-key-h)" stroke="#b9b5aa" stroke-width=".6"/><line x1="6" x2="6" y1="1" y2="11" stroke="#56606b"/><rect x="12" y="1" width="2" height="10" fill="#ebe9e2"/></svg>', 'Grey: ' + ev + ', March to peak · white: now · hatched: a normal year plus ' + ev + '’s El Niño effect', '') +
+      krow('<svg aria-hidden="true" width="40" height="12" viewBox="0 0 40 12"><defs><pattern id="enso-pchip-key-h" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.2" height="3" fill="#b9b5aa"/></pattern></defs><line x1="0" x2="40" y1="6" y2="6" stroke="#3a3d44"/><rect x="6" y="4" width="22" height="4" fill="#8b8980"/><rect x="13" y="3.5" width="24" height="5" fill="url(#enso-pchip-key-h)" stroke="#b9b5aa" stroke-width=".6"/><line x1="6" x2="6" y1="1" y2="11" stroke="#56606b"/><rect x="12" y="1" width="2" height="10" fill="#ebe9e2"/></svg>', 'Grey: ' + ev + ', March to peak · white: now · hatched: a normal year plus ' + ev + '’s El Niño effect' + poutReplayScore(), '') +
       (gaps.length ? krow('<svg aria-hidden="true" width="18" height="12" viewBox="0 0 18 12"><rect x="1" y="1" width="16" height="10" fill="none" stroke="#8a8578" stroke-width="1.2" stroke-dasharray="1 3"/></svg>', 'No series then', esc(gaps.join(', '))) : '') +
       '<div class="enso-key-foldable"><p>' + n + ' staple prices in ' + Object.keys(isos).length + ' countries where El Niño’s harvest damage is documented; other land stays grey. Blue falling, grey flat (within ±3%), ochre to red rising. A country with two staples takes the colour of the larger move.</p><p>Each chip: the staple since March ' + yr + ' (large, coloured like the map); then ' + ev + ' from March to the same month, and from March to its highest month after; then, in italics, the price from today in a normal year and with ' + ev + '’s El Niño effect added, to that effect’s highest month. That last line replays the past; it is not a forecast.</p>' + effectNote() + wholesaleNote() +
       (P.model_status === 'no_skill' ? '<p>The price model was tested on ' + k.n_events + ' past El Niños, each left out in turn: it missed the highest month by ' + num(k.mae_model, 1).replace('+', '') + ' points on average, against ' + num(k.mae_analog, 1).replace('+', '') + ' for replaying past paths and ' + num(k.mae_nochange, 1).replace('+', '') + ' for assuming no change. It beat the replay in ' + esc(k.events_model_beats_analog || '') + ' events' + (lost.length ? ', and lost in ' + esc(lost.join(', ')) : '') + ', so it is not shown.</p>' : '') + '</div></div>';
@@ -50397,7 +50405,7 @@ function showCommodityDetail(key) {
     var name = nameFor(r.iso3) + (r.iso3 === 'THA' ? (c ? ', Bangkok' : ' rice, Bangkok wholesale') : c ? '' : ' ' + poutName(r));
     var past = a && typeof a.pct === 'number' ? (c ? '' : ev + ' ') + poutPct(a.pct) + (h ? ' · peak ' + poutPct(h.v) : '') : ev + ' none';
     var mo = f && monIdx(f.month), when = f ? MON3[mo % 12] + ' ' + (c ? '’' + String(Math.floor(mo / 12)).slice(2) : Math.floor(mo / 12)) : '';
-    var fwd = f ? (f.a != null ? 'normal ' + poutPct(f.a) : 'normal n/a') + ' · ' + (c ? '' : 'with El Niño ') + poutPct(f.b) + (c ? ' ' : ' by ') + when : '';
+    var fwd = f ? (f.a != null ? 'normal ' + poutPct(f.a) + ' · ' : '') + (c ? '' : 'with El Niño ') + poutPct(f.b) + (c ? ' ' : ' by ') + when : '';
     var dark = ['#d9b27c', '#dd8a45', '#8fb1cf'].indexOf(col) >= 0;
     return '<i class="enso-pchip-s" style="background:' + col + '"></i><span class="enso-pchip-h"><span class="enso-pchip-n">' + esc(name) + '</span><b class="enso-pchip-v" style="background:' + col + ';color:' + (dark ? '#0b1017' : '#f2efe6') + '">' + esc(poutPct(v)) + '</b></span>' +
       '<span class="enso-pchip-p' + (c ? ' is-c' : '') + '">' + bar + '<span' + (a ? '' : ' class="is-none"') + '>' + esc(past) + '</span></span>' +

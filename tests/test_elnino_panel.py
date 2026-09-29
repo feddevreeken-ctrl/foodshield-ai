@@ -1588,7 +1588,7 @@ def main() -> int:
         check("Prices chips: now, 2023-24 same stage and peak, normal year and El Niño-effect replay equal the file" + ('' if _r is True else f' ({_r})'), _r is True and page.evaluate("""() => {
             const tag = document.getElementById('enso-maptag').textContent;
             return !document.querySelector('[data-pstage]') && tag.startsWith('After inflation, Mar')
-                && tag.includes('no better than replaying them: not shown.') && tag.includes('leave out the season and world prices')
+                && tag.includes('no better than replaying them: not shown.') && tag.includes('take out inflation and world-price moves')
                 && !/forecast:/i.test(tag) && document.querySelectorAll('[data-pev]').length === 2;
         }"""))
         page.click('[data-pev="2015-16"]'); page.wait_for_timeout(1200)
