@@ -675,6 +675,19 @@ def main() -> int:
                     return stack.height <= 620 && side.left >= stack.right && card.left >= stack.right && card.height > 0
                         && document.getElementById('enso-view-nav').getBoundingClientRect().height === 40;
                   }"""))
+            # 2026-09-29 round 2 (owner: "this takes too much space", "try condense", "the top explanation cuts of the bottom"):
+            # the explainer is a full-width row above the figure, the readout column ends before the figure does, the play
+            # control shares the tabs' row, and the Nino-region and past-peak labels each sit on one line without overlap.
+            page.wait_for_timeout(300)
+            check(f"Pacific explainer at {width}px: intro row above the figure, readout fits beside it, compact tab row, one-line labels", page.evaluate("""() => {
+                const p = document.querySelector('#enso-pacific .pac-plate'), what = p.querySelector(':scope > .pac-what'), read = p.querySelector('.pac-read');
+                const stack = document.getElementById('pac-stack').getBoundingClientRect(), r = read.getBoundingClientRect(), m = p.querySelector('.pac-main').getBoundingClientRect();
+                const tabs = [...p.querySelectorAll('.pac-main > .enso-ruler [role="tab"]')].map(t => t.getBoundingClientRect()), play = p.querySelector('[data-pac-story]').getBoundingClientRect();
+                const one = els => { const rs = els.map(e => e.getBoundingClientRect()).sort((a, b) => a.left - b.left); return rs.length > 1 && rs.every(x => Math.abs(x.top - rs[0].top) < 2) && rs.every((x, i) => !i || x.left >= rs[i - 1].right); };
+                return !!what && !read.querySelector('.pac-what') && what.getBoundingClientRect().bottom <= stack.top && r.bottom <= m.bottom + 1
+                    && tabs.length === 5 && tabs.every(t => Math.abs(t.top - tabs[0].top) < 2 && t.height <= 48) && Math.abs(play.top + play.height / 2 - (tabs[0].top + tabs[0].height / 2)) < 12
+                    && one([...p.querySelectorAll('.pac-lane .pac-box em')]) && one([...p.querySelectorAll('.pac-peak b')]);
+            }"""))
         page.set_viewport_size({"width":390,"height":844})
         check("phone switcher stays one 36px row and the explainer stacks without overflow", page.evaluate("""() => {
             const root = document.querySelector('#tab-elnino .content-page'), bar = document.getElementById('enso-view-nav');
@@ -764,9 +777,10 @@ def main() -> int:
             const harv = O.rows_all.filter(r => r.status === 'shown' && !r.in_season && Math.abs(r.change_kt_record || 0) >= 150);
             const text = document.querySelector('.enso-next12').textContent;
             // 2026-09-29 (audit, owner: "second block should be ... 'What is El Nino'"): map, the Pacific explainer, CPC's odds,
-            // the dated twelve months, then the ONI record.
-            const second = first && first.nextElementSibling, third = second && second.nextElementSibling, fourth = third && third.nextElementSibling;
-            return first && first.classList.contains('enso-mapgrid') && second && second.id === 'enso-pacific' && third && third.id === 'enso-strengths' && fourth && fourth.id === 'enso-next12' && !!document.querySelector('#subview-elnino > .enso-oni-plate')
+            // the dated twelve months, then the ONI record. Round 2 (owner: "switch position of This El Niño against the five
+            // strongest since 1950 with The next twelve months"): the ONI record is fourth, the twelve months fifth.
+            const second = first && first.nextElementSibling, third = second && second.nextElementSibling, fourth = third && third.nextElementSibling, fifth = fourth && fourth.nextElementSibling;
+            return first && first.classList.contains('enso-mapgrid') && second && second.id === 'enso-pacific' && third && third.id === 'enso-strengths' && fourth && fourth.classList.contains('enso-oni-plate') && fifth && fifth.id === 'enso-next12'
                 && items.length >= 6 && items.every(li => /^is-(forecast|published|modelled|precedent)$/.test(li.className) && li.querySelector('[data-goto-lens]'))
                 // 2026-09-27: the fitted harvests are one pointer row naming each (sizes live on Harvests).
                 && harv.every(r => text.includes(r.iso === 'USA' ? 'United States' : r.iso === 'ZAF' ? 'South Africa' : ''))
@@ -1507,7 +1521,7 @@ def main() -> int:
             for tab, labels in (
                 ('ensowater', ['No land layer', 'Shipping', 'Change nowEl Niño link']),
                 ('ensomoney', ['Staple prices', 'Grain imports', 'Since MarchWho paysYear on year', _pout_year + '2015-162023-24']),
-                ('elnino', ['Sea-surface']),
+                ('elnino', []),  # 2026-09-29 round 2 (owner: "remove Sea-surface"): one layer, no chip
                 ('ensoharvest', ['Production shock', 'Strongest crop', 'Coverage', 'Crop stress now', 'Teleconnections']),
                 ('ensolive', ['Rain pattern', 'Hotspots', 'IPC', 'Hazards', 'Headlines', 'Elsewhere'])):
                 page.evaluate('tab => showTab(tab)', tab)
@@ -1526,6 +1540,14 @@ def main() -> int:
                         && !row.querySelector('details').open && map.top - head.top <= 110
                         && !!search && !!t && t.left >= map.left && t.right <= map.right && t.top >= map.top && t.bottom <= map.bottom;
                 }""", labels))
+                if tab == 'elnino':
+                    # 2026-09-29 round 2 (owner: "remove Sea-surface. so its one straight line"): title, source and All layers on one line.
+                    check(f"Ocean map head at {width}: title, source and All layers on one line", page.evaluate("""() => {
+                        const t = document.querySelector('#enso-mapwrap > .enso-plate-h .enso-plate-t').getBoundingClientRect();
+                        const sub = document.querySelector('#enso-mapwrap > .enso-plate-h .enso-plate-sub').getBoundingClientRect();
+                        const s = document.querySelector('#enso-mapwrap .enso-all-layers > summary').getBoundingClientRect();
+                        return t.height < 34 && sub.top < t.bottom && s.top < t.bottom && s.bottom > t.top && s.left > sub.right;
+                    }"""))
             page.evaluate("showTab('ensomoney')")
             page.wait_for_timeout(150)
             # 2026-09-29: the default view shades the price-outlook countries by their real change since March, the larger
@@ -1621,7 +1643,7 @@ def main() -> int:
         # from data/sst_winters/<label>.json, named as observed; the outlook is a forecast with the dashed frame.
         page.click('[data-sst-season="DJF"]')
         page.click('[data-sst-win="2015-16"]')
-        page.wait_for_function("() => /The 2015–16 El Niño/.test(document.querySelector('#enso-mapwrap > .enso-plate-h').textContent)", timeout=15000)
+        page.wait_for_function("() => /in the 2015–16 El Niño/.test(document.querySelector('#enso-mapwrap > .enso-plate-h').textContent)", timeout=15000)
         check("one past winter opens from its own observed file and says so", page.evaluate("""async () => {
             const W = (await (await fetch('data/sst_winters/2015-16.json')).json()).data, tag = document.getElementById('enso-maptag').textContent;
             const strip = document.getElementById('enso-weekly').textContent, n = W.box_means_c.DJF.nino34;
@@ -1657,7 +1679,7 @@ def main() -> int:
             const hd = document.querySelector('#enso-scrub .sc-handle'), first = document.querySelector('#enso-scrub .sc-track [data-i="0"]');
             const last = [...document.querySelectorAll('#enso-scrub [data-sst-ol]')].pop();
             return d === 'outlook|' + last.dataset.sstOl && hd.getAttribute('aria-valuenow') === '0' && first.classList.contains('is-pick') && !!first.dataset.sstMon
-                && /^Sea (surface|and rain), \\w+ \\d{4} mean/.test(document.querySelector('#enso-mapwrap > .enso-plate-h').textContent);
+                && /^Sea temperature (and rain )?against normal, \\w+ \\d{4}/.test(document.querySelector('#enso-mapwrap > .enso-plate-h').textContent);
         }""", dragged))
         if page.locator('#enso-scrub [data-sst-view="outlook"]').count():
             page.click('#enso-scrub [data-sst-view="outlook"]')
@@ -1667,7 +1689,7 @@ def main() -> int:
                 const tag = document.getElementById('enso-maptag').textContent, strip = document.getElementById('enso-weekly').textContent;
                 // 2026-09-28 (owner: "outlook should be 6 months"): six monthly NMME maps, lead 1 to 6.
                 const list = O.months && O.months.length ? O.months : O.seasons;
-                return list.length === (O.months ? 6 : 3) && head.startsWith('Outlook for ' + list[0].label) && tag.includes('A forecast, not observed') && strip.includes('forecast')
+                return list.length === (O.months ? 6 : 3) && head.startsWith('Forecast sea temperature') && head.includes(list[0].label) && tag.includes('A forecast, not observed') && strip.includes('forecast')
                     && document.getElementById('enso-mapwrap').classList.contains('is-modelled') && document.querySelectorAll('#enso-scrub [data-sst-ol]').length === list.length;
             }"""))
             # 2026-09-28, fifth pass (owner: "the drought/ rain overlay in the outlook seems to have failed ... use real
@@ -1754,7 +1776,7 @@ def main() -> int:
                 const A = await fetch('data/enso_auto_events.json').then(r => r.ok ? r.json() : null).then(j => j ? j.data.events.filter(e => e.date_start <= w.end && e.date_end >= w.start).length : 0).catch(() => 0);
                 const head = document.querySelector('#enso-mapwrap > .enso-plate-h').textContent, key = document.getElementById('enso-legend').textContent;
                 const col = document.querySelector('#enso-scrub [data-sst-now="14"] .sc-c').textContent;
-                return /Sea and rain, last 14 days/.test(head) && /^Last 14 days/.test(document.getElementById('enso-weekly').textContent)
+                return /Sea temperature and rain against normal, last 14 days/.test(head) && /^Last 14 days/.test(document.getElementById('enso-weekly').textContent)
                     && !!document.querySelector('#enso-map .enso-rain-over') && /darker where the 14 days add/.test(key) && /last 30 days/.test(key)
                     && w.end === R.week.end && col === ((E + A) ? String(E + A) : '') && document.querySelector('#enso-scrub .sc-handle').getAttribute('aria-valuetext').startsWith('Last 14 days');
             }"""))
@@ -1766,7 +1788,7 @@ def main() -> int:
             check("a month stop paints that month's observed sea mean and says which", page.evaluate("""m => {
                 const [y, mo] = m.split('-'), name = ['January','February','March','April','May','June','July','August','September','October','November','December'][+mo - 1] + ' ' + y;
                 // The month's own rain too (data/rain_months.json, CPC gauges + CHIRPS), and its checked El Niño headlines only.
-                return document.querySelector('#enso-mapwrap > .enso-plate-h').textContent.includes('Sea and rain, ' + name + ' mean')
+                return document.querySelector('#enso-mapwrap > .enso-plate-h').textContent.includes('Sea temperature and rain against normal, ' + name)
                     && document.getElementById('enso-weekly').textContent.includes('OISST monthly mean') && !!document.querySelector('.enso-rain-canvas')
                     && new RegExp('last 30 days|' + name).test(document.getElementById('enso-legend').textContent)
                     && !document.querySelector('#enso-map .enso-pev:not(.is-now)');
