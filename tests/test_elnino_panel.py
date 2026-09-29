@@ -485,6 +485,14 @@ def main() -> int:
         check("only the chosen harvest's lines: supply at risk to each labelled buyer, and where buyers could turn, method in the key",
               marks["lost"] == marks["wantLost"] and marks["arcs"] > marks["lost"] and marks["labelled"]
               and "where trade could come from, not a forecast of trade" in marks["key"] and "Two inks by role" in marks["key"], str({k: marks[k] for k in ('lost', 'wantLost', 'arcs', 'labelled')}))
+        # 2026-09-29: "no other usual supplier" is said once, on the producer callout, not under each buyer.
+        said = page.evaluate("""() => {
+            const t = [...document.querySelectorAll('#enso-map .enso-flab-b')];
+            return {once: t.filter(e => /no other usual supplier/.test(e.textContent)).length, onCall: t.filter(e => /no other usual supplier/.test(e.textContent) && e.classList.contains('is-on')).length,
+                    buyers: t.filter(e => e.classList.contains('is-buy') && /no other usual|no import record/.test(e.textContent)).length};
+        }""")
+        check("Harvests says 'no other usual supplier' once, on the producer callout, not under each buyer",
+              said["once"] == 1 and said["onCall"] == 1 and said["buyers"] == 0, str(said))
         switched = page.evaluate("""async () => {
             const O = (await (await fetch('data/enso_outlook.json')).json()).data;
             const w = O.who_pays.filter(x => (x.buyers || []).length).slice(-1)[0];
@@ -1377,41 +1385,50 @@ def main() -> int:
         # The key used to show a solid-line swatch for "observed transits". No
         # lane in enso_lanes.json carries a geometry, so that line is never
         # drawn and the key described a mark the map does not have. The observed
-        # mark is the diamond and its ring.
+        # mark is the diamond. 2026-09-29 (owner: no size-scaled circles on maps): the ring is gone.
         check("Stage I visible key distinguishes observed transits from published schematic corridors",
-              'diamond and ring: observed, measured at the chokepoint' in visible_key
+              'diamond: observed, measured at the chokepoint' in visible_key and 'Ring size' not in visible_key
               and 'dashed: published schematic corridor through named ports' in visible_key)
+        # 2026-09-29: Shipping opens on the world view with the default story's lines drawn; it zooms only on a chip click.
+        check("Stage I Shipping opens on the world view: every El Niño lane on screen, the default story's lines drawn", page.evaluate("""() => {
+            const box = document.getElementById('enso-map').getBoundingClientRect();
+            const pins = [...document.querySelectorAll('.enso-choke')];
+            return pins.length === LINKED && pins.every(p => { const r = p.getBoundingClientRect(); return r.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom; })
+                && document.querySelectorAll('#enso-map path.enso-flow').length > 0;
+        }""".replace("LINKED", str(linked_lanes))))
         check("Stage I magnitude joins each lane to PortWatch and names missing values", page.evaluate("""async () => {
             const lanes = (await (await fetch('data/enso_lanes.json')).json()).data.lanes;
             const feed = await (await fetch('data/portwatch.json')).json();
-            const rings = document.querySelectorAll('.enso-choke .enso-transit-ring');
+            const rings = document.querySelectorAll('.enso-choke > i[data-yoy]');
             const key = document.getElementById('enso-legend').textContent;
             const date = s => new Date(s).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
             let measured = 0, missing = 0;
             return lanes.filter(ln => ln.phase && ln.phase !== 'none').every(ln => {
                 const label = document.querySelector('.enso-choke-label[data-lane="' + ln.id + '"]');
                 if (!label) return false;
-                const pin = label.closest('.enso-choke'), ring = pin.querySelector('.enso-transit-ring');
+                const pin = label.closest('.enso-choke'), ring = pin.querySelector('i[data-yoy]');
                 const pw = feed.data[ln.portwatch_key], dry = pw && Number.isFinite(pw.yoy.dry_bulk_pct) && Number.isFinite(pw.transits_per_day.dry_bulk), pct = pw && pw.yoy && (dry ? pw.yoy.dry_bulk_pct : pw.yoy.total_pct);
                 if (!pw || !Number.isFinite(pct) || !Number.isFinite(pw.transits_per_day.total)) {
                     missing++;
-                    return !ring && pin.classList.contains('no-transit') && !label.textContent.includes('no transit data')
+                    return !ring && !pin.querySelector('.enso-transit-ring') && pin.classList.contains('no-transit') && !label.textContent.includes('no transit data')
                         && key.includes('no PortWatch transit change available')
                         && key.includes(label.querySelector('text').textContent.split(' · ')[0]);
                 }
                 measured++;
-                const expected = 2 * Math.sqrt(81 + 10.08 * Math.min(Math.abs(pct),100));
+                // 2026-09-29: the mark is a fixed-size diamond filled by the transit-change class, not a ring scaled by the change.
+                const want = pct <= -25 ? '#b8452a' : pct <= -10 ? '#d9824a' : pct < -3 ? '#e2b27c' : pct <= 3 ? '#77797d' : pct < 10 ? '#a9c3da' : '#5f8fbf';
+                const rgb = 'rgb(' + [1, 3, 5].map(i => parseInt(want.slice(i, i + 2), 16)).join(', ') + ')';
                 const signed = (pct > 0 ? '+' : pct < 0 ? '−' : '') + Math.abs(pct).toFixed(1) + '% y/y';
                 return ring && Number(ring.dataset.yoy) === pct
-                    && Math.abs(parseFloat(ring.style.width) - expected) < .001
-                    && ring.style.width === ring.style.height && label.textContent.includes(signed)
+                    && getComputedStyle(ring).backgroundColor === rgb && !pin.querySelector('.enso-transit-ring')
+                    && label.textContent.includes(signed)
                     && !pin.classList.contains('no-transit')
                     && key.includes(pw.window_days + '-day mean to ' + date(pw.latest_date))
                     && pin.getAttribute('aria-label').includes(pw.transits_per_day.total.toFixed(1) + ' transits/day');
             }) && measured === rings.length && measured > 0 && missing > 0
                 && key.includes('per day against a year earlier, all vessels where dry bulk is missing, IMF PortWatch')
                 && key.includes('collected ' + date(feed._meta.generated_at))
-                && key.includes('Ring area grows with the size of the change, capped at 100%');
+                && key.includes('Every diamond is the same size') && !key.includes('Ring area grows');
         }"""))
         check("Stage I both Panama arcs carry a visible matching continuation name", page.evaluate("""() => {
             const markers = [];
@@ -1465,16 +1482,16 @@ def main() -> int:
         # 2026-09-27 (map research): the map opens on the change now; the driver inks are the El Niño link view.
         page.locator('[data-sview="enso"]').click()
         page.wait_for_timeout(400)
-        check("Stage I corridors have no destination triangles and chokepoint rings are coloured by driver", page.evaluate("""async () => {
+        check("Stage I corridors have no destination triangles and chokepoint diamonds carry the driver ink", page.evaluate("""async () => {
             const lanes = (await (await fetch('data/enso_lanes.json')).json()).data.lanes;
-            // 2026-09-26: rings take the phase ink (weak links keep it, thinner); no ENSO link is neutral grey.
+            // 2026-09-29: the ring is gone (no size-scaled circles on maps); the diamond carries the phase ink and stays one size per tier.
             const phase = Object.fromEntries(lanes.map(l => [l.id, l.phase]));
-            const rings = [...document.querySelectorAll('.enso-transit-ring')];
-            return !document.querySelector('.enso-corridor-arrow') && rings.length > 0 && rings.every(ring => {
-                const circle = ring.querySelectorAll('circle')[1], id = ring.closest('.enso-choke').querySelector('.enso-choke-label').dataset.lane;
+            const marks = [...document.querySelectorAll('.enso-choke > i[data-yoy]')];
+            return !document.querySelector('.enso-corridor-arrow') && !document.querySelector('.enso-transit-ring') && marks.length > 0 && marks.every(mark => {
+                const id = mark.closest('.enso-choke').querySelector('.enso-choke-label').dataset.lane;
                 const want = {el_nino: '#e0673c', la_nina: '#5b9bd0'}[phase[id]] || '#7b8491';
-                return ring.tagName.toLowerCase() === 'svg' && circle && circle.getAttribute('stroke') === want
-                    && Number(circle.getAttribute('r')) > 0 && getComputedStyle(ring).borderTopWidth === '0px';
+                return mark.style.getPropertyValue('--ink-phase') === want && mark.style.background === ''
+                    && ['13px', '11px', '8px'].includes(getComputedStyle(mark).width);
             });
         }"""))
 
@@ -1886,6 +1903,13 @@ def main() -> int:
                     calOpen: !document.querySelector('#enso-calendar details.enso-cal-fold') && shortRows === calRows && allRows === cal.querySelectorAll('.cal-row:not(.cal-head)').length && allRows > shortRows,
                     calH: Math.round(plateH)};
         }""")
+        check("Show per country is the third fold in the 2027 plate's footer, styled as the other two", page.evaluate("""() => {
+            const f = document.querySelector('.enso-outlook-plate #enso-harvest-fig'), hc = document.querySelector('.enso-outlook-plate .enso-hc-fold');
+            if (!f || !hc) return false;
+            const a = getComputedStyle(f.querySelector('summary')), b = getComputedStyle(hc.querySelector('summary'));
+            return f.classList.contains('enso-evidence-note') && a.borderTopWidth === '0px' && a.fontSize === b.fontSize && a.color === b.color
+                && f.getBoundingClientRect().top >= document.querySelector('.enso-outlook-plate .enso-ol-tablefold').getBoundingClientRect().top;
+        }"""))
         check("2027 plate: plain sentence from the data, at most three bullets, chart legend in the fold",
               audit["lede"] and audit["bullets"] and audit["legendFolded"], str(audit))
         check("fitted responses sit behind Show per country; the calendar is open with the outlook's pairs first",

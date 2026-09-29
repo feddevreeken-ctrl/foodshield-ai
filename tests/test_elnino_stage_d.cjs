@@ -94,14 +94,14 @@ test('Shipping draws the corridors of ENSO-linked lanes weighted by published li
 test('Stage I transit rings join actual lane values and distinguish zero, missing and increases',()=>{
  S.lanes.lanes.filter(l=>l.phase&&l.phase!=='none').forEach((ln,i)=>{
   const m=api.laneMeasurement(ln),html=S.lanePins[i].options.icon.html,pw=S.portwatch[ln.portwatch_key];
-  if(!pw){assert.equal(m,null);assert(!html.includes('no transit data'));assert(S.lanePins[i].options.icon.className.includes('no-transit'));assert(!html.includes('enso-transit-ring'));}
-  else {const dry=Number.isFinite(pw.yoy.dry_bulk_pct)&&Number.isFinite(pw.transits_per_day.dry_bulk),pct=dry?pw.yoy.dry_bulk_pct:pw.yoy.total_pct;assert.equal(m.pct,pct);assert.equal(m.total,pw.transits_per_day.total);assert(html.includes('data-yoy="'+pct+'"'));assert(html.includes('<circle'));assert(html.includes('stroke="'+(ln.phase==='none'?'#7b8491':{el_nino:'#e0673c',la_nina:'#5b9bd0'}[ln.phase])+'"'));}
+  if(!pw){assert.equal(m,null);assert(!html.includes('no transit data'));assert(S.lanePins[i].options.icon.className.includes('no-transit'));assert(!html.includes('data-yoy'));}
+  else {const dry=Number.isFinite(pw.yoy.dry_bulk_pct)&&Number.isFinite(pw.transits_per_day.dry_bulk),pct=dry?pw.yoy.dry_bulk_pct:pw.yoy.total_pct;assert.equal(m.pct,pct);assert.equal(m.total,pw.transits_per_day.total);assert(html.includes('data-yoy="'+pct+'"'));assert(!html.includes('<circle'));assert(!html.includes('enso-transit-ring'));assert(html.includes('--ink-phase:'+(ln.phase==='none'?'#7b8491':{el_nino:'#e0673c',la_nina:'#5b9bd0'}[ln.phase])));}
  });
  const original=S.portwatch,ln={portwatch_key:'fixture'};
  try {
   for(const pct of [-100,-25,0,25,100,150]){
    S.portwatch={fixture:{yoy:{total_pct:pct},transits_per_day:{total:0}}};
-   const m=api.laneMeasurement(ln);assert.equal(m.pct,pct);assert.equal(m.radius,Math.sqrt(81+10.08*Math.min(Math.abs(pct),100)));  /* 2026-09-28: ring area, not radius, grows with the change */
+   const m=api.laneMeasurement(ln);assert.equal(m.pct,pct);assert.equal(m.radius,undefined);  /* 2026-09-29: no size-scaled marks; the diamond is one size and its colour carries the change */
   }
   for(const pw of [{},{yoy:{total_pct:null},transits_per_day:{total:1}},{yoy:{total_pct:'2'},transits_per_day:{total:1}},
     {yoy:{total_pct:Infinity},transits_per_day:{total:1}},{yoy:{total_pct:2},transits_per_day:{total:null}}]){
@@ -311,7 +311,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    assert.equal(key.includes('El Niño raises output here'),S.showRegions&&view==='ensoharvest');
    assert.equal(key.includes('a published link, moderate or strong'),view==='ensowater');
    /* The solid-line swatch keyed a mark the map never draws: no lane in enso_lanes.json carries a geometry, so S.laneLines is always empty. The observed mark is the diamond and its ring. */
-   assert.equal(key.includes('diamond and ring: observed, measured at the chokepoint'),view==='ensowater');
+   assert.equal(key.includes('diamond: observed, measured at the chokepoint'),view==='ensowater');assert(!key.includes('Ring size'));
    assert.equal(key.includes('dashed: published schematic corridor through named ports'),view==='ensowater');
    if(view==='ensowater'){const LC=S.corridors.corridors.filter(c=>S.lanes.lanes.some(l=>l.id===c.lane&&l.phase===c.phase&&l.phase!=='none'));assert.equal(S.corridorLines.filter(l=>S.map.hasLayer(l)).length,LC.length);assert.equal(S.corridorLabels.length,0);for(const c of LC){assert(legend.querySelector('details').textContent.includes(c.basis.replace(/'/g,'&#39;')));}}
    assert.equal(key.includes('Does it fit the usual pattern?'),view==='ensolive');
