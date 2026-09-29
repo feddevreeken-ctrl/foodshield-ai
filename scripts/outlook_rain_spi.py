@@ -63,6 +63,7 @@ from statistics import NormalDist
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import precl_model as P  # noqa: E402
+import spi as SPI  # noqa: E402
 from spi import to_x100  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -171,6 +172,16 @@ def _norm_sf(x: float) -> float:
     return 1 - _ND.cdf(x)
 
 
+def _p_below(t: float, o_tot: float, mu: float, var: float) -> float:
+    """P(o_tot + X <= t) with X the forecast months' total, gamma-matched to (mu, var) as in _median_gamma."""
+    x = t - o_tot
+    if x <= 0:
+        return 0.0
+    if mu <= 0 or var <= 0:
+        return 1.0 if mu <= x else 0.0
+    return SPI.gammp(mu * mu / var, x / (var / mu))
+
+
 def _median_gamma(mu: float, var: float, clip: float) -> float:
     if mu <= 0:
         return 0.0
@@ -227,7 +238,7 @@ def add_rain_spi(payload: dict) -> dict:
                          "forecast": [_ym(b) for b in parts if b in fc_ab],
                          "climatology": [_ym(b) for b in parts if b not in fc_ab and b not in obs]})
         gap_months.update(windows[-1]["climatology"])
-        out = [None] * n
+        out, p3d, p3w = [None] * n, [None] * n, [None] * n
         for c in range(n):
             if not land[c] or P.fit(c, "m3", mth) is None:
                 continue
@@ -259,7 +270,13 @@ def add_rain_spi(payload: dict) -> dict:
                     mu, var = mu + mv[0], var + mv[1]
             if ok:
                 out[c] = to_x100(P.spi_from_total(c, "m3", mth, o_tot + _median_gamma(mu, var, clip)))
+                # The chance the three months end at least moderately dry (SPI <= -1) or wet (>= +1): the same
+                # distribution of the months still to come, measured against the window's own 1991-2020 fit.
+                lo, hi = P.total_from_spi(c, "m3", mth, -1.0), P.total_from_spi(c, "m3", mth, 1.0)
+                p3d[c] = int(round(100 * _p_below(lo, o_tot, mu, var)))
+                p3w[c] = int(round(100 * (1 - _p_below(hi, o_tot, mu, var))))
         x["maps"]["rain_spi3"] = out
+        x["maps"]["rain_p3_dry"], x["maps"]["rain_p3_wet"] = p3d, p3w
 
     payload["rain_model"] = _notes(model, st, oni_rows, oni_issued, oni_url, obs_info, windows, sorted(gap_months), payload)
     return payload

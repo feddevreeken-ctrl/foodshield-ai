@@ -45655,11 +45655,20 @@ function showCommodityDetail(key) {
   function rainStrength(v, kind) {
     var a = Math.abs(v), c = function (x) { return Math.max(0, Math.min(1, x)); };
     if (kind === 'spi' || kind === 'spiwk') return c((a - 50) / 150);     /* SPI 0.5 (clear within, as the key says) .. 2.0 */
+    /* 2026-09-29 (owner: "the outlook overlay is still weak ... asia and oceania is nothing"): a forecast's expected
+       index averages many possible seasons, so it runs about half the size of an observed one; on the observed scale a
+       real lean of -0.7 drew faint. The outlook gets its own scale, named in its key: clear within +-0.35, full at +-1.35. */
+    if (kind === 'fc') { var sc0 = fcScale(); return c((a - sc0[0]) / (sc0[1] - sc0[0])); }
     if (kind === 'odds') return c((a - 36) / 34);                          /* chance 36% .. 70% (33% = no lean) */
     if (kind === 'live') return c((a - 10) / 60);                          /* percent, older files without SPI */
     if (kind === 'wk') return a >= 80 ? c((a - 60) / 60) : 0;
     return c((a - 6) / 54);                                                /* percent change of a season, 6% .. 60% */
   }
+  /* The outlook scale follows how much of its three-month window is still forecast: the observed scale (clear within
+     +-0.5, full at +-2) for months already fallen, the forecast scale (+-0.35, +-1.35) for months to come. October
+     (Aug and Sep observed) sits near the first, December on is all forecast. [clear-within, full] in SPI x100. */
+  var FC_SHARE = 1;
+  function fcScale() { return [50 - 15 * FC_SHARE, 200 - 65 * FC_SHARE]; }
   function rainColor(v, kind) {
     if (v == null || isNaN(v)) return null;
     kind = kind || RAIN_KIND;
@@ -45836,12 +45845,13 @@ function showCommodityDetail(key) {
        the months already observed carried in), and the past maps paint each season's drought index, so every stop reads
        on one scale. Older files without these fields fall back to the odds and the percent. */
     var k = sstSceneKey(), avg = !ol && !sstWinter(), spi = ol ? m.rain_spi3 || m.rain_spi : m.rain_spi, odds = !spi && !!(ol && m.rain_prob_above && m.rain_prob_below); S._rainG = S._rainG || {};
-    RAIN_KIND = spi ? 'spi' : odds ? 'odds' : 'pct';
+    RAIN_KIND = spi ? (ol ? 'fc' : 'spi') : odds ? 'odds' : 'pct';
+    if (ol && m.rain_spi3) { var fw = olWin((olSeason() || {}).key || ''); FC_SHARE = fw.months.length ? fw.fc.length / fw.months.length : 1; }
     return S._rainG[k] || (S._rainG[k] = gridOf(g, spi ? spi : odds ? m.rain_prob_below.map(function (pd, i) { var pw = m.rain_prob_above[i];
         return pd == null || pw == null || m.rain[i] == null ? null : pd >= pw ? -pd : pw; }) : m.rain,
       { kind: RAIN_KIND, pct: m.rain, agree: avg ? m.rain_agree : null, n: avg ? m.n : null, pwet: ol && !spi ? m.rain_prob_above : null, pdry: ol && !spi ? m.rain_prob_below : null,
         three: !!(ol && m.rain_spi3), spi1: ol && m.rain_spi3 ? m.rain_spi : null, snmme: ol ? m.rain_spi_nmme : null, senso: ol ? m.rain_spi_enso : null,
-        pd1: ol ? m.rain_p_dry : null, pw1: ol ? m.rain_p_wet : null }));
+        pd1: ol ? m.rain_p_dry : null, pw1: ol ? m.rain_p_wet : null, pd3: ol ? m.rain_p3_dry : null, pw3: ol ? m.rain_p3_wet : null }));
   }
   function gridCell(g, key, latlng) {
     if (!g || !g[key] || !latlng) return null;
@@ -46228,7 +46238,7 @@ function showCommodityDetail(key) {
   }
   function olTip(e) {
     var kind = (PEV_TYPE[e.type] || [0, 'other'])[1], sc = sstScene(), src = e.source || {}, rg = rainGrid(), ll0 = { lat: e.lat, lng: e.lon };
-    var sv = rg && rg.kind === 'spi' ? gridCell(rg, 'anom', ll0) : null, span = rg && rg.three ? 'three months to ' + sc.season : sc.season;
+    var sv = rg && (rg.kind === 'spi' || rg.kind === 'fc') ? gridCell(rg, 'anom', ll0) : null, span = rg && rg.three ? 'three months to ' + sc.season : sc.season;
     var check = kind === 'other' ? '' : sv == null ? 'No modelled rain at this spot' : Math.abs(sv) < 50 ? 'This map here: near normal, ' + span + ' (' + num(sv / 100, 1) + ')' :
       ((sv < 0) === (kind === 'dry') ? 'This map agrees: ' : 'This map differs: ') + spiWord(sv).replace(/ for the time of year$/, '') + ', ' + span + ' (' + num(sv / 100, 1) + ')';
     return '<b>' + esc(e.title) + '</b><br>' + esc(e.place || nameFor((e.iso3 || [])[0])) + ' · ' + esc(monSpan(e.months)) + ' · forecast' +
@@ -46329,7 +46339,7 @@ function showCommodityDetail(key) {
       var srcTxt = w ? (chirps ? 'CHIRPS satellite + stations' : 'CPC rain gauges') + ', ' + dayRange(chirps ? w.fstart : w.start, chirps ? w.fend : w.end) :
         rm ? (chirps ? 'CHIRPS satellite + stations' + (rm.fillFinal === false ? ', preliminary' : '') : 'CPC rain gauges') + ', ' + sc.season : '';
       var mmTxt = mm != null && nmm != null ? mm + ' mm fell, normal ' + nmm + ' mm in ' + wd + ' days' : '';
-      var pct = rg && rg.pct ? gridCell(rg, 'pct', ll) : rv, sv = rg && rg.kind === 'spi' ? rv : null;
+      var pct = rg && rg.pct ? gridCell(rg, 'pct', ll) : rv, sv = rg && (rg.kind === 'spi' || rg.kind === 'fc') ? rv : null;
       if (pct != null && (rv != null || !obs)) {
         /* The excess or shortfall against the baseline, in words, then in millimetres where the feed has them. */
         rows.push('<span class="ro-v">' + (pct === 0 ? 'Rain at ' : 'Rain ' + Math.abs(pct) + '% ' + (pct < 0 ? 'below ' : 'above ')) + (sc.view === 'outlook' ? 'the models’ normal' : obs ? 'normal' : 'the 1991–2020 average') + '</span>');
@@ -46337,6 +46347,8 @@ function showCommodityDetail(key) {
           rows.push('<span class="ro-v ro-spi">' + esc(spiWord(sv).replace(/ for the time of year$/, '').replace(/^near normal$/, 'near normal').replace(/^./, function (c) { return c.toUpperCase(); })) + ', ' + esc(ow.span) + ' <span class="ro-c">(drought index ' + num(sv / 100, 1) + ')</span></span>');
           if (s1 != null) rows.push('<span class="ro-c">' + esc(MON_FULL[+sc.key.slice(5, 7) - 1]) + ' alone: ' + esc(spiWord(s1).replace(/ for the time of year$/, '')) + ' (' + num(s1 / 100, 1) + ')' +
             (sn != null ? '; models ' + num(sn / 100, 1) : '') + (se != null ? ', past El Niños ' + num(se / 100, 1) : '') + '</span>');
+          var d3 = gridCell(rg, 'pd3', ll), w3 = gridCell(rg, 'pw3', ll);
+          if (d3 != null && w3 != null) rows.push('<span class="ro-c">Chance ' + esc(ow.span) + ' ends ' + (w3 > d3 ? 'at least moderately wet: ' + w3 : 'at least moderately dry: ' + d3) + '%, about 16% in a normal year</span>');
           if (p1 != null && q1 != null) rows.push('<span class="ro-c">' + (q1 > p1 ? 'Chance of a very wet month (index +1 or more): ' + q1 : 'Chance of a drought month (index −1 or lower): ' + p1) + '%, about 16% in a normal year</span>');
           rows.push('<span class="ro-c">' + esc(ow.how) + '</span>');
         } else if (sv != null) rows.push('<span class="ro-v ro-spi">' + esc(spiWord(sv).replace(/^./, function (c) { return c.toUpperCase(); })) + ' <span class="ro-c">(drought index ' + num(sv / 100, 1) + ')</span></span>');
@@ -46491,6 +46503,7 @@ function showCommodityDetail(key) {
     var rg0 = sc.rain ? rainGrid() : null, rk = rg0 && rg0.kind || 'pct', rm0 = sc.view === 'month' ? rainMonth() : null;
     var rramp = ''; if (rk === 'odds') { for (var ro = -100; ro <= 100.01; ro += 4) rramp += '<i style="background:' + (rainColor(ro, rk) || 'transparent') + '"></i>'; }
     else if (rk === 'spi') { for (var rs = -300; rs <= 300.01; rs += 12) rramp += '<i style="background:' + (rainColor(rs, rk) || 'transparent') + '"></i>'; }
+    else if (rk === 'fc') { var fe0 = fcScale()[1] * 1.15; for (var rf = -fe0; rf <= fe0 + 0.01; rf += fe0 / 25) rramp += '<i style="background:' + (rainColor(rf, rk) || 'transparent') + '"></i>'; }
     else if (rk === 'wk') { for (var rw = -100; rw <= 150.01; rw += 5) rramp += '<i style="background:' + (rainColor(rw, rk) || 'transparent') + '"></i>'; }
     else for (var rv = -80; rv <= 80.01; rv += 4) rramp += '<i style="background:' + (rainColor(rv, rk) || 'transparent') + '"></i>';
     var rn0 = sc.view === 'now' ? rainNowWin(30) || {} : {}, onWeek = sc.view === 'now' && !!rainOverGrid(), rw7 = onWeek ? rainNowWin(7) || {} : {};
@@ -46498,11 +46511,11 @@ function showCommodityDetail(key) {
       (S.sub === 'elnino' ? '' : 'NOAA CPC rain gauges where they are dense; elsewhere CHIRPS v3 (satellite + stations' + when + '), each against its own 1991–2020 record. '); };
     var how = rk === 'spi' ? ': how unusual' : ' vs normal';
     var rainKey = sc.rain ? '<div class="enso-legend-block enso-lk-rain"><div class="enso-legend-t">' + ({ now: 'Rain on land, ' + (rn0.arch ? '' : 'last ') + '30 days to ' + esc(rn0.end ? dayMon(rn0.end) : '') + how,
-        month: 'Rain on land, ' + esc(sc.season) + how, outlook: sc.view === 'outlook' && rk === 'spi' && rg0.three ? 'Rain on land, ' + esc(olWin(sc.key).span) + ': drought outlook' : rk === 'odds' ? 'Rain on land, ' + esc(sc.season) + ': chance of a dry or wet month' : 'Rain on land, % against the models’ normal · forecast' }[sc.view] || (rk === 'spi' ? 'Rain on land, ' + esc(sc.season) + ': how unusual' : 'Rain on land, % against the 1991–2020 ' + esc(sc.season) + ' mean')) + '</div>' +
-      (rk === 'odds' ? box(rramp, 'likely dry', 'no lean', 'likely wet') : rk === 'spi' ? box(rramp, 'extremely dry', 'normal', 'extremely wet') : rk === 'wk' ? box(rramp, 'drier', 'clear −80% to +75%', 'wetter') : box(rramp, rk === 'live' ? '−80%' : 'drier', rk === 'live' ? 'normal ±15%' : 'normal', rk === 'live' ? '+80%' : 'wetter')) +
+        month: 'Rain on land, ' + esc(sc.season) + how, outlook: sc.view === 'outlook' && (rk === 'spi' || rk === 'fc') && rg0.three ? 'Rain on land, ' + esc(olWin(sc.key).span) + ': drought outlook' : rk === 'odds' ? 'Rain on land, ' + esc(sc.season) + ': chance of a dry or wet month' : 'Rain on land, % against the models’ normal · forecast' }[sc.view] || (rk === 'spi' ? 'Rain on land, ' + esc(sc.season) + ': how unusual' : 'Rain on land, % against the 1991–2020 ' + esc(sc.season) + ' mean')) + '</div>' +
+      (rk === 'odds' ? box(rramp, 'likely dry', 'no lean', 'likely wet') : rk === 'fc' ? box(rramp, 'drier −' + num(fcScale()[1] / 100, 1), 'no lean', 'wetter +' + num(fcScale()[1] / 100, 1)) : rk === 'spi' ? box(rramp, 'extremely dry', 'normal', 'extremely wet') : rk === 'wk' ? box(rramp, 'drier', 'clear −80% to +75%', 'wetter') : box(rramp, rk === 'live' ? '−80%' : 'drier', rk === 'live' ? 'normal ±15%' : 'normal', rk === 'live' ? '+80%' : 'wetter')) +
       '<div class="ctr-note">' + ({ now: both(rn0.fstart ? ', ' + dayRange(rn0.fstart, rn0.fend) : '') + (rk === 'spi' ? 'Blank where the season is normally dry.' : rk === 'wk' ? 'Clear from −80% to +75%, where most weeks of 1991–2020 fell; blank where the week normally brings under 7 mm. A CHIRPS week is one five-day pentad.' : 'Within ±15% is ordinary variation and left clear; blank where the season is normally dry.') + ' Hover for the percent, millimetres and source.',
         month: both(rm0 && rm0.fillFinal === false ? ', preliminary' : '') + (rk === 'spi' ? '' : 'Within ±15% is left clear. ') + 'Blank where the month is normally dry. Hover for the percent, millimetres and source.',
-        outlook: sc.view === 'outlook' && rk === 'spi' ? 'The drought index expected for ' + esc(olWin(sc.key).span) + ' (' + esc(olWin(sc.key).how) + '). Forecast months blend NOAA’s six-model average (NMME) with a statistical model of how each place’s rain answered El Niño in 1951–2020, run at CPC’s official outlook. A forecast is an average of many possible months, so it reads milder than a real one: any colour here is a strong signal. Hover for the month alone, both models and the chance of a drought month.' :
+        outlook: sc.view === 'outlook' && (rk === 'spi' || rk === 'fc') ? 'The drought index expected for ' + esc(olWin(sc.key).span) + ' (' + esc(olWin(sc.key).how) + '). Forecast months blend NOAA’s six-model average (NMME) with a statistical model of how each place’s rain answered El Niño in 1951–2020, run at CPC’s official outlook. Forecast scale: a forecast averages many possible seasons, so its index runs about half the size of an observed one; months still to come colour from ±0.35 and in full at ±1.35, months already fallen on the observed scale (±0.5 to ±2). This map: clear within ±' + num(fcScale()[0] / 100, 2) + ', full at ±' + num(fcScale()[1] / 100, 1) + '. Hover for the chance the three months end dry or wet, the month alone and both models.' :
           rk === 'odds' ? 'CPC’s odds that the month lands in the driest or wettest third of the models’ own past months; 33% each is no lean. Coloured from about 40%, full at 70%. Hover for the forecast change in rain. Blank where the month is normally dry.' : 'Masked where the month is normally dry. The average of many model runs: a real month swings further.',
         winter: (rk === 'spi' ? 'Drought index of this season’s three months against 1991–2020 (NOAA PREC/L gauges). ' : '') + 'Masked where the season is arid. One winter: local swings are its own, not a rule.' }[sc.view] ||
         (rk === 'spi' ? 'Drought index of the season’s three months against 1991–2020 (NOAA PREC/L gauges), averaged over the winters. ' : '') + 'Masked where the season is arid. Hover a place for how many of the winters agreed.') + '</div></div>' : '';
