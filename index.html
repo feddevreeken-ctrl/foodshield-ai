@@ -11505,7 +11505,6 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-pan-arr { color:var(--t3); }
 #tab-elnino .enso-pan-world { margin:16px 0 8px; padding:12px 14px; border-left:2px solid #e0864a; background:rgba(255,255,255,.015); }
 #tab-elnino .enso-pan-world h4 { margin:0 0 6px; font:600 13px/1.4 'Geist',sans-serif; color:var(--t1); }
-#tab-elnino .enso-gatun-sonar { display:block; width:100%; max-width:820px; height:auto; margin:8px 0 4px; }
 #tab-elnino :is(.enso-pan-world,.enso-lanes-other) .enso-inline-link { min-height:0; min-width:0; display:inline; }
 #tab-elnino .enso-gfit-more { margin-top:10px; }
 #tab-elnino .enso-chain-fold { margin:var(--enso-gap, 24px) 0; }
@@ -12325,7 +12324,9 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 /* Shipping: Panama since 2019 and the Gatún dry-season outlook */
 #tab-elnino .enso-pan-since { width:100%; height:auto; display:block; margin-top:8px; }
 #tab-elnino .enso-gfit { display:grid; grid-template-columns:minmax(0, 1.6fr) minmax(220px, 1fr); gap:28px; align-items:start; margin-top:8px; }
-#tab-elnino .enso-gatun-fit { width:100%; height:auto; display:block; }
+#tab-elnino .enso-gatun-fit { width:100%; height:auto; display:block; margin:6px 0 4px; }
+#tab-elnino .enso-gatun-fit .enso-hw-t { font-size:12px; }
+#tab-elnino .enso-gatun-fit .is-halo { paint-order:stroke; stroke:var(--plate, #10151c); stroke-width:4px; stroke-linejoin:round; }
 #tab-elnino .enso-gfit-facts { margin:0; display:grid; gap:4px; }
 #tab-elnino .enso-gfit-facts dt { font:10.5px/1.4 'Geist Mono',monospace; letter-spacing:.04em; text-transform:uppercase; color:var(--t3); margin-top:10px; }
 #tab-elnino .enso-gfit-facts dt:first-child { margin-top:0; }
@@ -50506,81 +50507,91 @@ function showCommodityDetail(key) {
     var fitAt = function (oni) { return b.intercept + b.level_then * lvNow + b.el_nino_oni * Math.max(oni, 0); };
     /* Each past season shifted to start from this year's level, so it sits against the one line drawn. */
     var adj = O.points.map(function (p) { return { s: p.season, o: p.oni_djf, v: p.low - b.level_then * (p.level_then - lvNow), raw: p.low }; });
-    var xs = adj.map(function (p) { return p.o; }).concat([fc.hi || 3]), ys = adj.map(function (p) { return p.v; }).concat([D.p05, D.p95]);
-    var xLo = Math.floor(Math.min.apply(null, xs)), xHi = Math.ceil(Math.max.apply(null, xs) * 2) / 2, yLo = Math.floor(Math.min.apply(null, ys)) - 0.5, yHi = Math.ceil(Math.max.apply(null, ys));
-    var W = 620, H = 330, L0 = 50, R0 = 600, T0 = 16, B0 = 290;
-    var X = function (v) { return L0 + (v - xLo) / (xHi - xLo) * (R0 - L0); }, Y = function (v) { return B0 - (v - yLo) / (yHi - yLo) * (B0 - T0); };
-    var grid = '';
-    for (var yv = Math.ceil(yLo); yv <= yHi; yv += 1) grid += '<line x1="' + L0 + '" x2="' + R0 + '" y1="' + Y(yv).toFixed(1) + '" y2="' + Y(yv).toFixed(1) + '" stroke="#232a33"/>' + (yv % 2 === 0 ? '<text x="' + (L0 - 6) + '" y="' + (Y(yv) + 4).toFixed(1) + '" text-anchor="end" class="enso-hw-t">' + yv + ' ft</text>' : '');
-    for (var xv = Math.ceil(xLo); xv <= xHi; xv += 1) grid += '<text x="' + X(xv).toFixed(1) + '" y="' + (B0 + 16) + '" text-anchor="middle" class="enso-hw-t">' + (xv > 0 ? '+' : xv < 0 ? '−' : '') + Math.abs(xv) + '</text>';
-    /* The 2023-24 band: the lake levels at which the Canal ran 22-25 booking slots a day. */
-    var lad = (O.ladder_2023 || []).filter(function (r) { return r.slots <= 25; }), band = '';
-    if (lad.length) { var lo = Math.min.apply(null, lad.map(function (r) { return r.lake_ft; })), hi = Math.max.apply(null, lad.map(function (r) { return r.lake_ft; }));
-      band = '<rect x="' + L0 + '" y="' + Y(hi).toFixed(1) + '" width="' + (R0 - L0) + '" height="' + Math.max(2, Y(lo) - Y(hi)).toFixed(1) + '" fill="rgba(143,177,207,.12)"/><text x="' + (L0 + 6) + '" y="' + (Y(hi) - 4).toFixed(1) + '" class="enso-hw-t" fill="#8fb1cf">2023-24: 22–25 slots a day at these levels</text>'; }
-    var rec = '<line x1="' + L0 + '" x2="' + R0 + '" y1="' + Y(D.record_ft).toFixed(1) + '" y2="' + Y(D.record_ft).toFixed(1) + '" stroke="#8b8980" stroke-dasharray="3 3"/><text x="' + (R0 - 4) + '" y="' + (Y(D.record_ft) + 13).toFixed(1) + '" text-anchor="end" class="enso-hw-t">record low ' + D.record_ft.toFixed(1) + ' ft (' + D.record_season + ')</text>';
-    var fit = '<path class="enso-gfit-line" d="M' + X(xLo).toFixed(1) + ',' + Y(fitAt(xLo)).toFixed(1) + ' L' + X(0).toFixed(1) + ',' + Y(fitAt(0)).toFixed(1) + ' L' + X(xHi).toFixed(1) + ',' + Y(fitAt(xHi)).toFixed(1) + '" fill="none" stroke="#e0864a" stroke-width="1.6" stroke-dasharray="6 4"/>';
-    var named = { 1983: 1, 1998: 1, 2016: 1, 2024: 1 };
-    var dots = adj.map(function (p) { var big = p.o >= 1.5, dy = ' data-dy="' + (Y(p.raw) - Y(p.v)).toFixed(1) + '"'; return '<circle' + dy + ' cx="' + X(p.o).toFixed(1) + '" cy="' + Y(p.v).toFixed(1) + '" r="' + (big ? 3.6 : 2.6) + '" fill="' + (big ? '#ebe9e2' : '#56606b') + '"><title>' + (p.s - 1) + '-' + String(p.s).slice(2) + ': Dec-Feb ONI ' + num(p.o, 2) + ', low ' + p.raw.toFixed(2) + ' ft</title></circle>' +
-      (named[p.s] ? '<text' + dy + ' x="' + (X(p.o) + 6).toFixed(1) + '" y="' + (Y(p.v) + 4).toFixed(1) + '" class="enso-hw-t">' + (p.s - 1) + '-' + String(p.s).slice(2) + '</text>' : ''); }).join('');
-    var px = X(fc.median || (cpc ? cpc.oni : 2.5));
-    var proj = '<g class="enso-gfit-proj"><line x1="' + px.toFixed(1) + '" x2="' + px.toFixed(1) + '" y1="' + Y(D.p95).toFixed(1) + '" y2="' + Y(D.p05).toFixed(1) + '" stroke="#e0864a" stroke-width="1.2"/>' +
-      '<rect x="' + (px - 5).toFixed(1) + '" y="' + Y(D.p90).toFixed(1) + '" width="10" height="' + (Y(D.p10) - Y(D.p90)).toFixed(1) + '" fill="rgba(224,134,74,.35)" stroke="#e0864a"/>' +
-      '<rect x="' + (px - 4).toFixed(1) + '" y="' + (Y(D.p50) - 4).toFixed(1) + '" width="8" height="8" fill="#e0864a" transform="rotate(45 ' + px.toFixed(1) + ' ' + Y(D.p50).toFixed(1) + ')"/>' +
-      '<text x="' + (px + 10).toFixed(1) + '" y="' + (Y(D.p50) + 4).toFixed(1) + '" class="enso-hw-t" fill="#e0864a">2027: ' + D.p50.toFixed(1) + ' ft</text></g>';
-    var svg = '<svg class="enso-hw enso-gatun-fit" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Past dry-season lows of Gatún Lake against the December–February ONI, the fitted line at this year’s level and the 2027 projection">' +
-      grid + band + rec + fit + dots + proj +
-      '<text x="' + ((L0 + R0) / 2) + '" y="' + (H - 4) + '" text-anchor="middle" class="enso-hw-t">December–February ONI, °C</text></svg>';
-    var slots = lad.length ? ' In 2023-24 the Canal ran ' + Math.min.apply(null, lad.map(function (r) { return r.slots; })) + '–' + Math.max.apply(null, lad.map(function (r) { return r.slots; })) + ' booking slots a day with the lake between ' + Math.min.apply(null, lad.map(function (r) { return r.lake_ft; })).toFixed(1) + ' and ' + Math.max.apply(null, lad.map(function (r) { return r.lake_ft; })).toFixed(1) + ' ft.' : '';
-    /* 2026-09-29 audit (Fedde: "Where is it now? Maybe better diagram of an actually lake depth (sonar)"): the top of
-       the lake as a cross-section, today's level, the normal range for the date, the modelled 2027 low with its
-       ranges, the levels of the 2023-24 slot cuts and the record low, every level read from the gauges file. */
     var cl = G.climatology_today || {}, nowL = G.latest && typeof G.latest.value === 'number' ? G.latest : { value: lvNow, date: O.level_date };
-    var ladAll = O.ladder_2023 || [], ftOf = function (r) { return r.lake_ft; }, slOf = function (r) { return r.slots; };
-    var cutLo = ladAll.length ? Math.min.apply(null, ladAll.map(ftOf)) : null, cutHi = ladAll.length ? Math.max.apply(null, ladAll.map(ftOf)) : null;
-    var sLo = ladAll.length ? Math.min.apply(null, ladAll.map(slOf)) : null, sHi = ladAll.length ? Math.max.apply(null, ladAll.map(slOf)) : null;
-    var lv = [nowL.value, D.p05, D.p95, D.record_ft].concat(typeof cl.p10 === 'number' ? [cl.p10, cl.p90] : []).concat(cutLo != null ? [cutLo, cutHi] : []);
-    var fLo = Math.floor(Math.min.apply(null, lv)) - 1, fHi = Math.ceil(Math.max.apply(null, lv)) + 1;
-    var SW = 720, SH = 296, sT = 14, sB = 272, bx0 = 46, bx1 = 330, slope = 64, cx0 = bx1 + 10, lx = bx1 + 62;
-    var sy = function (v) { return sB - (v - fLo) / (fHi - fLo) * (sB - sT); };
-    var xin = function (y) { var f = (y - sT) / (sB - sT); return [bx0 + slope * f, bx1 - slope * f]; };
-    var slab = function (lo, hi, fill, more) { var y0 = sy(hi), y1 = sy(lo), a0 = xin(y0), a1 = xin(y1); return '<path d="M' + a0[0].toFixed(1) + ',' + y0.toFixed(1) + 'L' + a0[1].toFixed(1) + ',' + y0.toFixed(1) + 'L' + a1[1].toFixed(1) + ',' + y1.toFixed(1) + 'L' + a1[0].toFixed(1) + ',' + y1.toFixed(1) + 'Z" fill="' + fill + '"' + (more || '') + '/>'; };
-    var level = function (v, c, dash, w) { var y = sy(v), e = xin(y); return '<line x1="' + e[0].toFixed(1) + '" x2="' + e[1].toFixed(1) + '" y1="' + y.toFixed(1) + '" y2="' + y.toFixed(1) + '" stroke="' + c + '" stroke-width="' + (w || 1) + '"' + (dash ? ' stroke-dasharray="' + dash + '"' : '') + '/>'; };
-    /* Ranges stand beside the lake as bars, one column each, so nothing is layered over the water. */
-    var bar = function (col, lo, hi, fill, w) { return '<rect x="' + (cx0 + col * 14 + (8 - w) / 2) + '" y="' + sy(hi).toFixed(1) + '" width="' + w + '" height="' + Math.max(1, sy(lo) - sy(hi)).toFixed(1) + '" fill="' + fill + '"/>'; };
+    /* The 2023-24 slot cuts: the lake levels at which the Canal ran 22-25 booking slots a day. */
+    var lad = (O.ladder_2023 || []).filter(function (r) { return r.slots <= 25; }), ftOf = function (r) { return r.lake_ft; }, slOf = function (r) { return r.slots; };
+    var cutLo = lad.length ? Math.min.apply(null, lad.map(ftOf)) : null, cutHi = lad.length ? Math.max.apply(null, lad.map(ftOf)) : null;
+    var sLo = lad.length ? Math.min.apply(null, lad.map(slOf)) : null, sHi = lad.length ? Math.max.apply(null, lad.map(slOf)) : null;
+    /* 2026-09-30 round 3 (Fedde: "still include the graph on right here ... on left have the canal depth model ... combine the
+       graph with dashes to the canal depth"): one figure on ONE vertical scale in feet. Left, an engraved section of the lake at
+       the Gatún Locks (Codex art, img/enso/gatun-section, not to scale) with the water and every level drawn to scale over it;
+       right, the fit. Dashed guides for today, the 2027 median and 80% range, the slot-cut band and the record low run across
+       both. Every level is read from the gauges file. */
+    var lv = [nowL.value, D.p05, D.p95, D.record_ft].concat(typeof cl.p10 === 'number' ? [cl.p10, cl.p90] : []).concat(cutLo != null ? [cutLo, cutHi] : []).concat(adj.map(function (p) { return p.v; }));
+    var fLo = Math.floor(Math.min.apply(null, lv)) - 0.5, fHi = Math.ceil(Math.max.apply(null, lv)) + 0.5;
+    var W = 1210, T0 = 96, B0 = 346, H = 388;
+    var Y = function (v) { return B0 - (v - fLo) / (fHi - fLo) * (B0 - T0); };
+    /* Art registration, measured on the 1536x1024 source: bank top and wall coping sit above row 330, the basin runs off the
+       bottom edge; the lake side of the bank (column by row) and the lock-wall face (column 1199). fHi pins to row 330 and fLo
+       to row 1010, so the painted water always sits inside the basin, whatever the levels are. */
+    var ART = { r0: 330, r1: 1010, wall: 1199, crop: 1415, edge: [[300, 330], [368, 339], [432, 370], [496, 388], [560, 427], [624, 443], [688, 468], [752, 497], [816, 530], [880, 554], [944, 589], [1024, 625]] };
+    var s = (B0 - T0) / (ART.r1 - ART.r0), oy = T0 - ART.r0 * s, AW = ART.crop * s, wallX = ART.wall * s, yb = B0 + 4;
+    var bankX = function (y) { var r = (y - oy) / s, e = ART.edge; for (var i = 1; i < e.length; i++) if (r <= e[i][0]) return (e[i - 1][1] + Math.max(0, (r - e[i - 1][0]) / (e[i][0] - e[i - 1][0])) * (e[i][1] - e[i - 1][1])) * s + 3; return e[e.length - 1][1] * s + 3; };
+    var bx = 546, lx = bx + 40, L0 = lx + 214, R0 = 1160;
+    var xs = adj.map(function (p) { return p.o; }).concat([fc.hi || 3]);
+    var xLo = Math.floor(Math.min.apply(null, xs)), xHi = Math.ceil(Math.max.apply(null, xs) * 2) / 2;
+    var X = function (v) { return L0 + (v - xLo) / (xHi - xLo) * (R0 - L0); };
+    var f1 = function (v) { return v.toFixed(1); };
+    var grid = '';
+    for (var yv = Math.ceil(fLo); yv <= fHi; yv += 1) grid += '<line x1="' + L0 + '" x2="' + R0 + '" y1="' + f1(Y(yv)) + '" y2="' + f1(Y(yv)) + '" stroke="#232a33"/>' + (yv % 2 === 0 ? '<text x="' + (R0 + 8) + '" y="' + f1(Y(yv) + 4) + '" class="enso-hw-t">' + yv + ' ft</text>' : '');
+    for (var xv = Math.ceil(xLo); xv <= xHi; xv += 1) grid += '<text x="' + f1(X(xv)) + '" y="' + (B0 + 17) + '" text-anchor="middle" class="enso-hw-t">' + (xv > 0 ? '+' : xv < 0 ? '−' : '') + Math.abs(xv) + '</text>';
+    /* Guides: from the bank (inside the water) across the art, the label column and the chart, one per level. */
+    var guide = function (v, c, dash, w, op, from) { var y = Y(v); return '<line class="enso-gx-guide" data-ft="' + v + '" x1="' + f1(from != null ? from : bankX(y)) + '" x2="' + R0 + '" y1="' + f1(y) + '" y2="' + f1(y) + '" stroke="' + c + '" stroke-width="' + (w || 1) + '"' + (dash ? ' stroke-dasharray="' + dash + '"' : '') + (op ? ' stroke-opacity="' + op + '"' : '') + '/>'; };
+    var yNow = Y(nowL.value), water = 'M' + f1(bankX(yNow)) + ',' + f1(yNow);
+    ART.edge.forEach(function (e) { var y = oy + e[0] * s; if (y > yNow && y < yb) water += 'L' + f1(e[1] * s + 3) + ',' + f1(y); });
+    water += 'L' + f1(bankX(yb)) + ',' + yb + 'L' + f1(wallX) + ',' + yb + 'L' + f1(wallX) + ',' + f1(yNow) + 'Z';
+    var band = cutLo == null ? '' : '<path d="M' + f1(bankX(Y(cutHi))) + ',' + f1(Y(cutHi)) + 'L' + R0 + ',' + f1(Y(cutHi)) + 'L' + R0 + ',' + f1(Y(cutLo)) + 'L' + f1(bankX(Y(cutLo))) + ',' + f1(Y(cutLo)) + 'Z" fill="rgba(143,177,207,.13)"/>';
+    var bar = function (col, lo, hi, fill, w) { return '<rect x="' + (bx + col * 12 + (8 - w) / 2) + '" y="' + f1(Y(hi)) + '" width="' + w + '" height="' + f1(Math.max(1, Y(lo) - Y(hi))) + '" fill="' + fill + '"/>'; };
+    var artSrc = 'img/enso/gatun-section' + (typeof window !== 'undefined' && window.innerWidth < 700 ? '-768' : '') + '.webp';
+    var drop = nowL.value - D.p50, ax = wallX - 34;
     var dNowTxt = (function () { var d = new Date(String(nowL.date).slice(0, 10) + 'T12:00:00Z'); return isNaN(d) ? '' : d.getUTCDate() + ' ' + MON3[d.getUTCMonth()]; })();
     var labs = [
       { v: nowL.value, c: '#ebe9e2', t: '<tspan font-weight="600">Now ' + nowL.value.toFixed(1) + ' ft</tspan>, ' + dNowTxt },
-      typeof cl.p10 === 'number' ? { v: (cl.p10 + cl.p90) / 2, c: '#8b8980', t: 'Normal for the date: ' + cl.p10.toFixed(1) + '–' + cl.p90.toFixed(1) + ' ft (' + (cl.n_years || '') + ' years)' } : null,
-      cutLo != null ? { v: (cutLo + cutHi) / 2, c: '#8fb1cf', t: '2023-24 slot cuts, ' + sLo + '–' + sHi + ' a day: ' + cutLo.toFixed(1) + '–' + cutHi.toFixed(1) + ' ft' } : null,
-      { v: D.p50, c: '#e0864a', t: '<tspan font-weight="600">2027 low, median ' + D.p50.toFixed(1) + ' ft</tspan> (80%: ' + D.p10.toFixed(1) + '–' + D.p90.toFixed(1) + ')' },
+      typeof cl.p10 === 'number' ? { v: cl.p90, c: '#8b8980', t: 'Normal for the date ' + cl.p10.toFixed(1) + '–' + cl.p90.toFixed(1) } : null,
+      cutLo != null ? { v: cutHi, c: '#8fb1cf', t: '2023-24: ' + sLo + '–' + sHi + ' slots a day' } : null,
+      { v: D.p50, c: '#e0864a', t: '<tspan font-weight="600">2027 median ' + D.p50.toFixed(1) + ' ft</tspan>' },
       { v: D.record_ft, c: '#8b8980', t: 'Record low ' + D.record_ft.toFixed(1) + ' ft (' + D.record_season + ')' }
-    ].filter(Boolean).map(function (x) { x.y = sy(x.v); x.ly = x.y; return x; }).sort(function (a, b2) { return a.y - b2.y; });
-    for (var li = 1; li < labs.length; li++) if (labs[li].ly < labs[li - 1].ly + 15) labs[li].ly = labs[li - 1].ly + 15;
-    var over = labs.length ? labs[labs.length - 1].ly - (sB - 2) : 0; if (over > 0) labs.forEach(function (x) { x.ly -= over; });
-    var ticksS = ''; for (var fv = fLo + 1; fv < fHi; fv += 1) if (fv % 2 === 0) ticksS += '<line x1="' + (bx0 - 4) + '" x2="' + bx0 + '" y1="' + sy(fv).toFixed(1) + '" y2="' + sy(fv).toFixed(1) + '" stroke="#56606b"/><text x="' + (bx0 - 7) + '" y="' + (sy(fv) + 4).toFixed(1) + '" text-anchor="end" class="enso-hw-t">' + fv + ' ft</text>';
-    var midX = (bx0 + bx1) / 2 + 40, drop = nowL.value - D.p50;
-    var sonar = '<svg class="enso-hw enso-gatun-sonar" viewBox="0 0 ' + SW + ' ' + SH + '" role="img" aria-label="Gatún Lake, the top ' + (fHi - fLo) + ' feet: today ' + nowL.value.toFixed(1) + ' ft, the modelled 2027 dry-season low ' + D.p50.toFixed(1) + ' ft, the 2023-24 slot-cut levels and the record low">' +
-      '<defs><linearGradient id="enso-sonar-deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#23404f"/><stop offset="1" stop-color="#0f1a22"/></linearGradient></defs>' +
-      slab(fLo, nowL.value, 'url(#enso-sonar-deep)') +
-      '<path d="M' + bx0 + ',' + sT + 'L' + (bx0 + slope) + ',' + sB + '" stroke="#56606b" fill="none"/><path d="M' + bx1 + ',' + sT + 'L' + (bx1 - slope) + ',' + sB + '" stroke="#56606b" fill="none"/>' +
-      '<line x1="' + (bx0 + slope) + '" x2="' + (bx1 - slope) + '" y1="' + sB + '" y2="' + sB + '" stroke="#56606b" stroke-dasharray="2 4"/>' +
-      '<text x="' + ((bx0 + bx1) / 2) + '" y="' + (sB + 16) + '" text-anchor="middle" class="enso-hw-t">the lake bed is far below this slice</text>' +
+    ].filter(Boolean).map(function (x) { x.y = Y(x.v); x.ly = x.y - 4; return x; }).sort(function (a, b2) { return a.y - b2.y; });
+    for (var li = 1; li < labs.length; li++) if (labs[li].ly < labs[li - 1].ly + 14) labs[li].ly = labs[li - 1].ly + 14;
+    /* Right: every dry season since 1966, the fitted line and the 2027 box, on the same feet. */
+    var fit = '<path class="enso-gfit-line" d="M' + f1(X(xLo)) + ',' + f1(Y(fitAt(xLo))) + ' L' + f1(X(0)) + ',' + f1(Y(fitAt(0))) + ' L' + f1(X(xHi)) + ',' + f1(Y(fitAt(xHi))) + '" fill="none" stroke="#e0864a" stroke-width="1.6" stroke-dasharray="6 4"/>';
+    /* Named winters sit to the left of their dots (the 2027 box is on the right); 1997-98 and 2015-16 lie 0.3 ft apart. */
+    var named = { 1983: [-6, 4], 1998: [-6, 13], 2016: [-6, -5], 2024: [-6, 4] };
+    var dots = adj.map(function (p) { var big = p.o >= 1.5, dy = ' data-dy="' + f1(Y(p.raw) - Y(p.v)) + '"'; return '<circle' + dy + ' data-v="' + p.v + '" cx="' + f1(X(p.o)) + '" cy="' + f1(Y(p.v)) + '" r="' + (big ? 3.6 : 2.6) + '" fill="' + (big ? '#ebe9e2' : '#56606b') + '"><title>' + (p.s - 1) + '-' + String(p.s).slice(2) + ': Dec-Feb ONI ' + num(p.o, 2) + ', low ' + p.raw.toFixed(2) + ' ft</title></circle>' +
+      (named[p.s] ? '<text' + dy + ' x="' + f1(X(p.o) + named[p.s][0]) + '" y="' + f1(Y(p.v) + named[p.s][1]) + '" text-anchor="end" class="enso-hw-t is-halo">' + (p.s - 1) + '-' + String(p.s).slice(2) + '</text>' : ''); }).join('');
+    var px = X(fc.median || (cpc ? cpc.oni : 2.5));
+    var proj = '<g class="enso-gfit-proj"><line x1="' + f1(px) + '" x2="' + f1(px) + '" y1="' + f1(Y(D.p95)) + '" y2="' + f1(Y(D.p05)) + '" stroke="#e0864a" stroke-width="1.2"/>' +
+      '<rect x="' + f1(px - 5) + '" y="' + f1(Y(D.p90)) + '" width="10" height="' + f1(Y(D.p10) - Y(D.p90)) + '" fill="rgba(224,134,74,.35)" stroke="#e0864a"/>' +
+      '<rect x="' + f1(px - 4) + '" y="' + f1(Y(D.p50) - 4) + '" width="8" height="8" fill="#e0864a" transform="rotate(45 ' + f1(px) + ' ' + f1(Y(D.p50)) + ')"/>' +
+      '<text x="' + f1(Math.min(px, R0 - 60)) + '" y="' + f1(Y(D.p95) - 8) + '" text-anchor="middle" class="enso-hw-t is-halo" fill="#e0864a">2027, 80%: ' + D.p10.toFixed(1) + '–' + D.p90.toFixed(1) + '</text></g>';
+    var svg = '<svg class="enso-hw enso-gatun-fit" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Gatún Lake at the locks on one scale in feet with past dry seasons: today ' + nowL.value.toFixed(1) + ' ft, the modelled 2027 dry-season low ' + D.p50.toFixed(1) + ' ft, the 2023-24 slot-cut levels, the record low, and every dry-season low since 1966 against the December–February ONI">' +
+      '<defs><clipPath id="enso-gx-clip"><rect x="0" y="0" width="' + f1(AW) + '" height="' + yb + '"/></clipPath><linearGradient id="enso-gx-water" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2c5566" stop-opacity=".7"/><stop offset="1" stop-color="#10202a" stop-opacity=".85"/></linearGradient><linearGradient id="enso-gx-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--plate, #10141b);stop-opacity:0"/><stop offset="1" style="stop-color:var(--plate, #10141b)"/></linearGradient></defs>' +
+      '<g class="enso-gatun-sonar">' +
+      '<g clip-path="url(#enso-gx-clip)"><image class="enso-gx-art" href="' + artSrc + '" x="0" y="' + f1(oy) + '" width="' + f1(1536 * s) + '" height="' + f1(1024 * s) + '" preserveAspectRatio="none"/>' +
+      '<path class="enso-gx-water" d="' + water + '" fill="url(#enso-gx-water)"/><rect x="0" y="' + (yb - 36) + '" width="' + f1(AW) + '" height="36" fill="url(#enso-gx-fade)"/></g>' +
+      band + grid +
+      guide(D.p90, '#e0864a', '2 4', 1, '.55') + guide(D.p10, '#e0864a', '2 4', 1, '.55') + guide(D.record_ft, '#8b8980', '1 3') +
+      guide(D.p50, '#e0864a', '6 4', 1.6) + guide(nowL.value, '#ebe9e2', '4 4', 1, '.6', wallX) +
+      '<line x1="' + f1(bankX(yNow)) + '" x2="' + f1(wallX) + '" y1="' + f1(yNow) + '" y2="' + f1(yNow) + '" stroke="#ebe9e2" stroke-width="2"/>' +
+      '<path d="M' + f1(ax) + ',' + f1(yNow + 3) + 'V' + f1(Y(D.p50) - 6) + '" stroke="#e0864a" stroke-width="1.2"/><path d="M' + f1(ax - 4) + ',' + f1(Y(D.p50) - 8) + 'L' + f1(ax) + ',' + f1(Y(D.p50) - 2) + 'L' + f1(ax + 4) + ',' + f1(Y(D.p50) - 8) + '" fill="none" stroke="#e0864a" stroke-width="1.2"/>' +
+      '<text x="' + f1(ax - 7) + '" y="' + f1(yNow + 0.3 * (Y(D.p50) - yNow) + 4) + '" text-anchor="end" class="enso-hw-t" fill="#f0a570">' + (drop >= 0 ? '−' : '+') + Math.abs(drop).toFixed(1) + ' ft</text>' +
       (typeof cl.p10 === 'number' ? bar(0, cl.p10, cl.p90, '#56606b', 6) : '') +
-      bar(1, D.p05, D.p95, 'rgba(224,134,74,.35)', 2) + bar(1, D.p10, D.p90, '#e0864a', 6) +
+      bar(1, D.p05, D.p95, 'rgba(224,134,74,.45)', 2) + bar(1, D.p10, D.p90, '#e0864a', 6) +
       (cutLo != null ? bar(2, cutLo, cutHi, '#8fb1cf', 6) : '') +
-      level(D.record_ft, '#8b8980', '1 3') + level(D.p50, '#e0864a', '6 4', 1.6) + level(nowL.value, '#ebe9e2', '', 2) +
-      '<path d="M' + midX + ',' + (sy(nowL.value) + 3).toFixed(1) + 'V' + (sy(D.p50) - 6).toFixed(1) + '" stroke="#e0864a" stroke-width="1.2"/><path d="M' + (midX - 4) + ',' + (sy(D.p50) - 8).toFixed(1) + 'L' + midX + ',' + (sy(D.p50) - 2).toFixed(1) + 'L' + (midX + 4) + ',' + (sy(D.p50) - 8).toFixed(1) + '" fill="none" stroke="#e0864a" stroke-width="1.2"/>' +
-      '<text x="' + (midX + 7) + '" y="' + ((sy(nowL.value) + sy(D.p50)) / 2 + 4).toFixed(1) + '" class="enso-hw-t is-halo" fill="#e0864a">' + (drop >= 0 ? '−' : '+') + Math.abs(drop).toFixed(1) + ' ft</text>' +
-      ticksS + labs.map(function (x) { var x0 = xin(x.y)[1] + 3; return '<path d="M' + x0 + ',' + x.y.toFixed(1) + 'L' + (lx - 4) + ',' + x.ly.toFixed(1) + '" stroke="' + x.c + '" stroke-opacity=".45" stroke-dasharray="1 2" fill="none"/>' +
-        '<text x="' + lx + '" y="' + (x.ly + 4).toFixed(1) + '" class="enso-hw-t" fill="' + x.c + '">' + x.t + '</text>'; }).join('') + '</svg>';
+      labs.map(function (x) { return '<text x="' + lx + '" y="' + f1(x.ly) + '" class="enso-hw-t is-halo" fill="' + x.c + '">' + x.t + '</text>'; }).join('') +
+      '<text x="10" y="' + f1(yb + 16) + '" class="enso-hw-t">At the Gatún Locks · art not to scale, water and levels to scale</text></g>' +
+      fit + dots + proj +
+      '<text x="' + L0 + '" y="' + (T0 - 12) + '" class="enso-hw-t">Lowest level, January to mid-June, every year since 1966</text>' +
+      '<text x="' + ((L0 + R0) / 2) + '" y="' + (B0 + 34) + '" text-anchor="middle" class="enso-hw-t">December–February ONI, °C</text></svg>';
     var where = cutLo == null ? '' : D.p50 < cutLo ? ', below the ' + cutLo.toFixed(1) + '–' + cutHi.toFixed(1) + ' ft at which the Canal cut to ' + sLo + '–' + sHi + ' slots a day in 2023-24' : D.p50 <= cutHi ? ', inside the ' + cutLo.toFixed(1) + '–' + cutHi.toFixed(1) + ' ft band where the Canal cut to ' + sLo + '–' + sHi + ' slots a day in 2023-24' : ', above the ' + cutLo.toFixed(1) + '–' + cutHi.toFixed(1) + ' ft of the 2023-24 slot cuts';
     var sonarLede = bulletList(['<b>Lowest level, January to mid-June 2027: ' + D.p50.toFixed(1) + ' ft</b> (80% range ' + D.p10.toFixed(1) + '–' + D.p90.toFixed(1) + ', 90% ' + D.p05.toFixed(1) + '–' + D.p95.toFixed(1) + '); ' + Math.round(D.p_below_record * 100) + '% chance of passing the ' + D.record_season + ' record low.',
       typeof G.vs_median_ft === 'number' ? '<b>Now:</b> ' + nowL.value.toFixed(2) + ' ft on ' + esc(dNowTxt) + ', ' + Math.abs(G.vs_median_ft).toFixed(1) + ' ft ' + (G.vs_median_ft < 0 ? 'below' : 'above') + ' the median for the date.' : '',
-      '<b>What this means:</b> at the median the lake ends the dry season ' + Math.abs(drop).toFixed(1) + ' ft ' + (drop >= 0 ? 'below' : 'above') + ' today' + where + '. A lower lake means shallower drafts and fewer transit slots: fewer and lighter grain ships through the canal.']);
+      '<b>What this means:</b> at the median the lake ends the dry season ' + Math.abs(drop).toFixed(1) + ' ft ' + (drop >= 0 ? 'below' : 'above') + ' today' + where + ': fewer and lighter grain ships through the canal.']);
     var lede = bulletList([
       'From the lake at ' + lvNow.toFixed(2) + ' ft on ' + dTxt + ' and CPC’s ' + esc(fc.label || 'December–February') + ' forecast, RONI ' + num(fc.roni_median, 2) + (typeof fc.median_lo === 'number' ? ' (about ONI ' + num(fc.median_lo, 1) + ' to ' + num(fc.median_hi, 1) + ')' : '') + '.',
       typeof D.share_beyond_fit === 'number' && O.fit_max_oni ? '<b>' + Math.round(D.share_beyond_fit * 100) + '% of the draws</b> pass the strongest winter in the record (ONI ' + num(O.fit_max_oni, 1) + ', ' + (O.fit_max_season - 1) + '-' + String(O.fit_max_season).slice(2) + '), so the fit is extended past its data.' : '',
-      slots ? slots.trim() : '']);
+      'Dots: every dry season since 1966, shifted to start from this year’s ' + dTxt + ' level; bright: winters at ONI +1.5 or above.',
+      'Box and bar: median, 80% and 90% range over the coefficients, the residual, CPC’s spread and how the ONI–RONI gap moved in ' + (fc.delta_events || 'past') + ' past El Niños.']);
     var facts = '<dl class="enso-gfit-facts">' +
       '<dt>Each +1 °C of El Niño</dt><dd>' + num(b.el_nino_oni, 1) + ' ft on the low (± ' + O.se.el_nino_oni.toFixed(1) + ')</dd>' +
       '<dt>Each foot higher now</dt><dd>' + num(b.level_then, 2) + ' ft on the low (± ' + O.se.level_then.toFixed(2) + ')</dd>' +
@@ -50588,13 +50599,12 @@ function showCommodityDetail(key) {
       (tdy ? '<dt>If ONI stays at ' + num(tdy.oni, 1) + '</dt><dd>' + tdy.low.toFixed(1) + ' ft</dd>' : '') +
       (O.recent_mean_resid_ft != null ? '<dt>Since ' + O.recent_from + '</dt><dd>the lake has ended the dry season ' + Math.abs(O.recent_mean_resid_ft).toFixed(1) + ' ft ' + (O.recent_mean_resid_ft < 0 ? 'below' : 'above') + ' the fit on average, so the risk leans lower</dd>' : '') + '</dl>';
     return '<figure class="enso-plate enso-gatunfit-plate is-modelled" data-kind="modelled">' + plateHead('How low could Gatún go by mid-2027', 'FoodShield model on the Canal’s daily record since 1965 · NOAA CPC Dec–Feb forecast', stamp(metaDate('gauges')), 'modelled') +
-      '<div class="plate-body">' + sonarLede + sonar +
-      '<details class="enso-ol-more enso-gfit-more"><summary>How the model works: past dry seasons against the winter ONI</summary>' + lede +
-      plateKey([['is-dot', '#56606b', 'Past dry-season lows'], ['is-dot', '#ebe9e2', 'Winters at ONI +1.5 or above'], ['is-dash', '#e0864a', 'Fitted line at this year’s level'], ['is-diamond', '#e0864a', '2027: median, 80% box, 90% bar'], ['is-band', 'rgba(143,177,207,.35)', 'Lake levels of 22–25 slots in 2023-24'], ['is-dash', '#8b8980', 'Record low']]) +
-      '<div class="enso-gfit">' + svg + facts + '</div>' + bulletList(['Dots: every dry season since 1966, shifted to start from this year’s ' + dTxt + ' level; bright: winters at ONI +1.5 or above.',
-        'Diamond and bar: median, 80% and 90% range over the coefficients, the residual, CPC’s spread and how the ONI–RONI gap moved in ' + (fc.delta_events || 'past') + ' past El Niños.'], 'is-fine') + '</details></div>' +
+      '<div class="plate-body">' + sonarLede +
+      plateKey([['is-dot', '#56606b', 'Past dry-season lows'], ['is-dot', '#ebe9e2', 'Winters at ONI +1.5 or above'], ['is-dash', '#e0864a', 'Fitted line at this year’s level'], ['is-diamond', '#e0864a', '2027: median, 80% box, 90% bar']]) +
+      svg +
+      '<details class="enso-ol-more enso-gfit-more"><summary>How the model works</summary><div class="enso-gfit">' + lede + facts + '</div></details></div>' +
       '<figcaption class="enso-log">' + bulletList(['A statistical fit, not a water-balance model; drafts and slots are set only by the Canal’s advisories.',
-        'Cross-section: the top of the lake only, drawn to scale in feet. Bars beside it, left to right: the normal range for the date, the 2027 low (80% thick, 90% thin), the lake levels of the 2023-24 slot cuts.'], 'is-fine') + '</figcaption></figure>';
+        'Left and right share one scale in feet. Bars between them, left to right: the normal range for the date, the 2027 low (80% thick, 90% thin), the lake levels of the 2023-24 slot cuts.'], 'is-fine') + '</figcaption></figure>';
   }
   function shippingPlates(lanes) {
     var G = (S.gauges && S.gauges.gauges) || {}, out = '', gd = stamp(metaDate('gauges'));
