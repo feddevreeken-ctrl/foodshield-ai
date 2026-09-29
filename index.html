@@ -26872,11 +26872,19 @@ const URL_STATE = {
   _last: { tab: null, country: null, commodity: null, scenario: null },
 };
 
+// A clean path (foodshield.nl/elnino) names a tab the same way ?tab= does.
+// vercel.json serves index.html for every non-asset path and strips a trailing
+// slash, so the page's relative data/ fetches still resolve from the root.
+function pathTab() {
+  const seg = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+  return /^[a-z0-9-]+$/.test(seg) ? seg : null;
+}
+
 function readURLState() {
   const p = new URLSearchParams(window.location.search);
   const country = (p.get('country') || '').toUpperCase();
   return {
-    tab:       (p.get('tab') || '').toLowerCase() || null,
+    tab:       (p.get('tab') || '').toLowerCase() || pathTab() || null,
     country:   country && /^(US-)?[A-Z]{2,3}$/.test(country) ? country : null,
     commodity: (p.get('commodity') || '').toLowerCase() || null,
     scenario:  (p.get('scenario') || '').toLowerCase() || null,
@@ -26890,9 +26898,9 @@ function updateURL(patch) {
     else p.set(k, String(v));
   }
   const newQs = p.toString();
-  const newURL = newQs
-    ? `${window.location.pathname}?${newQs}`
-    : window.location.pathname;
+  /* Leaving a path-linked tab writes ?tab= from the root, never /elnino?tab=country. */
+  const path = ('tab' in patch && pathTab()) ? '/' : window.location.pathname;
+  const newURL = newQs ? `${path}?${newQs}` : path;
   if (newURL !== window.location.pathname + window.location.search) {
     history.replaceState(null, '', newURL);
   }
@@ -38104,7 +38112,8 @@ window.addEventListener('load',()=>{
   setTimeout(() => {
     try {
       const _qs = new URLSearchParams(location.search);
-      if ((_qs.get('tab') && _qs.get('tab') !== 'global') || _qs.get('country') || _qs.get('commodity') || _qs.get('company')) return;
+      const _tab = readURLState().tab;
+      if ((_tab && _tab !== 'global') || _qs.get('country') || _qs.get('commodity') || _qs.get('company')) return;
       const skipped = localStorage.getItem('foodshield_skip_intro') === '1';
       if (!skipped) openInstructions();
     } catch(e) {
