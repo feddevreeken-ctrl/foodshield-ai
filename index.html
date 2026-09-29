@@ -12656,6 +12656,12 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-all-layers[open] > summary::after { content:' −'; }
 #tab-elnino .enso-extra-layers { display:flex; flex-wrap:wrap; gap:8px; padding:8px 0; }
 #tab-elnino .enso-all-layers .enso-scenario { margin:8px 0; }
+/* 2026-09-29 round 2 (owner: "so its one straight line"): Ocean has no layer chip, so "All layers" sits at the right
+   end of the title line; opened, it drops back into the flow under the head. */
+@media (min-width:768px) {
+  #tab-elnino[data-sub="elnino"] #enso-controls:not(:has(.enso-all-layers[open])) { position:absolute; top:15px; right:24px; z-index:2; }
+  #tab-elnino[data-sub="elnino"] #enso-mapwrap > .enso-plate-h { padding-right:128px; }
+}
 #tab-elnino #enso-maptag { border:0; margin:8px 24px 12px; padding:0; font:12px/1.5 'Geist',sans-serif; }
 #tab-elnino #enso-map { height:clamp(360px,50vh,450px); background:#0b1017; }
 #tab-elnino .enso-choke { border:0; background:none; box-shadow:none; }
@@ -13790,6 +13796,44 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .pac-peak.is-up { top:0; height:20px; }
 #tab-elnino .pac-peak b { bottom:24px; font-size:10px; }
 #tab-elnino .pac-peak.is-up b { bottom:34px; }
+/* 2026-09-29 round 2 (owner: "this takes too much space", "try condense", "the top explanation cuts of the bottom"):
+   the explainer is a full-width intro row above the figure; the play control shares the step tabs' row (longitude
+   only on the ruler); the Niño regions, the year labels and the replay buttons each take one line. */
+#tab-elnino .pac-plate > .pac-what { margin:0; padding:4px 24px 16px; border-bottom:1px solid var(--grid); }
+@media (min-width:701px) {
+  #tab-elnino .pac-plate > .pac-what { display:grid; grid-template-columns:minmax(0,4fr) minmax(0,8fr); gap:32px; align-items:start; }
+  #tab-elnino .pac-plate > .pac-what .pac-what-lede { margin:0; font-size:15px; line-height:1.45; }
+  #tab-elnino .pac-plate > .pac-what .enso-bullets { columns:2; column-gap:28px; }
+  #tab-elnino .pac-plate > .pac-what .enso-bullets li { break-inside:avoid; }
+  #tab-elnino .pac-plate > .pac-what .enso-bullets li + li { margin-top:0; padding-top:6px; }
+  #tab-elnino .pac-main > .enso-ruler .enso-ruler-longitude { display:none; }
+  #tab-elnino .pac-main > .enso-ruler button { padding:4px 4px 6px; }
+  #tab-elnino .pac-main > .enso-ruler .enso-ruler-name { font-size:13.5px; line-height:1.3; white-space:nowrap; }
+  #tab-elnino .pac-main > .enso-ruler .enso-ruler-now { margin-top:1px; font-size:12px; white-space:nowrap; }
+  #tab-elnino .pac-stage .enso-lonaxis { margin-top:4px; }
+  #tab-elnino .pac-lane { height:26px; margin-top:6px; }
+  #tab-elnino .pac-lane .pac-box.is-low { top:5px; }
+  #tab-elnino .pac-lane .pac-box i { height:3px; }
+  #tab-elnino .pac-lane .pac-box em { position:absolute; top:10px; left:50%; margin:0; transform:translateX(-50%); }
+  #tab-elnino .pac-lane .pac-box.is-low em { top:5px; }
+  #tab-elnino .pac-lane .pac-box[data-box="nino12"] em { left:auto; right:0; transform:none; }
+  #tab-elnino .pac-lane-k { top:10px; max-width:none; white-space:nowrap; }
+  #tab-elnino .pac-dial { height:64px; margin:4px 0 2px; }
+  #tab-elnino .pac-range { top:24px; }
+  #tab-elnino .pac-track { top:26px; }
+  #tab-elnino .pac-peak b { bottom:34px; }
+  #tab-elnino .pac-replay { margin-top:4px; gap:6px 14px; align-items:center; }
+  #tab-elnino .pac-replay button { min-height:28px; padding:3px 7px; }
+  #tab-elnino .pac-replay button.pac-still { padding:3px 0; }
+}
+#tab-elnino .pac-lead .pac-play { display:inline-flex; align-items:center; justify-content:center; width:34px; min-width:34px; padding:0; }
+@media (min-width:1181px) {
+  #tab-elnino .pac-main { display:grid; grid-template-columns:auto minmax(0,1fr); column-gap:12px; align-items:center; }
+  #tab-elnino .pac-main > .enso-ruler { grid-template-columns:repeat(5, auto); justify-content:space-between; gap:0 4px; }
+  #tab-elnino .pac-main > * { grid-column:1 / -1; }
+  #tab-elnino .pac-main > .pac-lead { grid-column:1; margin:0; }
+  #tab-elnino .pac-main > .enso-ruler { grid-column:2; }
+}
 @media (max-width:1180px) {
   #tab-elnino .pac-main { display:contents; }
   #tab-elnino .pac-body { gap:0; }
@@ -46224,24 +46268,24 @@ function showCommodityDetail(key) {
   /* Every caption on the Ocean map reads what is painted from here: the view, its season, and the words for it. */
   function sstScene() {
     var mo = monMap();
-    if (mo) { var ml = monLabel(mo.month), mr = !!rainGrid(); return { view: 'month', rain: mr, season: ml, mon: mo, title: (mr ? 'Sea and rain, ' : 'Sea surface, ') + ml + ' mean',
+    if (mo) { var ml = monLabel(mo.month), mr = !!rainGrid(); return { view: 'month', rain: mr, season: ml, mon: mo, title: 'Sea temperature' + (mr ? ' and rain' : '') + ' against normal, ' + ml,
       source: 'NOAA OISST v2.1' + (mr ? ' · CPC gauges · CHIRPS' : '') + ' · monthly' + (mo.preliminary ? ' · preliminary' : ''), date: ml + ', ' + mo.days_averaged + ' daily fields · sea against 1971–2000' + (mr ? ', rain against 1991–2020' : ''),
       what: 'Sea-surface anomaly, °C · ' + ml + ' mean' }; }
     var cl = sstClass(), w = sstWinter(), ol = olMap(), rg = !!rainGrid(), q = olSeason(), s = sstSeason();
     if (ol) return { view: 'outlook', rain: rg, season: q.label, key: q.key,
-      title: 'Outlook for ' + q.label + ': ' + (rg ? 'sea and rain' : 'sea surface'),
+      title: 'Forecast sea temperature' + (rg ? ' and rain' : '') + ', ' + q.label,
       source: 'NOAA CPC NMME, ' + (q.n_models ? q.n_models + ' models averaged' : olModels()) + (rg && S.seasonal && S.seasonal.rain_model ? ' · PREC/L El Niño fit' : ''),
       date: 'run ' + olRun() + (q.lead_months ? ' · ' + q.lead_months + ' month' + (q.lead_months > 1 ? 's' : '') + ' ahead' : '') + ' · against each model’s own hindcast climate',
       what: 'Sea-surface anomaly, °C · forecast' };
     if (w) { var ev = cl.events.filter(function (e) { return e.label === w.label; })[0] || w;
       return { view: 'winter', rain: rg, season: s.label, cls: cl, win: w, peak: ev.peak_oni,
-        title: 'The ' + winLabel(w.label) + ' El Niño, ' + seasonOfEvent(w.label, s.key, s.label) + ': ' + (rg ? 'sea and rain' : 'sea surface'),
-        source: 'NOAA ERSST v5' + (rg ? ' · PREC/L gauges' : '') + ' · one winter',
+        title: 'Sea temperature' + (rg ? ' and rain' : '') + ' in the ' + winLabel(w.label) + ' El Niño, ' + s.label,
+        source: 'NOAA ERSST v5' + (rg ? ' · PREC/L' : '') + ' · one winter',
         date: w.label + ', peak ONI ' + num(ev.peak_oni, 1) + ' · against 1991–2020',
         what: 'Sea-surface anomaly, °C · the ' + winLabel(w.label) + ' winter' }; }
     if (cl) return { view: 'class', rain: rg, season: s.label, cls: cl,
-      title: 'Past ' + cl.label.replace(/ El Niño$/, '').toLowerCase() + ' El Niños, ' + s.label + (SEASON_PHASE[s.key] ? ' (' + SEASON_PHASE[s.key] + ')' : '') + (rg ? ': sea and rain' : ': sea surface'),
-      source: 'NOAA ERSST v5' + (rg ? ' · PREC/L gauges' : '') + ' · ' + cl.n + ' winters averaged',
+      title: 'Sea temperature' + (rg ? ' and rain' : '') + ' in past ' + cl.label.replace(/ El Niño$/, '').toLowerCase() + ' El Niños, ' + s.label,
+      source: 'NOAA ERSST v5' + (rg ? ' · PREC/L' : '') + ' · ' + cl.n + ' winters',
       date: cl.events.map(function (e) { return e.label; }).join(', ') + ' · against 1991–2020',
       what: 'Sea-surface anomaly, °C · average of ' + cl.n + ' past winters' };
     var R = rg ? rainNow() : null;
@@ -48133,18 +48177,19 @@ function showCommodityDetail(key) {
     var zones = [[PAC.lo, -.5, 'La Niña', 'z-nina'], [-.5, .5, 'Neutral', 'z-neu'], [.5, 1, 'Weak', 'z-1'], [1, 1.5, 'Moderate', 'z-2'], [1.5, 2, 'Strong', 'z-3'], [2, PAC.hi, 'Very strong', 'z-4']];
     var events = (A.events || []).slice().sort(function (a, b) { return a.peak_djf_year - b.peak_djf_year; });
     var hist = E.history || [], nina = hist.slice().sort(function (a, b) { return a.anom - b.anom; })[0];
-    var byPeak = events.slice().sort(function (a, b) { return a.peak - b.peak; });
-    var marks = events.map(function (ev) { return '<i class="pac-peak' + (byPeak.indexOf(ev) % 2 ? ' is-up' : '') + '" style="left:' + pct(ev.peak) + '" title="' + esc(ev.label + ': DJF peak ONI ' + num(ev.peak, 2) + ' °C') + '"><b>’' + esc(String(ev.label).slice(2, 4)) + '</b></i>'; }).join('') +
+    var marks = events.map(function (ev) { return '<i class="pac-peak" style="left:' + pct(ev.peak) + '" title="' + esc(ev.label + ': DJF peak ONI ' + num(ev.peak, 2) + ' °C') + '"><b>’' + esc(String(ev.label).slice(2, 4)) + '</b></i>'; }).join('') +
       (nina ? '<i class="pac-peak is-nina" style="left:' + pct(nina.anom) + '" title="' + esc('DJF ' + nina.year + ': ONI ' + num(nina.anom, 2) + ' °C, the lowest DJF since 1950') + '"><b>’' + String(nina.year - 1).slice(2) + '</b></i>' : '');
     var dial = '<div class="pac-dial"><input type="range" class="pac-range" id="pac-range" min="' + PAC.lo + '" max="' + PAC.hi + '" step="0.01" value="' + now.o + '" aria-label="Pacific state, set by the ONI in °C"><div class="pac-track">' + zones.map(function (z) { return '<span class="pac-zone ' + z[3] + '" style="left:' + pct(z[0]) + ';width:calc(' + pct(z[1]) + ' - ' + pct(z[0]) + ')"><em>' + z[2] + '</em></span>'; }).join('') +
       marks + '<i class="pac-now" style="left:' + pct(now.o) + '"><b>now</b></i><span class="pac-thumb" id="pac-thumb"></span></div></div>';
     var cur = A.current && (A.current.path || []).filter(function (v) { return typeof v === 'number'; }).length ? A.current : null;
     var plays = events.slice().reverse().map(function (ev, i) { return '<button type="button" data-pac-play="' + i + '">' + esc(String(ev.label).replace(/-(\d\d)$/, '–$1')) + '</button>'; }).join('');
-    var lead = '<div class="pac-lead"><button type="button" class="is-lead" data-pac-story>Watch it build: five steps</button><button type="button" class="pac-still" id="pac-still" aria-pressed="false">Pause motion</button></div>';
+    /* 2026-09-29 round 2 (owner: "this takes too much space"): a small play control on the step tabs' row; pausing the
+       ambient motion moves to the replay row. */
+    var lead = '<div class="pac-lead"><button type="button" class="is-lead pac-play" data-pac-story aria-label="Watch it build: play the five steps" title="Watch it build: play the five steps"><svg viewBox="0 0 10 12" width="9" height="11" aria-hidden="true"><path d="M0 0L10 6L0 12Z" fill="currentColor"/></svg></button></div>';
     /* 2026-09-28 (plate height): what the scale means is the first line of the "How the figure moves" fold. */
     var pacKey = 'ONI: the three-month mean sea-surface temperature anomaly in the Niño 3.4 box, °C. Bands (CPC classes): ' + zones.slice(2).map(function (z) { return lc(z[2]) + ' from ' + num(z[0], 1); }).join(', ') + '. Ticks: past DJF peaks. Drag the scale or use the arrow keys.';
     var replay = '<div class="pac-replay"><div class="pac-row"><span class="pac-k">Past events</span>' + plays + '</div>' +
-      '<div class="pac-row"><span class="pac-k">Set</span><button type="button" data-pac-set="0">Neutral</button>' + (nina ? '<button type="button" data-pac-set="' + nina.anom + '" data-pac-label="DJF ' + nina.year + ' · lowest DJF since 1950">La Niña ' + (nina.year - 1) + '–' + String(nina.year).slice(2) + '</button>' : '') + '<button type="button" data-pac-set="now">Now</button></div></div>' +
+      '<div class="pac-row"><span class="pac-k">Set</span><button type="button" data-pac-set="0">Neutral</button>' + (nina ? '<button type="button" data-pac-set="' + nina.anom + '" data-pac-label="DJF ' + nina.year + ' · lowest DJF since 1950">La Niña ' + (nina.year - 1) + '–' + String(nina.year).slice(2) + '</button>' : '') + '<button type="button" data-pac-set="now">Now</button></div><button type="button" class="pac-still" id="pac-still" aria-pressed="false">Pause motion</button></div>' +
       '<ol class="pac-seasons" id="pac-seasons" aria-hidden="true" hidden>' + (A.seasons || []).map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ol>';
     var rk = E.historical_rank;
     var SEASONS = ['DJF','JFM','FMA','MAM','AMJ','MJJ','JJA','JAS','ASO','SON','OND','NDJ'];
@@ -48167,10 +48212,10 @@ function showCommodityDetail(key) {
     var howItWorks = '<section class="pac-how"><h3>How it works</h3>' + (fb.text ? '<p>' + esc(String(fb.text).replace(/^They close into a loop\.\s*/, '')) + '</p>' : '') + (fb.brake ? '<p>' + esc(fb.brake) + '</p>' : '') +
       (rainNow ? '<p><b>This year’s rain, as forecast:</b> ' + esc(rainNow.what) + '</p>' : '') + (MX.figure_note ? '<p>' + esc(MX.figure_note) + '</p>' : '') +
       '<p class="pac-how-src">' + ((X && X.sources) || []).concat(fb.sources || []).map(function (x) { return '<a href="' + esc(safeUrl(x.url)) + '" target="_blank" rel="noopener">' + esc(x.label) + '</a>'; }).join(' · ') + '</p></section>';
-    var side = '<aside class="pac-read">' + what + '<span class="enso-sr" id="pac-status" role="status" aria-live="polite"></span><span class="pac-k" id="pac-when"></span><div class="pac-big"><b id="pac-oni"></b><span id="pac-band"></span></div>' +
+    var side = '<aside class="pac-read"><span class="enso-sr" id="pac-status" role="status" aria-live="polite"></span><span class="pac-k" id="pac-when"></span><div class="pac-big"><b id="pac-oni"></b><span id="pac-band"></span></div>' +
       '<p class="pac-rank" id="pac-rank"></p><div class="pac-stepcard">' + (MV.panels || '') + '</div></aside>';
     el.innerHTML = '<figure class="enso-plate pac-plate" data-kind="schematic">' +
-      plateHead('What is El Niño', 'Illustration, not an ocean model · NOAA and BoM descriptions · the equator from 120°E to 80°W, set by the ONI', stamp(metaDate('enso')), 'schematic') +
+      plateHead('What is El Niño', 'Illustration, not an ocean model · NOAA and BoM descriptions · the equator from 120°E to 80°W, set by the ONI', stamp(metaDate('enso')), 'schematic') + what +
       '<div class="pac-body"><div class="pac-main">' + lead + (MV.tabs || '') + stage + '<p class="pac-cap" id="pac-cap" aria-hidden="true"></p>' + dial + replay + '</div>' + side + '</div>' +
       /* 2026-09-28 audit (plate height): the first line stays in view; how the figure moves goes in a fold. */
       /* The "illustration, not an ocean model" note moved into the subtitle (2026-09-29, plate height). */
@@ -48181,6 +48226,28 @@ function showCommodityDetail(key) {
         'Replays step through CPC’s seasonal ONI; the readout shows only published values.'], 'is-fine') + '</section>' +
         '<h3 class="pac-how-h">Evidence for each step</h3>' + (MV.evidence || '') + '</details></figure>';
     el.querySelectorAll('.pac-what [data-goto-lens]').forEach(function (b) { b.onclick = function () { showTab(b.getAttribute('data-goto-lens')); }; });
+    /* 2026-09-29 round 2 (owner: "try condense"): the past-peak year labels share one line; where two peaks sit closer
+       than their labels, the later label steps right just enough to clear the earlier one, order kept. */
+    var peakTrack = el.querySelector('.pac-track');
+    var placePeaks = function () {
+      try {
+        var bs = [].slice.call(peakTrack.querySelectorAll('.pac-peak b')).sort(function (a, b) { return a.parentNode.offsetLeft - b.parentNode.offsetLeft; }), right = -1e9;
+        if (!peakTrack.offsetWidth) return;
+        bs.forEach(function (b) { var x = b.parentNode.offsetLeft, w = b.offsetWidth, l = Math.max(x - w / 2, right + 4); b.style.transform = 'translateX(' + (l - x).toFixed(1) + 'px)'; right = l + w; });
+      } catch (e) {}
+      /* The four Niño-region labels share one line too: each centred on its box, then eased left from the east
+         edge (Niño 1+2 is pinned to the right) so none touch; west-to-east order is kept. */
+      try {
+        var lane = el.querySelector('.pac-lane'), LW = lane && lane.offsetWidth; if (!LW || !matchMedia('(min-width: 701px)').matches) return;
+        var ems = [].slice.call(lane.querySelectorAll('.pac-box em')), lim = LW;
+        ems.forEach(function (m) { m.style.left = ''; m.style.right = ''; m.style.transform = ''; });
+        ems.sort(function (a, b) { return b.parentNode.offsetLeft - a.parentNode.offsetLeft; }).forEach(function (m) {
+          var bx = m.parentNode, w = m.offsetWidth, r = Math.min(bx.offsetLeft + bx.offsetWidth / 2 + w / 2, lim), l = r - w;
+          m.style.left = (l - bx.offsetLeft).toFixed(1) + 'px'; m.style.right = 'auto'; m.style.transform = 'none'; lim = l - 12; });
+      } catch (e) {}
+    };
+    if (S.pacPeakRO) { S.pacPeakRO.disconnect(); S.pacPeakRO = null; }
+    if (peakTrack && typeof ResizeObserver === 'function') { S.pacPeakRO = new ResizeObserver(placePeaks); S.pacPeakRO.observe(peakTrack); } else if (peakTrack) placePeaks();
 
     var q = function (id) { return document.getElementById(id); };
     var stack = q('pac-stack'), range = q('pac-range'), thumb = q('pac-thumb');
@@ -48235,7 +48302,7 @@ function showCommodityDetail(key) {
       q('pac-rank').textContent = isNow && rk ? (rk.rank === 1 ? 'The highest ' + seasonTxt(rk.season) + ' reading in ' + rk.of + ' years of record (since 1950).' : rk.season + ' ' + L.year + ' ranks ' + rk.rank + ' of ' + rk.of + ' since 1950.') + sameSeason +
         (roni ? ' CPC’s strength index, RONI: ' + num(roni.value, 2) + ' °C, ' + lc(intervalBand(roni.value)) + '.' : '') : '';
       /* The selected step's reading: what the textbook pattern does at this strength, then the observed now. */
-      var AT = { trades: st.trades, soi: st.soi, warm_water: st.warm, convection: st.rain, upwelling: st.peru }, atLbl = ctx.illus ? intervalBand(ro) + ' · illustrative' : 'At ONI ' + num(ro, 2) + ' °C';
+      var AT = { trades: st.trades, soi: st.soi, warm_water: st.warm, convection: st.rain, upwelling: st.peru }, atLbl = ctx.illus ? 'At this strength' : 'At ONI ' + num(ro, 2) + ' °C';
       capLine = function () { var nm = tabs[stepIdx] && tabs[stepIdx].querySelector('.enso-ruler-name'), k = ['trades', 'soi', 'warm_water', 'convection', 'upwelling'][stepIdx], pr = String(AT[k] || '').split(' → ');
         q('pac-cap').innerHTML = '<b>' + (stepIdx + 1) + ' · ' + esc(nm ? nm.textContent : '') + '</b> ' + esc(pr[0]) + (pr[1] ? ' <span class="pac-res">→ ' + esc(pr[1]) + '</span>' : '') + ' <i>· ' + (ctx.illus ? 'illustrative' : isNow ? 'now' : 'ONI ' + num(ro, 1)) + '</i>'; };
       capLine();
@@ -48279,14 +48346,14 @@ function showCommodityDetail(key) {
         var last = ev === cur && i === path.length - 1;
         tween(path[i][0], 620, { label: seasonTxt(sn) + ' ' + yr + ' · ' + name, now: last, linear: i > 0 && i < path.length - 1 }, next);
       };
-      if (ev === cur) { render(0, { label: 'Neutral · illustrative start', value: 0, illus: true }); timer = setTimeout(next, reduce ? 600 : 350); } else next();
+      if (ev === cur) { render(0, { label: 'Neutral · start', value: 0, illus: true }); timer = setTimeout(next, reduce ? 600 : 350); } else next();
     }
     /* Illustrative positions for the first four steps (no number is shown for them): the front stops about a third,
        half, two thirds and nine tenths across, so Peru changes only at step 5, which lands on the published now. */
     var STORY = [.9, 1.0, 1.1, 1.25];
     function story(btn) {
       stop(); btn.setAttribute('aria-pressed', 'true'); if (seasonsEl) seasonsEl.hidden = true;
-      render(0, { label: 'Neutral · illustrative start', value: 0, illus: true }); selectStep(0, false);
+      render(0, { label: 'Neutral · start', value: 0, illus: true }); selectStep(0, false);
       var i = -1;
       var next = function () {
         i++;
@@ -48294,7 +48361,7 @@ function showCommodityDetail(key) {
         /* The box moves to the step first, then the ocean changes under it. */
         selectStep(i, false);
         var last = i === tabs.length - 1, to = last ? now.o : STORY[i];
-        timer = setTimeout(function () { tween(to, 1400, last ? nowCtx() : { label: 'Step ' + (i + 1) + ' of 5 · illustrative', value: to, illus: true }, function () { timer = setTimeout(next, reduce ? 3200 : (last ? 4500 : 2400)); }); }, reduce ? 0 : 400);
+        timer = setTimeout(function () { tween(to, 1400, last ? nowCtx() : { label: 'Step ' + (i + 1) + ' of 5', value: to, illus: true }, function () { timer = setTimeout(next, reduce ? 3200 : (last ? 4500 : 2400)); }); }, reduce ? 0 : 400);
       };
       timer = setTimeout(next, reduce ? 900 : 700);
     }
@@ -48418,7 +48485,7 @@ function showCommodityDetail(key) {
       /* The month comes from the metric's own label ("Troup SOI, July 2026"), never typed here. */
       var mon = (String(c.unit || '').match(/(January|February|March|April|May|June|July|August|September|October|November|December)/) || [])[1];
       if (id === 'soi' && typeof c.metric === 'number') return 'SOI ' + sgn(c.metric, 1) + (mon ? ' (' + mon.slice(0, 3) + ')' : '');
-      if (id === 'warm_water' && typeof c.metric === 'number') return sgn(c.metric, 0) + ' °C anomaly at depth';
+      if (id === 'warm_water' && typeof c.metric === 'number') return sgn(c.metric, 0) + ' °C at depth';
       if (id === 'upwelling') { var v = typeof weekly.nino12_anom === 'number' ? weekly.nino12_anom : c.metric; return typeof v === 'number' ? 'Niño 1+2 ' + sgn(v, 1) + ' °C' : ''; }
       /* No number in the feed for these two: show the state only when the dated "now" text says it. */
       if (id === 'trades') return /westerly anomal/i.test(c.now || '') ? 'westerly anomalies' : '';
@@ -48865,7 +48932,8 @@ function showCommodityDetail(key) {
     var lens = {
       ensowater: {modes:['none'], overlays:['lanes']},
       ensomoney: {modes:['staple'], overlays:['imports']},
-      elnino: {modes:['sst'], overlays:[]},
+      /* 2026-09-29 round 2 (owner: "remove Sea-surface"): Ocean has one layer, so no chip; it stays in All layers. */
+      elnino: {modes:[], overlays:[]},
       ensoharvest: {modes:['impact','crop','asap','coverage'], overlays:['regions']},
       ensolive: {modes:['rain','asap','ipc'], overlays:['alerts','headlines','elsewhere']}
     }[S.sub] || {modes:['sst'], overlays:[]};
@@ -49603,8 +49671,11 @@ function showCommodityDetail(key) {
     if (S.mode === 'rain') date = (S.alertCounts && S.alertCounts.newest) ? 'newest report ' + stamp(new Date(S.alertCounts.newest)) : 'no reports loaded yet';
     var sc = S.mode === 'sst' && sstScene();
     if (sc && sc.view !== 'now') { title = sc.title; source = sc.source; date = sc.date; if (sc.view === 'outlook') kind = 'modelled'; }
+    /* 2026-09-29 round 2 (owner: "smtn better than Sea and rain, last 7 days"): the title names both fields and the
+       baseline in plain words; the exact dates stay in the caption. */
     if (sc && sc.view === 'now') { var sq = seaNow(); date = daysMean(sq) + ' mean ' + isoText(sq.start) + ' to ' + isoText(sq.end);
-      if (sc.rain) { title = 'Sea and rain, last ' + sq.days + ' days'; source = 'NOAA OISST v2.1 · CPC gauges' + ((rainNow() || {}).fend ? ' · CHIRPS' : ''); date += '; rain ' + sc.rainWhen + ' against 1991–2020'; } }
+      title = 'Sea temperature against normal, last ' + sq.days + ' days';
+      if (sc.rain) { title = 'Sea temperature and rain against normal, last ' + sq.days + ' days'; source = 'NOAA OISST v2.1 · CPC gauges' + ((rainNow() || {}).fend ? ' · CHIRPS' : ''); date += '; rain ' + sc.rainWhen + ' against 1991–2020'; } }
     if (S.mode === 'sst' && !S.showSST) title += ' (backdrop hidden)';
     if (S.mode === 'sst' && !S.sst) date = 'source unavailable';
     return { kind: kind, title: title, source: source, date: date };
@@ -53750,8 +53821,9 @@ function showCommodityDetail(key) {
     /* Reading order per lens: map, then the answer, then how and when, then evidence and sources. */
     var ORDER = {
       /* 2026-09-29 audit (owner: "second block should be ... 'What is El Nino'"): the explainer follows the map, then
-         CPC's odds, the dated twelve months and the forecast against past events. */
-      elnino: ['.enso-mapgrid', '#enso-pacific', '#enso-strengths', '#enso-next12', '.enso-oni-plate', '#enso-agencies', '#subview-ensomech'],
+         CPC's odds; round 2 (owner: "switch position of This El Niño against the five strongest ... with The next
+         twelve months"): the forecast against past events, then the dated twelve months. */
+      elnino: ['.enso-mapgrid', '#enso-pacific', '#enso-strengths', '.enso-oni-plate', '#enso-next12', '#enso-agencies', '#subview-ensomech'],
       ensoharvest: ['.enso-mapgrid', '#enso-outlook', '#enso-hindcast', '#enso-pubfx', '#enso-land-head', '.enso-harvest-pair', '#enso-calendar'],
       ensowater: ['.enso-mapgrid', '#enso-water'],
       ensomoney: ['.enso-mapgrid', '#enso-whopays', '#enso-priceanalog', '#enso-pricewatch', '#enso-money', '#enso-people'],
