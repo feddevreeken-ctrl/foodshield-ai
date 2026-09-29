@@ -345,6 +345,8 @@ def main() -> int:
 
 
         page.evaluate("showTab('ensoharvest')")
+        # 2026-09-29 audit: the fitted table sits behind "Show per country"; open it to read rendered text.
+        page.locator('#enso-harvest-fig').evaluate('e => e.open = true')
         print("\nphase follows the selected scenario")
         page.select_option("#enso-country", "USA")
         page.wait_for_timeout(250)
@@ -449,24 +451,45 @@ def main() -> int:
               (style["fsBody"], style["fsMeta"], style["fsHead"]) == ("12px", "10px", "18px"),
               f'{style["fsBody"]}/{style["fsMeta"]}/{style["fsHead"]}')
 
-        print("\nmap annotations contain their own text")
-        # The harvest notes (Kansas, Free State) draw on the Harvests lens only;
-        # the canal note belongs to Shipping. Measure them where they exist.
+        print("\nHarvests map: 2027 circles and trade arcs (2026-09-29 audit)")
+        # The Kansas and Free State callouts gave way to labelled 2027 circles and the trade arcs around them.
         page.evaluate("showTab('ensoharvest')")
         page.wait_for_selector('#subview-ensoharvest.active .enso-subview-meta')
-        page.wait_for_timeout(600)
-        # iconSize was [188, 1]: Leaflet wrote that height inline, so the card was
-        # one pixel tall and every line of body text sat outside it, on the map.
-        boxes = page.evaluate("""() => [...document.querySelectorAll('.enso-anno')].map(e => {
-            const r = e.getBoundingClientRect();
-            const last = e.querySelector('span');
-            const lr = last ? last.getBoundingClientRect() : null;
-            return {h: Math.round(r.height), contains: lr ? (lr.bottom <= r.bottom + 1) : false};
-        })""")
-        check("annotation cards are taller than a single line",
-              bool(boxes) and all(b["h"] > 30 for b in boxes), str(boxes))
-        check("annotation text sits inside its card",
-              bool(boxes) and all(b["contains"] for b in boxes), str(boxes))
+        page.wait_for_function("() => document.querySelectorAll('#enso-map path.enso-flow').length > 0", timeout=20_000)
+        marks = page.evaluate("""async () => {
+            const O = (await (await fetch('data/enso_outlook.json')).json()).data;
+            const want = new Set(O.rows_all.filter(r => r.status === 'shown' && !r.in_season && typeof r.change_kt_observed === 'number').map(r => r.iso));
+            const labs = [...document.querySelectorAll('#enso-map .enso-shift-lab > span')];
+            return {annos: document.querySelectorAll('.enso-anno').length, circles: document.querySelectorAll('#enso-map path.enso-shift').length, want: want.size,
+                    labels: labs.length, oneLine: labs.every(l => l.getBoundingClientRect().height < 20),
+                    lost: document.querySelectorAll('#enso-map path.enso-flow.is-lost').length, arcs: document.querySelectorAll('#enso-map path.enso-flow').length,
+                    key: (document.getElementById('enso-legend') || {}).textContent || ''};
+        }""")
+        check("Harvests draws one 2027 circle per fitted country and no callout cards",
+              marks["annos"] == 0 and marks["circles"] == marks["want"] and marks["labels"] > 0 and marks["oneLine"], str({k: v for k, v in marks.items() if k != 'key'}))
+        check("trade arcs show lost supply and replacement suppliers, with the method in the key",
+              marks["lost"] > 0 and marks["arcs"] > marks["lost"]
+              and "where trade could come from, not a forecast of trade" in marks["key"], str({k: marks[k] for k in ('lost', 'arcs')}))
+        flows = page.evaluate("""async () => {
+            const O = (await (await fetch('data/enso_outlook.json')).json()).data;
+            const R = (await (await fetch('data/trade_restrictions.json')).json()).data;
+            const d = await ensoTradeFlows('compensate'), a = await ensoTradeFlows('atrisk');
+            const shortOf = new Set(O.rows_all.filter(r => r.status === 'shown' && r.change_pct_record < 0).map(r => r.iso + '/' + r.crop));
+            const rep = d.flows.filter(f => f.role === 'replace'), lost = d.flows.filter(f => f.role === 'lost');
+            const wantLost = O.who_pays.reduce((n, w) => n + (w.buyers || []).length, 0);
+            const perBuyer = {}; rep.forEach(f => { const k = f.to + '/' + f.crop; perBuyer[k] = (perBuyer[k] || 0) + 1; });
+            return {shape: ['mode', 'oni', 'year', 'flows', 'buyers'].every(k => k in d) && d.oni === O.cases[O.who_pays_case].oni,
+                    lost: lost.length === wantLost, noShort: rep.every(f => !shortOf.has(f.from + '/' + f.crop)),
+                    cap: Object.values(perBuyer).every(n => n <= 2), noBan: rep.every(f => !R.some(m => m.iso === f.from && /ban/i.test(m.measure || '') && m.status !== 'historical' && (f.crop === 'corn' ? /maize|corn/i : new RegExp(f.crop, 'i')).test(m.commodity || ''))),
+                    atrisk: a && a.mode === 'atrisk' && a.flows.every(f => f.role === 'export')};
+        }""")
+        check("ensoTradeFlows: one lost arc per named buyer, replacements capped and never from a short or banned exporter, atrisk mode ready",
+              all(flows.values()), str(flows))
+        page.evaluate("document.querySelector('#enso-map path.enso-flow:not(.is-lost)').dispatchEvent(new MouseEvent('click', {bubbles: true, clientX: 10, clientY: 10}))")
+        card = page.locator('#enso-map .flow-pop .flow-card')
+        check("a replacement arc opens the shared flow card on the El Niño map",
+              card.count() == 1 and "not a forecast of trade" in card.inner_text(), card.inner_text()[:160] if card.count() else "no card")
+        page.evaluate("document.querySelectorAll('#enso-map .leaflet-popup-close-button').forEach(b => b.click())")
 
         print("\nagency bulletins in the news view")
         # 2026-09-24: the official outlooks plate lives on Ocean now.
@@ -810,6 +833,7 @@ def main() -> int:
               and page.locator('[data-native="enso-level"][data-value="-1.5"]').get_attribute('aria-pressed') == 'true'
               and 'La Ni' in page.locator('#enso-legend').inner_text())
         country_name = page.locator('#enso-country option[value="ZWE"]').text_content()
+        page.locator('#enso-harvest-fig').evaluate('e => e.open = true')   # 2026-09-29: the table sits behind "Show per country"
         page.locator('#enso-country-search').fill(country_name)
         page.wait_for_function("() => document.getElementById('enso-harvest-fig').dataset.iso === 'ZWE'")
         check("country search synchronises native selection and fitted coefficients",
@@ -819,8 +843,9 @@ def main() -> int:
               and page.locator('#enso-harvest-fig .enso-tbl').count() == 1)
         page.evaluate("ensoFocus('USA')")
         page.wait_for_function("() => document.getElementById('enso-harvest-fig').dataset.iso === 'USA'")
-        check("ensoFocus updates the single fitted table",
+        check("ensoFocus updates the single fitted table and opens Show per country",
               page.input_value('#enso-country') == 'USA'
+              and page.locator('#enso-harvest-fig').evaluate('e => e.open')
               and page.locator('.enso-harvest-pair #enso-coeffs #enso-detail').count() == 1
               and page.locator('#enso-harvest-story').count() == 0)
         grouped = page.evaluate("""() => {
@@ -1661,6 +1686,34 @@ def main() -> int:
             const chips = document.querySelectorAll('#enso-land-head .enso-country-list .enso-chip').length;
             return chips === want.size && /passes on its own/.test(document.getElementById('enso-land-head').textContent);
         }"""))
+        # 2026-09-29 audit: the 2027 plate opens with one plain sentence and at most three bullets; the chart
+        # legend moved into the method fold; the fitted-responses plate became a "Show per country" button;
+        # the calendar is open and shows only the outlook's pairs until "All N pairs" is pressed.
+        audit = page.evaluate("""async () => {
+            const O = (await (await fetch('data/enso_outlook.json')).json()).data;
+            const shown = O.rows_all.filter(r => r.status === 'shown');
+            const worst = shown.filter(r => !r.in_season && r.change_kt_record < 0).sort((a, b) => a.change_kt_record - b.change_kt_record)[0];
+            const lede = document.querySelector('.enso-outlook-plate .enso-ol-lead > p.enso-ol-lede');
+            const bullets = document.querySelectorAll('.enso-outlook-plate .enso-ol-lead > ul > li').length;
+            const legendLine = [...document.querySelectorAll('.enso-outlook-plate li')].find(li => li.textContent.startsWith('Bar: tonnes'));
+            const cal = document.querySelector('#enso-calendar .enso-cal');
+            const visible = () => [...cal.querySelectorAll('.cal-row:not(.cal-head)')].filter(r => r.firstElementChild.getBoundingClientRect().height > 0).length;
+            const calRows = [...cal.querySelectorAll('.cal-row:not(.cal-head)')].filter(r => shown.some(o => o.iso === r.dataset.iso && o.crop === r.dataset.crop)).length;
+            const shortRows = visible(), plateH = document.querySelector('#enso-calendar .enso-cal-plate').getBoundingClientRect().height;
+            const btn = document.querySelector('#enso-calendar .enso-cal-all'); btn.click();
+            const allRows = [...document.querySelectorAll('#enso-calendar .cal-row:not(.cal-head)')].filter(r => r.firstElementChild.getBoundingClientRect().height > 0).length;
+            document.querySelector('#enso-calendar .enso-cal-all').click();
+            return {lede: !!lede && lede.textContent.includes((Math.abs(worst.change_kt_record) / 1000).toFixed(1) + ' Mt') && lede.textContent.includes(worst.harvest),
+                    bullets: bullets > 0 && bullets <= 3, legendFolded: !!legendLine && !!legendLine.closest('details'),
+                    noCoefPlate: [...document.querySelectorAll('#tab-elnino .enso-plate-t')].every(t => t.textContent !== 'Fitted crop responses')
+                        && /Show per country/.test(document.querySelector('#enso-harvest-fig > summary').textContent),
+                    calOpen: !document.querySelector('#enso-calendar details.enso-cal-fold') && shortRows === calRows && allRows === cal.querySelectorAll('.cal-row:not(.cal-head)').length && allRows > shortRows,
+                    calH: Math.round(plateH)};
+        }""")
+        check("2027 plate: plain sentence from the data, at most three bullets, chart legend in the fold",
+              audit["lede"] and audit["bullets"] and audit["legendFolded"], str(audit))
+        check("fitted responses sit behind Show per country; the calendar is open with the outlook's pairs first",
+              audit["noCoefPlate"] and audit["calOpen"] and audit["calH"] <= 520, str(audit))
         check("the Reported badge counts what its label names",
               page.locator('#viewbtn-ensolive .enso-view-desc').inner_text().strip() == 'news & alerts')
 
