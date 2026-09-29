@@ -45837,9 +45837,9 @@ function showCommodityDetail(key) {
        outlook month paints its own prediction; the rain already fallen stays in the hover. */
     var k = sstSceneKey(), avg = !ol && !sstWinter(), spi = ol ? m.rain_spi || m.rain_spi3 : m.rain_spi, odds = !spi && !!(ol && m.rain_prob_above && m.rain_prob_below); S._rainG = S._rainG || {};
     RAIN_KIND = spi ? (ol ? 'fc' : 'spi') : odds ? 'odds' : 'pct';
-    /* Island cells (GPCP) are drawn as dots at their islands (syncIslandDots), never as a 2.5-degree square of sea. */
-    var isl = ol && S.seasonal.rain_model && S.seasonal.rain_model.island_cells;
-    if (spi && isl && isl.length && !S._rainG[k]) { spi = spi.slice(); isl.forEach(function (c) { spi[c] = null; }); }
+    /* Island cells (GPCP) stay in the raster: the layer paints land pixels only, so they colour the coasts and larger
+       islands they hold (Sarasota, Marsala, Cyprus, Crete) and never open sea; syncIslandDots marks the islands too small
+       for the land mask. */
     return S._rainG[k] || (S._rainG[k] = gridOf(g, spi ? spi : odds ? m.rain_prob_below.map(function (pd, i) { var pw = m.rain_prob_above[i];
         return pd == null || pw == null || m.rain[i] == null ? null : pd >= pw ? -pd : pw; }) : m.rain,
       { kind: RAIN_KIND, pct: m.rain, agree: avg ? m.rain_agree : null, n: avg ? m.n : null, pwet: ol && !spi ? m.rain_prob_above : null, pdry: ol && !spi ? m.rain_prob_below : null,
@@ -46152,8 +46152,8 @@ function showCommodityDetail(key) {
     syncPastEvents();
   }
   /* 2026-09-29 (Asia-Oceania check: 22 of 29 blank checks were small Pacific islands with no land cell): island cells
-     carry the outlook on GPCP's record (seasonal_outlook.rain_model.island_points); a 2.5-degree square would paint open
-     sea, so each island gets a dot in the rain colours at its own place. Outlook months only. */
+     carry the outlook on GPCP's record (seasonal_outlook.rain_model.island_points); islands too small for the map's land
+     mask get a square in the rain colours at their own place. Outlook months only. */
   function syncIslandDots(want) {
     if (S.islLayer) { S.map.removeLayer(S.islLayer); S.islLayer = null; }
     var ol = want && sstView() === 'outlook' && olMap(), P = ol && S.seasonal && S.seasonal.rain_model && S.seasonal.rain_model.island_points;

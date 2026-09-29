@@ -77,6 +77,10 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 STATS = DATA / "ref" / "precl_month_stats_1991_2020.json.gz"
 ISLANDS = DATA / "ref" / "gpcp_island_model.json.gz"   # scripts/build_gpcp_island_model.py
+# A PREC/L month fit with gamma shape above this is implausibly narrow: CPC gauge and GPCP month fits pass 20 in only
+# 0.4% and 0.5% of cell-months (99.5th percentiles 19.1 and 20.0), PREC/L in 11%. Set from the records, not the forecasts;
+# agreement with the official forecasts is flat for bounds from 15 to 30.
+NARROW_ALPHA = 20.0
 GPCP_URL = "https://www.ncei.noaa.gov/data/global-precipitation-climatology-project-gpcp-monthly/access"
 SEASONS = "DJF JFM FMA MAM AMJ MJJ JJA JAS ASO SON OND NDJ".split()   # index = centre month - 1
 PROB_LEAN = 40
@@ -265,6 +269,12 @@ def add_rain_spi(payload: dict) -> dict:
             k = max(0.0, 1 + r / 100)
             med0 = P.total_of(0.0, ft, clip)
             z_n = P.spi_from_total(c, "m1", mth, k * med0, pth[c])
+            if c not in isl and c in ch and ft[0] > NARROW_ALPHA:
+                # PREC/L's 1991-2020 spread is implausibly narrow here (few gauges): a 30% cut read -2 to -3 in Mato Grosso
+                # or the Top End. Read NMME's change on CHIRPS's month spread instead (combined check, 29 Sep 2026: same
+                # agreement with 1,025 official forecasts, 30-40% fewer cells at |SPI| >= 2, closer to CPC's calibrated odds).
+                nb = (ch[c][0], 1.0, ch[c][2] / ch_meta["n_years"])
+                z_n = P.spi_of(k * P.total_of(0.0, nb, clip), nb, -1.0, clip)
             pr = P.enso_predict(c, "m1", mth, so[1], pth[c]) if so else None
             z_e, sd = (pr[0], pr[1]) if pr and pr[2] else (None, 1.0)
             z = z_n if z_e is None else (z_n + z_e) / 2
