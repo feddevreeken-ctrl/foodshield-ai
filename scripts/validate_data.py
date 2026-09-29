@@ -124,6 +124,7 @@ EXPECTED_FILES = {
     'enso_ports.json':            ('soft',     'dict_or_empty'),
     'enso_freight.json':          ('soft',     'dict_or_empty'),
     'enso_price_analogs.json':    ('soft',     'dict_or_empty'),
+    'enso_price_outlook.json':    ('soft',     'enso_price_outlook'),  # derived from FPMA + the harvest model
     'enso_hindcast.json':         ('soft',     'dict_or_empty'),
     'enso_situation.json':        ('soft',     'dict_or_empty'),
     'enso_strengths.json':        ('soft',     'dict_or_empty'),
@@ -363,6 +364,33 @@ def _check_sst_recent(data):
     return True, f"ok — {len(data['months'])} months, " + ", ".join(out)
 
 
+def _check_enso_price_outlook(text, data):
+    """build_enso_price_outlook.py: rows with the fields the Prices lens reads, no NaN, and no model numbers
+    unless the model passed its skill gate (a no_skill model must not leak a forecast)."""
+    try:
+        json.loads(text, parse_constant=lambda c: (_ for _ in ()).throw(ValueError(c)))
+    except ValueError as e:
+        return False, f"non-finite number in the file: {e}"
+    if not isinstance(data, dict) or not isinstance(data.get('rows'), list) or not data['rows']:
+        return False, "no rows"
+    status = data.get('model_status')
+    if status not in ('ok', 'no_skill', 'insufficient_data'):
+        return False, f"model_status is {status!r}"
+    need = ('iso3', 'country', 'commodity', 'series', 'latest', 'aftermath', 'analog', 'model', 'skill')
+    for r in data['rows']:
+        miss = [k for k in need if k not in r]
+        if miss:
+            return False, f"{r.get('iso3')} {r.get('commodity')} lacks {miss}"
+        if not (r['latest'] or {}).get('month') or not isinstance((r['latest'] or {}).get('real_value'), (int, float)):
+            return False, f"{r['iso3']} {r['commodity']}: no latest month/value"
+        if status != 'ok' and r['model'] is not None:
+            return False, f"{r['iso3']} {r['commodity']}: model numbers published while model_status is {status}"
+    if status != 'ok' and data.get('coefficients') is not None:
+        return False, f"coefficients published while model_status is {status}"
+    n_model = sum(r['model'] is not None for r in data['rows'])
+    return True, f"ok — {len(data['rows'])} rows, model {status} ({n_model} rows with model numbers)"
+
+
 def validate_one(filename, spec):
     """Returns (ok: bool, message: str)."""
     criticality, shape = spec
@@ -468,6 +496,8 @@ def validate_one(filename, spec):
         extra += f", SPI cells: {', '.join(spi_n)}" if spi_n else ", no SPI"
         return True, (f"ok — {(data.get('window') or {}).get('start')}..{(data.get('window') or {}).get('end')}, "
                       f"{len(valid)} cells, median {med:+d}%{extra}")
+    elif shape == 'enso_price_outlook':
+        return _check_enso_price_outlook(p.read_text(), data)
     elif shape == 'sst_recent':
         if not isinstance(data, dict) or not data:
             return False, f"no sea months yet ({notes[:60] if notes else 'no notes'})"
