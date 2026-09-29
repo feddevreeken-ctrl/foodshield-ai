@@ -275,7 +275,8 @@ def main() -> int:
         check("the CPC strength table prints the agency's percentages for every season", page.evaluate("""async () => {
             const T = (await (await fetch('data/enso_strengths.json')).json()).data;
             const rows = [...document.querySelectorAll('.enso-strength-table tbody tr')];
-            return rows.length > 0 && T.seasons.length === document.querySelectorAll('.enso-strength-table thead th').length - 1
+            // 2026-09-29: the header is a calendar (a year row over a middle-month row); seasons are the month row's columns.
+            return rows.length > 0 && T.seasons.length === document.querySelectorAll('.enso-strength-table thead tr:last-child th').length - 1
                 && rows.every(r => { const c = r.querySelector('th').textContent;
                     return [...r.querySelectorAll('td')].every((td, i) => (T.seasons[i].classes[c] ? T.seasons[i].classes[c] + '%' : '<1%') === td.textContent); });
         }"""))
@@ -498,7 +499,8 @@ def main() -> int:
         ags = page.eval_on_selector_all(".enso-bul-ag", "e => e.map(x => x.textContent)")
         check("BoM weekly appears in news", any("BoM" in a for a in ags), str(ags))
         check("more than one agency is represented", len(set(ags)) >= 2, str(set(ags)))
-        skip_note = page.locator(".enso-bul-skip").inner_text()
+        # 2026-09-29 (audit, "declutter"): the unreached-sources note sits in the strength plate's closed notes fold.
+        skip_note = " ".join((page.locator(".enso-bul-skip").text_content() or "").split())
         check("the frozen NOAA ENSO blog is named without a derived age",
               "NOAA’s ENSO blog is left out: its latest post is 25 June 2025." in skip_note
               and "days old" not in skip_note)
@@ -761,9 +763,10 @@ def main() -> int:
             const first = document.querySelector('#subview-elnino > *:not([hidden])');
             const harv = O.rows_all.filter(r => r.status === 'shown' && !r.in_season && Math.abs(r.change_kt_record || 0) >= 150);
             const text = document.querySelector('.enso-next12').textContent;
-            // 2026-09-28 (audit): the map opens Ocean, then CPC's odds and the dated twelve months; the Pacific explainer and the ONI record follow.
+            // 2026-09-29 (audit, owner: "second block should be ... 'What is El Nino'"): map, the Pacific explainer, CPC's odds,
+            // the dated twelve months, then the ONI record.
             const second = first && first.nextElementSibling, third = second && second.nextElementSibling, fourth = third && third.nextElementSibling;
-            return first && first.classList.contains('enso-mapgrid') && second && second.id === 'enso-strengths' && third && third.id === 'enso-next12' && fourth && fourth.id === 'enso-pacific' && !!document.querySelector('#subview-elnino > .enso-oni-plate')
+            return first && first.classList.contains('enso-mapgrid') && second && second.id === 'enso-pacific' && third && third.id === 'enso-strengths' && fourth && fourth.id === 'enso-next12' && !!document.querySelector('#subview-elnino > .enso-oni-plate')
                 && items.length >= 6 && items.every(li => /^is-(forecast|published|modelled|precedent)$/.test(li.className) && li.querySelector('[data-goto-lens]'))
                 // 2026-09-27: the fitted harvests are one pointer row naming each (sizes live on Harvests).
                 && harv.every(r => text.includes(r.iso === 'USA' ? 'United States' : r.iso === 'ZAF' ? 'South Africa' : ''))
@@ -775,6 +778,50 @@ def main() -> int:
         check("next-twelve-months timeline draws one bar per line, each inside its row", page.evaluate("""() => {
             const bars = [...document.querySelectorAll('.enso-next12-bar')], items = document.querySelectorAll('.enso-next12 li');
             return bars.length === items.length && bars.every(b => { const r = b.getBoundingClientRect(), row = b.parentElement.getBoundingClientRect(); return r.top >= row.top - 1 && r.bottom <= row.bottom + 1; });
+        }"""))
+        # 2026-09-29 audit (Ocean): read everything from the data files, never from typed numbers.
+        check("Ocean audit: the strip says when the newest El Niño feed was collected", page.evaluate("""async () => {
+            // The page's rule: every loaded feed named enso*, sst_*, rain_* or seasonal_outlook, except the hand-run forecast track record.
+            const names = ['enso','enso_exposure','enso_model','enso_regions','enso_lanes','enso_corridors','enso_econ','enso_mechanism','enso_indices','enso_bulletins','sst_anomaly','enso_news','enso_outlook','enso_gauges','enso_situation','enso_strengths','enso_ports','enso_hindcast','enso_freight','enso_price_analogs','enso_published_effects','sst_composites','seasonal_outlook','rain_anomaly','enso_past_events','sst_months','rain_months','enso_recent_events','enso_auto_events','enso_outlook_events'];
+            const ds = (await Promise.all(names.map(n => fetch('data/' + n + '.json').then(r => r.json()).catch(() => null)))).filter(Boolean).map(j => new Date(j._meta.generated_at || j._meta.generated)).filter(d => !isNaN(d));
+            const t = (document.querySelector('#enso-status-home .enso-now-upd') || {}).textContent || '';
+            const hm = d => String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0');
+            const newest = new Date(Math.max(...ds));
+            return /^Data updated/.test(t) && / UTC$/.test(t.trim()) && t.includes(hm(newest));
+        }"""))
+        check("Ocean audit: 'What is El Niño' follows the map, explains in a lede and four points, and stays near 1000 px", page.evaluate("""() => {
+            const p = document.querySelector('#enso-pacific .pac-plate'), t = p && p.querySelector('.enso-plate-t');
+            return !!t && t.textContent === 'What is El Niño' && !!p.querySelector('.pac-what-lede') && p.querySelectorAll('.pac-what li').length === 4
+                && p.querySelectorAll(':scope > details').length === 1 && p.getBoundingClientRect().height <= 1060
+                && [...p.querySelectorAll('.pac-how-src a')].every(a => /^https:/.test(a.href));
+        }"""))
+        check("Ocean audit: the strength table reads as a calendar and the agencies are one compact row", page.evaluate("""async () => {
+            const T = (await (await fetch('data/enso_strengths.json')).json()).data;
+            const top = T.roni_outlook.slice().sort((a, b) => b.median - a.median)[0];
+            const pk = document.querySelector('.enso-strength-table thead th.is-peakcol');
+            const plate = document.querySelector('.enso-strength-plate'), rows = plate.querySelectorAll('.enso-bul > .enso-bul-row');
+            return !!document.querySelector('.enso-strength-table .enso-cal-y') && !!document.querySelector('.enso-strength-table th.is-ybreak')
+                && !!pk && pk.title.startsWith(top.season) && rows.length >= 2 && [...rows].every(r => r.getBoundingClientRect().height < 40)
+                && !!plate.querySelector('details.enso-strength-notes .enso-bul-skip');
+        }"""))
+        check("Ocean audit: the hero's CPC odds come from the strength table, not a typed row", page.evaluate("""async () => {
+            const T = (await (await fetch('data/enso_strengths.json')).json()).data;
+            const top = T.roni_outlook.slice().sort((a, b) => b.median - a.median)[0], s = T.seasons.find(x => x.season === top.season);
+            const t = document.querySelector('#enso-agency-status').textContent;
+            return t.includes(s.classes['very strong El Niño'] + '% chance') && !/beats every event/.test(t)
+                && (!T.roni_record || top.median <= T.roni_record.value || t.includes(T.roni_record.value.toFixed(2)));
+        }"""))
+        check("Ocean audit: the twelve months adds the map's forecasts by region and stays within 14 rows", page.evaluate("""async () => {
+            const J = await (await fetch('data/enso_outlook_events.json')).json(), E = (J.data || J).events || [];
+            const rows = document.querySelectorAll('.enso-next12-rows > .enso-next12-row'), text = document.querySelector('.enso-next12').innerHTML;
+            const linked = E.filter(e => e.source && e.source.url && text.includes(e.source.url.replace(/&/g, '&amp;'))).length;
+            return rows.length <= 14 && document.querySelectorAll('.enso-next12 li.is-modelled').length >= 2 && /modelled: (drier|wetter)/.test(text) && linked >= 10;
+        }"""))
+        check("Ocean audit: the forecast plate gives the September forecasts' track record from the data file", page.evaluate("""async () => {
+            const F = (await (await fetch('data/enso_forecast_skill.json')).json()).data, t = (document.querySelector('.enso-oni-plate .enso-skill') || {}).textContent || '';
+            const title = document.querySelector('.enso-oni-plate .enso-plate-t').textContent;
+            return !/ONI|RONI/.test(title) && t.includes(F.summary.mae.toFixed(2)) && t.includes(F.summary.years + ' winters') && t.includes('in ' + F.summary.within_0_5 + ')')
+                && (!F.current || !!document.querySelector('.enso-oni-plate .enso-skill-mark'));
         }"""))
         check("one persistent map instance across all five views", page.evaluate("""() =>
             document.querySelectorAll('#enso-map').length === 1 && document.getElementById('enso-map') === window._stageAMap

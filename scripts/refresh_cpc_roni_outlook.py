@@ -202,6 +202,16 @@ def parse(page: str, disc: str) -> list[dict]:
     return out
 
 
+def roni_record(roni_txt: str, before: int) -> dict:
+    """The highest seasonal RONI in CPC's record before `before` (the current event's year), for the Ocean headline."""
+    roni = _index(roni_txt, "RONI")
+    (season, year), v = max(((k, v) for k, v in roni.items() if k[1] < before), key=lambda kv: kv[1])
+    return {"value": float(v), "season": season, "year": year, "since": min(y for _, y in roni),
+            "before": before, "source": RONI_TXT, "fetched": datetime.now(timezone.utc).date().isoformat(),
+            "note": "Highest three-month RONI in CPC's RONI.ascii.txt before the current event's year; year is CPC's label "
+                    "(DJF 1983 = December 1982 to February 1983)."}
+
+
 def main() -> int:
     outlook = parse(http_get(URL, timeout=30, headers=UA, retries=2).text,
                     http_get(DISC, timeout=30, headers=UA, retries=2).text)
@@ -210,9 +220,11 @@ def main() -> int:
     s_path, m_path = DATA_DIR / "enso_strengths.json", DATA_DIR / "enso_mechanism.json"
     strengths, mech = json.loads(s_path.read_text()), json.loads(m_path.read_text())
     prev_gap = strengths["data"].get("oni_roni_gap")
+    record = strengths["data"].get("roni_record")
     try:
-        gap = gap_table(http_get(ONI_TXT, timeout=30, headers=UA, retries=2).text,
-                        http_get(RONI_TXT, timeout=30, headers=UA, retries=2).text)
+        roni_txt = http_get(RONI_TXT, timeout=30, headers=UA, retries=2).text
+        gap = gap_table(http_get(ONI_TXT, timeout=30, headers=UA, retries=2).text, roni_txt)
+        record = roni_record(roni_txt, gap["jja_year"])
     except Exception as e:  # noqa: BLE001 -- the outlook itself must not be lost to the index files
         gap = prev_gap
         print(f"[WARN] ONI-RONI gap: {type(e).__name__}: {e}; "
@@ -224,6 +236,8 @@ def main() -> int:
     strengths["data"]["roni_outlook"] = outlook
     if gap:
         strengths["data"]["oni_roni_gap"] = gap
+    if record:
+        strengths["data"]["roni_record"] = record
     rows = mech["data"]["context"]["rows"]
     for code in ROWS_TO_TEXT:
         o = next((x for x in outlook if x["season"] == code), None)

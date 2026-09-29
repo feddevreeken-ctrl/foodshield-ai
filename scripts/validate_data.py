@@ -138,6 +138,7 @@ EXPECTED_FILES = {
     'enso_auto_events.json':      ('soft',     'dict_or_empty'),
     # Official seasonal forecasts marked on the outlook months (hand-curated, like enso_recent_events.json).
     'enso_outlook_events.json':   ('soft',     'dict_or_empty'),
+    'enso_forecast_skill.json':   ('soft',     'dict_or_empty'),  # hand-run: scripts/build_enso_forecast_skill.py
     # Weekly archives for the same map (refresh_rain_weeks.py, refresh_sst_weeks.py): calendar weeks, up to 12.
     # SOFT for the same reason; a failed step keeps the last good archive.
     'rain_weeks.json':            ('soft',     'rain_weeks'),

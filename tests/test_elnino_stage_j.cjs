@@ -13,7 +13,7 @@ vm.runInContext(html.slice(start,end)+`
  syncInstruments=renderMapRanking=renderMapTag=compactLegend=function(){};
 })();`,ctx);
 const api=ctx.api,S=api.S;
-for(const [key,file] of Object.entries({indices:'enso_indices',enso:'enso',regions:'enso_regions',lanes:'enso_lanes',rtfp:'rtfp',exp:'enso_exposure',econ:'enso_econ',mech:'enso_mechanism',bulletins:'enso_bulletins',pwhist:'portwatch_history',gauges:'enso_gauges'})){
+for(const [key,file] of Object.entries({indices:'enso_indices',enso:'enso',regions:'enso_regions',lanes:'enso_lanes',rtfp:'rtfp',exp:'enso_exposure',econ:'enso_econ',mech:'enso_mechanism',bulletins:'enso_bulletins',pwhist:'portwatch_history',gauges:'enso_gauges',strengths:'enso_strengths'})){ // 2026-09-29: the hero reads CPC's odds from the strength table
  const feed=JSON.parse(fs.readFileSync('data/'+file+'.json'));S[key]=feed.data;S.meta[key]=feed._meta;
 }
 const tele=new Set(S.regions.regions.flatMap(r=>r.iso3));S.isoIndex={};tele.forEach(iso=>S.isoIndex[iso]=[{}]);
