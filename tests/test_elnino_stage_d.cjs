@@ -297,7 +297,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    for(const l of S.lanePins.concat(S.laneLines,S.corridorLines,S.corridorLabels,S.corridorArrows,S.corridorEdges))assert.equal(S.map.hasLayer(l),view==='ensowater');
    for(const l of S.alertPins)assert.equal(S.map.hasLayer(l),view==='ensolive');
    /* Shipping has no callout any more: the Gatun card was the largest object on a map whose subject is the marks under it, and its numbers moved into the fold. Harvests keeps its two (three layers each). */
-   assert.equal(S.annoLayers.length,view==='ensoharvest'?6:0);
+   assert.equal(S.annoLayers.length,0);  /* 2026-09-29 audit: the harvest callouts gave way to labelled 2027 circles (S.shiftLayers) */
    assert.equal(country.options.color,['ensoharvest','ensomoney','ensolive'].includes(view)?'#ebe9e2':'#e6e3da');
    if(view!=='ensolive')assert(!country.element.classList.contains('enso-hotspot')&&!country.element.classList.contains('enso-major-hotspot'));
    const legend=node('enso-legend'),visible=legend.querySelector('.enso-legend'),key=visible.textContent;
@@ -350,7 +350,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
   api.renderCalendar();for(const label of ['Outlined: planting','Filled: harvest','El Niño slope falls','El Niño slope rises','Tinted band: DJF','Vertical rule: this month','grows through DJF'])assert(node('enso-calendar').textContent.includes(label));
   assert(node('enso-calendar').innerHTML.indexOf('cal-key')<node('enso-calendar').innerHTML.indexOf('class="enso-cal"'));
   // The sign rule moved into renderDetail (stubbed in this harness); the browser gate reads it from #enso-detail.
-  S.sel='ZWE';api.renderCoeffs();assert(node('enso-coeffs').textContent.includes('Fitted crop responses'));assert(node('enso-coeffs').querySelector('#enso-detail'));
+  S.sel='ZWE';api.renderCoeffs();assert(node('enso-coeffs').textContent.includes('Show per country'));  /* 2026-09-29: the plate became a fold */assert(node('enso-coeffs').querySelector('#enso-detail'));
   api.renderMoney();assert(node('enso-money').querySelector('#enso-c-record'));for(const label of ['vs the previous six months','vs the same months a year earlier'])assert(node('enso-money').textContent.includes(label));
   api.drawCharts('ensowater');assert(!ctx.charts['enso-c-panama']);
   const ais=ctx.charts['enso-c-panama-daily'].keyNotes[0],dates=S.pwhist.chokepoints.panama.dates;const isoT=(d)=>{const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);return m?(+m[3])+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m[2]-1]+' '+m[1]:d;};for(const t of ['Points: observed daily','7-day means','slot limit from each advisory',isoT(dates[0]),isoT(dates[dates.length-1])])assert(ais.includes(t));
