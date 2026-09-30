@@ -1458,12 +1458,12 @@ def main() -> int:
         check("hand-checked El Niño facts are within their review windows", not _stale, str(_stale))
         # 2026-10-01 consolidation: held-out performance remains a separate closed fold immediately below the one answer plate.
         page.evaluate("showTab('ensoharvest')")
-        page.wait_for_selector('#subview-ensoharvest.active .enso-pf-plate')
+        page.wait_for_selector('#subview-ensoharvest.active .enso-pf-plate', state='attached')
         check("Harvests keeps held-out performance in a closed fold under the answer", page.evaluate("""() => {
             const answer = document.getElementById('enso-outlook'), hind = document.getElementById('enso-hindcast');
             const fold = hind && hind.querySelector(':scope > details.enso-fold-plate');
             return !!answer.querySelector('.enso-hv-answer') && !!fold && !fold.open
-                && fold.querySelector(':scope > summary').textContent.includes('How the model did on past El Niños')
+                && fold.querySelector(':scope > summary').textContent.includes('How the model has performed')
                 && answer.nextElementSibling === hind;
         }"""))
         # 2026-10-01 consolidation: the answer joins outlook baselines to forecast percentiles; the record winter is one tick.
@@ -1517,12 +1517,34 @@ def main() -> int:
             const fold = pl.closest('details.enso-fold-plate');
             const right = sc.filter(e => e.global.sign_right).length, alarms = sc.filter(e => e.global.predicted_kt < 0 && e.global.actual_kt > 0).length;
             const t = pl.querySelector('.enso-pf-lede').textContent.replace(/\s+/g, ' ');
-            return !!fold && !fold.open && fold.querySelector(':scope > summary').textContent.includes('direction right ' + right + ' of ' + sc.length + ' winters')
+            return !!fold && !fold.open && !!fold.querySelector(':scope > .enso-rp-second .enso-pf-plate')
                 && right === P.overall.sign_right && alarms === P.overall.false_alarms && sc.length === P.overall.events
                 && +pl.dataset.n === sc.length && +pl.dataset.right === right && +pl.dataset.alarms === alarms
                 && t.includes('Direction right in ' + right + ' of ' + sc.length + ' winters') && t.includes('False alarms: ' + alarms + ' of ' + sc.length)
                 && pl.querySelectorAll('.enso-pf-row').length === P.events.length
                 && pl.querySelectorAll('.enso-pf-row.is-hit').length === right;
+        }"""))
+        # 2026-10-01: the selection-safe replay leads the closed fold; every printed count is recounted from data/enso_replay.json.
+        check("replay fold prints the file's rows, counts and error figures", page.evaluate("""async () => {
+            const R = (await (await fetch('data/enso_replay.json')).json()).data;
+            const sc = R.events.filter(e => e.scored), pl = document.querySelector('.enso-rp-plate'); if (!pl) return false;
+            const fold = pl.closest('details.enso-fold-plate'), right = sc.filter(e => e.sign_right).length;
+            const t = pl.querySelector('.enso-pf-lede').textContent.replace(/\\s+/g, ' '), P = R.summary.portfolio, F = R.comparison_full_record_selection.on_common_winters.same_harness_pairs_chosen_on_full_record;
+            const mt = k => { const a = Math.abs(k); return a >= 1000 ? (a / 1000).toFixed(1) + ' Mt' : Math.round(a) + ' kt'; };
+            const rows = [...pl.querySelectorAll('tbody tr')];
+            const plume = sc.filter(e => e.enso_input.kind === 'iri_plume_september').length;
+            return !!fold && !fold.open && fold.querySelector(':scope > summary').textContent.includes('direction right ' + right + ' of ' + sc.length + ' winters')
+                && rows.length === sc.length && rows.filter(r => r.classList.contains('is-hit')).length === right
+                && rows.every((r, i) => { const e = sc.slice().sort((a, b) => b.djf_year - a.djf_year)[i]; return r.textContent.includes(e.said.issued) && r.textContent.includes(mt(e.predicted_kt)) && r.textContent.includes(mt(e.actual_kt)) && r.textContent.includes(e.said.top3[0].pair.split('/')[0]); })
+                && t.includes('Direction right in ' + right + ' of ' + sc.length + ' winters') && t.includes(mt(P.mae_kt) + ' against ' + mt(P.mae_yardstick_kt))
+                && (P.mae_kt > P.mae_yardstick_kt) === /does not beat the yardstick/.test(t)
+                && t.includes('direction right in ' + F.sign_right + ' of ' + F.winters) && t.includes('(' + plume + ' of ' + sc.length + ' winters)')
+                && pl.closest('.enso-fold-plate').querySelector('.enso-rp-second .enso-pf-plate') && !/—/.test(pl.textContent);
+        }"""))
+        check("'What each number is' reads its statuses from _meta.maturity", page.evaluate("""async () => {
+            const M = (await (await fetch('data/enso_model.json')).json())._meta.maturity;
+            const rows = [...document.querySelectorAll('#enso-foodband .enso-maturity tbody tr')];
+            return rows.length === Object.keys(M).length && rows.every(r => { const [k, v] = r.dataset.maturity.split(':'); return M[k] === v && r.cells[1].textContent.trim().length > 0 && !/status not in the data/.test(r.textContent); });
         }"""))
         # 2026-10-01 consolidation: the retired distribution container is empty; hindcast now follows the joined answer directly.
         check("portfolio hindcast keeps five lead rows inside its closed fold, directly after the answer", page.evaluate("""() => {
@@ -2406,6 +2428,24 @@ def main() -> int:
             const sw = document.querySelector('#enso-scrub .sst-mode-buttons'), q = document.querySelector('#enso-scrub .sst-mode-question');
             return sw.textContent === 'Past El NiñosNowOutlook' && q.textContent === 'What is happening?';
         }"""))
+        # 2026-10-01: the Outlook state is visibly a forecast, asks its own question, and its source fold carries the rain-blend test.
+        page.click('#enso-scrub [data-sst-view="outlook"]')
+        page.wait_for_timeout(1500)
+        check("Ocean Outlook state: FORECAST tag, dashed frame, its own question", page.evaluate("""() => {
+            const tag = document.querySelector('#enso-mapwrap .enso-forecast-tag'), h = document.querySelector('#enso-mapwrap');
+            return !!tag && !tag.hidden && tag.getBoundingClientRect().width > 0 && tag.textContent === 'FORECAST'
+                && document.querySelector('#enso-scrub .sst-mode-question').textContent === 'What is expected next?'
+                && getComputedStyle(h).borderTopStyle === 'dashed' || h.classList.contains('is-modelled') || h.dataset.kind === 'modelled';
+        }"""))
+        check("Ocean outlook: the rain-blend test sentence and error figures come from data/enso_outlook_contest.json", page.evaluate("""async () => {
+            const O = (await (await fetch('data/enso_outlook_contest.json')).json()).data;
+            const sec = [...document.querySelectorAll('.enso-srcs .enso-src')].find(x => /Was the rain blend tested/.test(x.textContent)); if (!sec) return false;
+            const t = sec.textContent.replace(/\\s+/g, ' '), f = m => m.rmse.toFixed(2), S = O.summary;
+            return t.includes(O.verdict.reading) && t.includes('hybrid ' + f(S.skilful_cells_only.hybrid) + ', NMME alone ' + f(S.skilful_cells_only.nmme) + ', regression alone ' + f(S.skilful_cells_only.regression) + ', climatology ' + f(S.skilful_cells_only.climatology))
+                && t.includes('hybrid ' + f(S.all_cells.hybrid) + ', NMME alone ' + f(S.all_cells.nmme)) && t.includes(S.skilful_cells_only.cell_years.toLocaleString('en-US') + ' cell-years');
+        }"""))
+        page.click('#enso-scrub [data-sst-view="now"]')
+        page.wait_for_timeout(700)
         page.click('#enso-scrub [data-sst-view="past"]')
         page.wait_for_timeout(700)
         check("the Ocean composite shows past very strong El Niño winters, sea and rain, from the composite file", page.evaluate("""async () => {
