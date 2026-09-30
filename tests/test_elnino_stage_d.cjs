@@ -66,33 +66,34 @@ S.ready=true;S.names={};S.drawn={live:true,frame:true,limits:true,mech:true,map:
 S.sel='ZWE';
 test('lane geometry is data-only, validated and phase coloured',()=>{
  assert(S.lanes.lanes.every(l=>api.laneGeometry(l).length===0));
- /* 2026-09-29 audit: the map draws only lanes with a published ENSO link. */
- const LINKED=S.lanes.lanes.filter(l=>l.phase&&l.phase!=='none'), LINKEDC=S.corridors.corridors.filter(c=>LINKED.some(l=>l.id===c.lane&&l.phase===c.phase));
+ /* 2026-09-29 audit: the map draws only lanes with a published ENSO link; 2026-09-30 court: the El Niño side by default, the La Niña rivers only when their layer is on. */
+ const LINKED=S.lanes.lanes.filter(l=>l.phase==='el_nino');
  api.drawLanes();assert.equal(S.laneLines.length,0);assert.equal(S.lanePins.length,LINKED.length);
+ S.showLaNina=true;api.drawLanes();assert.equal(S.lanePins.length,S.lanes.lanes.filter(l=>l.phase&&l.phase!=='none').length);S.showLaNina=false;api.drawLanes();
  S.lanePins.forEach(p=>assert(p.options.icon.html.includes('enso-choke-label')));
  const original=S.lanes;
  S.lanes={lanes:['el_nino','la_nina','none'].map((phase,i)=>({id:'test'+i,name:'test',phase,lat:0,lng:0,geometry:{type:'LineString',coordinates:[[10,20],[11,21]]}}))};
- api.drawLanes();assert.deepEqual(S.laneLines.map(l=>l.options.color),['#e0673c','#5b9bd0']);
+ S.showLaNina=true;api.drawLanes();assert.deepEqual(S.laneLines.map(l=>l.options.color),['#e0673c','#5b9bd0']);S.showLaNina=false;
  assert(S.laneLines.every(l=>l.options.weight>=3&&!l.options.dashArray));assert.equal(S.laneLines[0].coords[0][0],20);
  assert.equal(api.laneGeometry({geometry:{type:'LineString',coordinates:[[999,20],[0,0]]}}).length,0);
- S.lanes=original;S.lanePins=[];S.laneLines=[];S.shipView='enso';api.drawLanes();  /* 2026-09-27: link inks live in the El Niño link view */
+ S.lanes=original;S.lanePins=[];S.laneLines=[];api.drawLanes();
 });
-test('Shipping draws the corridors of ENSO-linked lanes weighted by published link, with names in tooltips',()=>{
- const LINKED=S.lanes.lanes.filter(l=>l.phase&&l.phase!=='none'), LINKEDC=S.corridors.corridors.filter(c=>LINKED.some(l=>l.id===c.lane&&l.phase===c.phase));
+test('Shipping draws the El Niño-side corridors at one width, the weak link muted, with names in tooltips',()=>{
+ const LINKED=S.lanes.lanes.filter(l=>l.phase==='el_nino'), LINKEDC=S.corridors.corridors.filter(c=>LINKED.some(l=>l.id===c.lane&&l.phase===c.phase));
  assert.equal(S.corridorLines.length,LINKEDC.length);assert.equal(S.corridorLabels.length,0);assert.equal(S.corridorArrows.length,0);
  LINKEDC.forEach((c,i)=>{
   const lane=S.lanes.lanes.find(l=>l.id===c.lane),line=S.corridorLines.find(l=>l.options.ensoCorridorId===c.id);
-  /* 2026-09-26: tier 1 = moderate/strong ENSO link (phase ink, 2px), tier 2 = weak (phase ink, 1.25px), tier 3 = none (grey hairline). */
+  /* 2026-09-30 court: constant width (nothing scaled); tier 1 = moderate/strong link in the phase ink, tier 2 = weak in a muted ink. */
   const tier=lane.phase==='none'?3:lane.attribution==='weak'?2:1, ink={el_nino:'#e0673c',la_nina:'#5b9bd0',none:'#7b8491'}[lane.phase];
-  assert.equal(c.phase,lane.phase);assert.equal(line.options.color,tier===3?'#7b8491':ink);
-  assert.equal(line.options.weight,[0,2,1.25,1][tier]);assert.equal(line.options.opacity,[0,.85,.55,.35][tier]);assert.equal(line.options.dashArray,'6 4');
+  assert.equal(c.phase,lane.phase);assert.equal(line.options.color,tier===2?'#b39d8a':ink);
+  assert.equal(line.options.weight,1.7);assert.equal(line.options.opacity,[0,.95,.8][tier]);assert.equal(line.options.dashArray,'6 4');
   for(const text of [c.name,c.basis,'schematic corridor through named waypoints, not vessel tracks',...c.commodities,...c.sources])assert(line.tooltip.includes(text.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')));
  });
  const old=S.corridorLines.concat(S.corridorEdges);old.forEach(l=>l.addTo(S.map));api.drawLanes();
  assert(old.every(l=>!S.map.hasLayer(l)));assert.equal(S.corridorLines.length,LINKEDC.length);
 });
 test('Stage I transit rings join actual lane values and distinguish zero, missing and increases',()=>{
- S.lanes.lanes.filter(l=>l.phase&&l.phase!=='none').forEach((ln,i)=>{
+ S.lanes.lanes.filter(l=>l.phase==='el_nino').forEach((ln,i)=>{
   const m=api.laneMeasurement(ln),html=S.lanePins[i].options.icon.html,pw=S.portwatch[ln.portwatch_key];
   if(!pw){assert.equal(m,null);assert(!html.includes('no transit data'));assert(S.lanePins[i].options.icon.className.includes('no-transit'));assert(!html.includes('data-yoy'));}
   else {const dry=Number.isFinite(pw.yoy.dry_bulk_pct)&&Number.isFinite(pw.transits_per_day.dry_bulk),pct=dry?pw.yoy.dry_bulk_pct:pw.yoy.total_pct;assert.equal(m.pct,pct);assert.equal(m.total,pw.transits_per_day.total);assert(html.includes('data-yoy="'+pct+'"'));assert(!html.includes('<circle'));assert(!html.includes('enso-transit-ring'));assert(html.includes('--ink-phase:'+(ln.phase==='none'?'#7b8491':{el_nino:'#e0673c',la_nina:'#5b9bd0'}[ln.phase])));}
@@ -110,9 +111,13 @@ test('Stage I transit rings join actual lane values and distinguish zero, missin
  } finally {S.portwatch=original;}
  assert(api.transitKey().includes('IMF PortWatch'));assert(api.transitKey().includes('28-day mean'));
 });
-test('Stage I Panama continuation names occupy both dateline endpoints',()=>{
- assert.equal(S.corridorEdges.length,2);assert.deepEqual(S.corridorEdges.map(l=>l.coords[1]),[-180,180]);
- assert(S.corridorEdges.every(l=>l.options.icon.html.includes('↔ US Gulf to East Asia')&&l.options.icon.html.includes('us_gulf_panama_east_asia')));
+test('Panama ends in a labelled Pacific stub, one line, nothing at the dateline',()=>{
+ /* 2026-09-30 court: the stub label names where the cargo goes; Amazon and Malacca name their exits from the file's own waypoints. */
+ assert.equal(S.corridorEdges.length,3);
+ assert(S.corridorEdges.some(l=>l.options.icon.html.includes('to Asia and the Pacific coast of South America')&&l.options.icon.className.includes('is-pacific')));
+ assert(S.corridorEdges.some(l=>l.options.icon.html.includes('Atlantic exit')));assert(S.corridorEdges.some(l=>l.options.icon.html.includes('to South China Sea')));
+ const pan=S.corridorLines.find(l=>l.options.ensoCorridorId==='us_gulf_panama_east_asia');
+ assert.equal(pan.coords.length,1);assert(pan.coords[0].every((p,i)=>!i||Math.abs(p[1]-pan.coords[0][i-1][1])<=180));assert(pan.coords[0].every(p=>p[1]>-180&&p[1]<180));
 });
 test('long ocean legs curve and split at the dateline without a world-spanning chord',()=>{
  const path=api.corridorGeometry(S.corridors.corridors[0].waypoints);
@@ -199,19 +204,20 @@ test('Reported draws every hazard in El Niño countries, rings the verdict, and 
  const oldShow=S.showAlerts;S.showAlerts=true;const leg=api.alertLegend();S.showAlerts=oldShow;assert(leg.includes('<b>3</b> reports'));assert(leg.includes('Fitting is not attribution'));
  S.alertPins=oldPins;ctx.window.disturbanceEvents=oldEv;S.news=oldNews;S._hl=oldHl;S.gdacs=oldG;
 });
-test('Shipping keeps one unboxed SVG label per chokepoint, with no corridor chips',()=>{
+test('Shipping keeps one callout per chokepoint pairing Outlook with Now, with no corridor chips',()=>{
  assert.equal(S.corridorLabels.length,0);
  S.lanePins.forEach(pin=>{
-  const label=new Element();label.innerHTML=pin.options.icon.html;
-  assert.equal(label.querySelectorAll('.enso-choke-label').length,1);
-  /* Name, then the transit change; Panama adds its Gatún reading as a third line. */
-  assert.equal(label.querySelectorAll('text').length,pin.options.icon.className.includes('no-transit')?1:pin.options.icon.html.includes('enso-gauge-line')?3:2);
+  const html=pin.options.icon.html;
+  assert.equal(html.split('enso-choke-label').length-1,1);
+  /* 2026-09-30 court: a header, an Outlook line and a Now line; Panama adds the freight spread. */
+  assert(html.includes('enso-lc-h')&&html.includes('Outlook'));if(!pin.options.icon.className.includes('no-transit'))assert(html.includes('Now'));  /* a lane with neither a PortWatch count nor a gauge loaded has no Now line */
+  if(html.includes('Freight'))assert(html.includes('data-lane="panama"'));  /* only Panama carries the freight spread (the harness loads no freight feed, so it may be absent) */
  });
- const pac=S.corridorLines.find(l=>l.options.ensoCorridorId==='us_gulf_panama_east_asia')||S.corridorLines[0];assert.equal(pac.coords.length,2);assert(pac.coords.every(arc=>arc.length>1));
+ const pac=S.corridorLines.find(l=>l.options.ensoCorridorId==='us_gulf_panama_east_asia')||S.corridorLines[0];assert.equal(pac.coords.length,1);assert(pac.coords.every(arc=>arc.length>1));
 });
 test('lens defaults fit the lane belt and tropical price countries without animation',()=>{
  const sub=S.sub;
- for(const [view,bounds] of [['ensowater',[[-45,-115],[62,150]]],['ensomoney',[[-40,-100],[40,155]]]]){
+ for(const [view,bounds] of [['ensowater',[[-45,-135],[62,150]]],['ensomoney',[[-40,-100],[40,155]]]]){
   S.sub=view;api.fitMapView();assert.deepEqual(S.map.bounds,bounds);assert.equal(S.map.fitOptions.animate,false);
  }
  S.sub=sub;
@@ -255,7 +261,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
  ctx.document.querySelectorAll=s=>s==='#enso-map svg'?[svg]:[];
  api.buildDefs();ctx.document.querySelectorAll=query;
  /* Harvest hatches first; then the Reported rain hatches, in the drought and flood hues (dry, wet, and both crossed). */
- assert.deepEqual(svg.querySelectorAll('line').map(n=>n.getAttribute('stroke')),['#c9773a','#4f9fa8','#c47a3c','#4a7ab3','#c47a3c','#4a7ab3','#4f9fa8']);  /* + the Harvests published-rises hatch, green like the fitted rises (2026-09-27) */
+ assert.deepEqual(svg.querySelectorAll('line').map(n=>n.getAttribute('stroke')),['#c9773a','#4f9fa8','#c47a3c','#4a7ab3','#c47a3c','#4a7ab3','#4f9fa8','#c9773a','#4f9fa8','#c9773a','#4f9fa8','#c9773a','#4f9fa8']);  /* + the Harvests published-rises hatch, green like the fitted rises (2026-09-27); + the six lines of the 2027-outlook hatches, strong (fall, rise) and light (fall, rise, mixed as two) (2026-09-30) */
  S.mode='impact';S.showRegions=true;S.showSST=false;S.showLanes=false;api.renderLegend();
  const key=node('enso-legend').querySelector('.enso-legend').innerHTML;
  for(const c of ['#c9773a','#4f9fa8'])assert(key.includes('repeating-linear-gradient(45deg,'+c));
@@ -289,7 +295,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
   minus.onclick();assert.equal(m.getZoom(),2);plus.onclick();reset.onclick();assert.equal(m.getZoom(),2);
   for(let i=0;i<4;i++)plus.onclick();assert(plus.disabled);reset.onclick();assert(!plus.disabled);
  });
- const expected={elnino:'sst',ensoharvest:'impact',ensowater:'none',ensomoney:'staple',ensolive:'rain'};
+ const expected={elnino:'sst',ensoharvest:'harvest27',ensowater:'none',ensomoney:'staple',ensolive:'rain'};
  for(let cycle=0;cycle<2;cycle++) for(const [view,mode] of Object.entries(expected)) {
   node('scroller').scrollTop=1400;
   await ctx.window.ensoInit(view);pending.splice(0).forEach(fn=>fn());
@@ -313,7 +319,7 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
    /* The solid-line swatch keyed a mark the map never draws: no lane in enso_lanes.json carries a geometry, so S.laneLines is always empty. The observed mark is the diamond and its ring. */
    assert.equal(key.includes('diamond: observed, measured at the chokepoint'),view==='ensowater');assert(!key.includes('Ring size'));
    assert.equal(key.includes('dashed: published schematic corridor through named ports'),view==='ensowater');
-   if(view==='ensowater'){const LC=S.corridors.corridors.filter(c=>S.lanes.lanes.some(l=>l.id===c.lane&&l.phase===c.phase&&l.phase!=='none'));assert.equal(S.corridorLines.filter(l=>S.map.hasLayer(l)).length,LC.length);assert.equal(S.corridorLabels.length,0);for(const c of LC){assert(legend.querySelector('details').textContent.includes(c.basis.replace(/'/g,'&#39;')));}}
+   if(view==='ensowater'){const LC=S.corridors.corridors.filter(c=>S.lanes.lanes.some(l=>l.id===c.lane&&l.phase===c.phase&&l.phase==='el_nino'));assert.equal(S.corridorLines.filter(l=>S.map.hasLayer(l)).length,LC.length);assert.equal(S.corridorLabels.length,0);for(const c of LC){assert(legend.querySelector('details').textContent.includes(c.basis.replace(/'/g,'&#39;')));}}
    assert.equal(key.includes('Does it fit the usual pattern?'),view==='ensolive');
    if(view==='ensolive')for(const label of ['usually drier in El Niño years','usually wetter','a possible early sign','runs against it','no rainfall expectation','Fitting is not attribution'])assert(key.includes(label),label+' | '+key.slice(0,600));
    if(view==='ensowater')for(const l of S.lanes.lanes)assert(legend.querySelector('details').textContent.includes(l.name));
