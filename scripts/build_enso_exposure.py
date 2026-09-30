@@ -62,9 +62,12 @@ from __future__ import annotations
 import json
 import math
 import os
+import sys
 from datetime import datetime, timezone
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pipeline_dag import MATURITY  # noqa: E402
 
 # ONI levels to precompute. Named for CPC's conventional strength bands.
 LEVELS = {
@@ -212,7 +215,8 @@ def main() -> int:
         "_meta": {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "version": "v1",
-            "production_ready": False,
+            "maturity": MATURITY,
+            "production_ready": False,   # kept: index.html reads it ("country totals are directional")
             "blocking": (
                 "ONE limitation is real and unresolved: the production-weighted AGGREGATE has not "
                 "been scored as an aggregate. Each fitted pair HAS been held out and scored (see "
@@ -238,8 +242,9 @@ def main() -> int:
                 "surviving pairs, not 15; and the file has been wired into the UI for some "
                 "time."),
             "ready_when": (
-                "Flip production_ready to true only when the aggregate has been scored "
-                "out-of-sample. The non-ENSO-specific pairs are already excluded."),
+                "Stays false. Read maturity instead: portfolio_total is conditionally_backtested_not_vintage "
+                "(enso_portfolio_hindcast.json, enso_replay.json), not a vintage forecast. "
+                "The non-ENSO-specific pairs are already excluded."),
             "scenario_levels": LEVELS,
             "index": "ONI (CPC oni.ascii.txt, ERSSTv6 lineage)",
             "index_note": (

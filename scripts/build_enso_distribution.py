@@ -72,6 +72,7 @@ SEED = 20260930
 TARGET = "DJF"
 ORDER = ["JJA", "JAS", "ASO", "SON", "OND", "NDJ", "DJF", "JFM", "FMA", "MAM", "AMJ", "MJJ"]
 PCTS = [5, 10, 25, 50, 75, 90, 95]
+from pipeline_dag import MATURITY  # noqa: E402  (maturity by surface, shared by every builder that states it)
 
 
 def fetch(url: str, gz_name: str, refresh: bool) -> tuple[str, str]:
@@ -175,16 +176,17 @@ def pair_residuals(iso: str, crop: str, panel, cals, djf):
     series = panel[iso][crop]
     years = sorted(y for y in series if series[y].get("yield"))
     ay, anom = M.detrend(years, [series[y]["yield"] for y in years])
-    x, y = [], []
+    x, y, yrs_used = [], [], []
     for yr, a in zip(ay, anom):
         o = djf.get(yr + shift)
         if o is not None:
             x.append(o)
             y.append(a)
+            yrs_used.append(int(yr))   # harvest year: the key the joint bootstrap aligns pairs on
     o, Y = np.array(x), np.array(y)
     X = np.column_stack([np.ones(len(o)), np.maximum(o, 0.0), np.minimum(o, 0.0)])
     beta = np.linalg.lstsq(X, Y, rcond=None)[0]
-    return beta, Y - X @ beta
+    return beta, Y - X @ beta, yrs_used
 
 
 def pair_fits(keys, model_ts: str, recompute: bool) -> tuple[dict, str]:
@@ -194,9 +196,11 @@ def pair_fits(keys, model_ts: str, recompute: bool) -> tuple[dict, str]:
     if os.path.exists(RES_CACHE):
         with open(RES_CACHE, encoding="utf-8") as fh:
             cache = json.load(fh)
-    ok = cache.get("model_generated_at") == model_ts and all(k in (cache.get("pairs") or {}) for k in keys)
+    ok = (cache.get("model_generated_at") == model_ts
+          and all(k in (cache.get("pairs") or {}) and (cache["pairs"][k].get("years") or []) for k in keys))
     if ok and not recompute:
-        return {k: (cache["pairs"][k]["beta_nino"], np.array(cache["pairs"][k]["residuals"], float)) for k in keys}, "cache"
+        return {k: (cache["pairs"][k]["beta_nino"], np.array(cache["pairs"][k]["residuals"], float),
+                    list(cache["pairs"][k]["years"])) for k in keys}, "cache"
     global M
     try:
         import build_enso_model as M_  # needs scipy and the FAOSTAT QCL bulk
@@ -208,13 +212,13 @@ def pair_fits(keys, model_ts: str, recompute: bool) -> tuple[dict, str]:
     out, rec = {}, {}
     for k in keys:
         iso, crop = k.split("/")
-        beta, res = pair_residuals(iso, crop, panel, cals, djf)
-        out[k] = (float(beta[1]), res)
-        rec[k] = {"beta_nino": float(beta[1]), "residuals": [float(v) for v in res]}
+        beta, res, yrs = pair_residuals(iso, crop, panel, cals, djf)
+        out[k] = (float(beta[1]), res, yrs)
+        rec[k] = {"beta_nino": float(beta[1]), "years": yrs, "residuals": [float(v) for v in res]}
     with open(RES_CACHE, "w", encoding="utf-8") as fh:
         json.dump({"model_generated_at": model_ts, "built": datetime.now(timezone.utc).isoformat(),
                    "note": "Residuals of the two-slope fit in build_enso_model.py (MA-detrended log yield minus the fit), per shown pair; "
-                           "written by a hand run of build_enso_distribution.py, read by the cron run.", "pairs": rec}, fh, indent=1)
+                           "years = the harvest year of each residual (the joint bootstrap draws one year and uses every pair's residual from it). Written by a hand run of build_enso_distribution.py, read by the cron run.", "pairs": rec}, fh, indent=1)
         fh.write("\n")
     return out, "FAOSTAT"
 
@@ -279,22 +283,51 @@ def main() -> int:
     model_ts = json.load(open(os.path.join(DATA, "enso_model.json"), encoding="utf-8"))["_meta"]["generated_at"]
     fits, fit_src = pair_fits([f"{r['iso']}/{r['crop']}" for r in shown], model_ts, "--recompute" in sys.argv)
     print(f"[INFO] pair residuals from {fit_src}")
-    pairs, pct_draws = [], {}
-    for r in shown:
+    # Joint residuals: one historical harvest year is drawn per iteration and every pair takes ITS residual from that
+    # year, so a drought year hits neighbouring pairs together. A pair with no residual for the drawn year redraws from
+    # its own residuals (counted in _meta). The independent draw is kept beside it for comparison.
+    keys = [f"{r['iso']}/{r['crop']}" for r in shown]
+    year_cover = {}
+    for k in keys:
+        for y in fits[k][2]:
+            year_cover[y] = year_cover.get(y, 0) + 1
+    years_pool = sorted(y for y, c in year_cover.items() if c >= len(keys) / 2)
+    yidx = {y: i for i, y in enumerate(years_pool)}
+    R = np.full((len(years_pool), len(keys)), np.nan)
+    for j, k in enumerate(keys):
+        for y, e in zip(fits[k][2], fits[k][1]):
+            if y in yidx:
+                R[yidx[y], j] = e
+    draw_year = rng.integers(0, len(years_pool), N_DRAWS)
+    n_redraw = {}
+    oni_capped = np.where(oni_d > 0, np.minimum(oni_d, rec_oni), oni_d)
+    above = oni_d > rec_oni
+
+    pairs, pct_draws, cap_draws, ind_draws = [], {}, {}, {}
+    for j, r in enumerate(shown):
         iso, crop = r["iso"], r["crop"]
         m = model[iso][crop]
-        beta1, res = fits[f"{iso}/{crop}"]
+        beta1, res, _yrs = fits[f"{iso}/{crop}"]
         assert abs(beta1 * 100 - m["yield_pct_per_oni_nino"]) < 0.01, (iso, crop, beta1, m["yield_pct_per_oni_nino"])
         b_up = rng.normal(m["yield_pct_per_oni_nino"] / 100, m["se_nino_pct"] / 100, N_DRAWS)
         b_dn = rng.normal(m["yield_pct_per_oni_nina"] / 100, m["se_nina_pct"] / 100, N_DRAWS)
-        eps = rng.choice(res, size=N_DRAWS, replace=True)
+        eps_ind = rng.choice(res, size=N_DRAWS, replace=True)
+        eps = R[draw_year, j]
+        miss = np.isnan(eps)
+        n_redraw[keys[j]] = int(miss.sum())
+        if miss.any():
+            eps[miss] = rng.choice(res, size=int(miss.sum()), replace=True)
         slope_part = np.where(oni_d >= 0, b_up * oni_d, b_dn * oni_d)
+        slope_cap = np.where(oni_d >= 0, b_up * oni_capped, b_dn * oni_d)
         pct = (np.exp(slope_part + eps) - 1) * 100
-        pct_draws[(iso, crop)] = pct
+        pct_ind = (np.exp(slope_part + eps_ind) - 1) * 100
+        pct_cap = (np.exp(slope_cap + eps) - 1) * 100
+        pct_draws[(iso, crop)], ind_draws[(iso, crop)], cap_draws[(iso, crop)] = pct, pct_ind, pct_cap
         # the same draws with one source switched on at a time, for the page's fold
         only_enso = (np.exp(m["yield_pct_per_oni_nino"] / 100 * oni_d) - 1) * 100
         only_slope = (np.exp(b_up * float(np.median(oni_d))) - 1) * 100
-        only_resid = (np.exp(eps) - 1) * 100
+        only_resid = (np.exp(eps_ind) - 1) * 100
+        share_above = float(np.mean(above))
         pairs.append({
             "key": f"{iso}/{crop}", "iso": iso, "crop": crop, "harvest": r.get("harvest"),
             "harvest_year": r.get("harvest_year"), "in_season": r.get("in_season"),
@@ -302,6 +335,14 @@ def main() -> int:
             "slope_pct_per_oni": m["yield_pct_per_oni_nino"], "slope_se_pct": m["se_nino_pct"],
             "resid_sd_log_pts": round(float(res.std(ddof=3 if len(res) > 3 else 0)) * 100, 1), "n_resid": int(len(res)),
             "change_pct": pct_summary(pct),
+            "change_pct_independent": pct_summary(pct_ind),
+            "change_pct_capped": pct_summary(pct_cap),
+            "split_by_record": {
+                "record_oni": rec_oni, "share_above": round(share_above, 3),
+                "median_change_pct_at_or_below": round(float(np.median(pct[~above])), 1) if (~above).any() else None,
+                "median_change_pct_above": round(float(np.median(pct[above])), 1) if above.any() else None,
+                "median_change_pct_capped_above": round(float(np.median(pct_cap[above])), 1) if above.any() else None,
+            },
             "spread_p10_p90_by_source": {
                 "enso_forecast_only": [round(float(x), 1) for x in np.percentile(only_enso, [10, 90])],
                 "slope_only_at_median_oni": [round(float(x), 1) for x in np.percentile(only_slope, [10, 90])],
@@ -309,7 +350,10 @@ def main() -> int:
             },
         })
         print(f"  {iso}/{crop}: P10 {pairs[-1]['change_pct']['p10']} P50 {pairs[-1]['change_pct']['p50']} "
-              f"P90 {pairs[-1]['change_pct']['p90']} fall {pairs[-1]['change_pct']['prob_fall']}")
+              f"P90 {pairs[-1]['change_pct']['p90']} fall {pairs[-1]['change_pct']['prob_fall']} | capped P50 {pairs[-1]['change_pct_capped']['p50']}")
+
+    def aggregate(draws, ps, w):
+        return sum(w[i] * draws[(p["iso"], p["crop"])] for i, p in enumerate(ps)) / w.sum()
 
     crops = {}
     for crop in sorted({p["crop"] for p in pairs}):
@@ -317,11 +361,69 @@ def main() -> int:
         if not ps:
             continue
         w = np.array([p["production_kt"] for p in ps], float)
-        agg = sum(w[i] * pct_draws[(p["iso"], p["crop"])] for i, p in enumerate(ps)) / w.sum()
-        crops[crop] = {"pairs": [p["key"] for p in ps], "production_kt": float(w.sum()), "change_pct": pct_summary(agg)}
+        crops[crop] = {"pairs": [p["key"] for p in ps], "production_kt": float(w.sum()),
+                       "change_pct": pct_summary(aggregate(pct_draws, ps, w)),
+                       "change_pct_independent": pct_summary(aggregate(ind_draws, ps, w)),
+                       "change_pct_capped": pct_summary(aggregate(cap_draws, ps, w))}
+
+    # All shown pairs in tonnes (kt, at the page's baseline): the portfolio the page adds up.
+    tps = [p for p in pairs if isinstance(p["production_kt"], (int, float))]
+    tw = np.array([p["production_kt"] for p in tps], float)
+    def total_kt(draws):
+        t = sum(tw[i] * draws[(p["iso"], p["crop"])] / 100 for i, p in enumerate(tps))
+        q = np.percentile(t, PCTS)
+        return {**{f"p{pp:02d}": round(float(x)) for pp, x in zip(PCTS, q)}, "mean": round(float(t.mean())),
+                "sd": round(float(t.std())), "prob_fall": round(float(np.mean(t < 0)), 3)}
+    total = {"pairs": [p["key"] for p in tps], "baseline_kt": float(tw.sum()),
+             "change_kt": total_kt(pct_draws), "change_kt_independent": total_kt(ind_draws), "change_kt_capped": total_kt(cap_draws)}
+
+    # Does direction and ranking survive the linear vs capped specification? Rank by median tonnes (kt x median %).
+    def med_kt(p, field):
+        return float(p["production_kt"]) * p[field]["p50"] / 100 if isinstance(p["production_kt"], (int, float)) else 0.0
+    rows = [{"key": p["key"], "production_kt": p["production_kt"],
+             "median_pct_linear": p["change_pct"]["p50"], "median_pct_capped": p["change_pct_capped"]["p50"],
+             "median_kt_linear": round(med_kt(p, "change_pct")), "median_kt_capped": round(med_kt(p, "change_pct_capped")),
+             "sign_same": bool((p["change_pct"]["p50"] < 0) == (p["change_pct_capped"]["p50"] < 0)),
+             "prob_fall_linear": p["change_pct"]["prob_fall"], "prob_fall_capped": p["change_pct_capped"]["prob_fall"]} for p in pairs]
+    for field, rk in (("median_kt_linear", "rank_linear"), ("median_kt_capped", "rank_capped")):
+        for i, r_ in enumerate(sorted(rows, key=lambda r_: r_[field])):   # rank 1 = largest fall in tonnes
+            r_[rk] = i + 1
+    rows.sort(key=lambda r_: r_["rank_linear"])
+    rl = np.array([r_["rank_linear"] for r_ in rows], float)
+    rc = np.array([r_["rank_capped"] for r_ in rows], float)
+    rho = float(np.corrcoef(rl, rc)[0, 1]) if len(rows) > 2 and rl.std() > 0 and rc.std() > 0 else None
+    top3_l = {r_["key"] for r_ in rows if r_["rank_linear"] <= 3}
+    top3_c = {r_["key"] for r_ in rows if r_["rank_capped"] <= 3}
+    sensitivity = {
+        "rule": "Linear: effect = slope x ONI. Capped: effect = slope x min(ONI, record winter ONI), same slope, residual and ONI draws. Rank 1 = largest median fall in tonnes (production_kt x median percent).",
+        "record_oni": rec_oni, "table": rows,
+        "all_signs_survive": all(r_["sign_same"] for r_ in rows),
+        "rank_spearman": None if rho is None else round(rho, 2),
+        "top3_linear": sorted(top3_l), "top3_capped": sorted(top3_c), "top3_same_set": top3_l == top3_c,
+        "largest_exposure_same": rows[0]["key"] == min(rows, key=lambda r_: r_["rank_capped"])["key"],
+    }
+
+    # Joint vs independent: how much does the shared-year draw widen the aggregates?
+    jvi = {"draws_year_pool": [years_pool[0], years_pool[-1]], "years_in_pool": len(years_pool),
+           "pair_redraws_share": {k: round(v / N_DRAWS, 4) for k, v in n_redraw.items()},
+           "redraws_total_share": round(sum(n_redraw.values()) / (N_DRAWS * len(keys)), 4), "crops": {}}
+    for c, v in crops.items():
+        for f in ("change_pct", "change_pct_independent"):
+            v[f]["_w"] = round(v[f]["p95"] - v[f]["p05"], 1)
+        jvi["crops"][c] = {"p05_p95_width_joint": v["change_pct"].pop("_w"), "p05_p95_width_independent": v["change_pct_independent"].pop("_w"),
+                           "pairs": len(v["pairs"])}
+    tj, ti = total["change_kt"], total["change_kt_independent"]
+    jvi["total_kt"] = {"p05_p95_width_joint": tj["p95"] - tj["p05"], "p05_p95_width_independent": ti["p95"] - ti["p05"],
+                       "sd_joint": tj["sd"], "sd_independent": ti["sd"], "ratio_sd": round(tj["sd"] / ti["sd"], 2) if ti["sd"] else None}
+    cm = np.corrcoef(np.array([np.log1p(pct_draws[(p["iso"], p["crop"])] / 100) for p in pairs]))
+    jvi["mean_pair_correlation_joint_log_change"] = round(float((cm.sum() - len(pairs)) / (len(pairs) * (len(pairs) - 1))), 2)
 
     payload = {"_meta": {
-        "generated_at": datetime.now(timezone.utc).isoformat(), "version": "v2", "hand_run": False,
+        "generated_at": datetime.now(timezone.utc).isoformat(), "version": "v3", "hand_run": False,
+        "maturity": MATURITY,
+        "production_ready": False,
+        "production_ready_note": "Replaced by maturity (per surface). This distribution is a scenario read-out of a fitted association, not a scored forecast; most of its ONI range lies above the strongest winter in the fit.",
+        "joint_vs_independent": jvi,
         "builder": "scripts/build_enso_distribution.py (numpy; on the cron after the outlook; pair residuals from data/ref/enso_pair_residuals.json, rebuilt by a hand run with the FAOSTAT cache)",
         "pair_residuals": {"source": fit_src, "model_generated_at": model_ts},
         "sources": {
@@ -336,10 +438,17 @@ def main() -> int:
             "RONI for the target season is drawn from CPC's outlook as a two-piece normal fitted to its median and 5th and "
             "95th percentiles, then mapped to ONI with a least-squares bridge fitted on every year both CPC files cover "
             "(ONI = a + b RONI + c gap_JJA, where gap_JJA is ONI minus RONI in the June-August that opens the event). Each "
-            "draw adds a coefficient draw and a draw from the bridge's own residuals. The pair's El Niño slope is drawn from "
-            "its fitted value and HAC standard error, and a residual is drawn from the pair's own fit residuals. change = "
-            "exp(slope x ONI + residual) - 1."),
-        "not_included": "Baseline production, harvested area, price, policy or trade response; slope and residual error are taken as independent across pairs; the two-slope fit is linear in ONI and no winter above ONI +2.5 is in the record.",
+"draw adds a coefficient draw and a draw from the bridge's own residuals. The pair's El Niño slope is drawn from "
+            "its fitted value and HAC standard error. change = exp(slope x ONI + residual) - 1. Residuals (change_pct, the "
+            "headline) are a historical-winter block bootstrap: one harvest year is drawn per iteration and each pair takes its own "
+            "residual from that year, so a regional drought hits neighbouring pairs together (a pair with no residual for the year "
+            "redraws on its own; share in joint_vs_independent). change_pct_independent keeps the old independent draw. "
+            "change_pct_capped stops the El Niño response at the record winter: slope x min(ONI, record ONI), same draws otherwise; "
+            "split_by_record gives the share of draws above the record and the median change on each side."),
+        "not_included": ("Baseline production, harvested area, price, policy or trade response. Slope errors are still drawn independently across pairs "
+                         "(only residuals are joint). Both the linear and the capped specification are bounds, not forecasts above the record: "
+                         "no nonlinear saturation curve is fitted, because nine El Niño winters (none above ONI +2.5 before 2015-16) cannot identify one. "
+                         "The capped version says what the fit supports, the linear one what straight-line extension would give."),
         "residual_note": "Residuals are in-sample (MA-detrended log yield minus the fit), so they understate out-of-sample error; see enso_hindcast.json for held-out errors.",
     }, "data": {
         "target": {
@@ -355,6 +464,8 @@ def main() -> int:
             "record_oni": rec_oni, "prob_oni_above_record": round(float(np.mean(oni_d > rec_oni)), 3),
             "heuristic_oni_equiv_in_strengths": row_out["oni_equiv"],
         },
+        "total": total,
+        "sensitivity": sensitivity,
         "bridge_at_median": bridge_at_median,
         "bridge": {s: {k: (round(v, 4) if isinstance(v, float) else v) for k, v in b.items() if not k.startswith("_")}
                    for s, b in bridges.items()},

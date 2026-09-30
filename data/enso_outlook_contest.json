@@ -1,0 +1,1078 @@
+{
+ "_meta": {
+  "generated_at": "2026-09-30T22:55:26.519099+00:00",
+  "version": "v1",
+  "builder": "scripts/build_enso_outlook_contest.py (hand-run, numpy and scipy; output committed)",
+  "hand_run": true,
+  "sources": {
+   "nmme": "https://ftp.cpc.ncep.noaa.gov/NMME/realtime_anom/ENSMEAN/<YYYYMM>0800/ (CPC NMME archive, September starts 2011-2025; public domain)",
+   "observed": "NOAA PSL PREC/L 2.5 degree monthly rain (precip.mon.mean.2.5x2.5.nc), January 2012 to 2026",
+   "spi_fits": "data/ref/precl_enso_model.json.gz (1991-2020 gamma SPI, ENSO regression fitted 1951-2020)",
+   "enso_input": "data/enso_forecast_skill.json: IRI mid-September plume average for DJF (proxy for CPC's official outlook ONI)"
+  },
+  "design": "One lead (September start, January target), one month. Forecast SPI from each method; observed SPI from PREC/L. Normal forecasts, SD 1 (NMME) or the regression's residual SD.",
+  "caveats": [
+   "Regression fitted 1951-2020: targets January 2019 and 2020 are in its sample; the out-of-sample block is January 2021 to 2026 (six years).",
+   "ENSO input is IRI's plume, not CPC's official outlook ONI (not archived as data).",
+   "One lead and one target month, not every month the map paints; 'skilful cells' are the cells the page blends.",
+   "Cells in a year share weather: read the region and year blocks, not the cell-year count, as the sample size."
+  ],
+  "models_averaged_by_init": {
+   "2018": 7,
+   "2019": 7,
+   "2020": 7,
+   "2021": 6,
+   "2022": 6,
+   "2023": 7,
+   "2024": 7,
+   "2025": 6
+  },
+  "init_years_used": [
+   2018,
+   2019,
+   2020,
+   2021,
+   2022,
+   2023,
+   2024,
+   2025
+  ],
+  "init_years_skipped": [
+   {
+    "init": 2011,
+    "why": "CPC archive before 2018 is GRIB1 (prate.<date>.<model>.ensmean.*.1x1.grb), not NetCDF; not read"
+   },
+   {
+    "init": 2012,
+    "why": "CPC archive before 2018 is GRIB1 (prate.<date>.<model>.ensmean.*.1x1.grb), not NetCDF; not read"
+   },
+   {
+    "init": 2013,
+    "why": "CPC archive before 2018 is GRIB1 (prate.<date>.<model>.ensmean.*.1x1.grb), not NetCDF; not read"
+   },
+   {
+    "init": 2014,
+    "why": "CPC archive before 2018 is GRIB1 (prate.<date>.<model>.ensmean.*.1x1.grb), not NetCDF; not read"
+   },
+   {
+    "init": 2015,
+    "why": "CPC archive before 2018 is GRIB1 (prate.<date>.<model>.ensmean.*.1x1.grb), not NetCDF; not read"
+   },
+   {
+    "init": 2016,
+    "why": "CPC archive before 2018 is GRIB1 (prate.<date>.<model>.ensmean.*.1x1.grb), not NetCDF; not read"
+   },
+   {
+    "init": 2017,
+    "why": "CPC archive before 2018 is GRIB1 (prate.<date>.<model>.ensmean.*.1x1.grb), not NetCDF; not read"
+   }
+  ],
+  "inputs": {
+   "enso_forecast_skill.json": "2026-09-30T21:28:44.078592+00:00"
+  },
+  "hand_run_why": "reads CPC's NMME archive (NetCDF byte ranges, about 2 MB a year) and PREC/L; scores the Ocean outlook hybrid on past Januaries",
+  "next_review_due": "2027-03-29"
+ },
+ "data": {
+  "verdict": {
+   "hybrid_beats_nmme_rmse": true,
+   "hybrid_beats_regression_rmse": true,
+   "hybrid_beats_nmme_crps": true,
+   "out_of_sample_hybrid_beats_nmme_rmse": true,
+   "nmme_beats_climatology_rmse": true,
+   "hybrid_beats_nmme_ci_excludes_zero": true,
+   "reading": "In the cells where the regression is used the hybrid's SPI error is 0.86 against 0.88 for NMME alone, 0.88 for the regression alone and 0.92 for climatology (hybrid minus NMME -0.020, 95% interval -0.036 to -0.003 over 8 Januaries). Over all cells NMME's error is 1.01 against climatology's 0.99: at this lead and month NMME alone has no skill over climatology across the map, so the hybrid's gain is confined to the cells the regression covers. Eight Januaries, one lead, regression partly in sample: the hybrid is not shown to double count ENSO, and is not proven better than NMME elsewhere."
+  },
+  "summary": {
+   "all_cells": {
+    "cell_years": 18980,
+    "nmme": {
+     "rmse": 1.011,
+     "corr": 0.088,
+     "crps": 0.56,
+     "brier_dry": 0.1075,
+     "brier_wet": 0.1365
+    },
+    "regression": {
+     "rmse": 1.009,
+     "corr": 0.084,
+     "crps": 0.562,
+     "brier_dry": 0.1111,
+     "brier_wet": 0.137
+    },
+    "hybrid": {
+     "rmse": 1.009,
+     "corr": 0.092,
+     "crps": 0.559,
+     "brier_dry": 0.1075,
+     "brier_wet": 0.1363
+    },
+    "climatology": {
+     "rmse": 0.994,
+     "corr": null,
+     "crps": 0.549,
+     "brier_dry": 0.1038,
+     "brier_wet": 0.1332
+    }
+   },
+   "skilful_cells_only": {
+    "cell_years": 1859,
+    "nmme": {
+     "rmse": 0.88,
+     "corr": 0.295,
+     "crps": 0.494,
+     "brier_dry": 0.0959,
+     "brier_wet": 0.1285
+    },
+    "regression": {
+     "rmse": 0.882,
+     "corr": 0.325,
+     "crps": 0.498,
+     "brier_dry": 0.0995,
+     "brier_wet": 0.1276
+    },
+    "hybrid": {
+     "rmse": 0.86,
+     "corr": 0.35,
+     "crps": 0.487,
+     "brier_dry": 0.096,
+     "brier_wet": 0.1263
+    },
+    "climatology": {
+     "rmse": 0.918,
+     "corr": null,
+     "crps": 0.51,
+     "brier_dry": 0.0971,
+     "brier_wet": 0.128
+    }
+   },
+   "skilful_in_sample_targets_2019_2020": {
+    "cell_years": 463,
+    "nmme": {
+     "rmse": 0.791,
+     "corr": 0.313,
+     "crps": 0.451,
+     "brier_dry": 0.0914,
+     "brier_wet": 0.1157
+    },
+    "regression": {
+     "rmse": 0.833,
+     "corr": 0.203,
+     "crps": 0.473,
+     "brier_dry": 0.1032,
+     "brier_wet": 0.1186
+    },
+    "hybrid": {
+     "rmse": 0.791,
+     "corr": 0.336,
+     "crps": 0.454,
+     "brier_dry": 0.0956,
+     "brier_wet": 0.116
+    },
+    "climatology": {
+     "rmse": 0.831,
+     "corr": null,
+     "crps": 0.471,
+     "brier_dry": 0.093,
+     "brier_wet": 0.1195
+    }
+   },
+   "skilful_out_of_sample_targets_2021_2026": {
+    "cell_years": 1396,
+    "nmme": {
+     "rmse": 0.908,
+     "corr": 0.29,
+     "crps": 0.509,
+     "brier_dry": 0.0974,
+     "brier_wet": 0.1327
+    },
+    "regression": {
+     "rmse": 0.897,
+     "corr": 0.347,
+     "crps": 0.506,
+     "brier_dry": 0.0983,
+     "brier_wet": 0.1306
+    },
+    "hybrid": {
+     "rmse": 0.881,
+     "corr": 0.354,
+     "crps": 0.498,
+     "brier_dry": 0.0961,
+     "brier_wet": 0.1297
+    },
+    "climatology": {
+     "rmse": 0.946,
+     "corr": null,
+     "crps": 0.523,
+     "brier_dry": 0.0985,
+     "brier_wet": 0.1308
+    }
+   },
+   "all_cells_out_of_sample_targets_2021_2026": {
+    "cell_years": 14245,
+    "nmme": {
+     "rmse": 1.032,
+     "corr": 0.058,
+     "crps": 0.571,
+     "brier_dry": 0.1113,
+     "brier_wet": 0.1358
+    },
+    "regression": {
+     "rmse": 1.013,
+     "corr": 0.103,
+     "crps": 0.562,
+     "brier_dry": 0.1129,
+     "brier_wet": 0.1343
+    },
+    "hybrid": {
+     "rmse": 1.03,
+     "corr": 0.063,
+     "crps": 0.57,
+     "brier_dry": 0.1111,
+     "brier_wet": 0.1355
+    },
+    "climatology": {
+     "rmse": 1.001,
+     "corr": null,
+     "crps": 0.551,
+     "brier_dry": 0.1061,
+     "brier_wet": 0.131
+    }
+   },
+   "bootstrap_rmse_difference_skilful_cells": {
+    "hybrid_minus_nmme": {
+     "years": 8,
+     "diff_rmse": -0.02,
+     "ci95": [
+      -0.036,
+      -0.003
+     ]
+    },
+    "hybrid_minus_regression": {
+     "years": 8,
+     "diff_rmse": -0.022,
+     "ci95": [
+      -0.046,
+      -0.002
+     ]
+    },
+    "nmme_minus_climatology": {
+     "years": 8,
+     "diff_rmse": -0.037,
+     "ci95": [
+      -0.081,
+      0.013
+     ]
+    },
+    "hybrid_minus_nmme_out_of_sample": {
+     "years": 6,
+     "diff_rmse": -0.026,
+     "ci95": [
+      -0.042,
+      -0.012
+     ]
+    }
+   },
+   "by_region": {
+    "Southern Africa": {
+     "all_cells": {
+      "cell_years": 632,
+      "nmme": {
+       "rmse": 0.658,
+       "corr": 0.233,
+       "crps": 0.385,
+       "brier_dry": 0.0712,
+       "brier_wet": 0.0807
+      },
+      "regression": {
+       "rmse": 0.669,
+       "corr": 0.193,
+       "crps": 0.409,
+       "brier_dry": 0.0874,
+       "brier_wet": 0.0817
+      },
+      "hybrid": {
+       "rmse": 0.653,
+       "corr": 0.251,
+       "crps": 0.386,
+       "brier_dry": 0.0716,
+       "brier_wet": 0.0801
+      },
+      "climatology": {
+       "rmse": 0.66,
+       "corr": null,
+       "crps": 0.384,
+       "brier_dry": 0.0705,
+       "brier_wet": 0.077
+      }
+     },
+     "skilful_cells": {
+      "cell_years": 88,
+      "nmme": {
+       "rmse": 0.67,
+       "corr": 0.23,
+       "crps": 0.393,
+       "brier_dry": 0.0957,
+       "brier_wet": 0.0989
+      },
+      "regression": {
+       "rmse": 0.659,
+       "corr": 0.376,
+       "crps": 0.405,
+       "brier_dry": 0.1079,
+       "brier_wet": 0.0914
+      },
+      "hybrid": {
+       "rmse": 0.635,
+       "corr": 0.361,
+       "crps": 0.395,
+       "brier_dry": 0.0989,
+       "brier_wet": 0.0948
+      },
+      "climatology": {
+       "rmse": 0.68,
+       "corr": null,
+       "crps": 0.396,
+       "brier_dry": 0.095,
+       "brier_wet": 0.095
+      }
+     }
+    },
+    "East Africa": {
+     "all_cells": {
+      "cell_years": 323,
+      "nmme": {
+       "rmse": 1.033,
+       "corr": 0.334,
+       "crps": 0.574,
+       "brier_dry": 0.072,
+       "brier_wet": 0.1877
+      },
+      "regression": {
+       "rmse": 1.184,
+       "corr": 0.166,
+       "crps": 0.652,
+       "brier_dry": 0.0833,
+       "brier_wet": 0.2111
+      },
+      "hybrid": {
+       "rmse": 1.037,
+       "corr": 0.335,
+       "crps": 0.576,
+       "brier_dry": 0.0718,
+       "brier_wet": 0.1888
+      },
+      "climatology": {
+       "rmse": 1.088,
+       "corr": null,
+       "crps": 0.595,
+       "brier_dry": 0.0569,
+       "brier_wet": 0.2091
+      }
+     },
+     "skilful_cells": {
+      "cell_years": 32,
+      "nmme": {
+       "rmse": 0.675,
+       "corr": 0.642,
+       "crps": 0.401,
+       "brier_dry": 0.0661,
+       "brier_wet": 0.1179
+      },
+      "regression": {
+       "rmse": 0.818,
+       "corr": 0.477,
+       "crps": 0.463,
+       "brier_dry": 0.0711,
+       "brier_wet": 0.1412
+      },
+      "hybrid": {
+       "rmse": 0.732,
+       "corr": 0.614,
+       "crps": 0.419,
+       "brier_dry": 0.0639,
+       "brier_wet": 0.1287
+      },
+      "climatology": {
+       "rmse": 0.841,
+       "corr": null,
+       "crps": 0.479,
+       "brier_dry": 0.0678,
+       "brier_wet": 0.1532
+      }
+     }
+    },
+    "Eastern Australia": {
+     "all_cells": {
+      "cell_years": 608,
+      "nmme": {
+       "rmse": 0.696,
+       "corr": 0.213,
+       "crps": 0.407,
+       "brier_dry": 0.0585,
+       "brier_wet": 0.0887
+      },
+      "regression": {
+       "rmse": 0.74,
+       "corr": -0.052,
+       "crps": 0.458,
+       "brier_dry": 0.0922,
+       "brier_wet": 0.0843
+      },
+      "hybrid": {
+       "rmse": 0.696,
+       "corr": 0.213,
+       "crps": 0.408,
+       "brier_dry": 0.0596,
+       "brier_wet": 0.0892
+      },
+      "climatology": {
+       "rmse": 0.693,
+       "corr": null,
+       "crps": 0.404,
+       "brier_dry": 0.0645,
+       "brier_wet": 0.0723
+      }
+     },
+     "skilful_cells": {
+      "cell_years": 32,
+      "nmme": {
+       "rmse": 0.771,
+       "corr": -0.127,
+       "crps": 0.444,
+       "brier_dry": 0.091,
+       "brier_wet": 0.0481
+      },
+      "regression": {
+       "rmse": 0.787,
+       "corr": -0.224,
+       "crps": 0.486,
+       "brier_dry": 0.1216,
+       "brier_wet": 0.0572
+      },
+      "hybrid": {
+       "rmse": 0.764,
+       "corr": -0.199,
+       "crps": 0.474,
+       "brier_dry": 0.1129,
+       "brier_wet": 0.0577
+      },
+      "climatology": {
+       "rmse": 0.596,
+       "corr": null,
+       "crps": 0.363,
+       "brier_dry": 0.0892,
+       "brier_wet": 0.0252
+      }
+     }
+    },
+    "Maritime Continent": {
+     "all_cells": {
+      "cell_years": 696,
+      "nmme": {
+       "rmse": 1.038,
+       "corr": 0.165,
+       "crps": 0.582,
+       "brier_dry": 0.102,
+       "brier_wet": 0.172
+      },
+      "regression": {
+       "rmse": 0.992,
+       "corr": 0.102,
+       "crps": 0.563,
+       "brier_dry": 0.0929,
+       "brier_wet": 0.1714
+      },
+      "hybrid": {
+       "rmse": 1.038,
+       "corr": 0.173,
+       "crps": 0.581,
+       "brier_dry": 0.1016,
+       "brier_wet": 0.1722
+      },
+      "climatology": {
+       "rmse": 0.98,
+       "corr": null,
+       "crps": 0.552,
+       "brier_dry": 0.084,
+       "brier_wet": 0.1713
+      }
+     },
+     "skilful_cells": {
+      "cell_years": 168,
+      "nmme": {
+       "rmse": 0.918,
+       "corr": 0.2,
+       "crps": 0.52,
+       "brier_dry": 0.066,
+       "brier_wet": 0.2055
+      },
+      "regression": {
+       "rmse": 0.971,
+       "corr": 0.274,
+       "crps": 0.551,
+       "brier_dry": 0.0804,
+       "brier_wet": 0.2049
+      },
+      "hybrid": {
+       "rmse": 0.916,
+       "corr": 0.324,
+       "crps": 0.52,
+       "brier_dry": 0.0644,
+       "brier_wet": 0.2066
+      },
+      "climatology": {
+       "rmse": 0.947,
+       "corr": null,
+       "crps": 0.537,
+       "brier_dry": 0.0658,
+       "brier_wet": 0.2121
+      }
+     }
+    },
+    "India": {
+     "all_cells": {
+      "cell_years": 208,
+      "nmme": {
+       "rmse": 1.059,
+       "corr": 0.283,
+       "crps": 0.603,
+       "brier_dry": 0.104,
+       "brier_wet": 0.191
+      },
+      "regression": {
+       "rmse": 1.12,
+       "corr": 0.091,
+       "crps": 0.628,
+       "brier_dry": 0.1104,
+       "brier_wet": 0.1929
+      },
+      "hybrid": {
+       "rmse": 1.067,
+       "corr": 0.262,
+       "crps": 0.605,
+       "brier_dry": 0.1045,
+       "brier_wet": 0.1909
+      },
+      "climatology": {
+       "rmse": 1.12,
+       "corr": null,
+       "crps": 0.637,
+       "brier_dry": 0.1105,
+       "brier_wet": 0.1958
+      }
+     },
+     "skilful_cells": {
+      "cell_years": 8,
+      "nmme": {
+       "rmse": 1.434,
+       "corr": 0.384,
+       "crps": 0.857,
+       "brier_dry": 0.0855,
+       "brier_wet": 0.315
+      },
+      "regression": {
+       "rmse": 1.725,
+       "corr": 0.188,
+       "crps": 1.007,
+       "brier_dry": 0.1149,
+       "brier_wet": 0.3355
+      },
+      "hybrid": {
+       "rmse": 1.57,
+       "corr": 0.292,
+       "crps": 0.909,
+       "brier_dry": 0.0982,
+       "brier_wet": 0.3114
+      },
+      "climatology": {
+       "rmse": 1.667,
+       "corr": null,
+       "crps": 1.035,
+       "brier_dry": 0.1105,
+       "brier_wet": 0.3665
+      }
+     }
+    },
+    "Brazil": {
+     "all_cells": {
+      "cell_years": 720,
+      "nmme": {
+       "rmse": 0.742,
+       "corr": 0.119,
+       "crps": 0.425,
+       "brier_dry": 0.0844,
+       "brier_wet": 0.0785
+      },
+      "regression": {
+       "rmse": 0.729,
+       "corr": 0.027,
+       "crps": 0.436,
+       "brier_dry": 0.0889,
+       "brier_wet": 0.0776
+      },
+      "hybrid": {
+       "rmse": 0.736,
+       "corr": 0.123,
+       "crps": 0.424,
+       "brier_dry": 0.0849,
+       "brier_wet": 0.0762
+      },
+      "climatology": {
+       "rmse": 0.687,
+       "corr": null,
+       "crps": 0.399,
+       "brier_dry": 0.0697,
+       "brier_wet": 0.0754
+      }
+     },
+     "skilful_cells": {
+      "cell_years": 160,
+      "nmme": {
+       "rmse": 0.691,
+       "corr": 0.168,
+       "crps": 0.408,
+       "brier_dry": 0.0559,
+       "brier_wet": 0.1048
+      },
+      "regression": {
+       "rmse": 0.686,
+       "corr": 0.112,
+       "crps": 0.409,
+       "brier_dry": 0.0616,
+       "brier_wet": 0.0901
+      },
+      "hybrid": {
+       "rmse": 0.663,
+       "corr": 0.162,
+       "crps": 0.401,
+       "brier_dry": 0.0584,
+       "brier_wet": 0.0944
+      },
+      "climatology": {
+       "rmse": 0.617,
+       "corr": null,
+       "crps": 0.374,
+       "brier_dry": 0.0422,
+       "brier_wet": 0.0977
+      }
+     }
+    },
+    "Argentina and Uruguay": {
+     "all_cells": {
+      "cell_years": 248,
+      "nmme": {
+       "rmse": 1.21,
+       "corr": 0.025,
+       "crps": 0.707,
+       "brier_dry": 0.2185,
+       "brier_wet": 0.1367
+      },
+      "regression": {
+       "rmse": 1.182,
+       "corr": 0.099,
+       "crps": 0.676,
+       "brier_dry": 0.2092,
+       "brier_wet": 0.1328
+      },
+      "hybrid": {
+       "rmse": 1.21,
+       "corr": 0.025,
+       "crps": 0.707,
+       "brier_dry": 0.2185,
+       "brier_wet": 0.1367
+      },
+      "climatology": {
+       "rmse": 1.197,
+       "corr": null,
+       "crps": 0.692,
+       "brier_dry": 0.2179,
+       "brier_wet": 0.1353
+      }
+     },
+     "skilful_cells": {
+      "cell_years": 0
+     }
+    },
+    "Central America": {
+     "all_cells": {
+      "cell_years": 160,
+      "nmme": {
+       "rmse": 1.211,
+       "corr": 0.413,
+       "crps": 0.687,
+       "brier_dry": 0.1299,
+       "brier_wet": 0.175
+      },
+      "regression": {
+       "rmse": 1.276,
+       "corr": 0.343,
+       "crps": 0.716,
+       "brier_dry": 0.132,
+       "brier_wet": 0.1903
+      },
+      "hybrid": {
+       "rmse": 1.214,
+       "corr": 0.449,
+       "crps": 0.69,
+       "brier_dry": 0.129,
+       "brier_wet": 0.1772
+      },
+      "climatology": {
+       "rmse": 1.348,
+       "corr": null,
+       "crps": 0.772,
+       "brier_dry": 0.1446,
+       "brier_wet": 0.2086
+      }
+     },
+     "skilful_cells": {
+      "cell_years": 32,
+      "nmme": {
+       "rmse": 0.982,
+       "corr": 0.597,
+       "crps": 0.56,
+       "brier_dry": 0.1193,
+       "brier_wet": 0.16
+      },
+      "regression": {
+       "rmse": 1.123,
+       "corr": 0.469,
+       "crps": 0.635,
+       "brier_dry": 0.119,
+       "brier_wet": 0.1983
+      },
+      "hybrid": {
+       "rmse": 1.0,
+       "corr": 0.618,
+       "crps": 0.574,
+       "brier_dry": 0.1148,
+       "brier_wet": 0.1712
+      },
+      "climatology": {
+       "rmse": 1.248,
+       "corr": null,
+       "crps": 0.725,
+       "brier_dry": 0.1532,
+       "brier_wet": 0.2172
+      }
+     }
+    },
+    "US south": {
+     "all_cells": {
+      "cell_years": 360,
+      "nmme": {
+       "rmse": 0.657,
+       "corr": 0.465,
+       "crps": 0.39,
+       "brier_dry": 0.0654,
+       "brier_wet": 0.0988
+      },
+      "regression": {
+       "rmse": 0.705,
+       "corr": 0.327,
+       "crps": 0.408,
+       "brier_dry": 0.0694,
+       "brier_wet": 0.1007
+      },
+      "hybrid": {
+       "rmse": 0.654,
+       "corr": 0.471,
+       "crps": 0.386,
+       "brier_dry": 0.0639,
+       "brier_wet": 0.0988
+      },
+      "climatology": {
+       "rmse": 0.711,
+       "corr": null,
+       "crps": 0.416,
+       "brier_dry": 0.0593,
+       "brier_wet": 0.1067
+      }
+     },
+     "skilful_cells": {
+      "cell_years": 112,
+      "nmme": {
+       "rmse": 0.499,
+       "corr": 0.492,
+       "crps": 0.328,
+       "brier_dry": 0.0717,
+       "brier_wet": 0.0376
+      },
+      "regression": {
+       "rmse": 0.489,
+       "corr": 0.513,
+       "crps": 0.317,
+       "brier_dry": 0.0665,
+       "brier_wet": 0.0415
+      },
+      "hybrid": {
+       "rmse": 0.486,
+       "corr": 0.527,
+       "crps": 0.316,
+       "brier_dry": 0.0669,
+       "brier_wet": 0.0377
+      },
+      "climatology": {
+       "rmse": 0.565,
+       "corr": null,
+       "crps": 0.353,
+       "brier_dry": 0.0617,
+       "brier_wet": 0.0435
+      }
+     }
+    }
+   },
+   "by_year_skilful_cells": {
+    "Jan 2019": {
+     "cell_years": 232,
+     "nmme": {
+      "rmse": 0.667,
+      "corr": 0.506,
+      "crps": 0.392,
+      "brier_dry": 0.0942,
+      "brier_wet": 0.0783
+     },
+     "regression": {
+      "rmse": 0.785,
+      "corr": 0.176,
+      "crps": 0.444,
+      "brier_dry": 0.1105,
+      "brier_wet": 0.0817
+     },
+     "hybrid": {
+      "rmse": 0.699,
+      "corr": 0.39,
+      "crps": 0.406,
+      "brier_dry": 0.0985,
+      "brier_wet": 0.0782
+     },
+     "climatology": {
+      "rmse": 0.757,
+      "corr": null,
+      "crps": 0.433,
+      "brier_dry": 0.0958,
+      "brier_wet": 0.084
+     }
+    },
+    "Jan 2020": {
+     "cell_years": 231,
+     "nmme": {
+      "rmse": 0.899,
+      "corr": 0.134,
+      "crps": 0.509,
+      "brier_dry": 0.0885,
+      "brier_wet": 0.1533
+     },
+     "regression": {
+      "rmse": 0.878,
+      "corr": 0.261,
+      "crps": 0.503,
+      "brier_dry": 0.0958,
+      "brier_wet": 0.1556
+     },
+     "hybrid": {
+      "rmse": 0.873,
+      "corr": 0.28,
+      "crps": 0.502,
+      "brier_dry": 0.0928,
+      "brier_wet": 0.1539
+     },
+     "climatology": {
+      "rmse": 0.898,
+      "corr": null,
+      "crps": 0.509,
+      "brier_dry": 0.0902,
+      "brier_wet": 0.1552
+     }
+    },
+    "Jan 2021": {
+     "cell_years": 231,
+     "nmme": {
+      "rmse": 0.957,
+      "corr": 0.385,
+      "crps": 0.54,
+      "brier_dry": 0.1202,
+      "brier_wet": 0.1781
+     },
+     "regression": {
+      "rmse": 0.893,
+      "corr": 0.548,
+      "crps": 0.509,
+      "brier_dry": 0.1082,
+      "brier_wet": 0.1774
+     },
+     "hybrid": {
+      "rmse": 0.908,
+      "corr": 0.507,
+      "crps": 0.518,
+      "brier_dry": 0.1145,
+      "brier_wet": 0.1773
+     },
+     "climatology": {
+      "rmse": 1.052,
+      "corr": null,
+      "crps": 0.599,
+      "brier_dry": 0.1316,
+      "brier_wet": 0.1877
+     }
+    },
+    "Jan 2022": {
+     "cell_years": 233,
+     "nmme": {
+      "rmse": 0.865,
+      "corr": -0.167,
+      "crps": 0.485,
+      "brier_dry": 0.065,
+      "brier_wet": 0.1243
+     },
+     "regression": {
+      "rmse": 0.891,
+      "corr": -0.199,
+      "crps": 0.499,
+      "brier_dry": 0.0743,
+      "brier_wet": 0.1126
+     },
+     "hybrid": {
+      "rmse": 0.866,
+      "corr": -0.202,
+      "crps": 0.485,
+      "brier_dry": 0.0683,
+      "brier_wet": 0.1152
+     },
+     "climatology": {
+      "rmse": 0.761,
+      "corr": null,
+      "crps": 0.433,
+      "brier_dry": 0.0633,
+      "brier_wet": 0.1014
+     }
+    },
+    "Jan 2023": {
+     "cell_years": 233,
+     "nmme": {
+      "rmse": 0.976,
+      "corr": 0.439,
+      "crps": 0.546,
+      "brier_dry": 0.0968,
+      "brier_wet": 0.1438
+     },
+     "regression": {
+      "rmse": 0.978,
+      "corr": 0.468,
+      "crps": 0.551,
+      "brier_dry": 0.0974,
+      "brier_wet": 0.1432
+     },
+     "hybrid": {
+      "rmse": 0.96,
+      "corr": 0.491,
+      "crps": 0.543,
+      "brier_dry": 0.0956,
+      "brier_wet": 0.1442
+     },
+     "climatology": {
+      "rmse": 1.101,
+      "corr": null,
+      "crps": 0.606,
+      "brier_dry": 0.116,
+      "brier_wet": 0.1424
+     }
+    },
+    "Jan 2024": {
+     "cell_years": 233,
+     "nmme": {
+      "rmse": 0.891,
+      "corr": 0.328,
+      "crps": 0.493,
+      "brier_dry": 0.1179,
+      "brier_wet": 0.1086
+     },
+     "regression": {
+      "rmse": 0.937,
+      "corr": 0.425,
+      "crps": 0.536,
+      "brier_dry": 0.1485,
+      "brier_wet": 0.1139
+     },
+     "hybrid": {
+      "rmse": 0.868,
+      "corr": 0.428,
+      "crps": 0.492,
+      "brier_dry": 0.1278,
+      "brier_wet": 0.1062
+     },
+     "climatology": {
+      "rmse": 0.916,
+      "corr": null,
+      "crps": 0.509,
+      "brier_dry": 0.1014,
+      "brier_wet": 0.116
+     }
+    },
+    "Jan 2025": {
+     "cell_years": 233,
+     "nmme": {
+      "rmse": 0.832,
+      "corr": 0.201,
+      "crps": 0.474,
+      "brier_dry": 0.0915,
+      "brier_wet": 0.1189
+     },
+     "regression": {
+      "rmse": 0.762,
+      "corr": 0.341,
+      "crps": 0.437,
+      "brier_dry": 0.0818,
+      "brier_wet": 0.1099
+     },
+     "hybrid": {
+      "rmse": 0.776,
+      "corr": 0.29,
+      "crps": 0.444,
+      "brier_dry": 0.0857,
+      "brier_wet": 0.1107
+     },
+     "climatology": {
+      "rmse": 0.814,
+      "corr": null,
+      "crps": 0.458,
+      "brier_dry": 0.0867,
+      "brier_wet": 0.1131
+     }
+    },
+    "Jan 2026": {
+     "cell_years": 233,
+     "nmme": {
+      "rmse": 0.92,
+      "corr": 0.328,
+      "crps": 0.515,
+      "brier_dry": 0.0932,
+      "brier_wet": 0.1231
+     },
+     "regression": {
+      "rmse": 0.908,
+      "corr": 0.384,
+      "crps": 0.507,
+      "brier_dry": 0.0796,
+      "brier_wet": 0.1272
+     },
+     "hybrid": {
+      "rmse": 0.901,
+      "corr": 0.392,
+      "crps": 0.506,
+      "brier_dry": 0.0849,
+      "brier_wet": 0.125
+     },
+     "climatology": {
+      "rmse": 0.984,
+      "corr": null,
+      "crps": 0.537,
+      "brier_dry": 0.0926,
+      "brier_wet": 0.1248
+     }
+    }
+   }
+  }
+ }
+}

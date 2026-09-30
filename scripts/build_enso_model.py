@@ -96,6 +96,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "data")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from refresh_faostat_fbs import FAO_AREA_TO_ISO3  # noqa: E402
+from pipeline_dag import MATURITY  # noqa: E402
 
 FAOSTAT_URL = ("https://bulks-faostat.fao.org/production/"
                "Production_Crops_Livestock_E_All_Data_(Normalized).zip")
@@ -399,7 +400,13 @@ def main() -> int:
 
     payload = {"_meta": {
         "generated_at": datetime.now(timezone.utc).isoformat(), "version": "v2-faostat",
-        "production_ready": bool(n_sig > 0),
+        # 2026-10-01 audit: the single flag is replaced by maturity per surface. production_ready stays, false, because the
+        # exposure file already says false and the model's documented limits (association, not forecast) contradict true.
+        "maturity": MATURITY,
+        "production_ready": False,
+        "production_ready_note": ("Always false. Was 'any pair has a signal', which contradicted the limits below. Read maturity: "
+                                  "the coefficients are historically fitted associations, tested held-out on direction only, "
+                                  "and not a forecast of any harvest."),
         "method": ("Per country x crop OLS of detrended log-yield anomaly on DJF ONI with "
                    "separate El Nino and La Nina slopes. FAOSTAT QCL, indexed by CALENDAR "
                    "HARVEST YEAR. Alignment is set by the harvest month from USDA/FAO-GIEWS "

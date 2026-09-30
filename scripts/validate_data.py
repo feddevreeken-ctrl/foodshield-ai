@@ -136,6 +136,8 @@ EXPECTED_FILES = {
     'enso_hindcast.json':         ('soft',     'dict_or_empty'),
     'enso_distribution.json':     ('soft',     'dict_or_empty'),
     'enso_portfolio_hindcast.json': ('soft',   'dict_or_empty'),  # hand-run builder (scipy), committed
+    'enso_replay.json':           ('soft',     'dict_or_empty'),  # hand-run: scripts/build_enso_replay.py (selection-safe vintage replay)
+    'enso_outlook_contest.json':  ('soft',     'dict_or_empty'),  # hand-run: scripts/build_enso_outlook_contest.py (Ocean hybrid contest), only if written
     'enso_situation.json':        ('soft',     'dict_or_empty'),
     'enso_strengths.json':        ('soft',     'dict_or_empty'),
     'seasonal_outlook.json':      ('soft',     'dict_or_empty'),  # NMME outlook maps, monthly upstream
@@ -165,7 +167,7 @@ EXPECTED_FILES = {
 # Files whose complete absence is an expected, non-noteworthy state (key-gated
 # build steps that skip rather than write). Missing → reported as skipped, not
 # as a warning. If the file DOES exist it is validated normally.
-OPTIONAL_FILES = {'commodity_interpretation.json'}
+OPTIONAL_FILES = {'commodity_interpretation.json', 'enso_outlook_contest.json'}
 
 # Threshold: this many or more 'critical' failures → exit 1
 #

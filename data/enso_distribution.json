@@ -1,12 +1,74 @@
 {
  "_meta": {
-  "generated_at": "2026-09-30T21:37:59.419452+00:00",
-  "version": "v2",
+  "generated_at": "2026-09-30T22:41:56.442743+00:00",
+  "version": "v3",
   "hand_run": false,
+  "maturity": {
+   "enso_observations": "observed_operational",
+   "fitted_crop_relationships": "historically_fitted",
+   "pair_hindcast_direction": "backtested_held_out",
+   "portfolio_total": "conditionally_backtested_not_vintage",
+   "outcomes_above_record_oni": "extrapolation",
+   "production_2027": "scenario_not_forecast"
+  },
+  "production_ready": false,
+  "production_ready_note": "Replaced by maturity (per surface). This distribution is a scenario read-out of a fitted association, not a scored forecast; most of its ONI range lies above the strongest winter in the fit.",
+  "joint_vs_independent": {
+   "draws_year_pool": [
+    1961,
+    2024
+   ],
+   "years_in_pool": 64,
+   "pair_redraws_share": {
+    "ZAF/corn": 0.0,
+    "USA/wheat": 0.0,
+    "BRA/rice": 0.0,
+    "ZWE/corn": 0.0,
+    "ZWE/sorghum": 0.0,
+    "ZAF/sorghum": 0.0,
+    "BRA/barley": 0.0
+   },
+   "redraws_total_share": 0.0,
+   "crops": {
+    "barley": {
+     "p05_p95_width_joint": 47.0,
+     "p05_p95_width_independent": 46.5,
+     "pairs": 1
+    },
+    "corn": {
+     "p05_p95_width_joint": 50.0,
+     "p05_p95_width_independent": 49.5,
+     "pairs": 2
+    },
+    "rice": {
+     "p05_p95_width_joint": 15.4,
+     "p05_p95_width_independent": 15.8,
+     "pairs": 1
+    },
+    "sorghum": {
+     "p05_p95_width_joint": 54.2,
+     "p05_p95_width_independent": 51.3,
+     "pairs": 2
+    },
+    "wheat": {
+     "p05_p95_width_joint": 24.0,
+     "p05_p95_width_independent": 23.9,
+     "pairs": 1
+    }
+   },
+   "total_kt": {
+    "p05_p95_width_joint": 11866,
+    "p05_p95_width_independent": 12400,
+    "sd_joint": 3593,
+    "sd_independent": 3789,
+    "ratio_sd": 0.95
+   },
+   "mean_pair_correlation_joint_log_change": 0.11
+  },
   "builder": "scripts/build_enso_distribution.py (numpy; on the cron after the outlook; pair residuals from data/ref/enso_pair_residuals.json, rebuilt by a hand run with the FAOSTAT cache)",
   "pair_residuals": {
-   "source": "cache",
-   "model_generated_at": "2026-09-30T21:26:00.138105+00:00"
+   "source": "FAOSTAT",
+   "model_generated_at": "2026-09-30T22:40:34.979709+00:00"
   },
   "sources": {
    "oni": {
@@ -28,13 +90,13 @@
   "draws": 10000,
   "seed": 20260930,
   "target_season": "DJF",
-  "method": "RONI for the target season is drawn from CPC's outlook as a two-piece normal fitted to its median and 5th and 95th percentiles, then mapped to ONI with a least-squares bridge fitted on every year both CPC files cover (ONI = a + b RONI + c gap_JJA, where gap_JJA is ONI minus RONI in the June-August that opens the event). Each draw adds a coefficient draw and a draw from the bridge's own residuals. The pair's El Niño slope is drawn from its fitted value and HAC standard error, and a residual is drawn from the pair's own fit residuals. change = exp(slope x ONI + residual) - 1.",
-  "not_included": "Baseline production, harvested area, price, policy or trade response; slope and residual error are taken as independent across pairs; the two-slope fit is linear in ONI and no winter above ONI +2.5 is in the record.",
+  "method": "RONI for the target season is drawn from CPC's outlook as a two-piece normal fitted to its median and 5th and 95th percentiles, then mapped to ONI with a least-squares bridge fitted on every year both CPC files cover (ONI = a + b RONI + c gap_JJA, where gap_JJA is ONI minus RONI in the June-August that opens the event). Each draw adds a coefficient draw and a draw from the bridge's own residuals. The pair's El Niño slope is drawn from its fitted value and HAC standard error. change = exp(slope x ONI + residual) - 1. Residuals (change_pct, the headline) are a historical-winter block bootstrap: one harvest year is drawn per iteration and each pair takes its own residual from that year, so a regional drought hits neighbouring pairs together (a pair with no residual for the year redraws on its own; share in joint_vs_independent). change_pct_independent keeps the old independent draw. change_pct_capped stops the El Niño response at the record winter: slope x min(ONI, record ONI), same draws otherwise; split_by_record gives the share of draws above the record and the median change on each side.",
+  "not_included": "Baseline production, harvested area, price, policy or trade response. Slope errors are still drawn independently across pairs (only residuals are joint). Both the linear and the capped specification are bounds, not forecasts above the record: no nonlinear saturation curve is fitted, because nine El Niño winters (none above ONI +2.5 before 2015-16) cannot identify one. The capped version says what the fit supports, the linear one what straight-line extension would give.",
   "residual_note": "Residuals are in-sample (MA-detrended log yield minus the fit), so they understate out-of-sample error; see enso_hindcast.json for held-out errors.",
   "inputs": {
    "enso_strengths.json": "2026-09-30T17:27:31.983985+00:00",
-   "enso_outlook.json": "2026-09-30T21:37:59.113311+00:00",
-   "enso_model.json": "2026-09-30T21:26:00.138105+00:00"
+   "enso_outlook.json": "2026-09-30T22:41:34.362751+00:00",
+   "enso_model.json": "2026-09-30T22:40:34.979709+00:00"
   }
  },
  "data": {
@@ -97,6 +159,165 @@
     "median_lo": 2.22,
     "median_hi": 2.96
    }
+  },
+  "total": {
+   "pairs": [
+    "ZAF/corn",
+    "USA/wheat",
+    "BRA/rice",
+    "ZWE/corn",
+    "ZWE/sorghum",
+    "ZAF/sorghum",
+    "BRA/barley"
+   ],
+   "baseline_kt": 68336.0,
+   "change_kt": {
+    "p05": -9191,
+    "p10": -7849,
+    "p25": -5716,
+    "p50": -3262,
+    "p75": -890,
+    "p90": 1250,
+    "p95": 2675,
+    "mean": -3279,
+    "sd": 3593,
+    "prob_fall": 0.824
+   },
+   "change_kt_independent": {
+    "p05": -9338,
+    "p10": -8059,
+    "p25": -5837,
+    "p50": -3361,
+    "p75": -870,
+    "p90": 1641,
+    "p95": 3062,
+    "mean": -3273,
+    "sd": 3789,
+    "prob_fall": 0.817
+   },
+   "change_kt_capped": {
+    "p05": -9057,
+    "p10": -7697,
+    "p25": -5554,
+    "p50": -3154,
+    "p75": -822,
+    "p90": 1300,
+    "p95": 2684,
+    "mean": -3178,
+    "sd": 3531,
+    "prob_fall": 0.82
+   }
+  },
+  "sensitivity": {
+   "rule": "Linear: effect = slope x ONI. Capped: effect = slope x min(ONI, record winter ONI), same slope, residual and ONI draws. Rank 1 = largest median fall in tonnes (production_kt x median percent).",
+   "record_oni": 2.5,
+   "table": [
+    {
+     "key": "ZAF/corn",
+     "production_kt": 16500.0,
+     "median_pct_linear": -42.4,
+     "median_pct_capped": -38.8,
+     "median_kt_linear": -6996,
+     "median_kt_capped": -6402,
+     "sign_same": true,
+     "prob_fall_linear": 0.984,
+     "prob_fall_capped": 0.98,
+     "rank_linear": 1,
+     "rank_capped": 1
+    },
+    {
+     "key": "ZWE/corn",
+     "production_kt": 1800.0,
+     "median_pct_linear": -50.9,
+     "median_pct_capped": -46.7,
+     "median_kt_linear": -916,
+     "median_kt_capped": -841,
+     "sign_same": true,
+     "prob_fall_linear": 0.986,
+     "prob_fall_capped": 0.981,
+     "rank_linear": 2,
+     "rank_capped": 2
+    },
+    {
+     "key": "BRA/rice",
+     "production_kt": 7400.0,
+     "median_pct_linear": -8.4,
+     "median_pct_capped": -7.4,
+     "median_kt_linear": -622,
+     "median_kt_capped": -548,
+     "sign_same": true,
+     "prob_fall_linear": 0.98,
+     "prob_fall_capped": 0.974,
+     "rank_linear": 3,
+     "rank_capped": 3
+    },
+    {
+     "key": "BRA/barley",
+     "production_kt": 550.0,
+     "median_pct_linear": -38.3,
+     "median_pct_capped": -35.1,
+     "median_kt_linear": -211,
+     "median_kt_capped": -193,
+     "sign_same": true,
+     "prob_fall_linear": 0.988,
+     "prob_fall_capped": 0.984,
+     "rank_linear": 4,
+     "rank_capped": 4
+    },
+    {
+     "key": "ZWE/sorghum",
+     "production_kt": 300.0,
+     "median_pct_linear": -42.8,
+     "median_pct_capped": -38.8,
+     "median_kt_linear": -128,
+     "median_kt_capped": -116,
+     "sign_same": true,
+     "prob_fall_linear": 0.954,
+     "prob_fall_capped": 0.943,
+     "rank_linear": 5,
+     "rank_capped": 5
+    },
+    {
+     "key": "ZAF/sorghum",
+     "production_kt": 130.0,
+     "median_pct_linear": -46.0,
+     "median_pct_capped": -41.9,
+     "median_kt_linear": -60,
+     "median_kt_capped": -54,
+     "sign_same": true,
+     "prob_fall_linear": 0.988,
+     "prob_fall_capped": 0.985,
+     "rank_linear": 6,
+     "rank_capped": 6
+    },
+    {
+     "key": "USA/wheat",
+     "production_kt": 41656.0,
+     "median_pct_linear": 13.0,
+     "median_pct_capped": 11.6,
+     "median_kt_linear": 5415,
+     "median_kt_capped": 4832,
+     "sign_same": true,
+     "prob_fall_linear": 0.035,
+     "prob_fall_capped": 0.046,
+     "rank_linear": 7,
+     "rank_capped": 7
+    }
+   ],
+   "all_signs_survive": true,
+   "rank_spearman": 1.0,
+   "top3_linear": [
+    "BRA/rice",
+    "ZAF/corn",
+    "ZWE/corn"
+   ],
+   "top3_capped": [
+    "BRA/rice",
+    "ZAF/corn",
+    "ZWE/corn"
+   ],
+   "top3_same_set": true,
+   "largest_exposure_same": true
   },
   "bridge_at_median": {
    "roni": 2.27,
@@ -1391,15 +1612,44 @@
     "resid_sd_log_pts": 21.3,
     "n_resid": 64,
     "change_pct": {
+     "p05": -65.4,
+     "p10": -60.4,
+     "p25": -52.2,
+     "p50": -42.4,
+     "p75": -31.5,
+     "p90": -20.4,
+     "p95": -12.9,
+     "mean": -41.1,
+     "prob_fall": 0.984
+    },
+    "change_pct_independent": {
      "p05": -65.6,
-     "p10": -60.8,
-     "p25": -52.7,
-     "p50": -42.7,
-     "p75": -31.4,
-     "p90": -20.0,
-     "p95": -11.9,
-     "mean": -41.2,
-     "prob_fall": 0.982
+     "p10": -60.5,
+     "p25": -52.3,
+     "p50": -42.3,
+     "p75": -31.3,
+     "p90": -19.7,
+     "p95": -12.2,
+     "mean": -41.0,
+     "prob_fall": 0.983
+    },
+    "change_pct_capped": {
+     "p05": -60.5,
+     "p10": -55.5,
+     "p25": -47.9,
+     "p50": -38.8,
+     "p75": -28.5,
+     "p90": -17.6,
+     "p95": -10.1,
+     "mean": -37.5,
+     "prob_fall": 0.98
+    },
+    "split_by_record": {
+     "record_oni": 2.5,
+     "share_above": 0.646,
+     "median_change_pct_at_or_below": -35.8,
+     "median_change_pct_above": -46.0,
+     "median_change_pct_capped_above": -40.3
     },
     "spread_p10_p90_by_source": {
      "enso_forecast_only": [
@@ -1407,8 +1657,8 @@
       -34.8
      ],
      "slope_only_at_median_oni": [
-      -53.8,
-      -30.5
+      -53.6,
+      -30.3
      ],
      "residual_only": [
       -22.4,
@@ -1430,15 +1680,44 @@
     "resid_sd_log_pts": 5.5,
     "n_resid": 64,
     "change_pct": {
-     "p05": 1.3,
-     "p10": 3.7,
+     "p05": 1.0,
+     "p10": 3.6,
      "p25": 8.2,
-     "p50": 13.1,
-     "p75": 17.7,
+     "p50": 13.0,
+     "p75": 17.5,
+     "p90": 22.0,
+     "p95": 25.0,
+     "mean": 13.0,
+     "prob_fall": 0.035
+    },
+    "change_pct_independent": {
+     "p05": 1.0,
+     "p10": 3.5,
+     "p25": 8.2,
+     "p50": 13.0,
+     "p75": 17.6,
      "p90": 22.1,
      "p95": 24.9,
-     "mean": 13.0,
-     "prob_fall": 0.034
+     "mean": 12.9,
+     "prob_fall": 0.036
+    },
+    "change_pct_capped": {
+     "p05": 0.3,
+     "p10": 2.6,
+     "p25": 7.0,
+     "p50": 11.6,
+     "p75": 15.7,
+     "p90": 19.3,
+     "p95": 21.9,
+     "mean": 11.3,
+     "prob_fall": 0.046
+    },
+    "split_by_record": {
+     "record_oni": 2.5,
+     "share_above": 0.646,
+     "median_change_pct_at_or_below": 10.5,
+     "median_change_pct_above": 14.6,
+     "median_change_pct_capped_above": 12.3
     },
     "spread_p10_p90_by_source": {
      "enso_forecast_only": [
@@ -1451,7 +1730,7 @@
      ],
      "residual_only": [
       -6.8,
-      6.4
+      6.0
      ]
     }
    },
@@ -1469,15 +1748,44 @@
     "resid_sd_log_pts": 4.4,
     "n_resid": 64,
     "change_pct": {
-     "p05": -16.8,
-     "p10": -14.5,
-     "p25": -11.4,
+     "p05": -16.9,
+     "p10": -14.7,
+     "p25": -11.5,
      "p50": -8.4,
      "p75": -5.3,
      "p90": -2.8,
+     "p95": -1.5,
+     "mean": -8.6,
+     "prob_fall": 0.98
+    },
+    "change_pct_independent": {
+     "p05": -17.2,
+     "p10": -14.8,
+     "p25": -11.5,
+     "p50": -8.3,
+     "p75": -5.2,
+     "p90": -2.7,
      "p95": -1.4,
      "mean": -8.6,
-     "prob_fall": 0.981
+     "prob_fall": 0.98
+    },
+    "change_pct_capped": {
+     "p05": -15.6,
+     "p10": -13.3,
+     "p25": -10.2,
+     "p50": -7.4,
+     "p75": -4.6,
+     "p90": -2.2,
+     "p95": -1.1,
+     "mean": -7.6,
+     "prob_fall": 0.974
+    },
+    "split_by_record": {
+     "record_oni": 2.5,
+     "share_above": 0.646,
+     "median_change_pct_at_or_below": -6.7,
+     "median_change_pct_above": -9.2,
+     "median_change_pct_capped_above": -7.7
     },
     "spread_p10_p90_by_source": {
      "enso_forecast_only": [
@@ -1485,7 +1793,7 @@
       -6.6
      ],
      "slope_only_at_median_oni": [
-      -11.4,
+      -11.3,
       -6.0
      ],
      "residual_only": [
@@ -1508,15 +1816,44 @@
     "resid_sd_log_pts": 30.8,
     "n_resid": 64,
     "change_pct": {
+     "p05": -77.3,
+     "p10": -71.9,
+     "p25": -62.7,
+     "p50": -50.9,
+     "p75": -37.8,
+     "p90": -24.0,
+     "p95": -14.6,
+     "mean": -49.1,
+     "prob_fall": 0.986
+    },
+    "change_pct_independent": {
      "p05": -76.6,
-     "p10": -71.6,
-     "p25": -62.3,
+     "p10": -71.9,
+     "p25": -62.7,
      "p50": -50.8,
-     "p75": -37.2,
-     "p90": -23.5,
+     "p75": -37.5,
+     "p90": -23.4,
      "p95": -15.0,
-     "mean": -48.8,
+     "mean": -49.0,
      "prob_fall": 0.987
+    },
+    "change_pct_capped": {
+     "p05": -73.6,
+     "p10": -67.3,
+     "p25": -57.9,
+     "p50": -46.7,
+     "p75": -33.6,
+     "p90": -20.9,
+     "p95": -12.0,
+     "mean": -45.1,
+     "prob_fall": 0.981
+    },
+    "split_by_record": {
+     "record_oni": 2.5,
+     "share_above": 0.646,
+     "median_change_pct_at_or_below": -43.4,
+     "median_change_pct_above": -55.0,
+     "median_change_pct_capped_above": -48.7
     },
     "spread_p10_p90_by_source": {
      "enso_forecast_only": [
@@ -1524,8 +1861,8 @@
       -43.0
      ],
      "slope_only_at_median_oni": [
-      -63.8,
-      -37.5
+      -63.9,
+      -37.2
      ],
      "residual_only": [
       -30.0,
@@ -1547,15 +1884,44 @@
     "resid_sd_log_pts": 27.9,
     "n_resid": 64,
     "change_pct": {
-     "p05": -67.2,
+     "p05": -67.3,
      "p10": -63.3,
-     "p25": -55.2,
+     "p25": -55.3,
+     "p50": -42.8,
+     "p75": -27.5,
+     "p90": -11.7,
+     "p95": -1.1,
+     "mean": -39.8,
+     "prob_fall": 0.954
+    },
+    "change_pct_independent": {
+     "p05": -67.3,
+     "p10": -63.4,
+     "p25": -55.3,
      "p50": -42.8,
      "p75": -27.0,
-     "p90": -11.1,
-     "p95": -1.4,
-     "mean": -39.6,
+     "p90": -11.6,
+     "p95": -1.7,
+     "mean": -39.7,
      "prob_fall": 0.956
+    },
+    "change_pct_capped": {
+     "p05": -63.7,
+     "p10": -59.8,
+     "p25": -51.8,
+     "p50": -38.8,
+     "p75": -23.7,
+     "p90": -8.6,
+     "p95": 1.5,
+     "mean": -36.1,
+     "prob_fall": 0.943
+    },
+    "split_by_record": {
+     "record_oni": 2.5,
+     "share_above": 0.646,
+     "median_change_pct_at_or_below": -36.2,
+     "median_change_pct_above": -46.0,
+     "median_change_pct_capped_above": -40.5
     },
     "spread_p10_p90_by_source": {
      "enso_forecast_only": [
@@ -1563,8 +1929,8 @@
       -34.2
      ],
      "slope_only_at_median_oni": [
-      -53.5,
-      -29.4
+      -53.6,
+      -29.7
      ],
      "residual_only": [
       -31.2,
@@ -1587,14 +1953,43 @@
     "n_resid": 64,
     "change_pct": {
      "p05": -68.7,
-     "p10": -64.4,
-     "p25": -56.3,
+     "p10": -63.9,
+     "p25": -56.1,
      "p50": -46.0,
-     "p75": -33.9,
-     "p90": -22.0,
-     "p95": -14.1,
+     "p75": -34.4,
+     "p90": -22.7,
+     "p95": -14.5,
+     "mean": -44.4,
+     "prob_fall": 0.988
+    },
+    "change_pct_independent": {
+     "p05": -68.6,
+     "p10": -64.2,
+     "p25": -55.9,
+     "p50": -46.1,
+     "p75": -34.1,
+     "p90": -22.2,
+     "p95": -13.8,
      "mean": -44.2,
-     "prob_fall": 0.986
+     "prob_fall": 0.987
+    },
+    "change_pct_capped": {
+     "p05": -63.5,
+     "p10": -59.3,
+     "p25": -51.7,
+     "p50": -41.9,
+     "p75": -31.1,
+     "p90": -19.7,
+     "p95": -11.9,
+     "mean": -40.6,
+     "prob_fall": 0.985
+    },
+    "split_by_record": {
+     "record_oni": 2.5,
+     "share_above": 0.646,
+     "median_change_pct_at_or_below": -38.6,
+     "median_change_pct_above": -49.7,
+     "median_change_pct_capped_above": -43.6
     },
     "spread_p10_p90_by_source": {
      "enso_forecast_only": [
@@ -1602,8 +1997,8 @@
       -37.9
      ],
      "slope_only_at_median_oni": [
-      -57.2,
-      -33.8
+      -57.3,
+      -33.5
      ],
      "residual_only": [
       -23.3,
@@ -1625,15 +2020,44 @@
     "resid_sd_log_pts": 17.7,
     "n_resid": 64,
     "change_pct": {
-     "p05": -58.3,
-     "p10": -54.5,
-     "p25": -47.7,
-     "p50": -38.4,
+     "p05": -58.5,
+     "p10": -54.6,
+     "p25": -47.4,
+     "p50": -38.3,
      "p75": -27.6,
-     "p90": -17.5,
-     "p95": -11.4,
+     "p90": -17.8,
+     "p95": -11.5,
      "mean": -37.0,
+     "prob_fall": 0.988
+    },
+    "change_pct_independent": {
+     "p05": -58.3,
+     "p10": -54.6,
+     "p25": -47.6,
+     "p50": -38.6,
+     "p75": -27.9,
+     "p90": -17.9,
+     "p95": -11.8,
+     "mean": -37.2,
      "prob_fall": 0.989
+    },
+    "change_pct_capped": {
+     "p05": -53.8,
+     "p10": -50.3,
+     "p25": -43.7,
+     "p50": -35.1,
+     "p75": -24.5,
+     "p90": -14.9,
+     "p95": -9.2,
+     "mean": -33.6,
+     "prob_fall": 0.984
+    },
+    "split_by_record": {
+     "record_oni": 2.5,
+     "share_above": 0.646,
+     "median_change_pct_at_or_below": -32.3,
+     "median_change_pct_above": -41.5,
+     "median_change_pct_capped_above": -36.3
     },
     "spread_p10_p90_by_source": {
      "enso_forecast_only": [
@@ -1641,8 +2065,8 @@
       -30.6
      ],
      "slope_only_at_median_oni": [
-      -47.3,
-      -28.4
+      -47.5,
+      -28.5
      ],
      "residual_only": [
       -17.7,
@@ -1658,15 +2082,37 @@
     ],
     "production_kt": 550.0,
     "change_pct": {
-     "p05": -58.3,
-     "p10": -54.5,
-     "p25": -47.7,
-     "p50": -38.4,
+     "p05": -58.5,
+     "p10": -54.6,
+     "p25": -47.4,
+     "p50": -38.3,
      "p75": -27.6,
-     "p90": -17.5,
-     "p95": -11.4,
+     "p90": -17.8,
+     "p95": -11.5,
      "mean": -37.0,
+     "prob_fall": 0.988
+    },
+    "change_pct_independent": {
+     "p05": -58.3,
+     "p10": -54.6,
+     "p25": -47.6,
+     "p50": -38.6,
+     "p75": -27.9,
+     "p90": -17.9,
+     "p95": -11.8,
+     "mean": -37.2,
      "prob_fall": 0.989
+    },
+    "change_pct_capped": {
+     "p05": -53.8,
+     "p10": -50.3,
+     "p25": -43.7,
+     "p50": -35.1,
+     "p75": -24.5,
+     "p90": -14.9,
+     "p95": -9.2,
+     "mean": -33.6,
+     "prob_fall": 0.984
     }
    },
    "corn": {
@@ -1676,15 +2122,37 @@
     ],
     "production_kt": 18300.0,
     "change_pct": {
-     "p05": -64.5,
+     "p05": -65.3,
      "p10": -60.2,
-     "p25": -52.6,
-     "p50": -43.2,
+     "p25": -52.3,
+     "p50": -43.1,
      "p75": -32.7,
-     "p90": -22.5,
-     "p95": -14.9,
+     "p90": -22.1,
+     "p95": -15.3,
      "mean": -41.9,
+     "prob_fall": 0.988
+    },
+    "change_pct_independent": {
+     "p05": -64.5,
+     "p10": -59.9,
+     "p25": -52.3,
+     "p50": -43.0,
+     "p75": -32.7,
+     "p90": -22.3,
+     "p95": -15.0,
+     "mean": -41.8,
      "prob_fall": 0.989
+    },
+    "change_pct_capped": {
+     "p05": -60.1,
+     "p10": -55.2,
+     "p25": -47.9,
+     "p50": -39.4,
+     "p75": -29.8,
+     "p90": -19.6,
+     "p95": -12.5,
+     "mean": -38.2,
+     "prob_fall": 0.985
     }
    },
    "rice": {
@@ -1693,15 +2161,37 @@
     ],
     "production_kt": 7400.0,
     "change_pct": {
-     "p05": -16.8,
-     "p10": -14.5,
-     "p25": -11.4,
+     "p05": -16.9,
+     "p10": -14.7,
+     "p25": -11.5,
      "p50": -8.4,
      "p75": -5.3,
      "p90": -2.8,
+     "p95": -1.5,
+     "mean": -8.6,
+     "prob_fall": 0.98
+    },
+    "change_pct_independent": {
+     "p05": -17.2,
+     "p10": -14.8,
+     "p25": -11.5,
+     "p50": -8.3,
+     "p75": -5.2,
+     "p90": -2.7,
      "p95": -1.4,
      "mean": -8.6,
-     "prob_fall": 0.981
+     "prob_fall": 0.98
+    },
+    "change_pct_capped": {
+     "p05": -15.6,
+     "p10": -13.3,
+     "p25": -10.2,
+     "p50": -7.4,
+     "p75": -4.6,
+     "p90": -2.2,
+     "p95": -1.1,
+     "mean": -7.6,
+     "prob_fall": 0.974
     }
    },
    "sorghum": {
@@ -1711,15 +2201,37 @@
     ],
     "production_kt": 430.0,
     "change_pct": {
-     "p05": -63.6,
-     "p10": -59.7,
-     "p25": -52.6,
-     "p50": -42.9,
+     "p05": -63.9,
+     "p10": -60.4,
+     "p25": -53.5,
+     "p50": -43.6,
      "p75": -31.1,
-     "p90": -19.6,
+     "p90": -18.2,
+     "p95": -9.7,
+     "mean": -41.2,
+     "prob_fall": 0.982
+    },
+    "change_pct_independent": {
+     "p05": -63.4,
+     "p10": -59.8,
+     "p25": -52.6,
+     "p50": -43.0,
+     "p75": -31.2,
+     "p90": -19.9,
      "p95": -12.1,
-     "mean": -41.0,
+     "mean": -41.1,
      "prob_fall": 0.989
+    },
+    "change_pct_capped": {
+     "p05": -59.4,
+     "p10": -56.2,
+     "p25": -50.0,
+     "p50": -40.0,
+     "p75": -27.2,
+     "p90": -14.8,
+     "p95": -7.4,
+     "mean": -37.5,
+     "prob_fall": 0.977
     }
    },
    "wheat": {
@@ -1728,15 +2240,37 @@
     ],
     "production_kt": 41656.0,
     "change_pct": {
-     "p05": 1.3,
-     "p10": 3.7,
+     "p05": 1.0,
+     "p10": 3.6,
      "p25": 8.2,
-     "p50": 13.1,
-     "p75": 17.7,
+     "p50": 13.0,
+     "p75": 17.5,
+     "p90": 22.0,
+     "p95": 25.0,
+     "mean": 13.0,
+     "prob_fall": 0.035
+    },
+    "change_pct_independent": {
+     "p05": 1.0,
+     "p10": 3.5,
+     "p25": 8.2,
+     "p50": 13.0,
+     "p75": 17.6,
      "p90": 22.1,
      "p95": 24.9,
-     "mean": 13.0,
-     "prob_fall": 0.034
+     "mean": 12.9,
+     "prob_fall": 0.036
+    },
+    "change_pct_capped": {
+     "p05": 0.3,
+     "p10": 2.6,
+     "p25": 7.0,
+     "p50": 11.6,
+     "p75": 15.7,
+     "p90": 19.3,
+     "p95": 21.9,
+     "mean": 11.3,
+     "prob_fall": 0.046
     }
    }
   }

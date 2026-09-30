@@ -51,6 +51,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import stamp_inputs, write_json  # noqa: E402
+from pipeline_dag import MATURITY  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
@@ -633,6 +634,8 @@ def main() -> int:
        notes="Tonnes first, on an ENSO-neutral baseline with USDA shown beside it; value at stake is tonnes × latest World Bank price, not a price forecast.", status="ok")
     doc = json.loads(path.read_text())
     doc["_meta"]["model_quality_rule"] = TIER_RULE
+    doc["_meta"]["maturity"] = MATURITY
+    doc["_meta"]["production_ready"] = False   # replaced by maturity (per surface); false as in the model and exposure files
     path.write_text(json.dumps(doc, indent=2, ensure_ascii=False))
     stamp_inputs("enso_outlook.json")
     print(f"[OK] enso_outlook: {len(out_regions)} regions, {sum(len(r['fitted']) for r in out_regions)} fitted rows, "

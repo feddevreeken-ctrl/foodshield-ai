@@ -19,6 +19,17 @@ from pathlib import Path
 
 DATA = Path(__file__).resolve().parent.parent / "data"
 
+# Maturity by surface (2026-10-01 audit). Replaces the single `production_ready` flag in the builders' _meta.
+# One vocabulary, one place: every builder that states maturity imports this.
+MATURITY = {
+    "enso_observations": "observed_operational",
+    "fitted_crop_relationships": "historically_fitted",
+    "pair_hindcast_direction": "backtested_held_out",
+    "portfolio_total": "conditionally_backtested_not_vintage",
+    "outcomes_above_record_oni": "extrapolation",
+    "production_2027": "scenario_not_forecast",
+}
+
 # Two files built from inputs further apart than this (automated feeds only) are not one picture.
 WINDOW_DAYS = 3
 
@@ -75,6 +86,13 @@ NODES = {
     "enso_portfolio_hindcast.json": dict(
         builder="build_enso_portfolio_hindcast.py", mode=HAND, structural=["enso_outlook.json", "enso_hindcast.json"],
         review_days=30, why="scipy and the FAOSTAT QCL bulk"),
+    "enso_replay.json": dict(
+        builder="build_enso_replay.py", mode=HAND, inputs=["enso_forecast_skill.json"],
+        structural=["enso_outlook.json", "enso_portfolio_hindcast.json"], review_days=30,
+        why="scipy and the FAOSTAT QCL bulk; selection-safe vintage replay"),
+    "enso_outlook_contest.json": dict(
+        builder="build_enso_outlook_contest.py", mode=HAND, inputs=["enso_forecast_skill.json"], review_days=180,
+        why="reads CPC's NMME archive (NetCDF byte ranges, about 2 MB a year) and PREC/L; scores the Ocean outlook hybrid on past Januaries"),
     "enso_forecast_skill.json": dict(
         builder="build_enso_forecast_skill.py", mode=HAND, inputs=["enso.json"], review_days=365,
         why="scrapes one IRI plume figure per past year; it only changes each September"),
