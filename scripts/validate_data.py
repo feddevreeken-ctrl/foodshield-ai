@@ -128,6 +128,8 @@ EXPECTED_FILES = {
     'enso_freight.json':          ('soft',     'dict_or_empty'),
     'enso_price_analogs.json':    ('soft',     'dict_or_empty'),
     'enso_price_outlook.json':    ('soft',     'enso_price_outlook'),  # derived from FPMA + the harvest model
+    'enso_price_counterfactual.json': ('soft', 'dict_or_empty'),  # scripts/build_enso_price_counterfactual.py
+    'enso_event_threads.json':    ('soft',     'dict_or_empty'),  # scripts/build_enso_event_threads.py
     'enso_price_risk.json':       ('soft',     'enso_price_risk'),     # grey price-risk bands + their out-of-sample test
     'enso_price_forecast_log.json': ('soft',   'enso_price_forecast_log'),  # append-only frozen bands
     'enso_hindcast.json':         ('soft',     'dict_or_empty'),

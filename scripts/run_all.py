@@ -76,6 +76,8 @@ import refresh_trade_restrictions
 import refresh_fpma_prices      # FAO GIEWS FPMA: staple-food price YoY, ~125 countries, monthly
 import refresh_enso_price_analogs  # FAO GIEWS FPMA: southern African maize, real prices, around past El Niños
 import build_enso_price_outlook   # derived: FPMA staple prices in high-effect El Niño countries, analog path, skill-gated model
+import build_enso_price_counterfactual  # derived: actual real maize price vs normal-year, currency and world-price expectation (stdlib)
+import build_enso_event_threads   # derived: reports of one event merged into threads (no network)
 import build_price_risk_band      # derived: grey 3/6/12-month price-risk bands (quantile regression, tested out of sample) + append-only forecast log; needs numpy
 import refresh_giews_crea       # FAO GIEWS countries requiring external assistance (3x/yr list)
 import refresh_imf_food_cpi     # IMF CPI food (CP01) YoY, monthly, fresher than FAOSTAT's CPI
@@ -170,6 +172,7 @@ STEPS = [
     # Own step after the outlook: its rolling-origin test (about 80 s) must not eat the outlook's time, and a failure
     # keeps the last good bands and log (the log is append-only; safe_run never touches it).
     ("Price-risk band",        build_price_risk_band.main,      "enso_price_risk.json"),
+    ("Price counterfactual",   build_enso_price_counterfactual.main, "enso_price_counterfactual.json"),  # movement not explained by season, currency or world prices
     ("FAO GIEWS CREA list",    refresh_giews_crea.main,         "giews_crea.json"),
     ("IMF food CPI",           refresh_imf_food_cpi.main,       "imf_food_cpi.json"),
     ("FX rates (v23)",         refresh_fx.main,                 "fx_rates.json"),
@@ -187,6 +190,7 @@ STEPS = [
     ("El Niño news",           refresh_enso_news.main,          "enso_news.json"),
     # Reads the three feeds above (GDACS and ReliefWeb run earlier); marks for the map's 30-day and week stops.
     ("El Niño auto marks",     refresh_enso_auto_events.main,   "enso_auto_events.json"),
+    ("El Niño event threads",  build_enso_event_threads.main,   "enso_event_threads.json"),   # after GDACS, ReliefWeb, news and auto marks
     ("CPC strength odds",      refresh_cpc_strengths.main,      "enso_strengths.json"),
     ("CPC RONI outlook",       refresh_cpc_roni_outlook.main,   "enso_strengths.json"),
     # Observed rain now: 30 CPC daily files (~55 MB of Range requests, ~1 min) against the

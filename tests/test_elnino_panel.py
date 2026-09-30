@@ -1060,7 +1060,7 @@ def main() -> int:
         # 2026-09-29 audit (Ocean): read everything from the data files, never from typed numbers.
         check("Ocean audit: the strip says when the newest El Niño feed was collected", page.evaluate("""async () => {
             // The page's rule: every loaded feed named enso*, sst_*, rain_* or seasonal_outlook, except the hand-run forecast track record.
-            const names = ['enso','enso_exposure','enso_model','enso_regions','enso_lanes','enso_corridors','enso_econ','enso_mechanism','enso_indices','enso_bulletins','sst_anomaly','enso_news','enso_outlook','enso_gauges','enso_situation','enso_strengths','enso_ports','enso_hindcast','enso_freight','enso_price_analogs','enso_published_effects','sst_composites','seasonal_outlook','rain_anomaly','enso_past_events','sst_months','rain_months','enso_recent_events','enso_auto_events','enso_outlook_events','enso_price_outlook','enso_price_risk','enso_price_forecast_log','enso_changes','enso_replacement'];
+            const names = ['enso','enso_exposure','enso_model','enso_regions','enso_lanes','enso_corridors','enso_econ','enso_mechanism','enso_indices','enso_bulletins','sst_anomaly','enso_news','enso_outlook','enso_gauges','enso_situation','enso_strengths','enso_ports','enso_hindcast','enso_freight','enso_price_analogs','enso_published_effects','sst_composites','seasonal_outlook','rain_anomaly','enso_past_events','sst_months','rain_months','enso_recent_events','enso_auto_events','enso_outlook_events','enso_price_outlook','enso_price_risk','enso_price_forecast_log','enso_changes','enso_replacement','enso_price_counterfactual','enso_event_threads'];
             const ds =(await Promise.all(names.map(n => fetch('data/' + n + '.json').then(r => r.json()).catch(() => null)))).filter(Boolean).map(j => new Date(j._meta.generated_at || j._meta.generated)).filter(d => !isNaN(d));
             const t = (document.querySelector('#enso-status-home .enso-now-upd') || {}).textContent || '';
             const hm = d => String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0');
@@ -1526,6 +1526,34 @@ def main() -> int:
               'Everything on this board is observed' not in page.locator('#enso-live').inner_text()
               and page.locator('#enso-live .enso-wire-plate').get_attribute('data-kind') == 'published'
               and page.locator('#enso-live figure[data-kind="reported"]').count() >= 1)
+        # 2026-09-30 (eventsprices): event threads. Reports of one event are merged by rule into threads with two separate
+        # measures, event confidence and El Nino attribution; the plate shows the file's top rows and its counts.
+        check("Reported: event-thread plate lists the top threads with confidence, attribution and source chain, equal to the file", page.evaluate("""async () => {
+            const T = (await (await fetch('data/enso_event_threads.json')).json()).data;
+            const R = (await (await fetch('data/enso_recent_events.json')).json()).data.events;
+            const plate = document.querySelector('#enso-live .enso-threads-plate'); if (!plate) return false;
+            const rows = [...plate.querySelectorAll('.enso-th-row')], top = T.threads.slice(0, 5);
+            const ATT = { attributed: 'Attributed', pattern_consistent: 'Pattern-consistent', not_assessed: 'Not assessed' };
+            const st = T.stats, lede = plate.querySelector('.enso-plate-lede').textContent;
+            return rows.length === top.length && top.every((t, i) => {
+                const r = rows[i], c = t.event_confidence;
+                return r.dataset.thread === t.id && r.querySelector('.enso-th-ev b').textContent === t.title
+                    && r.querySelector('.enso-th-conf').textContent.includes(c.n_independent + ' independent source')
+                    && r.querySelector('.enso-th-att b').textContent === ATT[t.el_nino_attribution.status]
+                    && r.querySelectorAll('.enso-th-chain a, .enso-th-chain span:not(.enso-th-arrow):not(.enso-th-more)').length >= 1;
+            }) && lede.includes(st.event_reports + ' event reports, ' + st.threads + ' events.')
+              && st.threads <= st.event_reports && st.event_reports <= st.raw_items
+              && T.threads.every(t => t.el_nino_attribution.status !== 'attributed'
+                    || R.some(e => e.id === t.el_nino_attribution.basis.id && e.enso_link === 'attributed'))   // the machine never attributes
+              && T.threads.every(t => t.event_confidence.n_independent <= t.n_reports);
+        }"""))
+        check("Reported: threads plate keeps confidence and attribution separate and never calls an event an El Nino effect", page.evaluate("""() => {
+            const plate = document.querySelector('#enso-live .enso-threads-plate'); if (!plate) return false;
+            const t = plate.textContent;
+            return plate.querySelectorAll('.enso-th-conf').length === plate.querySelectorAll('.enso-th-att').length
+                && /Two readings, kept apart/.test(t) && plate.querySelector('details.enso-evidence-note')
+                && !/caused by El Ni|proves El Ni/i.test(t) && !/\u2014/.test(t);
+        }"""))
         # Reported redesign (2026-09-23): decisions, regional concern, a country
         # ledger joined across feeds, then a deduplicated, food-first wire.
         check("Reported shows FEWS NET's regions, a country ledger and in-force measures with a countdown", page.evaluate("""async () => {
@@ -2096,7 +2124,7 @@ def main() -> int:
                 && sub.includes('Modelled trade exposure in tonnes at the ONI ' + (oni > 0 ? '+' : '') + oni.toFixed(1) + ' winter scenario, not price pressure')
                 && want.every((sel, i) => i === 0 || order.findIndex(x => x === sel.slice(1)) > order.findIndex(x => want[i - 1].startsWith('.') ? /enso-mapgrid/.test(x) : x === want[i - 1].slice(1)));
         }"""))
-        check("maize panels keep their own y-axes and carry the 3-year seasonal median; replay lines and ± badges are gone", page.evaluate("""() => {
+        check("maize panels keep their own y-axes and carry the normal-year expected path (median, dashed); replay lines and ± badges are gone", page.evaluate("""() => {
             const tops = [...document.querySelectorAll('.enso-pa-svg')].map(s => Math.max(...[...s.querySelectorAll('text.enso-hw-t')].map(t => +t.textContent).filter(Number.isFinite)));
             return tops.length >= 6 && new Set(tops).size >= 3
                 && document.querySelectorAll('.enso-pa-svg .enso-season').length >= 6
@@ -2120,13 +2148,24 @@ def main() -> int:
             }
             return ok && (fans === 0 || document.querySelectorAll('.enso-pa-cell .enso-fan').length === fans);
         }"""))
-        check("decomposition bars (world price, exchange rate, local) sit beside the maize plate and add up to the real move", page.evaluate("""async () => {
-            const R = (await (await fetch('data/enso_price_risk.json')).json()).data;
-            const want = R.series.filter(e => e.decomposition), rows = [...document.querySelectorAll('.enso-pa-plate .enso-dc-row')];
-            return want.length >= 2 && rows.length === want.length
-                && want.every(e => Math.abs(e.decomposition.world_pct + e.decomposition.fx_pct + e.decomposition.local_pct - e.decomposition.total_pct) < 0.35)
-                && want.every(e => rows.some(r => r.querySelector('.enso-dc-n i').textContent.replace('−', '-') === (Math.round(e.decomposition.total_pct) > 0 ? '+' : '') + Math.round(e.decomposition.total_pct) + '%' && r.querySelectorAll('svg.enso-dc-bar rect').length >= 4))
-                && !document.querySelector('.enso-fan .enso-dc-bar, .enso-pa-cell .enso-dc-bar');
+        # 2026-09-30 (eventsprices): the decomposition bars (world, exchange rate, local) are replaced by the counterfactual
+        # ledger from data/enso_price_counterfactual.json: actual real price against the normal-year expectation, then after
+        # currency and world maize, one row per series with its range. Every figure is the file's; nothing is called El Nino.
+        check("counterfactual ledger: one row per series, excess and range equal the file, never labelled an El Nino effect", page.evaluate("""async () => {
+            const C = (await (await fetch('data/enso_price_counterfactual.json')).json()).data;
+            const sg = v => (Math.round(v) > 0 ? '+' : Math.round(v) < 0 ? '\u2212' : '') + Math.abs(Math.round(v)) + '%';
+            const plate = document.querySelector('.enso-pa-plate'), rows = [...plate.querySelectorAll('.enso-cf-row')];
+            const cells = [...plate.querySelectorAll('.enso-pa-cell')];
+            return C.rows.length >= 6 && rows.length === C.rows.length
+                && C.rows.every((r, i) => {
+                    const t = rows[i].textContent, e = r.excess_pct;
+                    return t.includes(sg(e.vs_fx_and_world)) && t.includes('(' + sg(e.range_fx_and_world[0]) + ' to ' + sg(e.range_fx_and_world[1]) + ')')
+                        && t.includes(r.price_type) && rows[i].querySelector('svg.enso-cf-bar rect');
+                })
+                && C.rows.every(r => cells.some(c => c.querySelector('h4').textContent.includes(r.price_type) && c.querySelector('.is-cf') && c.querySelector('.enso-season-band') && c.querySelector('.enso-season')))
+                && /not explained by season, currency or world prices/.test(plate.textContent)
+                && !/caused by El Ni|El Ni.o effect is|because of El Ni/i.test(plate.textContent.replace(/not an El Ni.o effect/g, ''))
+                && C.rows.every(r => r.regression.n_years === r.normal_years.n && r.normal_years.years.every(y => !C.excluded_years.includes(y)));
         }"""))
 
         # 2026-09-30 court verdict: the rail is one ranked table (Now, the last El Niño at the same stage, the grey 12-month
