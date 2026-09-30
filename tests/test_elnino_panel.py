@@ -1484,16 +1484,17 @@ def main() -> int:
                 && Math.abs(r.scenario_kt - r.neutral_kt - r.change_kt_record) <= 1) && O.who_pays.every(w => {
                     const r = rows.find(x => x.iso === w.iso && x.crop === w.crop); return r && Math.abs(w.loss_kt + r.change_kt_record) <= 1; });
         }"""))
-        check("Harvests lens head compares USDA with neutral first and does not repeat the tab's largest-loss figure", page.evaluate("""async () => {
+        check("Harvests lens head compares USDA with neutral for the largest headline exposures, states the model evidence tiers, and does not repeat the tab's record-winter loss figure", page.evaluate("""async () => {
             const O = (await (await fetch('data/enso_outlook.json')).json()).data;
-            const rows = O.rows_all.filter(r => r.status === 'shown' && !r.in_season && r.usda_same_harvest && typeof r.usda_vs_neutral_pct === 'number' && typeof r.change_pct_observed === 'number')
-                .sort((a, b) => Math.abs(a.usda_vs_neutral_pct - a.change_pct_observed) - Math.abs(b.usda_vs_neutral_pct - b.change_pct_observed));
+            const rows = O.rows_all.filter(r => r.status === 'shown' && !r.in_season && r.usda_same_harvest && typeof r.usda_vs_neutral_pct === 'number' && typeof r.change_pct_observed === 'number' && r.headline !== false)
+                .sort((a, b) => Math.abs(b.change_kt_observed || 0) - Math.abs(a.change_kt_observed || 0));
             const li = [...document.querySelectorAll('.enso-view-heading .enso-lens-lede > li')].map(x => x.textContent.replace(/\\s+/g, ' '));
             const pct = v => (v > 0 ? '+' : v < 0 ? '\u2212' : '') + Math.abs(v).toFixed(0) + '%';
-            const worst = O.rows_all.filter(r => r.status === 'shown' && typeof r.change_kt_record === 'number' && r.change_kt_record < 0).sort((a, b) => a.change_kt_record - b.change_kt_record)[0];
-            return rows.length > 1 && li.length >= 2 && li.length <= 4 && /^USDA sits nearest the fit/.test(li[0]) && /^It sits furthest away/.test(li[1])
-                && li[0].includes(pct(rows[0].usda_vs_neutral_pct)) && li[1].includes(pct(rows.at(-1).usda_vs_neutral_pct))
-                && li.some(x => /validated flags/.test(x)) && !li.join(' ').includes(pct(worst.change_pct_record));
+            const worst = O.rows_all.filter(r => r.status === 'shown' && r.headline !== false && typeof r.change_kt_record === 'number' && r.change_kt_record < 0).sort((a, b) => a.change_kt_record - b.change_kt_record)[0];
+            const expl = O.rows_all.filter(r => r.status === 'shown' && r.model_quality && r.model_quality.tier === 'exploratory');
+            return rows.length > 0 && li.length >= 2 && li.length <= 4 && /^USDA\u2019s 2027 figures carry little of the loss/.test(li[0]) && li[0].includes(pct(rows[0].usda_vs_neutral_pct))
+                && li.some(x => /^Model evidence from past El Ni\u00f1os held out/.test(x)) && li.some(x => /validated flags/.test(x)) && !li.join(' ').includes(pct(worst.change_pct_record))
+                && expl.every(r => !li[0].includes(r.iso === 'BRA' ? 'Brazil rice: USDA' : 'zz'));
         }"""))
         # 2026-09-30: the production-weighted aggregate is scored as an aggregate (build_enso_portfolio_hindcast.py).
         check("portfolio hindcast plate prints the file's counts, recounted from its rows", page.evaluate("""async () => {
