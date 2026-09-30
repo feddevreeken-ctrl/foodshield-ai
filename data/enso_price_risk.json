@@ -1,0 +1,3119 @@
+{
+  "_meta": {
+    "generated_at": "2026-09-30T00:16:35.941203+00:00",
+    "source": "FAO GIEWS FPMA (CPI-deflated), World Bank Pink Sheet, NOAA CPC ONI; FoodShield price-risk model",
+    "notes": "Grey price-risk band: seasonality and the pull back toward the 3-year level, not an El Niño forecast. See data.spec and _meta.method.",
+    "version": "v23",
+    "status": "ok",
+    "method": {
+      "band": "A pooled linear quantile regression (tau 0.1, 0.5, 0.9) of the h-month log change in the CPI-deflated FPMA price on the 12-month log change and the log gap to the median of the previous 36 months, with an intercept per series, fitted on every series with 24+ training rows. h = 3, 6, 12. Real-time: each rolling-origin fit uses only rows whose target was known at the origin (expanding window), refitted every 3 months from 2012-01. The quantile regression is solved by iteratively reweighted least squares (numpy only) and checked against an exact linear program in the test suite. Quantiles are sorted so they never cross. Bands are real % change from each series' latest month.",
+      "pass_rule": "pinball at tau 0.1 and 0.9 below the unconditional and the calendar-month baselines on the selection folds; 80% band coverage 70-90% on the selection folds; coverage >= 70% inside the 2015-16 and 2023-24 windows. The pass is decided on origins up to 2018-12; the pinball losses and coverage shown on the page are from origins 2019-01 on, which had no say in it. A series with fewer than 36 early-fold points cannot be tested and gets no band.",
+      "baselines": "Unconditional: the series' own expanding-window quantiles of the same h-month change. Calendar-month: the same, for origins in the same calendar month only (at least 5). Both are scored on the same points as the model.",
+      "oni": "The same model with the ONI of the month before the origin (CPC oni.ascii.txt, real time) as a third predictor.",
+      "decomposition": "For ZAF, HND, ZMB maize (import-parity series; FPMA carries the USD price). Real move since March = d ln(world price, Pink Sheet maize, US Gulf, USD) + [d ln(local currency per USD) - d ln(implied CPI deflator)] + local. Local = d ln(FPMA USD price) - d ln(world price): the local basis, so transport, margins, tariffs, harvest and policy. Pass-through is fixed at 1 (import parity), not fitted. The three logs sum exactly to the real change; percentage points are the average over the six orders the three can be applied. The world price ends at the Pink Sheet's latest month if that is earlier than the series'.",
+      "data_fixes": "The last 3 months of MDG and ETH are dropped in this file and in enso_price_outlook.json: FPMA's CPI deflator for them steps near-constantly at the tail, which looks extrapolated. Gaps of 12+ months are flagged (BRA maize has a 48-month gap; rows spanning it are lost). Headline CPI is kept: food CPI would deflate the shock away.",
+      "cadence": "Refit every 3 months in the test, so bands for a month between refits use a fit at most two months old.",
+      "forecast_log": "data/enso_price_forecast_log.json is append-only: one entry per run date with the spec hash. Later runs compare every logged band with the price that has arrived (data.checks)."
+    }
+  },
+  "data": {
+    "run_date": "2026-09-30",
+    "spec": {
+      "model": "pooled linear quantile regression, series intercepts, expanding window",
+      "target": "ln real price change over h months",
+      "taus": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "horizons": [
+        3,
+        6,
+        12
+      ],
+      "predictors": [
+        "ln R[t] - ln R[t-12]",
+        "ln R[t] - ln median(R[t-36..t-1]), >= 24 of 36 months"
+      ],
+      "min_training_rows_per_series": 24,
+      "min_months_per_series": 24,
+      "first_origin": "2012-01",
+      "select_end": "2018-12",
+      "display_from": "2019-01",
+      "refit_every_months": 3,
+      "pass_rule": "pinball at tau 0.1 and 0.9 below the unconditional and the calendar-month baselines on the selection folds; 80% band coverage 70-90% on the selection folds; coverage >= 70% inside the 2015-16 and 2023-24 windows",
+      "windows": {
+        "2015-16": [
+          "2015-03",
+          "2016-03"
+        ],
+        "2023-24": [
+          "2023-03",
+          "2024-03"
+        ]
+      }
+    },
+    "spec_hash": "b0b31b8a83779097",
+    "default_horizon": 12,
+    "horizons": [
+      3,
+      6,
+      12
+    ],
+    "series": [
+      {
+        "key": "ZAF:Maize (white)",
+        "iso3": "ZAF",
+        "country": "South Africa",
+        "commodity": "Maize (white)",
+        "staple": "maize",
+        "market": "Randfontein",
+        "price_type": "wholesale",
+        "first_month": "2000-01",
+        "latest_month": "2026-08",
+        "n_months": 320,
+        "dropped_tail": [],
+        "gap": null,
+        "latest_real": 1648.39,
+        "now": {
+          "chg12_pct": -18.0,
+          "vs_3y_median_pct": -22.7
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-11",
+            "pass": false,
+            "why": "did not beat the unconditional baseline at tau 0.9 on the early folds",
+            "select": {
+              "n": 84,
+              "model_p10": 0.04338,
+              "model_p90": 0.03066,
+              "uncond_p10": 0.0455,
+              "uncond_p90": 0.03041,
+              "calmonth_p10": 0.04791,
+              "calmonth_p90": 0.02975,
+              "coverage": 0.78571
+            },
+            "display": {
+              "n": 89,
+              "model_p10": 0.02721,
+              "model_p90": 0.02403,
+              "uncond_p10": 0.02416,
+              "uncond_p90": 0.02409,
+              "calmonth_p10": 0.02596,
+              "calmonth_p90": 0.0247,
+              "coverage": 0.8764
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.692
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.846
+              }
+            },
+            "p10": -11.9,
+            "p50": 6.2,
+            "p90": 31.0
+          },
+          "6": {
+            "target_month": "2027-02",
+            "pass": false,
+            "why": "did not beat the calendar-month baseline at tau 0.9 on the early folds",
+            "select": {
+              "n": 84,
+              "model_p10": 0.05925,
+              "model_p90": 0.04187,
+              "uncond_p10": 0.07285,
+              "uncond_p90": 0.04224,
+              "calmonth_p10": 0.07172,
+              "calmonth_p90": 0.04108,
+              "coverage": 0.78571
+            },
+            "display": {
+              "n": 86,
+              "model_p10": 0.04185,
+              "model_p90": 0.02923,
+              "uncond_p10": 0.03731,
+              "uncond_p90": 0.03228,
+              "calmonth_p10": 0.04477,
+              "calmonth_p90": 0.03081,
+              "coverage": 0.89535
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.615
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.769
+              }
+            },
+            "p10": -20.2,
+            "p50": 12.8,
+            "p90": 52.6
+          },
+          "12": {
+            "target_month": "2027-08",
+            "pass": false,
+            "why": "under-covers inside the El Niño windows (69% of 26 months)",
+            "select": {
+              "n": 84,
+              "model_p10": 0.07871,
+              "model_p90": 0.06151,
+              "uncond_p10": 0.10632,
+              "uncond_p90": 0.06495,
+              "calmonth_p10": 0.10403,
+              "calmonth_p90": 0.06886,
+              "coverage": 0.72619
+            },
+            "display": {
+              "n": 80,
+              "model_p10": 0.06152,
+              "model_p90": 0.03512,
+              "uncond_p10": 0.06466,
+              "uncond_p90": 0.05029,
+              "calmonth_p10": 0.06311,
+              "calmonth_p90": 0.04612,
+              "coverage": 0.875
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.615
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.769
+              }
+            },
+            "p10": -27.6,
+            "p50": 21.1,
+            "p90": 85.0
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 127.0,
+            "2": 138.0,
+            "3": 166.1,
+            "4": 158.1,
+            "5": 148.6,
+            "6": 144.3,
+            "7": 151.0,
+            "8": 131.0,
+            "9": 129.0,
+            "10": 132.6,
+            "11": 134.2,
+            "12": 140.0
+          }
+        },
+        "decomposition": {
+          "from": "2026-03",
+          "to": "2026-08",
+          "total_pct": 7.4,
+          "world_pct": 5.4,
+          "fx_pct": -7.0,
+          "local_pct": 9.0,
+          "world_log": 0.0518,
+          "fx_log": -0.0672,
+          "local_log": 0.0868,
+          "inflation_log": 0.0308,
+          "currency_log": -0.0364
+        }
+      },
+      {
+        "key": "ZMB:Maize (white)",
+        "iso3": "ZMB",
+        "country": "Zambia",
+        "commodity": "Maize (white)",
+        "staple": "maize",
+        "market": "National Average",
+        "price_type": "retail",
+        "first_month": "2004-01",
+        "latest_month": "2026-08",
+        "n_months": 272,
+        "dropped_tail": [],
+        "gap": null,
+        "latest_real": 18.85,
+        "now": {
+          "chg12_pct": -17.9,
+          "vs_3y_median_pct": -47.4
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-11",
+            "pass": false,
+            "why": "did not beat the calendar-month baseline at tau 0.1 on the early folds",
+            "select": {
+              "n": 84,
+              "model_p10": 0.02811,
+              "model_p90": 0.01917,
+              "uncond_p10": 0.03523,
+              "uncond_p90": 0.01985,
+              "calmonth_p10": 0.02696,
+              "calmonth_p90": 0.02114,
+              "coverage": 0.79762
+            },
+            "display": {
+              "n": 89,
+              "model_p10": 0.04196,
+              "model_p90": 0.02659,
+              "uncond_p10": 0.04641,
+              "uncond_p90": 0.02544,
+              "calmonth_p10": 0.02728,
+              "calmonth_p90": 0.02352,
+              "coverage": 0.67416
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.769
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.385
+              }
+            },
+            "p10": -1.2,
+            "p50": 20.1,
+            "p90": 53.1
+          },
+          "6": {
+            "target_month": "2027-02",
+            "pass": false,
+            "why": "under-covers inside the El Niño windows (54% of 26 months)",
+            "select": {
+              "n": 84,
+              "model_p10": 0.03921,
+              "model_p90": 0.02526,
+              "uncond_p10": 0.04654,
+              "uncond_p90": 0.0332,
+              "calmonth_p10": 0.04396,
+              "calmonth_p90": 0.0304,
+              "coverage": 0.78571
+            },
+            "display": {
+              "n": 86,
+              "model_p10": 0.04699,
+              "model_p90": 0.04625,
+              "uncond_p10": 0.06351,
+              "uncond_p90": 0.04068,
+              "calmonth_p10": 0.04051,
+              "calmonth_p90": 0.04062,
+              "coverage": 0.63953
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.846
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.231
+              }
+            },
+            "p10": 7.6,
+            "p50": 37.8,
+            "p90": 104.9
+          },
+          "12": {
+            "target_month": "2027-08",
+            "pass": false,
+            "why": "under-covers inside the El Niño windows (42% of 26 months)",
+            "select": {
+              "n": 84,
+              "model_p10": 0.05049,
+              "model_p90": 0.03363,
+              "uncond_p10": 0.06352,
+              "uncond_p90": 0.04784,
+              "calmonth_p10": 0.06419,
+              "calmonth_p90": 0.05654,
+              "coverage": 0.7381
+            },
+            "display": {
+              "n": 80,
+              "model_p10": 0.04835,
+              "model_p90": 0.08581,
+              "uncond_p10": 0.06244,
+              "uncond_p90": 0.05876,
+              "calmonth_p10": 0.05935,
+              "calmonth_p90": 0.05971,
+              "coverage": 0.6375
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.846
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.0
+              }
+            },
+            "p10": 20.9,
+            "p50": 56.3,
+            "p90": 175.2
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 130.9,
+            "2": 138.4,
+            "3": 143.4,
+            "4": 122.9,
+            "5": 95.2,
+            "6": 79.7,
+            "7": 76.1,
+            "8": 74.2,
+            "9": 103.3,
+            "10": 114.9,
+            "11": 116.6,
+            "12": 122.1
+          }
+        },
+        "decomposition": {
+          "from": "2026-03",
+          "to": "2026-08",
+          "total_pct": -39.1,
+          "world_pct": 4.2,
+          "fx_pct": -2.7,
+          "local_pct": -40.5,
+          "world_log": 0.0518,
+          "fx_log": -0.0339,
+          "local_log": -0.5137,
+          "inflation_log": 0.013,
+          "currency_log": -0.0209
+        }
+      },
+      {
+        "key": "MWI:Maize",
+        "iso3": "MWI",
+        "country": "Malawi",
+        "commodity": "Maize",
+        "staple": "maize",
+        "market": "National Average",
+        "price_type": "retail",
+        "first_month": "2016-11",
+        "latest_month": "2026-08",
+        "n_months": 101,
+        "dropped_tail": [],
+        "gap": {
+          "months": 12,
+          "from": "2019-01",
+          "to": "2019-12"
+        },
+        "latest_real": 56.61,
+        "now": {
+          "chg12_pct": -41.1,
+          "vs_3y_median_pct": -28.9
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-11",
+            "pass": false,
+            "why": "too little history to test (0 early-fold points, need 36)",
+            "select": null,
+            "display": null,
+            "windows": {
+              "2015-16": {
+                "n": 0,
+                "coverage": null
+              },
+              "2023-24": {
+                "n": 0,
+                "coverage": null
+              }
+            },
+            "p10": -18.2,
+            "p50": 2.9,
+            "p90": 48.2
+          },
+          "6": {
+            "target_month": "2027-02",
+            "pass": false,
+            "why": "too little history to test (0 early-fold points, need 36)",
+            "select": null,
+            "display": null,
+            "windows": {
+              "2015-16": {
+                "n": 0,
+                "coverage": null
+              },
+              "2023-24": {
+                "n": 0,
+                "coverage": null
+              }
+            },
+            "p10": -18.9,
+            "p50": 11.8,
+            "p90": 77.0
+          },
+          "12": {
+            "target_month": "2027-08",
+            "pass": false,
+            "why": "too little history to test (0 early-fold points, need 36)",
+            "select": null,
+            "display": null,
+            "windows": {
+              "2015-16": {
+                "n": 0,
+                "coverage": null
+              },
+              "2023-24": {
+                "n": 0,
+                "coverage": null
+              }
+            },
+            "p10": -16.6,
+            "p50": 42.0,
+            "p90": 127.8
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 141.5,
+            "2": 122.7,
+            "3": 116.9,
+            "4": 97.8,
+            "5": 91.8,
+            "6": 105.7,
+            "7": 115.4,
+            "8": 113.9,
+            "9": 131.2,
+            "10": 128.8,
+            "11": 123.2,
+            "12": 122.9
+          }
+        }
+      },
+      {
+        "key": "MOZ:Maize (white)",
+        "iso3": "MOZ",
+        "country": "Mozambique",
+        "commodity": "Maize (white)",
+        "staple": "maize",
+        "market": "Maputo",
+        "price_type": "retail",
+        "first_month": "2000-01",
+        "latest_month": "2026-07",
+        "n_months": 319,
+        "dropped_tail": [],
+        "gap": null,
+        "latest_real": 12.69,
+        "now": {
+          "chg12_pct": -25.0,
+          "vs_3y_median_pct": -19.2
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-10",
+            "pass": false,
+            "why": "did not beat the unconditional baseline at tau 0.9 on the early folds",
+            "select": {
+              "n": 84,
+              "model_p10": 0.02885,
+              "model_p90": 0.04449,
+              "uncond_p10": 0.03998,
+              "uncond_p90": 0.04419,
+              "calmonth_p10": 0.03922,
+              "calmonth_p90": 0.0396,
+              "coverage": 0.82143
+            },
+            "display": {
+              "n": 88,
+              "model_p10": 0.02584,
+              "model_p90": 0.03513,
+              "uncond_p10": 0.02944,
+              "uncond_p90": 0.03707,
+              "calmonth_p10": 0.02837,
+              "calmonth_p90": 0.03422,
+              "coverage": 0.73864
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.692
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.923
+              }
+            },
+            "p10": -8.2,
+            "p50": 2.5,
+            "p90": 31.5
+          },
+          "6": {
+            "target_month": "2027-01",
+            "pass": false,
+            "why": "under-covers inside the El Niño windows (65% of 26 months)",
+            "select": {
+              "n": 84,
+              "model_p10": 0.03423,
+              "model_p90": 0.06034,
+              "uncond_p10": 0.05892,
+              "uncond_p90": 0.06756,
+              "calmonth_p10": 0.05782,
+              "calmonth_p90": 0.06845,
+              "coverage": 0.77381
+            },
+            "display": {
+              "n": 85,
+              "model_p10": 0.03829,
+              "model_p90": 0.03808,
+              "uncond_p10": 0.03439,
+              "uncond_p90": 0.04463,
+              "calmonth_p10": 0.02804,
+              "calmonth_p90": 0.04059,
+              "coverage": 0.68235
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.462
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.846
+              }
+            },
+            "p10": -9.0,
+            "p50": 5.4,
+            "p90": 44.5
+          },
+          "12": {
+            "target_month": "2027-07",
+            "pass": false,
+            "why": "80% band covered 63% on the early folds (need 70-90%)",
+            "select": {
+              "n": 84,
+              "model_p10": 0.05882,
+              "model_p90": 0.0906,
+              "uncond_p10": 0.09957,
+              "uncond_p90": 0.09628,
+              "calmonth_p10": 0.1008,
+              "calmonth_p90": 0.10305,
+              "coverage": 0.63095
+            },
+            "display": {
+              "n": 79,
+              "model_p10": 0.05012,
+              "model_p90": 0.03772,
+              "uncond_p10": 0.03558,
+              "uncond_p90": 0.04509,
+              "calmonth_p10": 0.03801,
+              "calmonth_p90": 0.0482,
+              "coverage": 0.75949
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.0
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.615
+              }
+            },
+            "p10": -11.4,
+            "p50": 11.6,
+            "p90": 80.6
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 134.8,
+            "2": 106.9,
+            "3": 100.0,
+            "4": 99.4,
+            "5": 97.2,
+            "6": 91.1,
+            "7": 83.6,
+            "8": 84.3,
+            "9": 110.3,
+            "10": 115.2,
+            "11": 121.5,
+            "12": 119.6
+          }
+        }
+      },
+      {
+        "key": "SWZ:Maize meal",
+        "iso3": "SWZ",
+        "country": "Eswatini",
+        "commodity": "Maize meal",
+        "staple": "maize",
+        "market": "National Average",
+        "price_type": "retail",
+        "first_month": "2008-01",
+        "latest_month": "2026-08",
+        "n_months": 224,
+        "dropped_tail": [],
+        "gap": null,
+        "latest_real": 16.51,
+        "now": {
+          "chg12_pct": -5.0,
+          "vs_3y_median_pct": -4.4
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-11",
+            "pass": true,
+            "why": "passes",
+            "select": {
+              "n": 48,
+              "model_p10": 0.01146,
+              "model_p90": 0.02843,
+              "uncond_p10": 0.01229,
+              "uncond_p90": 0.03055,
+              "calmonth_p10": 0.01355,
+              "calmonth_p90": 0.03093,
+              "coverage": 0.85417
+            },
+            "display": {
+              "n": 89,
+              "model_p10": 0.01148,
+              "model_p90": 0.01455,
+              "uncond_p10": 0.01071,
+              "uncond_p90": 0.01781,
+              "calmonth_p10": 0.01163,
+              "calmonth_p90": 0.02,
+              "coverage": 0.88764
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.692
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.923
+              }
+            },
+            "p10": -5.3,
+            "p50": -0.1,
+            "p90": 10.5
+          },
+          "6": {
+            "target_month": "2027-02",
+            "pass": false,
+            "why": "80% band covered 58% on the early folds (need 70-90%)",
+            "select": {
+              "n": 48,
+              "model_p10": 0.01608,
+              "model_p90": 0.04166,
+              "uncond_p10": 0.01733,
+              "uncond_p90": 0.04434,
+              "calmonth_p10": 0.02256,
+              "calmonth_p90": 0.04579,
+              "coverage": 0.58333
+            },
+            "display": {
+              "n": 86,
+              "model_p10": 0.01502,
+              "model_p90": 0.02235,
+              "uncond_p10": 0.015,
+              "uncond_p90": 0.02067,
+              "calmonth_p10": 0.0161,
+              "calmonth_p90": 0.02334,
+              "coverage": 0.89535
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.462
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 1.0
+              }
+            },
+            "p10": -7.2,
+            "p50": 0.1,
+            "p90": 21.2
+          },
+          "12": {
+            "target_month": "2027-08",
+            "pass": false,
+            "why": "80% band covered 38% on the early folds (need 70-90%)",
+            "select": {
+              "n": 48,
+              "model_p10": 0.03775,
+              "model_p90": 0.05281,
+              "uncond_p10": 0.05311,
+              "uncond_p90": 0.06134,
+              "calmonth_p10": 0.05377,
+              "calmonth_p90": 0.06878,
+              "coverage": 0.375
+            },
+            "display": {
+              "n": 80,
+              "model_p10": 0.02255,
+              "model_p90": 0.02461,
+              "uncond_p10": 0.02256,
+              "uncond_p90": 0.02716,
+              "calmonth_p10": 0.02128,
+              "calmonth_p90": 0.02826,
+              "coverage": 0.8125
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.0
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 1.0
+              }
+            },
+            "p10": -8.6,
+            "p50": 3.1,
+            "p90": 30.1
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 101.6,
+            "2": 101.3,
+            "3": 100.3,
+            "4": 99.0,
+            "5": 103.2,
+            "6": 104.5,
+            "7": 104.2,
+            "8": 105.1,
+            "9": 107.7,
+            "10": 111.7,
+            "11": 107.4,
+            "12": 102.1
+          }
+        }
+      },
+      {
+        "key": "LSO:Maize meal",
+        "iso3": "LSO",
+        "country": "Lesotho",
+        "commodity": "Maize meal",
+        "staple": "maize",
+        "market": "Maseru",
+        "price_type": "retail",
+        "first_month": "2010-01",
+        "latest_month": "2026-05",
+        "n_months": 197,
+        "dropped_tail": [],
+        "gap": null,
+        "latest_real": 49.76,
+        "now": {
+          "chg12_pct": -23.2,
+          "vs_3y_median_pct": -8.6
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-08",
+            "pass": false,
+            "why": "too little history to test (24 early-fold points, need 36)",
+            "select": {
+              "n": 24,
+              "model_p10": 0.05623,
+              "model_p90": 0.01747,
+              "uncond_p10": 0.03764,
+              "uncond_p90": 0.01792,
+              "calmonth_p10": 0.05582,
+              "calmonth_p90": 0.02901,
+              "coverage": 0.54167
+            },
+            "display": {
+              "n": 86,
+              "model_p10": 0.016,
+              "model_p90": 0.01497,
+              "uncond_p10": 0.01519,
+              "uncond_p90": 0.01459,
+              "calmonth_p10": 0.01489,
+              "calmonth_p90": 0.01504,
+              "coverage": 0.81395
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.692
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.769
+              }
+            },
+            "p10": -9.4,
+            "p50": -0.2,
+            "p90": 7.9
+          },
+          "6": {
+            "target_month": "2026-11",
+            "pass": false,
+            "why": "too little history to test (24 early-fold points, need 36)",
+            "select": {
+              "n": 24,
+              "model_p10": 0.0806,
+              "model_p90": 0.03156,
+              "uncond_p10": 0.04391,
+              "uncond_p90": 0.03056,
+              "calmonth_p10": 0.06963,
+              "calmonth_p90": 0.03705,
+              "coverage": 0.25
+            },
+            "display": {
+              "n": 83,
+              "model_p10": 0.02218,
+              "model_p90": 0.02093,
+              "uncond_p10": 0.01994,
+              "uncond_p90": 0.01941,
+              "calmonth_p10": 0.01917,
+              "calmonth_p90": 0.0204,
+              "coverage": 0.81928
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.538
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.692
+              }
+            },
+            "p10": -13.1,
+            "p50": -0.9,
+            "p90": 16.4
+          },
+          "12": {
+            "target_month": "2027-05",
+            "pass": false,
+            "why": "too little history to test (24 early-fold points, need 36)",
+            "select": {
+              "n": 24,
+              "model_p10": 0.14242,
+              "model_p90": 0.04508,
+              "uncond_p10": 0.09159,
+              "uncond_p90": 0.03279,
+              "calmonth_p10": 0.10369,
+              "calmonth_p90": 0.02676,
+              "coverage": 0.25
+            },
+            "display": {
+              "n": 77,
+              "model_p10": 0.02942,
+              "model_p90": 0.01884,
+              "uncond_p10": 0.02789,
+              "uncond_p90": 0.02051,
+              "calmonth_p10": 0.02635,
+              "calmonth_p90": 0.0229,
+              "coverage": 0.83117
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.0
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.846
+              }
+            },
+            "p10": -12.9,
+            "p50": 6.0,
+            "p90": 29.8
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 92.3,
+            "2": 97.7,
+            "3": 100.0,
+            "4": 97.2,
+            "5": 102.8,
+            "6": 104.2,
+            "7": 101.3,
+            "8": 111.5,
+            "9": 100.1,
+            "10": 97.8,
+            "11": 97.4,
+            "12": 102.7
+          }
+        }
+      },
+      {
+        "key": "NAM:Maize meal",
+        "iso3": "NAM",
+        "country": "Namibia",
+        "commodity": "Maize meal",
+        "staple": "maize",
+        "market": "Windhoek",
+        "price_type": "retail",
+        "first_month": "2010-01",
+        "latest_month": "2026-07",
+        "n_months": 199,
+        "dropped_tail": [],
+        "gap": null,
+        "latest_real": 8.51,
+        "now": {
+          "chg12_pct": 0.6,
+          "vs_3y_median_pct": 1.3
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-10",
+            "pass": false,
+            "why": "too little history to test (24 early-fold points, need 36)",
+            "select": {
+              "n": 24,
+              "model_p10": 0.03859,
+              "model_p90": 0.02533,
+              "uncond_p10": 0.02153,
+              "uncond_p90": 0.01674,
+              "calmonth_p10": 0.03075,
+              "calmonth_p90": 0.01528,
+              "coverage": 0.41667
+            },
+            "display": {
+              "n": 88,
+              "model_p10": 0.00935,
+              "model_p90": 0.01631,
+              "uncond_p10": 0.01108,
+              "uncond_p90": 0.01486,
+              "calmonth_p10": 0.01066,
+              "calmonth_p90": 0.01595,
+              "coverage": 0.93182
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.462
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.923
+              }
+            },
+            "p10": -7.0,
+            "p50": -0.4,
+            "p90": 14.0
+          },
+          "6": {
+            "target_month": "2027-01",
+            "pass": false,
+            "why": "too little history to test (24 early-fold points, need 36)",
+            "select": {
+              "n": 24,
+              "model_p10": 0.05567,
+              "model_p90": 0.0412,
+              "uncond_p10": 0.02721,
+              "uncond_p90": 0.02099,
+              "calmonth_p10": 0.03468,
+              "calmonth_p90": 0.01934,
+              "coverage": 0.29167
+            },
+            "display": {
+              "n": 85,
+              "model_p10": 0.01222,
+              "model_p90": 0.02403,
+              "uncond_p10": 0.01243,
+              "uncond_p90": 0.02244,
+              "calmonth_p10": 0.01279,
+              "calmonth_p90": 0.02208,
+              "coverage": 0.96471
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.462
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 1.0
+              }
+            },
+            "p10": -10.6,
+            "p50": -1.0,
+            "p90": 20.6
+          },
+          "12": {
+            "target_month": "2027-07",
+            "pass": false,
+            "why": "too little history to test (24 early-fold points, need 36)",
+            "select": {
+              "n": 24,
+              "model_p10": 0.09283,
+              "model_p90": 0.05828,
+              "uncond_p10": 0.04352,
+              "uncond_p90": 0.03514,
+              "calmonth_p10": 0.04247,
+              "calmonth_p90": 0.02731,
+              "coverage": 0.04167
+            },
+            "display": {
+              "n": 79,
+              "model_p10": 0.01806,
+              "model_p90": 0.03337,
+              "uncond_p10": 0.0198,
+              "uncond_p90": 0.02944,
+              "calmonth_p10": 0.01913,
+              "calmonth_p90": 0.03298,
+              "coverage": 1.0
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.538
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 1.0
+              }
+            },
+            "p10": -13.9,
+            "p50": -1.1,
+            "p90": 35.4
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 100.4,
+            "2": 100.1,
+            "3": 101.6,
+            "4": 99.9,
+            "5": 100.9,
+            "6": 103.0,
+            "7": 103.2,
+            "8": 104.5,
+            "9": 105.7,
+            "10": 102.6,
+            "11": 102.6,
+            "12": 103.5
+          }
+        }
+      },
+      {
+        "key": "BWA:Maize meal",
+        "iso3": "BWA",
+        "country": "Botswana",
+        "commodity": "Maize meal",
+        "staple": "maize",
+        "market": "National Average",
+        "price_type": "retail",
+        "first_month": "2007-01",
+        "latest_month": "2026-08",
+        "n_months": 236,
+        "dropped_tail": [],
+        "gap": null,
+        "latest_real": 23.58,
+        "now": {
+          "chg12_pct": -12.2,
+          "vs_3y_median_pct": -12.0
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-11",
+            "pass": true,
+            "why": "passes",
+            "select": {
+              "n": 60,
+              "model_p10": 0.00898,
+              "model_p90": 0.00827,
+              "uncond_p10": 0.01042,
+              "uncond_p90": 0.00926,
+              "calmonth_p10": 0.01135,
+              "calmonth_p90": 0.00946,
+              "coverage": 0.73333
+            },
+            "display": {
+              "n": 89,
+              "model_p10": 0.00893,
+              "model_p90": 0.00926,
+              "uncond_p10": 0.00759,
+              "uncond_p90": 0.00797,
+              "calmonth_p10": 0.00797,
+              "calmonth_p90": 0.00905,
+              "coverage": 0.70787
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.846
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.846
+              }
+            },
+            "p10": -3.1,
+            "p50": 1.5,
+            "p90": 8.2
+          },
+          "6": {
+            "target_month": "2027-02",
+            "pass": false,
+            "why": "80% band covered 62% on the early folds (need 70-90%)",
+            "select": {
+              "n": 60,
+              "model_p10": 0.01252,
+              "model_p90": 0.01543,
+              "uncond_p10": 0.01882,
+              "uncond_p90": 0.01861,
+              "calmonth_p10": 0.02007,
+              "calmonth_p90": 0.01853,
+              "coverage": 0.61667
+            },
+            "display": {
+              "n": 86,
+              "model_p10": 0.01378,
+              "model_p90": 0.01683,
+              "uncond_p10": 0.01185,
+              "uncond_p90": 0.01292,
+              "calmonth_p10": 0.01258,
+              "calmonth_p90": 0.01402,
+              "coverage": 0.74419
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.692
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.692
+              }
+            },
+            "p10": -4.8,
+            "p50": 4.0,
+            "p90": 16.1
+          },
+          "12": {
+            "target_month": "2027-08",
+            "pass": false,
+            "why": "80% band covered 57% on the early folds (need 70-90%)",
+            "select": {
+              "n": 60,
+              "model_p10": 0.01833,
+              "model_p90": 0.02623,
+              "uncond_p10": 0.03221,
+              "uncond_p90": 0.02653,
+              "calmonth_p10": 0.03631,
+              "calmonth_p90": 0.03284,
+              "coverage": 0.56667
+            },
+            "display": {
+              "n": 80,
+              "model_p10": 0.02087,
+              "model_p90": 0.02002,
+              "uncond_p10": 0.01754,
+              "uncond_p90": 0.02002,
+              "calmonth_p10": 0.01646,
+              "calmonth_p90": 0.02067,
+              "coverage": 0.85
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.308
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 1.0
+              }
+            },
+            "p10": -6.4,
+            "p50": 7.9,
+            "p90": 27.6
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 101.0,
+            "2": 100.9,
+            "3": 100.0,
+            "4": 98.5,
+            "5": 98.0,
+            "6": 99.8,
+            "7": 102.0,
+            "8": 101.2,
+            "9": 102.9,
+            "10": 103.1,
+            "11": 102.4,
+            "12": 100.7
+          }
+        }
+      },
+      {
+        "key": "MDG:Maize (yellow)",
+        "iso3": "MDG",
+        "country": "Madagascar",
+        "commodity": "Maize (yellow)",
+        "staple": "maize",
+        "market": "Antananarivo Average",
+        "price_type": "retail",
+        "first_month": "2012-06",
+        "latest_month": "2026-04",
+        "n_months": 133,
+        "dropped_tail": [
+          "2026-05",
+          "2026-06",
+          "2026-07"
+        ],
+        "gap": null,
+        "latest_real": 583.11,
+        "now": null,
+        "h": {
+          "3": {
+            "target_month": "2026-07",
+            "pass": false,
+            "why": "too little history to test (0 early-fold points, need 36)",
+            "select": null,
+            "display": {
+              "n": 14,
+              "model_p10": 0.02938,
+              "model_p90": 0.03469,
+              "uncond_p10": 0.03648,
+              "uncond_p90": 0.03861,
+              "calmonth_p10": 0.03537,
+              "calmonth_p90": 0.04133,
+              "coverage": 0.78571
+            },
+            "windows": {
+              "2015-16": {
+                "n": 0,
+                "coverage": null
+              },
+              "2023-24": {
+                "n": 11,
+                "coverage": 0.909
+              }
+            }
+          },
+          "6": {
+            "target_month": "2026-10",
+            "pass": false,
+            "why": "too little history to test (0 early-fold points, need 36)",
+            "select": null,
+            "display": {
+              "n": 6,
+              "model_p10": 0.03151,
+              "model_p90": 0.04779,
+              "uncond_p10": 0.03733,
+              "uncond_p90": 0.06248,
+              "calmonth_p10": 0.01792,
+              "calmonth_p90": 0.04706,
+              "coverage": 0.66667
+            },
+            "windows": {
+              "2015-16": {
+                "n": 0,
+                "coverage": null
+              },
+              "2023-24": {
+                "n": 11,
+                "coverage": 0.727
+              }
+            }
+          },
+          "12": {
+            "target_month": "2027-04",
+            "pass": false,
+            "why": "too little history to test (0 early-fold points, need 36)",
+            "select": null,
+            "display": {
+              "n": 11,
+              "model_p10": 0.02456,
+              "model_p90": 0.02273,
+              "uncond_p10": 0.02546,
+              "uncond_p90": 0.0386,
+              "calmonth_p10": 0.02918,
+              "calmonth_p90": 0.03335,
+              "coverage": 1.0
+            },
+            "windows": {
+              "2015-16": {
+                "n": 0,
+                "coverage": null
+              },
+              "2023-24": {
+                "n": 8,
+                "coverage": 1.0
+              }
+            }
+          }
+        }
+      },
+      {
+        "key": "GTM:Maize (white)",
+        "iso3": "GTM",
+        "country": "Guatemala",
+        "commodity": "Maize (white)",
+        "staple": "maize",
+        "market": "National Average",
+        "price_type": "wholesale",
+        "first_month": "2000-01",
+        "latest_month": "2026-06",
+        "n_months": 307,
+        "dropped_tail": [],
+        "gap": null,
+        "latest_real": 2240.76,
+        "now": {
+          "chg12_pct": -0.1,
+          "vs_3y_median_pct": -9.2
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-09",
+            "pass": false,
+            "why": "did not beat the unconditional baseline at tau 0.9 on the early folds",
+            "select": {
+              "n": 78,
+              "model_p10": 0.02695,
+              "model_p90": 0.0206,
+              "uncond_p10": 0.03055,
+              "uncond_p90": 0.02052,
+              "calmonth_p10": 0.02713,
+              "calmonth_p90": 0.02003,
+              "coverage": 0.84615
+            },
+            "display": {
+              "n": 69,
+              "model_p10": 0.0203,
+              "model_p90": 0.01749,
+              "uncond_p10": 0.02342,
+              "uncond_p90": 0.01779,
+              "calmonth_p10": 0.01702,
+              "calmonth_p90": 0.01633,
+              "coverage": 0.82609
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 1.0
+              },
+              "2023-24": {
+                "n": 6,
+                "coverage": 0.833
+              }
+            },
+            "p10": -13.4,
+            "p50": 3.5,
+            "p90": 19.8
+          },
+          "6": {
+            "target_month": "2026-12",
+            "pass": false,
+            "why": "did not beat the calendar-month baseline at tau 0.9 on the early folds",
+            "select": {
+              "n": 80,
+              "model_p10": 0.02558,
+              "model_p90": 0.0261,
+              "uncond_p10": 0.0317,
+              "uncond_p90": 0.02989,
+              "calmonth_p10": 0.02668,
+              "calmonth_p90": 0.02535,
+              "coverage": 0.85
+            },
+            "display": {
+              "n": 64,
+              "model_p10": 0.02291,
+              "model_p90": 0.01976,
+              "uncond_p10": 0.0253,
+              "uncond_p90": 0.02569,
+              "calmonth_p10": 0.02101,
+              "calmonth_p90": 0.02331,
+              "coverage": 0.90625
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 1.0
+              },
+              "2023-24": {
+                "n": 6,
+                "coverage": 1.0
+              }
+            },
+            "p10": -14.8,
+            "p50": 4.2,
+            "p90": 25.6
+          },
+          "12": {
+            "target_month": "2027-06",
+            "pass": false,
+            "why": "did not beat the unconditional baseline at tau 0.1 on the early folds",
+            "select": {
+              "n": 80,
+              "model_p10": 0.0361,
+              "model_p90": 0.03135,
+              "uncond_p10": 0.02916,
+              "uncond_p90": 0.03083,
+              "calmonth_p10": 0.03296,
+              "calmonth_p90": 0.02812,
+              "coverage": 0.6875
+            },
+            "display": {
+              "n": 57,
+              "model_p10": 0.02377,
+              "model_p90": 0.02949,
+              "uncond_p10": 0.02273,
+              "uncond_p90": 0.02604,
+              "calmonth_p10": 0.0236,
+              "calmonth_p90": 0.02663,
+              "coverage": 0.80702
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.615
+              },
+              "2023-24": {
+                "n": 6,
+                "coverage": 1.0
+              }
+            },
+            "p10": -11.2,
+            "p50": 3.3,
+            "p90": 30.6
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 98.7,
+            "2": 98.4,
+            "3": 100.0,
+            "4": 107.2,
+            "5": 102.1,
+            "6": 102.2,
+            "7": 122.1,
+            "8": 122.2,
+            "9": 120.5,
+            "10": 115.3,
+            "11": 102.9,
+            "12": 101.0
+          }
+        }
+      },
+      {
+        "key": "GTM:Beans (black)",
+        "iso3": "GTM",
+        "country": "Guatemala",
+        "commodity": "Beans (black)",
+        "staple": "beans",
+        "market": "National Average",
+        "price_type": "wholesale",
+        "first_month": "2000-01",
+        "latest_month": "2026-06",
+        "n_months": 304,
+        "dropped_tail": [],
+        "gap": null,
+        "latest_real": 6209.03,
+        "now": {
+          "chg12_pct": -21.0,
+          "vs_3y_median_pct": -22.5
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-09",
+            "pass": true,
+            "why": "passes",
+            "select": {
+              "n": 72,
+              "model_p10": 0.01786,
+              "model_p90": 0.02072,
+              "uncond_p10": 0.02141,
+              "uncond_p90": 0.02293,
+              "calmonth_p10": 0.01812,
+              "calmonth_p90": 0.02342,
+              "coverage": 0.84722
+            },
+            "display": {
+              "n": 69,
+              "model_p10": 0.01537,
+              "model_p90": 0.02204,
+              "uncond_p10": 0.014,
+              "uncond_p90": 0.02063,
+              "calmonth_p10": 0.01352,
+              "calmonth_p90": 0.02024,
+              "coverage": 0.7971
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.846
+              },
+              "2023-24": {
+                "n": 6,
+                "coverage": 1.0
+              }
+            },
+            "p10": -5.1,
+            "p50": 1.2,
+            "p90": 19.4
+          },
+          "6": {
+            "target_month": "2026-12",
+            "pass": true,
+            "why": "passes",
+            "select": {
+              "n": 75,
+              "model_p10": 0.0195,
+              "model_p90": 0.02154,
+              "uncond_p10": 0.02538,
+              "uncond_p90": 0.02935,
+              "calmonth_p10": 0.02441,
+              "calmonth_p90": 0.02742,
+              "coverage": 0.89333
+            },
+            "display": {
+              "n": 64,
+              "model_p10": 0.02269,
+              "model_p90": 0.03574,
+              "uncond_p10": 0.0226,
+              "uncond_p90": 0.02862,
+              "calmonth_p10": 0.01989,
+              "calmonth_p90": 0.02977,
+              "coverage": 0.71875
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 1.0
+              },
+              "2023-24": {
+                "n": 6,
+                "coverage": 0.5
+              }
+            },
+            "p10": -6.9,
+            "p50": 5.1,
+            "p90": 33.4
+          },
+          "12": {
+            "target_month": "2027-06",
+            "pass": false,
+            "why": "80% band covered 99% on the early folds (need 70-90%)",
+            "select": {
+              "n": 76,
+              "model_p10": 0.02405,
+              "model_p90": 0.03164,
+              "uncond_p10": 0.0242,
+              "uncond_p90": 0.03712,
+              "calmonth_p10": 0.02606,
+              "calmonth_p90": 0.03395,
+              "coverage": 0.98684
+            },
+            "display": {
+              "n": 57,
+              "model_p10": 0.03403,
+              "model_p90": 0.02173,
+              "uncond_p10": 0.02673,
+              "uncond_p90": 0.03539,
+              "calmonth_p10": 0.02846,
+              "calmonth_p90": 0.03661,
+              "coverage": 0.7193
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.923
+              },
+              "2023-24": {
+                "n": 6,
+                "coverage": 1.0
+              }
+            },
+            "p10": -9.8,
+            "p50": 11.5,
+            "p90": 53.8
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 126.8,
+            "2": 127.1,
+            "3": 127.0,
+            "4": 126.6,
+            "5": 126.3,
+            "6": 126.2,
+            "7": 141.8,
+            "8": 143.1,
+            "9": 143.6,
+            "10": 144.8,
+            "11": 139.3,
+            "12": 133.8
+          }
+        }
+      },
+      {
+        "key": "HND:Maize (white)",
+        "iso3": "HND",
+        "country": "Honduras",
+        "commodity": "Maize (white)",
+        "staple": "maize",
+        "market": "National Average",
+        "price_type": "wholesale",
+        "first_month": "2000-01",
+        "latest_month": "2026-06",
+        "n_months": 303,
+        "dropped_tail": [],
+        "gap": null,
+        "latest_real": 7228.76,
+        "now": {
+          "chg12_pct": 22.1,
+          "vs_3y_median_pct": 22.2
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-09",
+            "pass": false,
+            "why": "did not beat the calendar-month baseline at tau 0.1 on the early folds",
+            "select": {
+              "n": 81,
+              "model_p10": 0.03593,
+              "model_p90": 0.02718,
+              "uncond_p10": 0.04267,
+              "uncond_p90": 0.02849,
+              "calmonth_p10": 0.02052,
+              "calmonth_p90": 0.03036,
+              "coverage": 0.8642
+            },
+            "display": {
+              "n": 66,
+              "model_p10": 0.02877,
+              "model_p90": 0.02101,
+              "uncond_p10": 0.02992,
+              "uncond_p90": 0.02496,
+              "calmonth_p10": 0.02574,
+              "calmonth_p90": 0.02596,
+              "coverage": 0.93939
+            },
+            "windows": {
+              "2015-16": {
+                "n": 11,
+                "coverage": 1.0
+              },
+              "2023-24": {
+                "n": 7,
+                "coverage": 1.0
+              }
+            },
+            "p10": -25.0,
+            "p50": -0.7,
+            "p90": 17.0
+          },
+          "6": {
+            "target_month": "2026-12",
+            "pass": false,
+            "why": "did not beat the calendar-month baseline at tau 0.1 on the early folds",
+            "select": {
+              "n": 81,
+              "model_p10": 0.0422,
+              "model_p90": 0.02964,
+              "uncond_p10": 0.05105,
+              "uncond_p90": 0.03927,
+              "calmonth_p10": 0.03362,
+              "calmonth_p90": 0.03208,
+              "coverage": 0.87654
+            },
+            "display": {
+              "n": 61,
+              "model_p10": 0.03743,
+              "model_p90": 0.02445,
+              "uncond_p10": 0.04236,
+              "uncond_p90": 0.03827,
+              "calmonth_p10": 0.03443,
+              "calmonth_p90": 0.04129,
+              "coverage": 0.93443
+            },
+            "windows": {
+              "2015-16": {
+                "n": 11,
+                "coverage": 1.0
+              },
+              "2023-24": {
+                "n": 7,
+                "coverage": 1.0
+              }
+            },
+            "p10": -33.3,
+            "p50": -3.9,
+            "p90": 17.1
+          },
+          "12": {
+            "target_month": "2027-06",
+            "pass": true,
+            "why": "passes",
+            "select": {
+              "n": 80,
+              "model_p10": 0.03993,
+              "model_p90": 0.03678,
+              "uncond_p10": 0.04701,
+              "uncond_p90": 0.04277,
+              "calmonth_p10": 0.04995,
+              "calmonth_p90": 0.03938,
+              "coverage": 0.825
+            },
+            "display": {
+              "n": 56,
+              "model_p10": 0.036,
+              "model_p90": 0.02578,
+              "uncond_p10": 0.04404,
+              "uncond_p90": 0.03685,
+              "calmonth_p10": 0.03929,
+              "calmonth_p90": 0.0372,
+              "coverage": 1.0
+            },
+            "windows": {
+              "2015-16": {
+                "n": 12,
+                "coverage": 0.667
+              },
+              "2023-24": {
+                "n": 5,
+                "coverage": 1.0
+              }
+            },
+            "p10": -35.2,
+            "p50": -8.7,
+            "p90": 10.9
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 88.7,
+            "2": 85.9,
+            "3": 82.4,
+            "4": 82.1,
+            "5": 82.9,
+            "6": 93.8,
+            "7": 107.4,
+            "8": 113.1,
+            "9": 109.8,
+            "10": 105.6,
+            "11": 97.9,
+            "12": 102.3
+          }
+        },
+        "decomposition": {
+          "from": "2026-03",
+          "to": "2026-06",
+          "total_pct": 14.6,
+          "world_pct": -8.2,
+          "fx_pct": -1.5,
+          "local_pct": 24.2,
+          "world_log": -0.0762,
+          "fx_log": -0.0135,
+          "local_log": 0.2258,
+          "inflation_log": 0.0206,
+          "currency_log": 0.0071
+        }
+      },
+      {
+        "key": "HND:Beans (red)",
+        "iso3": "HND",
+        "country": "Honduras",
+        "commodity": "Beans (red)",
+        "staple": "beans",
+        "market": "National Average",
+        "price_type": "wholesale",
+        "first_month": "2000-01",
+        "latest_month": "2026-06",
+        "n_months": 310,
+        "dropped_tail": [],
+        "gap": null,
+        "latest_real": 19695.42,
+        "now": {
+          "chg12_pct": -7.1,
+          "vs_3y_median_pct": -5.6
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-09",
+            "pass": true,
+            "why": "passes",
+            "select": {
+              "n": 84,
+              "model_p10": 0.02735,
+              "model_p90": 0.03707,
+              "uncond_p10": 0.03473,
+              "uncond_p90": 0.04371,
+              "calmonth_p10": 0.03261,
+              "calmonth_p90": 0.046,
+              "coverage": 0.85714
+            },
+            "display": {
+              "n": 72,
+              "model_p10": 0.03908,
+              "model_p90": 0.03022,
+              "uncond_p10": 0.04581,
+              "uncond_p90": 0.03497,
+              "calmonth_p10": 0.03435,
+              "calmonth_p90": 0.03546,
+              "coverage": 0.86111
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 1.0
+              },
+              "2023-24": {
+                "n": 7,
+                "coverage": 1.0
+              }
+            },
+            "p10": -19.0,
+            "p50": 1.9,
+            "p90": 25.2
+          },
+          "6": {
+            "target_month": "2026-12",
+            "pass": true,
+            "why": "passes",
+            "select": {
+              "n": 84,
+              "model_p10": 0.03317,
+              "model_p90": 0.05837,
+              "uncond_p10": 0.04505,
+              "uncond_p90": 0.07139,
+              "calmonth_p10": 0.03656,
+              "calmonth_p90": 0.07549,
+              "coverage": 0.89286
+            },
+            "display": {
+              "n": 66,
+              "model_p10": 0.03473,
+              "model_p90": 0.03617,
+              "uncond_p10": 0.04812,
+              "uncond_p90": 0.04231,
+              "calmonth_p10": 0.0345,
+              "calmonth_p90": 0.04305,
+              "coverage": 0.86364
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 1.0
+              },
+              "2023-24": {
+                "n": 7,
+                "coverage": 1.0
+              }
+            },
+            "p10": -21.4,
+            "p50": 1.6,
+            "p90": 41.4
+          },
+          "12": {
+            "target_month": "2027-06",
+            "pass": true,
+            "why": "passes",
+            "select": {
+              "n": 84,
+              "model_p10": 0.04377,
+              "model_p90": 0.06752,
+              "uncond_p10": 0.06424,
+              "uncond_p90": 0.09234,
+              "calmonth_p10": 0.05958,
+              "calmonth_p90": 0.08917,
+              "coverage": 0.85714
+            },
+            "display": {
+              "n": 60,
+              "model_p10": 0.04123,
+              "model_p90": 0.04507,
+              "uncond_p10": 0.05544,
+              "uncond_p90": 0.06788,
+              "calmonth_p10": 0.04928,
+              "calmonth_p90": 0.05443,
+              "coverage": 0.96667
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 1.0
+              },
+              "2023-24": {
+                "n": 7,
+                "coverage": 1.0
+              }
+            },
+            "p10": -22.8,
+            "p50": 1.3,
+            "p90": 66.5
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 102.7,
+            "2": 101.6,
+            "3": 107.0,
+            "4": 106.3,
+            "5": 99.1,
+            "6": 108.4,
+            "7": 114.3,
+            "8": 115.6,
+            "9": 103.1,
+            "10": 102.9,
+            "11": 102.8,
+            "12": 104.4
+          }
+        }
+      },
+      {
+        "key": "ETH:Teff (mixed)",
+        "iso3": "ETH",
+        "country": "Ethiopia",
+        "commodity": "Teff (mixed)",
+        "staple": "cereals",
+        "market": "Bahirdar",
+        "price_type": "wholesale",
+        "first_month": "2019-04",
+        "latest_month": "2026-05",
+        "n_months": 80,
+        "dropped_tail": [
+          "2026-06",
+          "2026-07",
+          "2026-08"
+        ],
+        "gap": null,
+        "latest_real": 722.35,
+        "now": {
+          "chg12_pct": -12.2,
+          "vs_3y_median_pct": -19.0
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-08",
+            "pass": false,
+            "why": "too little history to test (0 early-fold points, need 36)",
+            "select": null,
+            "display": null,
+            "windows": {
+              "2015-16": {
+                "n": 0,
+                "coverage": null
+              },
+              "2023-24": {
+                "n": 0,
+                "coverage": null
+              }
+            },
+            "p10": -5.7,
+            "p50": 2.6,
+            "p90": 25.0
+          },
+          "6": {
+            "target_month": "2026-11",
+            "pass": false,
+            "why": "too little history to test (0 early-fold points, need 36)",
+            "select": null,
+            "display": null,
+            "windows": {
+              "2015-16": {
+                "n": 0,
+                "coverage": null
+              },
+              "2023-24": {
+                "n": 0,
+                "coverage": null
+              }
+            },
+            "p10": -9.4,
+            "p50": 10.0,
+            "p90": 45.0
+          },
+          "12": {
+            "target_month": "2027-05",
+            "pass": false,
+            "why": "too little history to test (0 early-fold points, need 36)",
+            "select": null,
+            "display": null,
+            "windows": {
+              "2015-16": {
+                "n": 0,
+                "coverage": null
+              },
+              "2023-24": {
+                "n": 0,
+                "coverage": null
+              }
+            },
+            "p10": -7.0,
+            "p50": 14.2,
+            "p90": 76.0
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 134.3,
+            "2": 130.3,
+            "3": 128.4,
+            "4": 120.5,
+            "5": 120.3,
+            "6": 129.2,
+            "7": 130.8,
+            "8": 128.1,
+            "9": 127.6,
+            "10": 149.8,
+            "11": 147.4,
+            "12": 146.6
+          }
+        }
+      },
+      {
+        "key": "IDN:Rice",
+        "iso3": "IDN",
+        "country": "Indonesia",
+        "commodity": "Rice",
+        "staple": "rice",
+        "market": "National Average",
+        "price_type": "retail",
+        "first_month": "2008-02",
+        "latest_month": "2026-07",
+        "n_months": 222,
+        "dropped_tail": [],
+        "gap": null,
+        "latest_real": 8558.54,
+        "now": {
+          "chg12_pct": -1.0,
+          "vs_3y_median_pct": 1.4
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-10",
+            "pass": false,
+            "why": "did not beat the calendar-month baseline at tau 0.1 on the early folds",
+            "select": {
+              "n": 47,
+              "model_p10": 0.00511,
+              "model_p90": 0.00954,
+              "uncond_p10": 0.00535,
+              "uncond_p90": 0.00671,
+              "calmonth_p10": 0.00473,
+              "calmonth_p90": 0.00515,
+              "coverage": 0.70213
+            },
+            "display": {
+              "n": 88,
+              "model_p10": 0.00932,
+              "model_p90": 0.00861,
+              "uncond_p10": 0.00816,
+              "uncond_p90": 0.00671,
+              "calmonth_p10": 0.0085,
+              "calmonth_p90": 0.00698,
+              "coverage": 0.72727
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.923
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.538
+              }
+            },
+            "p10": -3.5,
+            "p50": -0.6,
+            "p90": 5.8
+          },
+          "6": {
+            "target_month": "2027-01",
+            "pass": false,
+            "why": "did not beat the unconditional baseline at tau 0.1 on the early folds",
+            "select": {
+              "n": 47,
+              "model_p10": 0.0059,
+              "model_p90": 0.01669,
+              "uncond_p10": 0.00504,
+              "uncond_p90": 0.00953,
+              "calmonth_p10": 0.00677,
+              "calmonth_p90": 0.00693,
+              "coverage": 0.68085
+            },
+            "display": {
+              "n": 85,
+              "model_p10": 0.0141,
+              "model_p90": 0.01525,
+              "uncond_p10": 0.01121,
+              "uncond_p90": 0.01078,
+              "calmonth_p10": 0.01202,
+              "calmonth_p90": 0.00897,
+              "coverage": 0.61176
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 1.0
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.769
+              }
+            },
+            "p10": -4.5,
+            "p50": -1.3,
+            "p90": 9.0
+          },
+          "12": {
+            "target_month": "2027-07",
+            "pass": false,
+            "why": "did not beat the unconditional baseline at tau 0.1 on the early folds",
+            "select": {
+              "n": 47,
+              "model_p10": 0.00799,
+              "model_p90": 0.0243,
+              "uncond_p10": 0.00668,
+              "uncond_p90": 0.01122,
+              "calmonth_p10": 0.00823,
+              "calmonth_p90": 0.00976,
+              "coverage": 0.57447
+            },
+            "display": {
+              "n": 79,
+              "model_p10": 0.02091,
+              "model_p90": 0.02345,
+              "uncond_p10": 0.01473,
+              "uncond_p90": 0.01454,
+              "calmonth_p10": 0.01507,
+              "calmonth_p90": 0.01382,
+              "coverage": 0.39241
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 0.769
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.923
+              }
+            },
+            "p10": -6.1,
+            "p50": -1.7,
+            "p90": 17.5
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 100.0,
+            "2": 101.8,
+            "3": 100.7,
+            "4": 100.5,
+            "5": 100.1,
+            "6": 101.1,
+            "7": 101.7,
+            "8": 100.9,
+            "9": 101.0,
+            "10": 100.5,
+            "11": 99.8,
+            "12": 99.5
+          }
+        }
+      },
+      {
+        "key": "PHL:Rice (regular milled)",
+        "iso3": "PHL",
+        "country": "Philippines",
+        "commodity": "Rice (regular milled)",
+        "staple": "rice",
+        "market": "National Average",
+        "price_type": "retail",
+        "first_month": "2000-01",
+        "latest_month": "2026-08",
+        "n_months": 320,
+        "dropped_tail": [],
+        "gap": null,
+        "latest_real": 28.76,
+        "now": {
+          "chg12_pct": 15.7,
+          "vs_3y_median_pct": -2.2
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-11",
+            "pass": true,
+            "why": "passes",
+            "select": {
+              "n": 84,
+              "model_p10": 0.00477,
+              "model_p90": 0.00676,
+              "uncond_p10": 0.00556,
+              "uncond_p90": 0.00707,
+              "calmonth_p10": 0.00602,
+              "calmonth_p90": 0.00708,
+              "coverage": 0.84524
+            },
+            "display": {
+              "n": 89,
+              "model_p10": 0.00941,
+              "model_p90": 0.00976,
+              "uncond_p10": 0.00769,
+              "uncond_p90": 0.01038,
+              "calmonth_p10": 0.01004,
+              "calmonth_p90": 0.01172,
+              "coverage": 0.61798
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 1.0
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.615
+              }
+            },
+            "p10": -1.6,
+            "p50": 2.6,
+            "p90": 11.2
+          },
+          "6": {
+            "target_month": "2027-02",
+            "pass": false,
+            "why": "did not beat the unconditional baseline at tau 0.9 on the early folds",
+            "select": {
+              "n": 84,
+              "model_p10": 0.00733,
+              "model_p90": 0.0108,
+              "uncond_p10": 0.00886,
+              "uncond_p90": 0.00931,
+              "calmonth_p10": 0.01073,
+              "calmonth_p90": 0.01107,
+              "coverage": 0.90476
+            },
+            "display": {
+              "n": 86,
+              "model_p10": 0.01758,
+              "model_p90": 0.01507,
+              "uncond_p10": 0.01532,
+              "uncond_p90": 0.01718,
+              "calmonth_p10": 0.0176,
+              "calmonth_p90": 0.01946,
+              "coverage": 0.56977
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 1.0
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.385
+              }
+            },
+            "p10": -2.6,
+            "p50": 4.8,
+            "p90": 17.9
+          },
+          "12": {
+            "target_month": "2027-08",
+            "pass": true,
+            "why": "passes",
+            "select": {
+              "n": 84,
+              "model_p10": 0.01105,
+              "model_p90": 0.01366,
+              "uncond_p10": 0.01585,
+              "uncond_p90": 0.01518,
+              "calmonth_p10": 0.0158,
+              "calmonth_p90": 0.01798,
+              "coverage": 0.89286
+            },
+            "display": {
+              "n": 80,
+              "model_p10": 0.02802,
+              "model_p90": 0.01935,
+              "uncond_p10": 0.02714,
+              "uncond_p90": 0.02297,
+              "calmonth_p10": 0.02858,
+              "calmonth_p90": 0.02532,
+              "coverage": 0.4625
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 1.0
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.538
+              }
+            },
+            "p10": -3.7,
+            "p50": 2.9,
+            "p90": 20.3
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 104.8,
+            "2": 102.8,
+            "3": 100.5,
+            "4": 105.1,
+            "5": 105.3,
+            "6": 102.9,
+            "7": 101.5,
+            "8": 101.5,
+            "9": 107.0,
+            "10": 102.4,
+            "11": 105.2,
+            "12": 106.6
+          }
+        }
+      },
+      {
+        "key": "IND:Rice",
+        "iso3": "IND",
+        "country": "India",
+        "commodity": "Rice",
+        "staple": "rice",
+        "market": "National Average",
+        "price_type": "retail",
+        "first_month": "2014-01",
+        "latest_month": "2026-08",
+        "n_months": 152,
+        "dropped_tail": [],
+        "gap": null,
+        "latest_real": 18.51,
+        "now": {
+          "chg12_pct": 2.1,
+          "vs_3y_median_pct": -0.3
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-11",
+            "pass": false,
+            "why": "too little history to test (0 early-fold points, need 36)",
+            "select": null,
+            "display": {
+              "n": 65,
+              "model_p10": 0.00361,
+              "model_p90": 0.00367,
+              "uncond_p10": 0.00657,
+              "uncond_p90": 0.00414,
+              "calmonth_p10": 0.00684,
+              "calmonth_p90": 0.00525,
+              "coverage": 0.76923
+            },
+            "windows": {
+              "2015-16": {
+                "n": 0,
+                "coverage": null
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.462
+              }
+            },
+            "p10": -2.1,
+            "p50": 0.1,
+            "p90": 3.1
+          },
+          "6": {
+            "target_month": "2027-02",
+            "pass": false,
+            "why": "too little history to test (0 early-fold points, need 36)",
+            "select": null,
+            "display": {
+              "n": 62,
+              "model_p10": 0.00622,
+              "model_p90": 0.00715,
+              "uncond_p10": 0.01083,
+              "uncond_p90": 0.0068,
+              "calmonth_p10": 0.01212,
+              "calmonth_p90": 0.00663,
+              "coverage": 0.70968
+            },
+            "windows": {
+              "2015-16": {
+                "n": 0,
+                "coverage": null
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.231
+              }
+            },
+            "p10": -2.6,
+            "p50": 0.8,
+            "p90": 5.3
+          },
+          "12": {
+            "target_month": "2027-08",
+            "pass": false,
+            "why": "too little history to test (0 early-fold points, need 36)",
+            "select": null,
+            "display": {
+              "n": 56,
+              "model_p10": 0.00579,
+              "model_p90": 0.00955,
+              "uncond_p10": 0.01598,
+              "uncond_p90": 0.01097,
+              "calmonth_p10": 0.01747,
+              "calmonth_p90": 0.01155,
+              "coverage": 0.69643
+            },
+            "windows": {
+              "2015-16": {
+                "n": 0,
+                "coverage": null
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.615
+              }
+            },
+            "p10": -2.1,
+            "p50": -0.1,
+            "p90": 5.9
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 103.1,
+            "2": 103.1,
+            "3": 103.0,
+            "4": 102.4,
+            "5": 101.8,
+            "6": 101.3,
+            "7": 100.6,
+            "8": 102.5,
+            "9": 103.7,
+            "10": 102.4,
+            "11": 102.9,
+            "12": 102.7
+          }
+        }
+      },
+      {
+        "key": "THA:Rice (5% broken)",
+        "iso3": "THA",
+        "country": "Thailand",
+        "commodity": "Rice (5% broken)",
+        "staple": "rice",
+        "market": "Bangkok",
+        "price_type": "wholesale",
+        "first_month": "2000-01",
+        "latest_month": "2026-08",
+        "n_months": 320,
+        "dropped_tail": [],
+        "gap": null,
+        "latest_real": 10961.71,
+        "now": {
+          "chg12_pct": 26.5,
+          "vs_3y_median_pct": -7.2
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-11",
+            "pass": false,
+            "why": "did not beat the unconditional baseline at tau 0.1 on the early folds",
+            "select": {
+              "n": 84,
+              "model_p10": 0.01704,
+              "model_p90": 0.01711,
+              "uncond_p10": 0.01603,
+              "uncond_p90": 0.0154,
+              "calmonth_p10": 0.01429,
+              "calmonth_p90": 0.01606,
+              "coverage": 0.83333
+            },
+            "display": {
+              "n": 89,
+              "model_p10": 0.01796,
+              "model_p90": 0.01958,
+              "uncond_p10": 0.02039,
+              "uncond_p90": 0.0223,
+              "calmonth_p10": 0.02183,
+              "calmonth_p90": 0.02434,
+              "coverage": 0.76404
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 1.0
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.692
+              }
+            },
+            "p10": -5.4,
+            "p50": 6.1,
+            "p90": 23.6
+          },
+          "6": {
+            "target_month": "2027-02",
+            "pass": false,
+            "why": "did not beat the unconditional baseline at tau 0.1 on the early folds",
+            "select": {
+              "n": 84,
+              "model_p10": 0.02613,
+              "model_p90": 0.02547,
+              "uncond_p10": 0.01715,
+              "uncond_p90": 0.01906,
+              "calmonth_p10": 0.01904,
+              "calmonth_p90": 0.01814,
+              "coverage": 0.78571
+            },
+            "display": {
+              "n": 86,
+              "model_p10": 0.027,
+              "model_p90": 0.02777,
+              "uncond_p10": 0.03874,
+              "uncond_p90": 0.03215,
+              "calmonth_p10": 0.03853,
+              "calmonth_p90": 0.03445,
+              "coverage": 0.72093
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 1.0
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.538
+              }
+            },
+            "p10": -7.2,
+            "p50": 10.8,
+            "p90": 35.8
+          },
+          "12": {
+            "target_month": "2027-08",
+            "pass": false,
+            "why": "did not beat the unconditional baseline at tau 0.1 on the early folds",
+            "select": {
+              "n": 84,
+              "model_p10": 0.02998,
+              "model_p90": 0.04189,
+              "uncond_p10": 0.02666,
+              "uncond_p90": 0.03201,
+              "calmonth_p10": 0.02917,
+              "calmonth_p90": 0.02737,
+              "coverage": 0.7619
+            },
+            "display": {
+              "n": 80,
+              "model_p10": 0.04861,
+              "model_p90": 0.0341,
+              "uncond_p10": 0.06357,
+              "uncond_p90": 0.04166,
+              "calmonth_p10": 0.06888,
+              "calmonth_p90": 0.04748,
+              "coverage": 0.6625
+            },
+            "windows": {
+              "2015-16": {
+                "n": 13,
+                "coverage": 1.0
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.538
+              }
+            },
+            "p10": -10.2,
+            "p50": 9.2,
+            "p90": 46.1
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 137.5,
+            "2": 122.5,
+            "3": 117.7,
+            "4": 115.8,
+            "5": 116.2,
+            "6": 131.1,
+            "7": 126.2,
+            "8": 124.6,
+            "9": 162.1,
+            "10": 143.0,
+            "11": 147.1,
+            "12": 149.9
+          }
+        }
+      },
+      {
+        "key": "BRA:Rice (milled, fine long-grain, type 1)",
+        "iso3": "BRA",
+        "country": "Brazil",
+        "commodity": "Rice (milled, fine long-grain, type 1)",
+        "staple": "rice",
+        "market": "São Paulo",
+        "price_type": "retail",
+        "first_month": "2014-01",
+        "latest_month": "2026-08",
+        "n_months": 148,
+        "dropped_tail": [],
+        "gap": null,
+        "latest_real": 1.85,
+        "now": {
+          "chg12_pct": -7.5,
+          "vs_3y_median_pct": -22.8
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-11",
+            "pass": false,
+            "why": "too little history to test (0 early-fold points, need 36)",
+            "select": null,
+            "display": {
+              "n": 61,
+              "model_p10": 0.01258,
+              "model_p90": 0.01531,
+              "uncond_p10": 0.01321,
+              "uncond_p90": 0.01606,
+              "calmonth_p10": 0.01537,
+              "calmonth_p90": 0.01947,
+              "coverage": 0.80328
+            },
+            "windows": {
+              "2015-16": {
+                "n": 0,
+                "coverage": null
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.769
+              }
+            },
+            "p10": -0.5,
+            "p50": 5.7,
+            "p90": 21.5
+          },
+          "6": {
+            "target_month": "2027-02",
+            "pass": false,
+            "why": "too little history to test (0 early-fold points, need 36)",
+            "select": null,
+            "display": {
+              "n": 58,
+              "model_p10": 0.01872,
+              "model_p90": 0.02142,
+              "uncond_p10": 0.01884,
+              "uncond_p90": 0.02666,
+              "calmonth_p10": 0.02368,
+              "calmonth_p90": 0.02683,
+              "coverage": 0.72414
+            },
+            "windows": {
+              "2015-16": {
+                "n": 0,
+                "coverage": null
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 0.692
+              }
+            },
+            "p10": 1.2,
+            "p50": 13.5,
+            "p90": 37.4
+          },
+          "12": {
+            "target_month": "2027-08",
+            "pass": false,
+            "why": "too little history to test (0 early-fold points, need 36)",
+            "select": null,
+            "display": {
+              "n": 52,
+              "model_p10": 0.03804,
+              "model_p90": 0.02805,
+              "uncond_p10": 0.04028,
+              "uncond_p90": 0.02925,
+              "calmonth_p10": 0.05042,
+              "calmonth_p90": 0.03148,
+              "coverage": 0.71154
+            },
+            "windows": {
+              "2015-16": {
+                "n": 0,
+                "coverage": null
+              },
+              "2023-24": {
+                "n": 13,
+                "coverage": 1.0
+              }
+            },
+            "p10": 2.4,
+            "p50": 25.4,
+            "p90": 59.0
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 133.3,
+            "2": 141.1,
+            "3": 138.9,
+            "4": 133.3,
+            "5": 126.7,
+            "6": 122.8,
+            "7": 114.4,
+            "8": 111.1,
+            "9": 132.8,
+            "10": 130.0,
+            "11": 133.3,
+            "12": 146.1
+          }
+        }
+      },
+      {
+        "key": "BRA:Maize (yellow)",
+        "iso3": "BRA",
+        "country": "Brazil",
+        "commodity": "Maize (yellow)",
+        "staple": "maize",
+        "market": "São Paulo",
+        "price_type": "wholesale",
+        "first_month": "2014-01",
+        "latest_month": "2026-08",
+        "n_months": 104,
+        "dropped_tail": [],
+        "gap": {
+          "months": 48,
+          "from": "2016-03",
+          "to": "2020-02"
+        },
+        "latest_real": 24.77,
+        "now": {
+          "chg12_pct": -5.0,
+          "vs_3y_median_pct": -5.6
+        },
+        "h": {
+          "3": {
+            "target_month": "2026-11",
+            "pass": false,
+            "why": "too little history to test (0 early-fold points, need 36)",
+            "select": null,
+            "display": null,
+            "windows": {
+              "2015-16": {
+                "n": 0,
+                "coverage": null
+              },
+              "2023-24": {
+                "n": 0,
+                "coverage": null
+              }
+            },
+            "p10": -20.7,
+            "p50": -3.1,
+            "p90": 7.7
+          },
+          "6": {
+            "target_month": "2027-02",
+            "pass": false,
+            "why": "too little history to test (0 early-fold points, need 36)",
+            "select": null,
+            "display": null,
+            "windows": {
+              "2015-16": {
+                "n": 0,
+                "coverage": null
+              },
+              "2023-24": {
+                "n": 0,
+                "coverage": null
+              }
+            },
+            "p10": -35.2,
+            "p50": -6.8,
+            "p90": 2.7
+          },
+          "12": {
+            "target_month": "2027-08",
+            "pass": false,
+            "why": "too little history to test (0 early-fold points, need 36)",
+            "select": null,
+            "display": null,
+            "windows": {
+              "2015-16": {
+                "n": 0,
+                "coverage": null
+              },
+              "2023-24": {
+                "n": 0,
+                "coverage": null
+              }
+            },
+            "p10": -35.7,
+            "p50": -20.0,
+            "p90": -9.8
+          }
+        },
+        "seasonal_median_3y": {
+          "base_month": "2026-03",
+          "by_calendar_month": {
+            "1": 110.6,
+            "2": 98.7,
+            "3": 100.0,
+            "4": 94.4,
+            "5": 92.8,
+            "6": 91.7,
+            "7": 87.3,
+            "8": 90.1,
+            "9": 91.1,
+            "10": 93.4,
+            "11": 95.2,
+            "12": 109.8
+          }
+        }
+      }
+    ],
+    "headline": {
+      "3": {
+        "all_series_display": {
+          "n": 1300,
+          "model_p10": 0.01868,
+          "model_p90": 0.01827,
+          "uncond_p10": 0.01969,
+          "uncond_p90": 0.01895,
+          "calmonth_p10": 0.01764,
+          "calmonth_p90": 0.01947,
+          "coverage": 0.79231
+        },
+        "all_series_full_2012_on": {
+          "n": 2238,
+          "model_p10": 0.02089,
+          "model_p90": 0.0203,
+          "uncond_p10": 0.02267,
+          "uncond_p90": 0.02094,
+          "calmonth_p10": 0.02041,
+          "calmonth_p90": 0.02135,
+          "coverage": 0.79669
+        },
+        "passing_series_display": {
+          "n": 408,
+          "model_p10": 0.016,
+          "model_p90": 0.01638,
+          "uncond_p10": 0.01612,
+          "uncond_p90": 0.01755,
+          "calmonth_p10": 0.01481,
+          "calmonth_p90": 0.01857,
+          "coverage": 0.76961
+        },
+        "passing_n_series": 5,
+        "tested_n_series": 20,
+        "beats_calendar_p90_display": 10,
+        "n_with_display": 17
+      },
+      "6": {
+        "all_series_display": {
+          "n": 1235,
+          "model_p10": 0.02465,
+          "model_p90": 0.02531,
+          "uncond_p10": 0.02675,
+          "uncond_p90": 0.02638,
+          "calmonth_p10": 0.02424,
+          "calmonth_p90": 0.02654,
+          "coverage": 0.77085
+        },
+        "all_series_full_2012_on": {
+          "n": 2178,
+          "model_p10": 0.02717,
+          "model_p90": 0.02823,
+          "uncond_p10": 0.03051,
+          "uncond_p90": 0.03015,
+          "calmonth_p10": 0.02841,
+          "calmonth_p90": 0.02985,
+          "coverage": 0.77227
+        },
+        "passing_series_display": {
+          "n": 130,
+          "model_p10": 0.0288,
+          "model_p90": 0.03596,
+          "uncond_p10": 0.03555,
+          "uncond_p90": 0.03557,
+          "calmonth_p10": 0.02731,
+          "calmonth_p90": 0.03651,
+          "coverage": 0.79231
+        },
+        "passing_n_series": 2,
+        "tested_n_series": 20,
+        "beats_calendar_p90_display": 9,
+        "n_with_display": 17
+      },
+      "12": {
+        "all_series_display": {
+          "n": 1143,
+          "model_p10": 0.03329,
+          "model_p90": 0.03128,
+          "uncond_p10": 0.03517,
+          "uncond_p90": 0.03367,
+          "calmonth_p10": 0.03534,
+          "calmonth_p90": 0.03419,
+          "coverage": 0.75766
+        },
+        "all_series_full_2012_on": {
+          "n": 2086,
+          "model_p10": 0.0373,
+          "model_p90": 0.03705,
+          "uncond_p10": 0.04208,
+          "uncond_p90": 0.03987,
+          "calmonth_p10": 0.04268,
+          "calmonth_p90": 0.04054,
+          "coverage": 0.73586
+        },
+        "passing_series_display": {
+          "n": 196,
+          "model_p10": 0.03434,
+          "model_p90": 0.02906,
+          "uncond_p10": 0.04063,
+          "uncond_p90": 0.04069,
+          "calmonth_p10": 0.03798,
+          "calmonth_p90": 0.03763,
+          "coverage": 0.77041
+        },
+        "passing_n_series": 3,
+        "tested_n_series": 20,
+        "beats_calendar_p90_display": 13,
+        "n_with_display": 17
+      }
+    },
+    "oni_test": {
+      "rows": [
+        {
+          "h": 3,
+          "tau": 0.1,
+          "n": 2553,
+          "pinball_without": 0.0228,
+          "pinball_with": 0.02293,
+          "gain_pct": -0.6,
+          "t": -0.92,
+          "p": 0.36,
+          "onset_n": 458,
+          "onset_gain_pct": -4.2
+        },
+        {
+          "h": 3,
+          "tau": 0.5,
+          "n": 2553,
+          "pinball_without": 0.04237,
+          "pinball_with": 0.04253,
+          "gain_pct": -0.4,
+          "t": -1.08,
+          "p": 0.28,
+          "onset_n": 458,
+          "onset_gain_pct": -2.3
+        },
+        {
+          "h": 3,
+          "tau": 0.9,
+          "n": 2553,
+          "pinball_without": 0.02349,
+          "pinball_with": 0.02397,
+          "gain_pct": -2.0,
+          "t": -1.07,
+          "p": 0.283,
+          "onset_n": 458,
+          "onset_gain_pct": -11.3
+        },
+        {
+          "h": 6,
+          "tau": 0.1,
+          "n": 2455,
+          "pinball_without": 0.02854,
+          "pinball_with": 0.02872,
+          "gain_pct": -0.6,
+          "t": -0.62,
+          "p": 0.535,
+          "onset_n": 459,
+          "onset_gain_pct": -5.6
+        },
+        {
+          "h": 6,
+          "tau": 0.5,
+          "n": 2455,
+          "pinball_without": 0.05847,
+          "pinball_with": 0.05907,
+          "gain_pct": -1.0,
+          "t": -1.13,
+          "p": 0.258,
+          "onset_n": 459,
+          "onset_gain_pct": -5.6
+        },
+        {
+          "h": 6,
+          "tau": 0.9,
+          "n": 2455,
+          "pinball_without": 0.03121,
+          "pinball_with": 0.03279,
+          "gain_pct": -5.1,
+          "t": -1.31,
+          "p": 0.192,
+          "onset_n": 459,
+          "onset_gain_pct": -20.7
+        },
+        {
+          "h": 12,
+          "tau": 0.1,
+          "n": 2286,
+          "pinball_without": 0.03734,
+          "pinball_with": 0.03768,
+          "gain_pct": -0.9,
+          "t": -1.62,
+          "p": 0.105,
+          "onset_n": 443,
+          "onset_gain_pct": -1.9
+        },
+        {
+          "h": 12,
+          "tau": 0.5,
+          "n": 2286,
+          "pinball_without": 0.075,
+          "pinball_with": 0.07624,
+          "gain_pct": -1.6,
+          "t": -1.56,
+          "p": 0.118,
+          "onset_n": 443,
+          "onset_gain_pct": -5.6
+        },
+        {
+          "h": 12,
+          "tau": 0.9,
+          "n": 2286,
+          "pinball_without": 0.03845,
+          "pinball_with": 0.04174,
+          "gain_pct": -8.6,
+          "t": -1.26,
+          "p": 0.208,
+          "onset_n": 443,
+          "onset_gain_pct": -30.6
+        }
+      ],
+      "adds_value": false,
+      "verdict": "adds_nothing",
+      "what": "The same pooled model with the ONI of the month before the origin as a third predictor, scored on the same points. gain_pct = pinball loss saved; t/p = Newey-West (12 lags) on the per-origin mean difference; onset = origins with ONI >= 0.5 and rising over three months."
+    },
+    "excluded": [],
+    "last_origin": "2026-05",
+    "checks": [],
+    "first_published": "2026-09-30",
+    "log_entries": 1
+  }
+}
