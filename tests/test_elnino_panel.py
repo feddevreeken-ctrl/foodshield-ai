@@ -1092,8 +1092,52 @@ def main() -> int:
             const t = (document.querySelector('#enso-status-home .enso-now-upd') || {}).textContent || '';
             const hm = d => String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0');
             const newest = new Date(Math.max(...ds));
-            return /^Data updated/.test(t) && / UTC$/.test(t.trim()) && t.includes(hm(newest));
+            return /^Data as of/.test(t) && / UTC/.test(t) && t.includes(hm(newest));
         }"""))
+        # 2026-09-30 (pipeline audit): the derived El Niño files must agree with their inputs and with each other. The checker runs on
+        # the committed data (clean), then on in-memory copies with one deliberate break each (must fail for that reason).
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import copy
+        import check_consistency as cc
+        import pipeline_dag as dag
+        clean = [r for r in cc.check_all() if r[0] == "FAIL"]
+        check("Pipeline: derived El Niño files are consistent with their inputs and with each other", not clean, "; ".join(m for _, _, m in clean)[:400])
+
+        def broken(mut):
+            docs = {}
+
+            def reader(name):
+                if name not in docs:
+                    docs[name] = copy.deepcopy(dag.read(name))
+                return docs[name]
+            mut(reader)
+            return {c for lvl, c, _ in cc.check_all(reader) if lvl == "FAIL"}
+
+        def old_advisory(rd):
+            rd("enso_replacement.json")["data"]["panama"]["advisory"] = "A-29-2026"
+            rd("enso_replacement.json")["data"]["panama"]["slots_now"] = 31
+
+        def wrong_oni(rd):
+            rd("enso_distribution.json")["data"]["target"]["record_oni"] = 9.9
+
+        def stale_neutral(rd):
+            rd("enso_outlook.json")["data"]["neutral_generated_at"] = "2026-01-01T00:00:00+00:00"
+
+        def old_build(rd):
+            rd("enso_replacement.json")["_meta"]["generated_at"] = "2026-01-01T00:00:00+00:00"
+
+        def wide_window(rd):
+            rd("enso_outlook.json")["_meta"]["generated_at"] = "2099-01-01T00:00:00+00:00"
+            rd("enso_replacement.json")["_meta"]["generated_at"] = "2099-01-02T00:00:00+00:00"
+
+        got = {"advisory": broken(old_advisory), "oni": broken(wrong_oni), "neutral": broken(stale_neutral),
+               "order": broken(old_build), "window": broken(wide_window)}
+        check("Pipeline: a copy with a stale Panama advisory, a disagreeing ONI scenario, a stale neutral vintage, a file older than its input, "
+              "or a build far from its feeds fails the consistency checker",
+              "panama_advisory" in got["advisory"] and "panama_slots" in got["advisory"] and "oni_scenario" in got["oni"]
+              and "neutral_vintage" in got["neutral"] and "older_than_input" in got["order"] and "window" in got["window"], str(got))
+        a = dag.data_as_of()
+        check("Pipeline: one data-as-of stamp reports the newest and the oldest cron feed and stays inside its window", bool(a["newest"]) and bool(a["oldest"]) and not a["wide"], str(a)[:300])
         check("Ocean audit: 'What is El Niño' follows the map, explains in a lede and four points, and stays near 1000 px", page.evaluate("""() => {
             const p = document.querySelector('#enso-pacific .pac-plate'), t = p && p.querySelector('.enso-plate-t');
             return !!t && t.textContent === 'What is El Niño' && !!p.querySelector('.pac-what-lede') && p.querySelectorAll('.pac-what li').length === 4

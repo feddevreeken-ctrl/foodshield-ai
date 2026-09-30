@@ -425,6 +425,7 @@ def main() -> int:
     out = os.path.join(DATA, "enso_model.json")
     with open(out, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=1, sort_keys=True, ensure_ascii=False); f.write("\n")
+    from pipeline_dag import stamp_file; stamp_file("enso_model.json")
     print(f"[OK] fitted {n_fit} | signal {n_sig} | El Nino {n_nino} | La Nina {n_nina} | thin {n_thin} | no-calendar {n_nocal}")
     print(f"[OK] wrote {out}")
     return 0

@@ -436,6 +436,7 @@ def main():
     OUT.parent.mkdir(parents=True, exist_ok=True)
     meta = out.pop("_meta")
     OUT.write_text(json.dumps({"_meta": meta, "data": out}, indent=1, ensure_ascii=False))
+    from pipeline_dag import stamp_file; stamp_file("ref/access_thresholds.json")
     print(f"wrote {OUT} in {time.time() - t0:.0f}s")
     print(json.dumps(out["lines"], indent=1)); print(json.dumps(chk, indent=1))
 

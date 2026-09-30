@@ -43848,12 +43848,19 @@ function showCommodityDetail(key) {
   };
   /* 2026-09-29 audit ("add last updated"): the newest collection among the El Niño feeds this page loaded, to the minute.
      Each plate keeps its own "read" date; this says when the freshest of them was collected. */
+  /* 2026-09-30 (pipeline audit): one "data as of" stamp. Mirrors data_as_of() in scripts/pipeline_dag.py: the NEWEST generated_at
+     among the El Niño feeds shown, and the OLDEST among the feeds the cron keeps fresh (hand-kept files carry their own review
+     date and are left out of the spread). The oldest date appears only when the spread passes STAMP_WINDOW_DAYS. */
+  var STAMP_WINDOW_DAYS = 3;
   var ensoUpdated = function () {
-    var ds = Object.keys(S.feedNames || {}).filter(function (k) { return /^(enso|sst_|rain_|seasonal_outlook)/.test(S.feedNames[k]) && k !== 'fskill' && k !== 'dist' && S[k]; })
-      .map(metaDate).filter(Boolean);
+    var keys = Object.keys(S.feedNames || {}).filter(function (k) { return /^(enso|sst_|rain_|seasonal_outlook)/.test(S.feedNames[k]) && k !== 'fskill' && k !== 'dist' && S[k] && metaDate(k); });
+    var ds = keys.map(metaDate);
     if (!ds.length) return '';
+    var auto = keys.filter(function (k) { var m = S.meta[k] || {}; return !(REVIEW_DAYS[k] || Number(m.review_days) > 0 || m.hand_run); }).map(metaDate);
     var d = new Date(Math.max.apply(null, ds)), hm = ('0' + d.getUTCHours()).slice(-2) + ':' + ('0' + d.getUTCMinutes()).slice(-2);
-    return '<span class="enso-now-c enso-now-upd" title="The newest collection among the El Niño feeds on this page; each figure shows its own read date"><i>Data updated</i><span class="enso-now-v"><em class="enso-num">' + esc(stamp(d)) + ', ' + hm + ' UTC</em></span></span>';
+    var old = auto.length ? new Date(Math.min.apply(null, auto)) : null;
+    var wide = old && (d.getTime() - old.getTime()) > STAMP_WINDOW_DAYS * 86400000;
+    return '<span class="enso-now-c enso-now-upd" title="The newest collection among the El Niño feeds on this page; each figure shows its own read date' + (wide ? '. The oldest feed the cron keeps fresh is more than ' + STAMP_WINDOW_DAYS + ' days older' : '') + '"><i>Data as of</i><span class="enso-now-v"><em class="enso-num">' + esc(stamp(d)) + ', ' + hm + ' UTC</em>' + (wide ? ' <em class="enso-num">· oldest ' + esc(stamp(old)) + '</em>' : '') + '</span></span>';
   };
   var feedStamp = function (key, label) {
     var issue = feedIssue(key), d = metaDate(key);

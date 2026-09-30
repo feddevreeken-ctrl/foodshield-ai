@@ -293,6 +293,7 @@ def main() -> int:
         json.dump(payload, f, indent=1, sort_keys=True, ensure_ascii=False)
         f.write("\n")
 
+    from pipeline_dag import stamp_file; stamp_file("enso_exposure.json")
     print(f"[OK] {len(out)} countries -> data/enso_exposure.json")
     print(f"[INFO] at ONI +1.5 (strong El Nino), worst production shocks:")
     for pct, iso in ranked[:10]:

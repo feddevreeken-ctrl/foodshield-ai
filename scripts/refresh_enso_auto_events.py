@@ -38,7 +38,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import COUNTRY_COORDS, DATA_DIR, write_json  # noqa: E402
+from _common import COUNTRY_COORDS, DATA_DIR, stamp_inputs, write_json  # noqa: E402
 from _news_gazetteer import COUNTRY_NAMES  # noqa: E402
 
 OUT = "enso_auto_events.json"
@@ -339,6 +339,7 @@ def main() -> int:
                "data/reliefweb_alerts.json, data/enso_news.json), filtered by rule; no network",
                notes="Reported hazards that fit El Niño, picked by rule for the El Niño map's 7-day and 30-day "
                      "stops. checked is false on every item: none was opened by a person.", status="ok")
+    stamp_inputs(OUT)
     print(f"[OK] {len(payload['events'])} auto El Niño marks ({n['fresh']} this run, {n['kept']} carried over) | "
           f"skipped {payload['skipped']}")
     return 0

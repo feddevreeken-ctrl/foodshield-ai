@@ -55,7 +55,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import write_json  # noqa: E402
+from _common import stamp_inputs, write_json  # noqa: E402
 import build_enso_model as bm  # noqa: E402
 from build_enso_outlook import PSD_HARVEST_OFFSET  # noqa: E402
 from refresh_usda_psd import COMMODITY_TO_KEY, FAS_TO_ISO3, NAME_TO_ISO3, URLS  # noqa: E402
@@ -165,6 +165,7 @@ def main() -> int:
         "pairs": out,
     }, source=f"Derived: FAOSTAT QCL ({SRC['faostat']}); USDA PSD bulk ({SRC['usda']}); fetched {datetime.now(timezone.utc).date()}; FAOSTAT licence CC BY-NC-SA 3.0 IGO, USDA public domain",
        notes="Hand-run builder (numpy, needs the FAOSTAT bulk); output committed, not refreshed by the cron. Re-run after build_enso_model.py.", status="ok")
+    stamp_inputs("enso_neutral.json")
     print(f"[OK] enso_neutral: {len(out)} pairs, {n_map} with USDA mapping")
     return 0
 

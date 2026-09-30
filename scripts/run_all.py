@@ -93,6 +93,8 @@ import refresh_rain_months      # CPC + CHIRPS rain for the last six complete mo
 import refresh_shipping_gauges  # Gatún, St. Louis (+ barge rate), Kaub, Rosario, Manaus: the water behind the lanes
 import refresh_import_ports     # PortWatch dry-bulk imports at the gateway ports of the El Niño concern regions
 import refresh_enso_freight     # USDA AgTransport: Gulf/PNW->Japan grain freight, export inspections, barged grain
+import build_enso_exposure       # El Niño exposure: fitted slopes x USDA balances per country (stdlib, no network)
+import build_enso_distribution   # El Niño harvest distribution: CPC RONI outlook -> ONI bridge -> Monte Carlo (numpy, lazy; cached pair residuals)
 import build_enso_replacement   # El Niño replacement trades: who replaces a lost export, who is left short (stdlib, no network)
 import build_enso_outlook       # El Niño outlook: fitted pairs x production x harvest, plus live signals per region
 import build_enso_changes       # El Niño "what changed": snapshot of every tracked measure + 6 h / 24 h / 7 d differences
@@ -168,7 +170,7 @@ STEPS = [
     # run before "Countries dataset" so a future consumer there sees this cycle's rows.
     ("FAO GIEWS FPMA prices",  refresh_fpma_prices.main,        "fpma_prices.json"),
     ("FPMA El Niño analogs",   refresh_enso_price_analogs.main, "enso_price_analogs.json"),
-    ("El Niño price outlook",  build_enso_price_outlook.main,   "enso_price_outlook.json"),
+    # (El Niño price outlook reads the harvest outlook, so it runs after it: see "El Niño price outlook" below.)
     # Own step after the outlook: its rolling-origin test (about 80 s) must not eat the outlook's time, and a failure
     # keeps the last good bands and log (the log is append-only; safe_run never touches it).
     ("Price-risk band",        build_price_risk_band.main,      "enso_price_risk.json"),
@@ -211,8 +213,16 @@ STEPS = [
     ("Import ports",           refresh_import_ports.main,       "enso_ports.json"),
     ("Grain freight (USDA)",   refresh_enso_freight.main,       "enso_freight.json"),
     # Derived, no network: reads the feeds above and the fitted model, so it runs after them.
+    # Order follows scripts/pipeline_dag.py: exposure (model + PSD) -> outlook -> distribution -> replacement -> price outlook -> changes.
+    # Hand-run, NOT here: build_enso_model / neutral (FAOSTAT + USDA bulks, scipy), hindcast, portfolio hindcast, access thresholds
+    # (scipy), forecast skill (yearly IRI scrape). Each carries _meta.hand_run + next_review_due; validate_data warns when overdue.
+    ("El Niño exposure",       build_enso_exposure.main,        "enso_exposure.json"),
     ("El Niño outlook",        build_enso_outlook.main,         "enso_outlook.json"),
+    # Needs numpy (lazy import: the step fails fast without it and the last good file stays). The FAOSTAT-derived pair
+    # residuals come from the committed data/ref/enso_pair_residuals.json, keyed to enso_model.json.
+    ("El Niño distribution",   build_enso_distribution.main,    "enso_distribution.json"),
     ("El Niño replacement",    build_enso_replacement.main,     "enso_replacement.json"),
+    ("El Niño price outlook",  build_enso_price_outlook.main,   "enso_price_outlook.json"),
     # Derived, no network: must run after every El Niño step above (it snapshots their outputs). Also appends data/enso_snapshots.json.
     ("El Niño what changed",   build_enso_changes.main,         "enso_changes.json"),
     ("Countries dataset",      build_countries_dataset.main,    "countries.json"),
@@ -388,6 +398,15 @@ def main():
     print(f"=== Output audit — {present}/{len(expected_files)} expected files present with data ===")
     if missing:
         print(f"=== Missing/empty files: {missing}")
+    # Soft-fail, loudly: the consistency checker prints every mismatch between derived files and their inputs, but a
+    # mismatch never blocks the commit (honest degradation; the gate test and validate_data are the authoritative stops).
+    try:
+        import check_consistency
+        check_consistency.main(["--soft"])
+        if any(r[0] == "FAIL" for r in check_consistency.check_all()):
+            print("!!! CONSISTENCY FAILURES above: derived El Niño files disagree with their inputs or each other !!!")
+    except Exception as e:  # noqa: BLE001
+        print(f"!!! consistency check could not run: {type(e).__name__}: {e}")
     if failures > FAIL_THRESHOLD:
         print(f"=== {failures} steps failed (> {FAIL_THRESHOLD}); exiting non-zero ===")
         sys.exit(1)

@@ -399,6 +399,7 @@ def main() -> int:
     }, "data": {"events": events, "overall": overall, "by_crop": by_crop, "by_region": by_region, "by_pair": by_pair, "model_tests": tests}}
     with open(os.path.join(ROOT, "data", "enso_portfolio_hindcast.json"), "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=1, ensure_ascii=False); fh.write("\n")
+    from pipeline_dag import stamp_file; stamp_file("enso_portfolio_hindcast.json")
     print(json.dumps(overall, indent=1))
     for e in events:
         if e.get("scored"):

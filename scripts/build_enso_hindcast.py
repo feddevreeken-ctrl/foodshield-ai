@@ -189,6 +189,7 @@ def main() -> int:
     }, "data": {"pairs": out}}
     with open(os.path.join(ROOT, "data", "enso_hindcast.json"), "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=1, ensure_ascii=False); fh.write("\n")
+    from pipeline_dag import stamp_file; stamp_file("enso_hindcast.json")
     print(f"[OK] enso_hindcast: {len(out)} pairs")
     return 0
 

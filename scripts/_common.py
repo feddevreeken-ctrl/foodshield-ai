@@ -88,6 +88,12 @@ def http_get(url, *, params=None, headers=None, timeout=DEFAULT_TIMEOUT, retries
     raise RuntimeError(f"GET {url} failed after {retries} attempts: {last_exc}")
 
 
+def stamp_inputs(filename):
+    """Record _meta.inputs {input: its generated_at} (and hand-run review fields) from scripts/pipeline_dag.py."""
+    import pipeline_dag
+    pipeline_dag.stamp_file(filename)
+
+
 def write_json(filename, payload, *, source=None, notes=None, status=None):
     """Write JSON to data/<filename> with a standard envelope.
 

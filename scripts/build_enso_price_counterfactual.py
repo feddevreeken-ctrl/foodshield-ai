@@ -44,7 +44,7 @@ import math
 import statistics
 from datetime import date
 
-from _common import DATA_DIR, http_get, write_json
+from _common import DATA_DIR, http_get, stamp_inputs, write_json
 import build_enso_price_outlook as po
 
 API = po.API
@@ -292,6 +292,7 @@ def main():
     write_json("enso_price_counterfactual.json", out, source=SOURCE, status="ok",
                notes=("Southern-Africa maize: actual real local price against a normal-year expectation, then adjusted for currency and "
                       "world maize. Excess is movement not explained by season, currency or world prices, never an El Niño effect. See data.method."))
+    stamp_inputs("enso_price_counterfactual.json")
 
 
 if __name__ == "__main__":

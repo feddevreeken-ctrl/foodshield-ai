@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import DATA_DIR, http_get, write_json  # noqa: E402
+from _common import DATA_DIR, http_get, stamp_inputs, write_json  # noqa: E402
 
 URL = "https://ensoforecast.iri.columbia.edu/figure4_plot/{year}/8"
 PAGE = "https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/"
@@ -153,6 +153,7 @@ def main() -> int:
                "single-model DJF values; current is this year's September plume, not yet verified. Skipped years had a figure whose axis could not be read (2002, 2003 label their ticks differently). Values are read from the SVG figure's line coordinates with its own axis "
                "ticks (linear-axis check to 0.01 °C). Observed: NOAA CPC ONI for the same DJF. The plume uses "
                "Niño 3.4 on each model's base period, not the ONI's centred base."), status="ok")
+    stamp_inputs("enso_forecast_skill.json")
     return 0
 
 

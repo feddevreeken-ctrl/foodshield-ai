@@ -54,7 +54,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import DATA_DIR, write_json  # noqa: E402
+from _common import DATA_DIR, stamp_inputs, write_json  # noqa: E402
 from _news_corridors import detect_countries  # noqa: E402
 import refresh_enso_auto_events as ae  # noqa: E402
 
@@ -387,6 +387,7 @@ def main():
           f"confidence {s['by_confidence']}; attribution {s['by_attribution']}")
     write_json("enso_event_threads.json", out, source="data/enso_recent_events.json, gdacs.json, reliefweb_alerts.json, enso_news.json, enso_auto_events.json (no network)",
                status="ok", notes="Reports of the same event merged by rule, with event confidence and El Niño attribution kept as two separate measures. See data.rule.")
+    stamp_inputs("enso_event_threads.json")
 
 
 if __name__ == "__main__":

@@ -37,7 +37,7 @@ import math
 import statistics
 from datetime import date
 
-from _common import DATA_DIR, http_get, write_json
+from _common import DATA_DIR, http_get, stamp_inputs, write_json
 import build_enso_price_outlook as bo
 
 try:
@@ -646,6 +646,7 @@ def main():
     write_json(LOG_FILE, {"entries": entries, "spec": SPEC, "rule": "append-only: one entry per run date, never edited"},
                source="FoodShield price-risk model", status="ok",
                notes="Frozen forecasts. Entries are never rewritten; data/enso_price_risk.json checks them against arriving prices.")
+    stamp_inputs(OUT_FILE)
 
 
 if __name__ == "__main__":

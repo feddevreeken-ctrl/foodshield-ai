@@ -691,6 +691,16 @@ def main():
           f"{len(critical_failures)} critical failures, "
           f"{len(soft_warnings)} soft warnings ===")
 
+    # Hand-run builders (scipy, FAOSTAT bulks) are not on the cron, so they record a review date. Soft: a warning, never a stop.
+    for msg in hand_run_overdue():
+        print(f"  [warn] {msg}")
+    try:
+        import check_consistency
+        for lvl, code, msg in check_consistency.check_all():
+            print(f"  [{'warn' if lvl == 'WARN' else 'WARN consistency'}] {code}: {msg}")
+    except Exception as e:  # noqa: BLE001
+        print(f"  [warn] consistency check could not run: {e}")
+
     if critical_failures:
         print("\nCRITICAL failures:")
         for filename, msg in critical_failures:
@@ -1406,6 +1416,28 @@ INTERPRETATION_CONTENT_TYPES = {
     True:  'ai_interpretation',
     False: 'deterministic_template',
 }
+
+
+def hand_run_overdue(today=None):
+    """Files marked _meta.hand_run whose next_review_due has passed (or that have none). Soft warning text, one per file."""
+    from datetime import date as _date
+    today = (today or _date.today()).isoformat()
+    out = []
+    for path in sorted(DATA_DIR.glob("**/*.json")):
+        if path.name.startswith("enso") or path.parent.name == "ref":
+            try:
+                head = json.loads(path.read_text())
+            except Exception:
+                continue
+            m = (head.get("_meta") or {}) if isinstance(head, dict) else {}
+            if m.get("hand_run") is True:
+                due = m.get("next_review_due")
+                rel = path.relative_to(DATA_DIR)
+                if not due:
+                    out.append(f"{rel} is hand-run and has no next_review_due")
+                elif due < today:
+                    out.append(f"{rel} is hand-run ({m.get('builder', 'see _meta')}) and its review was due {due}")
+    return out
 
 
 def validate_trade_restrictions(today=None):

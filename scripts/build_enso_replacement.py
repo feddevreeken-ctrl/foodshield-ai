@@ -10,7 +10,8 @@ Pure stdlib, deterministic, about a second. Reads:
   tm/<ISO>.json       FAOSTAT detailed trade matrix: each buyer's usual suppliers of the crop (top eight)
   usda_psd.json       exporter normal exports and ending stocks, buyer stocks and consumption
   trade_restrictions  export bans in force
-  enso_lanes.json     Panama Canal booking slots (latest advisory step and the 2023 floor)
+  enso_lanes.json     Panama Canal: newest advisory, draft, dated slot steps (the one in force today, the next scheduled) and the 2023 floor
+  enso_gauges.json    newest advisory id on the Canal Authority's own list (cross-check only)
   enso_freight.json   US Gulf ocean freight, latest against its own baseline (a cost signal only)
 
 Nothing here is typed in by hand except the rule parameters in PARAMS, all echoed into _meta.
@@ -21,6 +22,8 @@ from __future__ import annotations
 import json
 import re
 import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -63,19 +66,37 @@ def crop_match(crop, text):
     return bool(rx.search(text or ""))
 
 
-def panama_factors(lanes, today):
-    """Capacity factors for US Gulf -> Asia: slots against the canal's stated normal capacity."""
+def panama_factors(lanes, gauges, today):
+    """Capacity factors for US Gulf -> Asia: slots against the canal's stated normal capacity.
+
+    State comes from the curated lane file: `live_2026.latest_advisory` (the newest advisory a person has read),
+    `draft`, and the dated `steps`. The step in force today is the last one whose `effective` date has passed; a step
+    keyed to a future date is scheduled, not now, and is carried as slots_next / next_from. (`live_2026.advisory` is the
+    older deficit advisory that opened the restrictions; it is not the current state.) The newest advisory id on the
+    Canal Authority's own list (enso_gauges acp_advisories) is carried beside it so a stale curated module shows."""
     out = {"latest_advisory": 1.0, "floor_2023": 1.0, "note": "no lane data"}
     try:
         lane = [l for l in body(lanes)["lanes"] if l["id"] == "panama"][0]
         live = lane["live_2026"]
-        normal = float(re.findall(r"\d+", live["capacity_vessels_day"])[0])      # '36–38' -> lower end, 36
-        steps = [s for s in live["steps"] if s["effective"] <= today]
-        now_slots = float(steps[-1]["total"]) if steps else float(live["steps"][0]["total"])
+        normal = float(re.findall(r"\d+", live["capacity_vessels_day"])[0])      # '36-38' -> lower end, 36
+        steps = sorted((s for s in live["steps"] if s.get("total")), key=lambda s: s["effective"])
+        inforce = [s for s in steps if s["effective"] <= today]
+        now_step = inforce[-1] if inforce else steps[0]
+        nxt = next((s for s in steps if s["effective"] > today), None)
+        now_slots = float(now_step["total"])
         floor = float(min(s["total"] for s in lane["precedent_2023"]["steps"]))
+        la = live.get("latest_advisory") or {}
+        m = re.search(r"\((\d{2}(?:\.\d)?)\s*ft\)", live.get("draft") or "")
+        g = ((body(gauges).get("acp_advisories") or {}).get("latest") or {}) if gauges else {}
         out = {"latest_advisory": min(1.0, now_slots / normal), "floor_2023": min(1.0, floor / normal),
                "normal_slots": normal, "slots_now": now_slots, "slots_floor_2023": floor,
-               "advisory": live.get("advisory"), "note": "slots / lower end of the canal's stated 36-38 a day"}
+               "advisory": la.get("advisory") or (live.get("draft_advisory") or {}).get("advisory") or live.get("advisory"),
+               "advisory_date": la.get("advisory_date"),
+               "draft_ft": float(m.group(1)) if m else None,
+               "step_in_force": {"effective": now_step["effective"], "total": now_step["total"], "neopanamax": now_step.get("neopanamax")},
+               "slots_next": nxt["total"] if nxt else None, "next_from": nxt["effective"] if nxt else None,
+               "acp_list_newest": g.get("id"),
+               "note": "slots in force today / lower end of the canal's stated 36-38 a day; a later scheduled step is shown, not used"}
     except Exception as e:  # pragma: no cover
         out["note"] = f"lane data unreadable: {e}"
     return out
@@ -151,9 +172,9 @@ def main() -> int:
     psd = body(load("usda_psd.json"))
     restr = body(load("trade_restrictions.json"))
     pubfx = body(load("enso_published_effects.json"))
-    lanes, freight = load("enso_lanes.json"), load("enso_freight.json")
+    lanes, freight, gauges = load("enso_lanes.json"), load("enso_freight.json"), load("enso_gauges.json")
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    pan = panama_factors(lanes, today)
+    pan = panama_factors(lanes, gauges, today)
     fr = freight_signal(freight)
     case = O.get("who_pays_case", "record")
     oni = (O.get("cases") or {}).get(case, {}).get("oni")
@@ -338,7 +359,7 @@ def main() -> int:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "source": "Derived: enso_outlook who_pays (shortfall, buyers), FAOSTAT Detailed Trade Matrix (data/tm), USDA PSD, trade_restrictions, enso_lanes (Panama Canal Authority advisories), enso_freight (USDA AMS)",
         "version": "v1", "status": "ok",
-        "notes": "Scenario arithmetic, not a forecast. Potential import need met by other exporters, or left uncovered. Hand-run or cron: stdlib only, about a second.",
+        "notes": "Scenario arithmetic, not a forecast. Potential import need met by other exporters, or left uncovered. On the cron after the outlook: stdlib only, about a second. Panama state read from enso_lanes live_2026.latest_advisory (" + str(pan.get("advisory")) + ") and its dated steps: " + str((pan.get("step_in_force") or {}).get("total")) + " slots in force on " + today + ", next step " + str(pan.get("slots_next")) + " from " + str(pan.get("next_from")) + ".",
         "assumptions": [
             "Demand: each named buyer's lost-export tonnes from who_pays (already capped at the buyer's usual imports), plus the short supplier's own shortfall beyond its exports (its own import need). Tonnes come from the who_pays row fields, so the rule follows whatever production baseline the outlook uses. 'Other buyers' (past the five named) are not routed and are listed as unrouted.",
             "Candidate exporters, scope 'usual': the buyer's own usual suppliers of the crop in the FAOSTAT trade matrix (top eight partners, at least 1% of the buyer's imports and 10 kt). Each can ship at most 3x its normal volume to that buyer. Weights: normal tonnes.",
@@ -346,7 +367,7 @@ def main() -> int:
             "Exporter headroom = stock share x ending stocks + slack share x normal exports (USDA PSD). Three cases: 25% of stocks and no slack, 50% and 10%, 100% and 20%, never more than a doubling of normal exports (a cap: stocks alone are not exportable, China holds most of the world's rice stock). The shares are sensitivity assumptions, not estimates.",
             "Excluded: the short supplier, any exporter whose own harvest of the crop falls in the fitted outlook, sits in a published El Niño drought region for that crop, has a published study finding a fall, or has an export ban in force (trade_restrictions). Excluded, not haircut. Exporters whose own crop gains (for example US wheat) get no extra headroom.",
             "Rationing: a buyer's need is split across eligible exporters in proportion to weight; an exporter asked for more than its headroom is cut back pro rata across the buyers asking it. Repeated until nothing moves. All buyers of a crop compete for the same headroom.",
-            "Routes: US exports to East and Southeast Asian buyers are scaled by the Panama Canal capacity factor: booking slots in the latest advisory step (mid, high cases) or the 2023 floor (low case), over the lower end of the stated normal 36-38 a day. Gulf ocean freight (USDA AMS, US Gulf to Japan) is carried as a cost signal with its own baseline; no freight cost is invented or used to rank suppliers. Landlocked access, port capacity and overland routes are not modelled.",
+            "Routes: US exports to East and Southeast Asian buyers are scaled by the Panama Canal capacity factor: booking slots in the step in force today under the newest advisory, " + str(pan.get("advisory") or "unknown") + " (mid, high cases; a step scheduled for a later date is carried as slots_next but not used), or the 2023 floor (low case), over the lower end of the stated normal 36-38 a day. Gulf ocean freight (USDA AMS, US Gulf to Japan) is carried as a cost signal with its own baseline; no freight cost is invented or used to rank suppliers. Landlocked access, port capacity and overland routes are not modelled.",
             "Residual weeks of use = uncovered tonnes over the buyer's USDA annual consumption x 52. Buyer stocks are shown, not subtracted.",
             "Stretched exporters: extra tonnes above 25% of the exporter's normal exports.",
         ],
@@ -359,6 +380,8 @@ def main() -> int:
                "excluded": excl_rows, "panama": pan, "freight_signal": fr}
     out = {"_meta": meta, "data": payload}
     (DATA / "enso_replacement.json").write_text(json.dumps(out, indent=1, ensure_ascii=False))
+    from pipeline_dag import stamp_file   # records _meta.inputs {file: generated_at}
+    stamp_file("enso_replacement.json")
     print(f"[OK] enso_replacement: {len(pairs_out)} pairs, {n_total} buyer lines, crops {crops}")
     for c, m in mid.items():
         for sc, x in m.items():

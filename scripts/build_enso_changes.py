@@ -35,7 +35,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import DATA_DIR, write_json  # noqa: E402
+from _common import DATA_DIR, stamp_inputs, write_json  # noqa: E402
 
 WINDOWS = (("6h", 6), ("24h", 24), ("7d", 168))
 SNAP_CAP = 700            # hard cap on stored snapshots
@@ -499,6 +499,7 @@ def main() -> int:
                source="Derived from the El Niño feeds in data/ (see enso_changes.json inputs for each feed's own generated_at)",
                notes="What changed in the El Niño tab's inputs over the last 6 hours, 24 hours and 7 days, ranked by the rule in rank_rule. Built by scripts/build_enso_changes.py on every refresh.",
                status="ok")
+    stamp_inputs("enso_changes.json")
     for k, w in windows.items():
         print(f"  {k}: {w['status']}, {len(w['changes'])} changes")
     return 0

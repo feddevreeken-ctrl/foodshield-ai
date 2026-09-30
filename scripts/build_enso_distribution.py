@@ -2,8 +2,15 @@
 """
 build_enso_distribution.py — turn the 2027 harvest scenario into a predictive distribution.
 
-Hand-run builder (needs numpy and the FAOSTAT cache, like build_enso_model.py); its output
-data/enso_distribution.json is committed. Not on the cron.
+On the cron (run_all, after the outlook) when numpy is installed; without numpy the step is skipped and the
+last good file stays. Its output data/enso_distribution.json is committed.
+
+CI has no 34 MB FAOSTAT bulk, so the per-pair fit residuals (the only FAOSTAT-derived input) are cached in
+data/ref/enso_pair_residuals.json, keyed to the generated_at of data/enso_model.json. A hand run with the
+FAOSTAT cache (and scipy, through build_enso_model) rebuilds that cache; CI reads it. If the model file
+is newer than the cache, or a shown pair has no cached residuals, the step fails loudly instead of guessing.
+CI also re-fetches CPC's ONI and RONI text files (falling back to the committed copies), so the bridge follows
+the newest months.
 
 Two pieces.
 
@@ -46,14 +53,18 @@ import sys
 import urllib.request
 from datetime import datetime, timezone
 
-import numpy as np
+try:
+    import numpy as np
+except ImportError:  # run_all imports this module; main() refuses to run without numpy
+    np = None
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import build_enso_model as M  # noqa: E402
+M = None   # build_enso_model (needs scipy and the FAOSTAT bulk): imported only by a hand run that rebuilds the residual cache
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "data")
 REF = os.path.join(DATA, "ref")
+RES_CACHE = os.path.join(REF, "enso_pair_residuals.json")
 ONI_URL = "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
 RONI_URL = "https://www.cpc.ncep.noaa.gov/data/indices/RONI.ascii.txt"
 N_DRAWS = 10000
@@ -71,8 +82,13 @@ def fetch(url: str, gz_name: str, refresh: bool) -> tuple[str, str]:
             req = urllib.request.Request(url, headers={"User-Agent": "FoodShield/1.0"})
             txt = urllib.request.urlopen(req, timeout=60).read().decode("utf-8", "replace")
             os.makedirs(REF, exist_ok=True)
-            with gzip.open(p, "wt", encoding="utf-8") as fh:
-                fh.write(txt)
+            old = None
+            if os.path.exists(p):
+                with gzip.open(p, "rt", encoding="utf-8") as fh:
+                    old = fh.read()
+            if old != txt:   # unchanged text is not rewritten, so the cron commit holds no gzip-header noise
+                with open(p, "wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as fh:
+                    fh.write(txt.encode("utf-8"))
             return txt, datetime.now(timezone.utc).date().isoformat()
         except Exception as e:  # noqa: BLE001
             if not os.path.exists(p):
@@ -171,6 +187,38 @@ def pair_residuals(iso: str, crop: str, panel, cals, djf):
     return beta, Y - X @ beta
 
 
+def pair_fits(keys, model_ts: str, recompute: bool) -> tuple[dict, str]:
+    """{iso/crop: (El Nino slope fitted here, residuals)} and where they came from ('cache' or 'FAOSTAT').
+    The cache is valid for exactly the enso_model.json it was fitted beside (same generated_at)."""
+    cache = {}
+    if os.path.exists(RES_CACHE):
+        with open(RES_CACHE, encoding="utf-8") as fh:
+            cache = json.load(fh)
+    ok = cache.get("model_generated_at") == model_ts and all(k in (cache.get("pairs") or {}) for k in keys)
+    if ok and not recompute:
+        return {k: (cache["pairs"][k]["beta_nino"], np.array(cache["pairs"][k]["residuals"], float)) for k in keys}, "cache"
+    global M
+    try:
+        import build_enso_model as M_  # needs scipy and the FAOSTAT QCL bulk
+        M = M_
+        panel, cals, djf = M.load_faostat(), M.load_calendars(), M.load_oni()
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(f"pair residual cache is out of date for enso_model.json {model_ts} and the FAOSTAT fit cannot run here "
+                           f"({type(e).__name__}: {e}). Hand-run scripts/build_enso_distribution.py on a machine with the FAOSTAT cache.")
+    out, rec = {}, {}
+    for k in keys:
+        iso, crop = k.split("/")
+        beta, res = pair_residuals(iso, crop, panel, cals, djf)
+        out[k] = (float(beta[1]), res)
+        rec[k] = {"beta_nino": float(beta[1]), "residuals": [float(v) for v in res]}
+    with open(RES_CACHE, "w", encoding="utf-8") as fh:
+        json.dump({"model_generated_at": model_ts, "built": datetime.now(timezone.utc).isoformat(),
+                   "note": "Residuals of the two-slope fit in build_enso_model.py (MA-detrended log yield minus the fit), per shown pair; "
+                           "written by a hand run of build_enso_distribution.py, read by the cron run.", "pairs": rec}, fh, indent=1)
+        fh.write("\n")
+    return out, "FAOSTAT"
+
+
 def pct_summary(v) -> dict:
     q = np.percentile(v, PCTS)
     return {**{f"p{p:02d}": round(float(x), 1) for p, x in zip(PCTS, q)},
@@ -178,7 +226,10 @@ def pct_summary(v) -> dict:
 
 
 def main() -> int:
-    refresh = "--refresh" in sys.argv
+    if np is None:
+        raise RuntimeError("numpy is not installed: the El Niño distribution is not rebuilt (the last good file stays)")
+    # In CI the ONI/RONI text files are re-read so the bridge follows the newest months; locally they come from the committed copies.
+    refresh = "--refresh" in sys.argv or bool(os.environ.get("GITHUB_ACTIONS"))
     oni_txt, oni_date = fetch(ONI_URL, "cpc_oni_ascii.txt.gz", refresh)
     roni_txt, roni_date = fetch(RONI_URL, "cpc_roni_ascii.txt.gz", refresh)
     oni, roni = parse(oni_txt, 4, 3), parse(roni_txt, 3, 2)
@@ -224,14 +275,16 @@ def main() -> int:
     check = [round(float(np.mean((roni_d >= edges[i]) & (roni_d < edges[i + 1])) * 100), 1) for i in range(9)]
 
     # B2-B4 pairs
-    panel, cals, djf = M.load_faostat(), M.load_calendars(), M.load_oni()
     shown = [r for r in outlook["rows_all"] if r.get("status") == "shown"]
+    model_ts = json.load(open(os.path.join(DATA, "enso_model.json"), encoding="utf-8"))["_meta"]["generated_at"]
+    fits, fit_src = pair_fits([f"{r['iso']}/{r['crop']}" for r in shown], model_ts, "--recompute" in sys.argv)
+    print(f"[INFO] pair residuals from {fit_src}")
     pairs, pct_draws = [], {}
     for r in shown:
         iso, crop = r["iso"], r["crop"]
         m = model[iso][crop]
-        beta, res = pair_residuals(iso, crop, panel, cals, djf)
-        assert abs(beta[1] * 100 - m["yield_pct_per_oni_nino"]) < 0.01, (iso, crop, beta[1], m["yield_pct_per_oni_nino"])
+        beta1, res = fits[f"{iso}/{crop}"]
+        assert abs(beta1 * 100 - m["yield_pct_per_oni_nino"]) < 0.01, (iso, crop, beta1, m["yield_pct_per_oni_nino"])
         b_up = rng.normal(m["yield_pct_per_oni_nino"] / 100, m["se_nino_pct"] / 100, N_DRAWS)
         b_dn = rng.normal(m["yield_pct_per_oni_nina"] / 100, m["se_nina_pct"] / 100, N_DRAWS)
         eps = rng.choice(res, size=N_DRAWS, replace=True)
@@ -268,8 +321,9 @@ def main() -> int:
         crops[crop] = {"pairs": [p["key"] for p in ps], "production_kt": float(w.sum()), "change_pct": pct_summary(agg)}
 
     payload = {"_meta": {
-        "generated_at": datetime.now(timezone.utc).isoformat(), "version": "v1", "hand_run": True,
-        "builder": "scripts/build_enso_distribution.py (numpy; needs the FAOSTAT cache; not on the cron)",
+        "generated_at": datetime.now(timezone.utc).isoformat(), "version": "v2", "hand_run": False,
+        "builder": "scripts/build_enso_distribution.py (numpy; on the cron after the outlook; pair residuals from data/ref/enso_pair_residuals.json, rebuilt by a hand run with the FAOSTAT cache)",
+        "pair_residuals": {"source": fit_src, "model_generated_at": model_ts},
         "sources": {
             "oni": {"url": ONI_URL, "fetched": oni_date, "cache": "data/ref/cpc_oni_ascii.txt.gz", "licence": "NOAA CPC, public domain"},
             "roni": {"url": RONI_URL, "fetched": roni_date, "cache": "data/ref/cpc_roni_ascii.txt.gz", "licence": "NOAA CPC, public domain"},
@@ -310,6 +364,8 @@ def main() -> int:
     with open(os.path.join(DATA, "enso_distribution.json"), "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=1, ensure_ascii=False)
         fh.write("\n")
+    from pipeline_dag import stamp_file
+    stamp_file("enso_distribution.json")
     t = payload["data"]["target"]
     print(f"[OK] bridge at RONI {med}: ONI fit {bridge_at_median['oni_fit']}, sd {bridge_at_median['oni_sd']}; "
           f"target ONI P05/50/95 {t['oni_draw']['p05']}/{t['oni_draw']['p50']}/{t['oni_draw']['p95']}")

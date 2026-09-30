@@ -41,7 +41,7 @@ import re
 import statistics
 from datetime import date
 
-from _common import DATA_DIR, http_get, write_json
+from _common import DATA_DIR, http_get, stamp_inputs, write_json
 
 API = "https://fpma.fao.org/giews/v4/global/price_module/api/v1"
 TOOL_URL = "https://fpma.fao.org/giews/fpmat4/"
@@ -688,6 +688,7 @@ def main():
         {"name": "El Niño region cards and published effects", "file": "data/enso_regions.json, data/enso_published_effects.json"},
         {"name": "NOAA CPC ONI", "url": "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt", "file": "data/enso.json"}]})
     path.write_text(json.dumps(env, indent=2, ensure_ascii=False))
+    stamp_inputs("enso_price_outlook.json")
 
 
 if __name__ == "__main__":
