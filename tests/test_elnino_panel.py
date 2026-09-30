@@ -1184,6 +1184,22 @@ def main() -> int:
               page.locator('#enso-map .leaflet-map-pane').count() == 1
               and page.input_value('#enso-level') == '-1.5' and page.input_value('#enso-mode') == 'crop')
 
+        print("\nmodel quality tags (2026-09-30): tiers come from the file, exploratory rows are headline false and greyed")
+        page.evaluate("showTab('ensoharvest')")
+        page.wait_for_selector('#enso-outlook .enso-mq', state='attached', timeout=25_000)
+        mq = page.evaluate("""async () => {
+            const O = (await (await fetch('data/enso_outlook.json')).json()).data;
+            const shown = O.rows_all.filter(r => r.status === 'shown' && !r.in_season);
+            const rows = [...document.querySelectorAll('#enso-outlook .enso-ol-row[data-k]')];
+            const match = rows.length > 0 && rows.every(r => { const f = shown.filter(x => x.iso + '/' + x.crop === r.getAttribute('data-k'))[0];
+                const t = r.querySelector('.enso-mq'); return f && t && t.textContent === f.model_quality.tier && r.classList.contains('is-exploratory') === (f.model_quality.tier === 'exploratory'); });
+            const expl = O.rows_all.filter(r => r.model_quality.tier === 'exploratory');
+            return {match, n: rows.length, allHave: O.rows_all.every(r => r.model_quality && typeof r.headline === 'boolean' && r.headline === (r.model_quality.tier !== 'exploratory')),
+                    explHeadline: expl.length > 0 && expl.every(r => r.headline === false), rule: !!O.model_quality_rule};
+        }""")
+        check("outlook rows show the tier from the file and exploratory rows are greyed", mq["match"] and mq["n"] > 0, str(mq))
+        check("every row carries model_quality and headline; exploratory rows are headline false", mq["allHave"] and mq["explHeadline"] and mq["rule"], str(mq))
+
         print("\nstage B instruments and consolidated plates")
         page.evaluate("showTab('ensoharvest')")
         page.wait_for_selector('#subview-ensoharvest.active #enso-harvest-fig')

@@ -234,7 +234,51 @@ def allocate_buyers(total: float, shares: list[dict], cap_of, top: int = 5) -> l
     return rows
 
 
+# Quality tiers for each outlook row, computed from the FORWARD portfolio hindcast only (enso_portfolio_hindcast.json by_pair):
+# each pair's El Nino term refitted on earlier harvests, scored in tonnes against the no-El-Nino yardstick.
+# One-sided binomial chance of at least k right directions in n winters if the direction were a coin flip.
+TIER_RULE = ("Computed from the past-winter test only (each pair refitted on earlier harvests, scored in tonnes against the no-El Niño yardstick). "
+             "Supported: direction right with a coin-flip chance of 10% or less (6 of 7 winters), tonnes error below the yardstick's, "
+             "and at most 1 false alarm (a predicted fall that became a rise). "
+             "Moderate: direction right with a coin-flip chance of 25% or less (5 of 7) and tonnes error below the yardstick's. "
+             "Exploratory: anything else, or not scored forward. Exploratory rows are kept but are not headline figures. "
+             "The pairs were chosen on the full record, so even Supported is an upper bound on skill.")
+
+
+def binom_tail(k: int, n: int) -> float:
+    return sum(math.comb(n, i) for i in range(k, n + 1)) / 2 ** n
+
+
+def model_quality(pair: str, status: str, by_pair: dict) -> dict:
+    s = by_pair.get(pair)
+    if status != "shown" or not s or not s.get("events"):
+        return {"tier": "exploratory", "headline": False,
+                "basis": {"events": 0, "sign_right": None, "beats_yardstick": None, "false_alarms": None},
+                "reason": "not scored", "rule": "Not in the past-winter test: its El Niño slope does not pass the test that puts a pair in the outlook."}
+    n, k = s["events"], s["sign_right"]
+    p = binom_tail(k, n)
+    beats = bool(s["mae_kt"] < s["mae_yardstick_kt"])
+    fa = s["false_alarms"]
+    if p <= 0.10 and beats and fa <= 1:
+        tier, reason = "supported", "direction right in " + str(k) + " of " + str(n)
+    elif p <= 0.25 and beats:
+        tier, reason = "moderate", "direction right in " + str(k) + " of " + str(n)
+    else:
+        tier = "exploratory"
+        reason = ("direction right in only " + str(k) + " of " + str(n)) if p > 0.25 else ("error above the no-El Niño yardstick")
+    return {"tier": tier, "headline": tier != "exploratory",
+            "basis": {"events": n, "sign_right": k, "beats_yardstick": beats, "false_alarms": fa,
+                      "mae_kt": s["mae_kt"], "mae_yardstick_kt": s["mae_yardstick_kt"], "coin_flip_chance": round(p, 3)},
+            "reason": reason,
+            "rule": (f"Past-winter test, {n} winters: direction right {k} of {n}, tonnes error "
+                     f"{'below' if beats else 'above'} the no-El Niño yardstick, {fa} false alarm{'s' if fa != 1 else ''}.")}
+
+
 def main() -> int:
+    try:
+        by_pair = body(load("enso_portfolio_hindcast.json")).get("by_pair") or {}
+    except (OSError, ValueError):
+        by_pair = {}
     enso = body(load("enso.json"))
     model_doc = load("enso_model.json")
     model = body(model_doc)
@@ -414,6 +458,9 @@ def main() -> int:
                                                if same and usda_kt and row["scenario_kt"] is not None else None)
                 if usd:
                     row["price"] = {"usd_per_t": usd, "series": plabel.strip(), "month": pmonth}
+                mq = model_quality(f"{iso}/{crop}", row["status"], by_pair)
+                row["model_quality"] = {k: mq[k] for k in ("tier", "basis", "reason", "rule")}
+                row["headline"] = mq["headline"]
                 rows.append(row)
         rows.sort(key=lambda r: abs(r["change_kt_record"] or 0), reverse=True)
         return rows
@@ -560,7 +607,7 @@ def main() -> int:
     for c in by_crop.values():
         c["countries"].sort(key=lambda x: x["change_kt_record"])
 
-    write_json("enso_outlook.json", {
+    path = write_json("enso_outlook.json", {
         "cases": cases, "harvest_winter": f"DJF {jan_year - 1}-{str(jan_year)[2:]}",
         "method": ("exp(fitted log-yield slope × ONI) − 1, applied to an ENSO-neutral production baseline, at two ONI values the record contains. "
                    "Neutral baseline = the model's own trend yield for the harvest year (centred 9-year moving average of log yield, extended by its recent slope, no El Niño term) "
@@ -575,6 +622,7 @@ def main() -> int:
         "q_nino_family": n_fitted,
         "q_nino_rule": ("A row is shown only when its El Niño slope passes Benjamini–Hochberg control on its own: "
                         + (f"q < 0.10 across all {n_fitted} fitted pairs." if n_fitted else "q < 0.10 across all fitted pairs.")),
+        "model_quality_rule": TIER_RULE,
         "regions": out_regions,
         "crops": sorted(by_crop.values(), key=lambda c: c["loss_kt_record"]),
         "rows_all": rows_all,
@@ -583,6 +631,9 @@ def main() -> int:
         "who_pays_rule": f"At the fit's strongest winter (ONI {rec_oni:+.1f}). The shortfall is the fitted change on the ENSO-neutral baseline, not on USDA's figure. It cuts exports first, allocated to buyers by Comtrade value share, each capped at its usual imports (USDA) with the capped excess spread over the other named buyers; any remainder is extra import need. Priced at the latest World Bank price. Stocks shown, not subtracted.",
     }, source="Derived: enso_regions, enso_model, crop_calendars, USDA PSD, World Bank Pink Sheet; live signals from JRC ASAP, GDACS, World Bank RTFP, ReliefWeb, El Niño news feed, trade_restrictions",
        notes="Tonnes first, on an ENSO-neutral baseline with USDA shown beside it; value at stake is tonnes × latest World Bank price, not a price forecast.", status="ok")
+    doc = json.loads(path.read_text())
+    doc["_meta"]["model_quality_rule"] = TIER_RULE
+    path.write_text(json.dumps(doc, indent=2, ensure_ascii=False))
     print(f"[OK] enso_outlook: {len(out_regions)} regions, {sum(len(r['fitted']) for r in out_regions)} fitted rows, "
           f"cases {cases['observed']['oni']} / {cases['record']['oni']}")
     return 0

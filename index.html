@@ -11364,6 +11364,13 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-ol-n3 > span { display:block; margin-top:3px; font:10.5px/1.35 'Geist Mono',monospace; color:var(--t3); white-space:nowrap; }
 #tab-elnino .enso-ol-scn b { color:var(--t1); }
 #tab-elnino .enso-ol-who > span.is-warn { color:#e0864a; }
+/* 2026-09-30: model quality tag (supported / moderate / exploratory) and the greyed exploratory rows. */
+#tab-elnino .enso-mq { display:inline-block; font:10px/1.5 'Geist Mono',monospace; letter-spacing:.06em; text-transform:uppercase; padding:0 6px; border:1px solid var(--b3); color:var(--t2); cursor:help; }
+#tab-elnino .enso-ol-who > span.enso-mq { display:inline-block; }
+#tab-elnino .enso-mq.is-supported { color:var(--t1); border-color:#86c7cc; }
+#tab-elnino .enso-mq.is-moderate { color:var(--t2); border-style:dashed; }
+#tab-elnino .enso-mq.is-exploratory { color:var(--t3); border-style:dotted; }
+#tab-elnino .enso-ol-row.is-exploratory, #tab-elnino .enso-outlook-table tr.is-exploratory { opacity:.5; filter:grayscale(1); }
 #tab-elnino .enso-ol-chart > .enso-ol-fine { margin:10px 0 0; padding-top:8px; border-top:1px solid var(--b1); max-width:110ch; }
 #tab-elnino .enso-ol-chart > .enso-ol-fine b { color:var(--t2); font-weight:600; }
 @media (max-width:760px) { #tab-elnino .enso-ol-top { grid-template-columns:minmax(0,1fr); } #tab-elnino .enso-ol-top > div + div { border-left:0; padding-left:0; border-top:1px solid var(--b1); } #tab-elnino .enso-ol-top .enso-ol-switch { grid-template-columns:minmax(0,1fr); } }
@@ -45600,6 +45607,25 @@ function showCommodityDetail(key) {
     return 'Tested on past El Niños held out one at a time, the harvest moved the way the model pointed in ' + sr + ' of ' + ev + ' cases' + (fe ? ' (' + fs + ' of ' + fe + ' when fitted only on earlier harvests)' : '') + '. ' +
       (function () { var o = S.pfhind && S.pfhind.overall; return o ? 'Scored as a portfolio over ' + o.events + ' past winters, the total pointed the right way in ' + o.sign_right + ', and its tonnes error (' + (o.mae_kt / 1000).toFixed(1) + ' Mt) was ' + (o.mae_kt > o.mae_yardstick_kt ? 'larger' : 'smaller') + ' than assuming no El Niño effect (' + (o.mae_yardstick_kt / 1000).toFixed(1) + ' Mt). ' : 'The total itself has not been scored. '; })() + 'No past winter exceeded ONI +2.5.';
   }
+  /* 2026-09-30: model quality tier per row, read from data/enso_outlook.json (model_quality, headline), computed in
+     build_enso_outlook.py from the forward portfolio hindcast. The page only displays it. */
+  function mqTier(f) { return (f.model_quality && f.model_quality.tier) || ''; }
+  function mqTag(f) {
+    var q = f.model_quality; if (!q || !q.tier) return '';
+    return '<span class="enso-mq is-' + esc(q.tier) + '" title="' + esc(q.tier + ': ' + (q.reason || '')) + '">' + esc(q.tier) + '</span>';
+  }
+  /* The tier rule and the scores behind it, for the method fold. Every number is read from the two data files. */
+  function modelQualityNote(O) {
+    var P = S.pfhind, o = P && P.overall, t = P && P.model_tests; if (!O || !O.model_quality_rule || !o) return '';
+    var mt = function (kt) { return (Math.abs(kt) / 1000).toFixed(1) + ' Mt'; };
+    var v0 = t && (t.variants || [])[0], v3 = t && (t.variants || []).filter(function (v) { return v.id === 'A3'; })[0], pl = t && t.pair_level;
+    return '<p><b>Model quality tags.</b> ' + esc(O.model_quality_rule) + '</p>' +
+      '<p><b>Portfolio scores.</b> Over ' + o.events + ' past El Niño winters the seven pairs added up pointed the right way in ' + o.sign_right + '; the tonnes error was ' + mt(o.mae_kt) + ' against ' + mt(o.mae_yardstick_kt) + ' for assuming no El Niño effect, the total ran ' + mt(o.bias_kt) + (o.bias_kt < 0 ? ' too low' : ' too high') + ' on average, and ' + o.false_alarms + ' predicted falls were rises. ' +
+      (v3 && v3.winters ? 'With the choice of pairs re-run inside each winter on earlier data only, the direction was right in ' + v3.sign_right + ' of ' + v3.winters + ' winters and the error was ' + mt(v3.mae_kt) + ' against ' + mt(v3.mae_yardstick_kt) + '. ' : '') +
+      (pl ? 'Pair by pair, the seven pairs were right in ' + pl.outlook_pairs.sign_right + ' of ' + pl.outlook_pairs.pair_winters + ' winters, the pairs a fresh test picks on earlier data in ' + pl.rule_selected_on_earlier_data.sign_right + ' of ' + pl.rule_selected_on_earlier_data.pair_winters + ', and all pairs in ' + pl.all_pair_winters.sign_right + ' of ' + pl.all_pair_winters.pair_winters + '. ' : '') +
+      (t ? t.variants_tried + ' variants were tried (shrinking each slope, pooling slopes by region, gates on earlier winters); none met the rule for adoption, so the fit is unchanged. ' : '') +
+      'Read Supported as direction and rough size, not as a forecast.</p>';
+  }
   function hindcastLine(f) {
     var h = hindcastOf(f.iso, f.crop); if (!h) return '';
     return '<span class="enso-live-sub' + (h.sign_right * 2 <= h.events ? ' is-warn' : '') + '">past El Niños: sign right ' + h.sign_right + ' of ' + h.events + (h.beats_no_change ? '' : '; size no better than the fit without its El Niño term') + '</span>';
@@ -45726,8 +45752,8 @@ function showCommodityDetail(key) {
         var lab = typeof v !== 'number' ? '' : inside
           ? '<span class="enso-ol-barlab is-in" style="' + (v < 0 ? 'left:calc(' + xv.toFixed(2) + '% + 6px)' : 'right:calc(' + (100 - xv).toFixed(2) + '% + 6px)') + '">' + fmtKt(v) + '</span>'
           : '<span class="enso-ol-barlab" style="' + (v < 0 ? 'right:calc(' + (100 - far).toFixed(2) + '% + 6px)' : 'left:calc(' + far.toFixed(2) + '% + 6px)') + '">' + fmtKt(v) + '</span>';
-        return '<div class="enso-ol-row' + (yv < 0 ? ' is-falls' : ' is-rises') + '" role="row" data-k="' + esc(f.iso + '/' + f.crop) + '">' +
-          '<div class="enso-ol-who" role="rowheader"><button type="button" data-map-country="' + esc(f.iso) + '">' + esc(nameFor(f.iso)) + '</button> ' + esc(crop(f.crop)) + '<span>' + esc(f.harvest) + '</span>' + (h ? '<span>past El Niños ' + h.sign_right + '/' + h.events + ' right</span>' : '') + (rough ? '<span class="is-warn">size rough</span>' : '') + '</div>' +
+        return '<div class="enso-ol-row' + (yv < 0 ? ' is-falls' : ' is-rises') + (mqTier(f) === 'exploratory' ? ' is-exploratory' : '') + '" role="row" data-k="' + esc(f.iso + '/' + f.crop) + '">' +
+          '<div class="enso-ol-who" role="rowheader"><button type="button" data-map-country="' + esc(f.iso) + '">' + esc(nameFor(f.iso)) + '</button> ' + esc(crop(f.crop)) + '<span>' + esc(f.harvest) + '</span>' + mqTag(f) + (h ? '<span>past El Niños ' + h.sign_right + '/' + h.events + ' right</span>' : '') + (rough ? '<span class="is-warn">size rough</span>' : '') + '</div>' +
           '<div class="enso-ol-track" role="cell"><i class="enso-ol-zero" style="left:' + pc(0) + '"></i>' +
             (typeof v === 'number' ? '<i class="enso-ol-bar" style="left:' + Math.min(x0, xv).toFixed(2) + '%;width:' + Math.abs(xv - x0).toFixed(2) + '%"></i>' : '') +
             (b ? '<i class="enso-ol-whisk" style="left:' + pc(b[0]) + ';width:' + (P(b[1]) - P(b[0])).toFixed(2) + '%"></i>' : '') +
@@ -45742,8 +45768,8 @@ function showCommodityDetail(key) {
     var lead = scen + dotChart;
     var band = function (x) { return x ? num(x[0], 0) + ' to ' + num(x[1], 0) + '%' : ''; };
     var rowAhead = function (f) {
-      return '<tr class="is-' + (f.change_pct_record < 0 ? 'falls' : 'rises') + '"><td class="enso-ol-h">' + esc(f.harvest) + '</td>' +
-        '<th scope="row"><button type="button" data-map-country="' + esc(f.iso) + '">' + esc(nameFor(f.iso)) + '</button> <span>' + esc(crop(f.crop)) + '</span></th>' +
+      return '<tr class="is-' + (f.change_pct_record < 0 ? 'falls' : 'rises') + (mqTier(f) === 'exploratory' ? ' is-exploratory' : '') + '"><td class="enso-ol-h">' + esc(f.harvest) + '</td>' +
+        '<th scope="row"><button type="button" data-map-country="' + esc(f.iso) + '">' + esc(nameFor(f.iso)) + '</button> <span>' + esc(crop(f.crop)) + '</span> ' + mqTag(f) + '</th>' +
         '<td class="enso-ol-v" data-label="Yield at ONI ' + num(rec.oni, 1) + '"><b>' + num(f.change_pct_record, 0) + '%</b> <i>' + band(f.change_pct_record_90) + '</i>' + hindcastLine(f) + '</td>' +
         /* Neutral baseline, USDA now and the scenario with its 90% model range: the row's own numbers (P0 double-count fix). */
         '<td class="enso-ol-v" data-label="Neutral baseline">' + cellN(f) + '</td><td class="enso-ol-v" data-label="USDA now">' + cellU(f) + '</td>' +
@@ -45752,8 +45778,8 @@ function showCommodityDetail(key) {
         '<td class="enso-ol-v enso-ol-rec" data-label="At today’s ONI ' + num(obs.oni, 1) + '">' + num(f.change_pct_observed, 0) + '% · ' + fmtKt(f.change_kt_observed) + '</td></tr>';
     };
     var rowNow = function (f) {
-      return '<tr class="is-' + (f.change_pct_record < 0 ? 'falls' : 'rises') + '"><td class="enso-ol-h">' + esc(f.harvest) + '</td>' +
-        '<th scope="row"><button type="button" data-map-country="' + esc(f.iso) + '">' + esc(nameFor(f.iso)) + '</button> <span>' + esc(crop(f.crop)) + '</span></th>' +
+      return '<tr class="is-' + (f.change_pct_record < 0 ? 'falls' : 'rises') + (mqTier(f) === 'exploratory' ? ' is-exploratory' : '') + '"><td class="enso-ol-h">' + esc(f.harvest) + '</td>' +
+        '<th scope="row"><button type="button" data-map-country="' + esc(f.iso) + '">' + esc(nameFor(f.iso)) + '</button> <span>' + esc(crop(f.crop)) + '</span> ' + mqTag(f) + '</th>' +
         '<td class="enso-ol-v" data-label="Yield at ONI ' + num(rec.oni, 1) + '"><b>' + num(f.change_pct_record, 0) + '%</b> <i>' + band(f.change_pct_record_90) + '</i>' + hindcastLine(f) + '</td>' +
         '<td class="enso-ol-v" data-label="Neutral baseline">' + cellN(f) + '</td><td class="enso-ol-v" data-label="USDA now">' + cellU(f) + '</td>' +
         '<td colspan="2" class="enso-ol-na">already in USDA’s in-season estimate; no tonnes added</td>' +
@@ -45787,7 +45813,7 @@ function showCommodityDetail(key) {
       (gaps.length ? '<p class="enso-outlook-gap"><b>Where the fit is silent or partial.</b> ' + gaps.join('; ') + '.</p>' : '') +
       (iod && typeof iod.value === 'number' ? '<p class="enso-outlook-gap"><b>Also in play: the Indian Ocean Dipole</b> is on its ' + esc(iod.state) + ' side (' + num(iod.value, 2) + ' °C, ' + esc(iod.agency) + ', ' + esc(iod.window) + '; it counts as an event only after about eight weeks). A positive IOD alongside El Niño usually means a wetter East African short-rains season and a drier Australian winter crop.</p>' : '') +
       '<p><b>Sources.</b> Neutral baseline: FAOSTAT yields 1961–2024 (trend) × harvested area, on USDA’s basis where the marketing-year mapping is checked. USDA PSD 2026/27 is shown beside it, not multiplied. Prices: World Bank ' + esc(priceMon) + '.</p>' +
-      '<p><b>Two kinds of blank.</b> “Not modelled” means FoodShield has no verified crop calendar for that country and crop, so it says nothing about it. “No detected relationship” means the pair was fitted and no El Niño slope survived the tests. Neither means El Niño has no effect there.</p><p>Each pair was fitted on detrended log-yield against winter ONI with Newey–West errors; a row is shown only when its El Niño slope survives Benjamini–Hochberg control on its own (q &lt; 0.10 across all ' + (O.q_nino_family || 146) + ' fitted pairs). The change at an ONI value is exp(b·ONI) − 1; the 90% band comes from the standard error. Tonnes = yield change × the neutral baseline in the table (trend yield × area, no El Niño term, so USDA’s own allowance is not counted twice); dollars = tonnes × today’s World Bank price, not a price forecast. ' + hindcastSummary() + '</p>' +
+      '<p><b>Two kinds of blank.</b> “Not modelled” means FoodShield has no verified crop calendar for that country and crop, so it says nothing about it. “No detected relationship” means the pair was fitted and no El Niño slope survived the tests. Neither means El Niño has no effect there.</p><p>Each pair was fitted on detrended log-yield against winter ONI with Newey–West errors; a row is shown only when its El Niño slope survives Benjamini–Hochberg control on its own (q &lt; 0.10 across all ' + (O.q_nino_family || 146) + ' fitted pairs). The change at an ONI value is exp(b·ONI) − 1; the 90% band comes from the standard error. Tonnes = yield change × the neutral baseline in the table (trend yield × area, no El Niño term, so USDA’s own allowance is not counted twice); dollars = tonnes × today’s World Bank price, not a price forecast. ' + hindcastSummary() + '</p>' + modelQualityNote(O) +
       (excluded ? '<ul class="enso-ol-excluded">' + excluded + '</ul>' : '') + '</details>' +
       '</figure>';
     el.querySelectorAll('[data-map-country]').forEach(function (b) { b.onclick = function () { ensoFocus(b.getAttribute('data-map-country')); }; });
