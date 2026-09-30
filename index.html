@@ -47952,7 +47952,7 @@ function showCommodityDetail(key) {
   /* 2026-09-30 round 3: one line under each lens H2 saying what the lens shows; the numbers stay in the bullets. */
   var LENS_DEK = {
     elnino: 'How warm the tropical Pacific runs now, and what NOAA’s forecasters expect for the winter.',
-    ensoharvest: 'What FoodShield’s fit expects from each country’s harvest at today’s ONI, crop by crop.',
+    ensoharvest: 'What FoodShield’s fit expects from each 2027 harvest if the winter peaks strongly, crop by crop: a scenario, not a forecast.',
     ensowater: 'Where the harvests El Niño can hit are shipped, and how Panama and the rivers move cargo now.',
     ensomoney: 'Staple prices where El Niño hits harvests, after inflation, set against the last El Niño.',
     ensolive: 'What agencies and newswires report now from the countries El Niño touches.'
@@ -47961,11 +47961,12 @@ function showCommodityDetail(key) {
     var it = [], dm = function (x) { var d = new Date(x); return isNaN(d) ? '' : d.getUTCDate() + ' ' + MON3[d.getUTCMonth()]; };
     var cropW = function (c) { return ({ corn: 'maize' })[c] || c; };
     if (sub === 'ensoharvest') {
-      var O = S.outlook || {}, obs = O.cases && O.cases.observed, rows = (O.rows_all || []).filter(function (r) { return r.status === 'shown' && typeof r.change_kt_observed === 'number'; });
-      var fall = rows.filter(function (r) { return r.change_kt_observed < 0; }).sort(function (a, b) { return a.change_kt_observed - b.change_kt_observed; })[0];
-      var rise = rows.filter(function (r) { return r.change_kt_observed > 0; }).sort(function (a, b) { return b.change_kt_observed - a.change_kt_observed; })[0];
-      if (fall && obs) it.push('<b>' + num(fall.change_pct_observed, 0) + '%</b> ' + esc(nameFor(fall.iso)) + ' ' + cropW(fall.crop) + ' (' + fmtKt(fall.change_kt_observed) + ', ' + esc(fall.harvest) + ') at today’s ONI ' + num(obs.oni, 1) + ': the largest fitted fall in tonnes.');
-      if (rise && obs) it.push('<b>' + num(rise.change_pct_observed, 0) + '%</b> ' + esc(nameFor(rise.iso)) + ' ' + cropW(rise.crop) + ' (' + fmtKt(rise.change_kt_observed) + '): the largest fitted rise.');
+      /* One ONI per lens (maps court, 2026-09-30): the map, the callouts and this lede all use the winter scenario. */
+      var O = S.outlook || {}, rec = O.cases && O.cases.record, rows = (O.rows_all || []).filter(function (r) { return r.status === 'shown' && typeof r.change_kt_record === 'number'; });
+      var fall = rows.filter(function (r) { return r.change_kt_record < 0; }).sort(function (a, b) { return a.change_kt_record - b.change_kt_record; })[0];
+      var rise = rows.filter(function (r) { return r.change_kt_record > 0; }).sort(function (a, b) { return b.change_kt_record - a.change_kt_record; })[0];
+      if (fall && rec) it.push('<b>' + num(fall.change_pct_record, 0) + '%</b> ' + esc(nameFor(fall.iso)) + ' ' + cropW(fall.crop) + ' (' + fmtKt(fall.change_kt_record) + ', ' + esc(fall.harvest) + ') if the winter reaches ONI ' + num(rec.oni, 1) + ': the largest fitted fall in tonnes.');
+      if (rise && rec) it.push('<b>' + num(rise.change_pct_record, 0) + '%</b> ' + esc(nameFor(rise.iso)) + ' ' + cropW(rise.crop) + ' (' + fmtKt(rise.change_kt_record) + '): the largest fitted rise.');
       var wp = (O.who_pays || []).filter(function (w) { return (w.buyers || []).length; })[0], wc = O.cases && O.cases[O.who_pays_case];
       if (wp && wc) it.push('Buyers who would lose ' + esc(nameFor(wp.iso)) + '’s ' + cropW(wp.crop) + ' at ONI ' + num(wc.oni, 1) + ': ' + wp.buyers.slice(0, 3).map(function (b) { return esc(nameFor(b.iso)) + ' ' + fmtKt(b.kt).replace('+', ''); }).join(', ') + '.');
     }
