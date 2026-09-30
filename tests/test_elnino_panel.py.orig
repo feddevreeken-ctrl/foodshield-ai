@@ -1019,33 +1019,6 @@ def main() -> int:
         # 2026-09-30 (replacement engine): Prices gains "Who replaces it, and who is left short" (about 1.0k at 1440 wide), ceiling +1000.
         CEIL = {'elnino': 5350, 'ensoharvest': 5725, 'ensowater': 7300, 'ensomoney': 6400, 'ensolive': 6100}
         check("no lens grows past its height ceiling", all(heights.get(k, 0) <= v for k, v in CEIL.items()), str(heights))
-        # 2026-09-30 (crop belt): the "Is the expected pattern showing up?" plate weights the 30-day SPI by harvested crop area
-        # (data/ref/crop_area_2p5.json.gz, MIRCA2000). Weights sum to 1 per region and crop, and every status is recomputed here from the file.
-        page.evaluate("showTab('ensolive')"); page.wait_for_timeout(6000)
-        cb = page.evaluate("""async () => {
-            const raw = await (await fetch('data/ref/crop_area_2p5.json.gz')).arrayBuffer();
-            const u = new Uint8Array(raw);
-            const txt = (u[0] === 0x1f && u[1] === 0x8b) ? await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('gzip'))).text() : new TextDecoder().decode(u);
-            const F = JSON.parse(txt), regs = (await (await fetch('data/enso_regions.json')).json()).data.regions.filter(r => r.crop_belt);
-            const sums = [], missing = [];
-            regs.forEach(r => { const e = F.regions[r.id]; if (!e) { missing.push(r.id); return; } r.crop_belt.crops.forEach(c => { const x = e.crops[c]; if (!x) missing.push(r.id + '/' + c); else sums.push(Math.abs(x.cells.reduce((a, p) => a + p[1], 0) - 1)); }); });
-            const RA = (await (await fetch('data/rain_anomaly.json')).json()).data, mon = new Date().getUTCMonth() + 1, bad = [];
-            const SP = RA.spi.slice(); RA.fill.cells.forEach((c, i) => { if (RA.fill.anom[i] == null && RA.fill.mm[i] == null) return; if (RA.fill.spi[i] != null) SP[c] = RA.fill.spi[i]; });
-            const W = { showing: 'Showing up', leaning: 'Leaning that way', notyet: 'Not yet', against: 'Running against', season: 'Not in season', small: 'Too small to test' };
-            const dom = {}; document.querySelectorAll('#enso-confirm tbody tr').forEach(tr => { dom[tr.children[0].firstChild.textContent.trim()] = tr.lastElementChild.textContent.trim(); });
-            regs.filter(r => r.rain === 'drier' || r.rain === 'wetter').forEach(r => {
-                const e = r.rain === 'drier' ? -1 : 1, F1 = F.regions[r.id], names = Object.keys(F1.crops), tot = names.reduce((a, k) => a + F1.crops[k].ha, 0), w = {}; let act = 0;
-                names.forEach(k => { const c = F1.crops[k], sh = c.ha / tot, st = c.stage[mon] || {}; c.cells.forEach(p => { w[p[0]] = (w[p[0]] || 0) + p[1] * sh; }); act += sh * ((st.plant || 0) + (st.veg || 0) + (st.fill || 0) + (st.year || 0)); });
-                const it = Object.keys(w).filter(i => SP[+i] != null).map(i => [SP[+i], w[i]]).sort((a, b) => a[0] - b[0]), cover = it.reduce((a, p) => a + p[1], 0);
-                let cum = 0, med = null; for (const p of it) { cum += p[1]; if (cum >= cover / 2 - 1e-12) { med = p[0]; break; } }
-                const months = r.rain_season_months, inRain = !months || months.includes(mon);
-                let st; if (!inRain || act < 0.5) st = 'season'; else if (!it.length || cover < 0.5) st = 'small'; else { const v = med * e; st = v >= 50 ? 'showing' : v > 0 ? 'leaning' : v > -50 ? 'notyet' : 'against'; }
-                if (dom[r.label] !== W[st]) bad.push(r.id + ': file says ' + W[st] + ', page says ' + dom[r.label]);
-            });
-            return { n: regs.length, maxdev: Math.max(...sums), missing, bad, rows: document.querySelectorAll('#enso-confirm tbody tr').length };
-        }""")
-        check("crop-area weights sum to 1 for every region and crop in the regions file", cb['n'] >= 10 and not cb['missing'] and cb['maxdev'] < 1e-6, str(cb))
-        check("every crop-belt status on the Reported lens is recomputed from the weight file and the live SPI", not cb['bad'] and cb['rows'] >= cb['n'], str(cb))
         # 2026-09-30: the food-security band leads every lens, is computed from the feeds and links to the lenses that hold the evidence.
         band = page.evaluate("""async () => {
             const O = (await (await fetch('data/enso_outlook.json')).json()).data, f = document.getElementById('enso-foodband');

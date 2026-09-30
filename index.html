@@ -52639,41 +52639,87 @@ function showCommodityDetail(key) {
     vals.sort(function (a, b) { return a - b; });
     return { n: vals.length, med: vals.length % 2 ? vals[(vals.length - 1) / 2] : (vals[vals.length / 2 - 1] + vals[vals.length / 2]) / 2, end: R.end };
   }
+  /* 2026-09-30 crop-belt reading. A country or regional median SPI is misleading where a region is sub-national or a country
+     has opposite ENSO relations by season. The weights come from data/ref/crop_area_2p5.json.gz (MIRCA2000 harvested area per crop
+     on the 2.5 degree rain grid, built by scripts/build_crop_area.py, weights sum to 1 per region and crop) and are applied here to the
+     live 30-day SPI, so the reading updates with every cron run. The same file carries each crop's stage by calendar month. */
+  var CROPAREA = { d: null, st: 0 };
+  function cropAreaLoad() {
+    if (CROPAREA.st) return; CROPAREA.st = 1;
+    var done = function (ok) { CROPAREA.st = ok ? 2 : 3; try { renderConfirm(); } catch (e) {} };
+    fetch('data/ref/crop_area_2p5.json.gz').then(function (r) { if (!r.ok) throw new Error('crop area ' + r.status); return r.arrayBuffer(); }).then(function (b) {
+      var u = new Uint8Array(b);
+      if (u[0] === 0x1f && u[1] === 0x8b) { if (typeof DecompressionStream === 'undefined') throw new Error('no gzip'); return new Response(new Blob([b]).stream().pipeThrough(new DecompressionStream('gzip'))).text(); }
+      return new TextDecoder().decode(u);
+    }).then(function (t) { CROPAREA.d = JSON.parse(t); done(true); }).catch(function () { done(false); });
+  }
+  var CROP_WORD = { maize: 'maize', wheat: 'wheat', rice: 'rice', soy: 'soy', sorghum: 'sorghum', millet: 'millet', oil_palm: 'oil palm', pulses: 'beans and pulses' };
+  var STAGE_WORD = { plant: 'planting', veg: 'vegetative', fill: 'flowering and grain fill', harvest: 'harvest', year: 'perennial', off: 'outside season' };
+  /* Crop-area-weighted median of the 30-day SPI over the region's crop belt, plus each crop's stage in month `mon`. */
+  function cropBeltRain(id, mon) {
+    var C = CROPAREA.d && CROPAREA.d.regions && CROPAREA.d.regions[id], R = rainNowWin(30); if (!C || !R || !R.spi) return null;
+    var names = Object.keys(C.crops), tot = 0, w = {}, stages = [], active = 0;
+    names.forEach(function (k) { tot += C.crops[k].ha; });
+    names.forEach(function (k) {
+      var c = C.crops[k], sh = c.ha / tot, st = (c.stage || {})[mon] || {}, best = 'off', bv = -1;
+      c.cells.forEach(function (p) { w[p[0]] = (w[p[0]] || 0) + p[1] * sh; });
+      for (var s in st) if (st[s] > bv) { bv = st[s]; best = s; }
+      stages.push({ crop: k, share: sh, stage: best, frac: bv });
+      active += sh * ((st.plant || 0) + (st.veg || 0) + (st.fill || 0) + (st.year || 0));
+    });
+    var it = [], cover = 0;
+    Object.keys(w).forEach(function (i) { var v = R.spi[+i]; if (v == null) return; it.push([v, w[i]]); cover += w[i]; });
+    var med = null;
+    if (it.length) { it.sort(function (a, b) { return a[0] - b[0]; }); var cum = 0; for (var q = 0; q < it.length; q++) { cum += it[q][1]; if (cum >= cover / 2 - 1e-12) { med = it[q][0]; break; } } }
+    return { n: it.length, cells: Object.keys(w).length, cover: cover, med: med, end: R.end, stages: stages, active: active };
+  }
   function confirmRows() {
     var regs = (S.regions && S.regions.regions) || (S.regions instanceof Array ? S.regions : []), mon = new Date().getUTCMonth() + 1, A = S.asap || {};
     return regs.filter(function (r) { return r.rain === 'drier' || r.rain === 'wetter'; }).map(function (r) {
-      var e = r.rain === 'drier' ? -1 : 1, months = r.rain_season_months, inSeason = !months || months.indexOf(mon) >= 0;
+      var e = r.rain === 'drier' ? -1 : 1, months = r.rain_season_months, inRain = !months || months.indexOf(mon) >= 0;
       var asap = (r.iso3 || []).filter(function (i) { return A[i] && typeof A[i].hotspot_code === 'number'; }), flagged = asap.filter(function (i) { return A[i].hotspot_code >= 1; });
-      var rr = inSeason ? regionRain(r.iso3 || []) : null, st;
-      if (!inSeason) st = 'season';
-      else if (!rr || !rr.n) st = 'small';
+      var cb = r.crop_belt ? cropBeltRain(r.id, mon) : null, cty = regionRain(r.iso3 || []), st;
+      var rr = cb && cb.n ? { n: cb.n, med: cb.med, end: cb.end, cover: cb.cover } : cb ? { n: 0 } : cty;
+      if (!inRain || (cb && cb.active < 0.5)) st = 'season';
+      else if (!rr || !rr.n || (cb && cb.cover < 0.5)) st = 'small';
       else { var v = rr.med * e; st = v >= 50 ? 'showing' : v > 0 ? 'leaning' : v > -50 ? 'notyet' : 'against'; }
-      return { r: r, e: e, st: st, rr: rr, asap: asap.length, flagged: flagged.length };
+      return { r: r, e: e, st: st, rr: rr, cb: cb, cty: cty, inRain: inRain, asap: asap.length, flagged: flagged.length };
     });
+  }
+  function spiFmt(v) { return (v >= 0 ? '+' : '−') + Math.abs(v / 100).toFixed(1); }
+  function stageText(cb) {
+    if (!cb) return 'no crop calendar';
+    return cb.stages.filter(function (s) { return s.share >= 0.15; }).map(function (s) { return CROP_WORD[s.crop] + ': ' + STAGE_WORD[s.stage] + (s.frac < 0.6 ? ' (mixed)' : ''); }).join(' · ');
   }
   function renderConfirm() {
     var host = document.getElementById('subview-ensolive'), lead = document.getElementById('enso-live-lead'); if (!host || !lead) return;
     var el = document.getElementById('enso-confirm'); if (!el) { el = document.createElement('section'); el.id = 'enso-confirm'; el.className = 'enso-sec'; lead.after(el); }
-    var rows = confirmRows(); if (!rows.length || !S.features || !S.rainnow) { el.innerHTML = ''; return; }
-    var W = { showing: 'Showing up', leaning: 'Leaning that way', notyet: 'Not yet', against: 'Running against', season: 'Not in its rain season', small: 'Too small to test' };
-    var by = function (k) { return rows.filter(function (x) { return x.st === k; }).map(function (x) { return esc(x.r.label); }); };
+    if (!S.features || !S.rainnow) { el.innerHTML = ''; return; }
+    if (!CROPAREA.st) { cropAreaLoad(); el.innerHTML = ''; return; }
+    if (CROPAREA.st === 1) { el.innerHTML = ''; return; }
+    var rows = confirmRows(); if (!rows.length) { el.innerHTML = ''; return; }
+    var W = { showing: 'Showing up', leaning: 'Leaning that way', notyet: 'Not yet', against: 'Running against', season: 'Not in season', small: 'Too small to test' };
+    var crops = function (x) { return x.cb ? x.cb.stages.map(function (s) { return CROP_WORD[s.crop]; }).join(', ') : ''; };
+    var by = function (k) { return rows.filter(function (x) { return x.st === k; }).map(function (x) { return esc(x.r.label) + (x.rr && x.rr.n && x.cb ? ' <i>(' + esc(crops(x)) + ', SPI ' + spiFmt(x.rr.med) + ')</i>' : ''); }); };
     var bl = [];
-    if (by('showing').length) bl.push('<b>Showing up</b> in the last 30 days of observed rain: ' + by('showing').join(', ') + '.');
-    if (by('leaning').length) bl.push('<b>Leaning that way</b>, under a moderate anomaly: ' + by('leaning').join(', ') + '.');
-    if (by('notyet').length || by('against').length) bl.push('<b>Expected pattern not showing</b> so far: ' + by('notyet').concat(by('against')).join(', ') + '. Rain near normal or on the other side.');
-    if (by('season').length) bl.push('Not in their rain season, so not tested: ' + by('season').join(', ') + '.');
+    if (by('showing').length) bl.push('<b>Showing up</b> in the crop belt, last 30 days of observed rain: ' + by('showing').join('; ') + '.');
+    if (by('leaning').length) bl.push('<b>Leaning that way</b>, under a moderate anomaly: ' + by('leaning').join('; ') + '.');
+    if (by('notyet').length || by('against').length) bl.push('<b>Expected pattern not showing</b> so far: ' + by('notyet').concat(by('against')).join('; ') + '. Crop-belt rain near normal or on the other side.');
+    if (by('season').length) bl.push('Not in season, so not tested: ' + rows.filter(function (x) { return x.st === 'season'; }).map(function (x) { return esc(x.r.label); }).join(', ') + '.');
     var rr0 = rows.filter(function (x) { return x.rr && x.rr.end; })[0], end = rr0 ? rr0.rr.end : '';
-    var tbl = '<table class="enso-outlook-table enso-confirm-table"><thead><tr><th scope="col">Region</th><th scope="col">El Niño usually brings</th><th scope="col">Observed, 30 days to ' + esc(isoText(end)) + '</th><th scope="col">Crop warnings (JRC ASAP)</th><th scope="col">Reading</th></tr></thead><tbody>' +
+    var tbl = '<table class="enso-outlook-table enso-confirm-table"><thead><tr><th scope="col">Region · crops</th><th scope="col">El Niño usually brings</th><th scope="col">Crop belt observed, 30 days to ' + esc(isoText(end)) + '</th><th scope="col">Crop stage now</th><th scope="col">Whole-country median</th><th scope="col">Crop warnings (JRC ASAP)</th><th scope="col">Reading</th></tr></thead><tbody>' +
       rows.map(function (x) {
-        var obs = x.rr && x.rr.n ? esc(spiWord(x.rr.med)) + ' <i>(SPI ' + (x.rr.med >= 0 ? '+' : '−') + Math.abs(x.rr.med / 100).toFixed(1) + ', ' + x.rr.n + ' cell' + (x.rr.n === 1 ? '' : 's') + ')</i>' : x.st === 'season' ? 'Rain season: ' + esc(x.r.damage_season || '') : 'No 2.5° cell holds it';
-        var asap = x.e < 0 && x.asap ? x.flagged + ' of ' + x.asap + ' countries flagged' : x.e < 0 ? 'not assessed' : 'dry-side test only';
-        return '<tr><th scope="row">' + esc(x.r.label) + '</th><td>' + (x.e < 0 ? 'drier' : 'wetter') + '</td><td>' + obs + '</td><td>' + asap + '</td><td><b>' + esc(W[x.st]) + '</b></td></tr>';
+        var belt = x.cb && x.cb.n ? esc(spiWord(x.rr.med).replace(' for the time of year', '')) + ' <i>(SPI ' + spiFmt(x.rr.med) + ' · ' + x.cb.n + ' cell' + (x.cb.n === 1 ? '' : 's') + ' · ' + Math.round(x.cb.cover * 100) + '% of crop area)</i>' : x.cb ? 'No 2.5° cell with rain data holds the crop' : x.rr && x.rr.n ? esc(spiWord(x.rr.med).replace(' for the time of year', '')) + ' <i>(SPI ' + spiFmt(x.rr.med) + ' · whole-country median, no crop weights)</i>' : 'No 2.5° cell holds it';
+        var cty = x.cty && x.cty.n ? esc(spiWord(x.cty.med).replace(' for the time of year', '')) + ' <i>(SPI ' + spiFmt(x.cty.med) + ', ' + x.cty.n + ' cells)</i>' : 'none';
+        var asap = x.e < 0 && x.asap ? x.flagged + ' of ' + x.asap + (x.asap === 1 ? ' country' : ' countries') + ' flagged' : '—';
+        return '<tr><th scope="row">' + esc(x.r.label) + '<span class="enso-live-sub">' + esc(crops(x)) + '</span></th><td>' + (x.e < 0 ? 'drier' : 'wetter') + '</td><td>' + belt + '</td><td>' + esc(stageText(x.cb)) + (!x.inRain ? '<span class="enso-live-sub">Rain season: ' + esc(x.r.damage_season || '') + '</span>' : '') + '</td><td>' + cty + '</td><td>' + asap + '</td><td><b>' + esc(W[x.st]) + '</b></td></tr>';
       }).join('') + '</tbody></table>';
+    var meta = (CROPAREA.d && CROPAREA.d._meta) || {};
     el.innerHTML = '<figure class="enso-plate enso-confirm-plate">' +
-      plateHead('Is the expected pattern showing up?', 'NOAA CPC gauge rain (CHIRPS where gauges are few) as a drought index · JRC ASAP crop warnings · direction from the published regions', stamp(metaDate('rainnow')), 'observed') +
+      plateHead('Is the expected pattern showing up?', 'NOAA CPC gauge rain (CHIRPS where gauges are few) as a drought index, weighted by harvested crop area (MIRCA2000) · JRC ASAP crop warnings · direction from the published regions', stamp(metaDate('rainnow')), 'observed') +
       '<div class="plate-body">' + bulletList(bl, 'enso-lens-lede') + '</div>' +
       '<details class="enso-evidence-note"><summary>Every region, and how the reading is set</summary>' + tbl +
-      '<p>Reading: SPI of the last 30 days, median of the 2.5° cells inside the region’s countries. At +0.5 or beyond on the expected side it is “showing up”, between 0 and +0.5 “leaning”, from 0 to −0.5 “not yet”, and beyond −0.5 “running against”. A region outside its rain season is not tested, so a dry month there is not read as a missed forecast. Rain is one of several links; crop stress needs soil, heat and crop stage too, and ASAP is the crop-side check where it covers the country.</p></details></figure>';
+      '<p>Reading: SPI of the last 30 days, median of the 2.5° cells that grow the region’s crops, each cell counted by its share of the crop’s harvested area. The whole-country median is shown beside it for comparison. At +0.5 or beyond on the expected side it is “showing up”, between 0 and +0.5 “leaning”, from 0 to −0.5 “not yet”, and beyond −0.5 “running against”. A region is “not in season” outside its rain window or when its crops are not planting, growing or filling; a dry month then is not read as a missed forecast. “Too small” means under half of the crop area has a rain reading. Crop areas are from ' + esc(meta.vintage ? 'around the year 2000' : 'MIRCA2000') + ' and the stage comes from the same calendars, so they are a guide, not this year’s planting. Rain is one of several links; crop stress needs soil, heat and crop stage too, and ASAP is the crop-side check where it covers the country.</p></details></figure>';
   }
   function renderLive() {
     try { renderConfirm(); } catch (e) {}
