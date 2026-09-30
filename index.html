@@ -43635,6 +43635,14 @@ function showCommodityDetail(key) {
       });
     });
   }
+  /* Price-risk band: the grey range grows forward in time out of the latest observed month, once per visit,
+     so it reads as a range starting from today rather than as another past path. */
+  function animPriceFan(root) {
+    var grid = one(root, '.enso-pa-grid'); if (!grid || !one(grid, '.enso-fan')) return;
+    playOnce(grid, 'pricefan', function () {
+      each(grid, '.enso-fan', function (g, i) { ensoAnim(g, WIPE, { duration: 520, delay: Math.min(i * 60, 360), easing: EASE_OUT }); });
+    });
+  }
   /* Flipping the outlook's scenario moves each harvest's diamond, ring and 90% band from the old case to the
      new one instead of redrawing them in place. Runs on every flip. */
   var OL_MARKS = ['.enso-ol-bar', '.enso-ol-alt', '.enso-ol-whisk'];
@@ -51309,6 +51317,7 @@ function showCommodityDetail(key) {
         '<b>Grey range (' + esc(riskLabel().replace(/^Price-risk band: /, '').replace(/\.$/, '')) + '):</b> the 80% range and median of the real price 3, 6 and 12 months from the latest month, from a quantile regression tested on rolling forecasts since ' + esc(String((S.prisk && S.prisk.spec || {}).first_origin || '').slice(0, 4)) + '. A market shows it only where it beat two simple baselines on earlier years and covered about 80% of outcomes, including inside 2015-16 and 2023-24. Where it did not, there is no band.',
         riskOniLine(), riskLogLine(),
         (function () { var late = A.countries.filter(function (c) { return !c.events['2015-16']; }).map(function (c) { var r = poutRows().filter(function (x) { return x.iso3 === c.iso; })[0]; return nameFor(c.iso) + (r && r.series && r.series.first_month ? ' (series from ' + poutMon(r.series.first_month) + ')' : ''); }); return late.length ? 'No 2015-16 series: ' + late.join(', ') + '.' : ''; })()], 'is-fine') + '</details></figure>';
+    animPriceFan(el);
   }
   /* Who has to buy grain elsewhere, one entry per payer: a producer covering its own shortfall, or a buyer losing a
      supplier's exports; a country hit both ways is one entry. Tonnes and shares are the outlook file's own figures.
