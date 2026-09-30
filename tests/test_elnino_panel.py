@@ -730,7 +730,7 @@ def main() -> int:
         page.wait_for_selector('#subview-ensowater.active .enso-pan-since')
         page.locator('#viewbtn-ensowater').focus()
         page.keyboard.press('ArrowRight')
-        page.wait_for_selector('#subview-ensomoney.active #enso-c-record')
+        page.wait_for_selector('#subview-ensomoney.active #enso-c-record', state='attached')
         check("view switcher works with clicks and arrow keys",
               page.locator('#viewbtn-ensomoney').get_attribute('aria-selected') == 'true')
 
@@ -763,9 +763,11 @@ def main() -> int:
                 # the high-effect countries (data/enso_price_outlook.json); its one-line tag states the price model's verdict
                 # from the file. The older 37-country layer is the "Year on year" view and keeps its checks there.
                 pout = page.evaluate("async () => (await (await fetch('data/enso_price_outlook.json')).json()).data")
-                check("Prices map leads with staple prices since March and states the model verdict from the data",
-                      'Staple price since March' in legend and tag.startswith('After inflation, Mar')
-                      and (pout['model_status'] != 'no_skill' or f"tested on {pout['skill']['n_events']} past El Niños, no better than replaying them: not shown" in tag), tag)
+                # 2026-09-30 court verdict: the tag says the fill is observed and what the labels compare with; no model
+                # verdict or replay wording is left on the map.
+                check("Prices map leads with observed staple prices since March; the tag names the comparison, no replay wording",
+                      'Staple price since March' in legend and tag.startswith('Observed, after inflation, Mar')
+                      and 'Labels compare with 2023-24 at the same stage' in tag and not re.search(r'replay|model tested|not shown', tag + legend, re.I), tag)
                 page.click('[data-pview="change"]'); page.wait_for_timeout(300)
                 legend = page.locator('#enso-legend').text_content()
                 tag = page.locator('#enso-maptag').text_content()
@@ -827,7 +829,7 @@ def main() -> int:
         # 2026-09-29 audit (Ocean): read everything from the data files, never from typed numbers.
         check("Ocean audit: the strip says when the newest El Niño feed was collected", page.evaluate("""async () => {
             // The page's rule: every loaded feed named enso*, sst_*, rain_* or seasonal_outlook, except the hand-run forecast track record.
-            const names = ['enso','enso_exposure','enso_model','enso_regions','enso_lanes','enso_corridors','enso_econ','enso_mechanism','enso_indices','enso_bulletins','sst_anomaly','enso_news','enso_outlook','enso_gauges','enso_situation','enso_strengths','enso_ports','enso_hindcast','enso_freight','enso_price_analogs','enso_published_effects','sst_composites','seasonal_outlook','rain_anomaly','enso_past_events','sst_months','rain_months','enso_recent_events','enso_auto_events','enso_outlook_events','enso_price_outlook'];
+            const names = ['enso','enso_exposure','enso_model','enso_regions','enso_lanes','enso_corridors','enso_econ','enso_mechanism','enso_indices','enso_bulletins','sst_anomaly','enso_news','enso_outlook','enso_gauges','enso_situation','enso_strengths','enso_ports','enso_hindcast','enso_freight','enso_price_analogs','enso_published_effects','sst_composites','seasonal_outlook','rain_anomaly','enso_past_events','sst_months','rain_months','enso_recent_events','enso_auto_events','enso_outlook_events','enso_price_outlook','enso_price_risk','enso_price_forecast_log'];
             const ds =(await Promise.all(names.map(n => fetch('data/' + n + '.json').then(r => r.json()).catch(() => null)))).filter(Boolean).map(j => new Date(j._meta.generated_at || j._meta.generated)).filter(d => !isNaN(d));
             const t = (document.querySelector('#enso-status-home .enso-now-upd') || {}).textContent || '';
             const hm = d => String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0');
@@ -1112,7 +1114,7 @@ def main() -> int:
               and page.locator('#enso-lane-story').count() == 0
               and page.locator('.enso-lanes-table').first.locator('th').count() == 2)
         page.evaluate("showTab('ensomoney')")
-        page.wait_for_selector('#subview-ensomoney.active #enso-c-record')
+        page.wait_for_selector('#subview-ensomoney.active #enso-c-record', state='attached')
         check("Who pays lists every modelled shortfall with its buyers from the outlook file", page.evaluate("""async () => {
             const W = (await (await fetch('data/enso_outlook.json')).json()).data.who_pays;
             // 2026-09-28 (redesign): one row per payer. Every producer that imports to cover its shortfall and every named
@@ -1128,23 +1130,32 @@ def main() -> int:
         }"""))
         # 2026-09-24: past El Niños and world prices are one dot plot; food inflation by country is the
         # map and its ranked list only (the bar chart and 37-row table repeated it).
-        check("Prices shows past El Niños as one dot plot and food inflation once",
+        # 2026-09-30 court verdict: the world-price event study, the published models and the other drivers are one fold,
+        # "What history can and cannot say"; the incomparable 2026 FAO row is gone from the World Bank graphic.
+        check("Prices shows past El Niños as one dot plot inside one history fold, without the 2026 FAO row, and food inflation once",
               page.locator('#enso-c-record .enso-event').count() == 7
               and page.locator('#enso-c-record .enso-pp-prev').count() == 7
-              and page.locator('#enso-c-ffpi, #enso-c-rtfp, #enso-c-ffpilive, #enso-money-story').count() == 0)
-        # 2026-09-29 audit ("why is it there? weirdly designed"): the watch table is a calendar in the Ocean grammar. Each row
-        # label carries the World Bank price and its change on a year earlier; marks come from the model's harvest windows
-        # and the export measures file; the ECB lag is a shaded column; the old policy text box is gone.
-        check("Which prices to watch is a calendar: priced rows, harvest windows, dated measures and the ECB lag", page.evaluate("""async () => {
+              and page.locator('#enso-c-ffpi, #enso-c-rtfp, #enso-c-ffpilive, #enso-money-story').count() == 0
+              and page.locator('#enso-money > details.enso-history-fold').count() == 1
+              and page.locator('#enso-money > details.enso-history-fold').get_attribute('open') is None
+              and 'What history can and cannot say' in page.locator('#enso-money > details.enso-history-fold > summary').text_content()
+              and page.locator('.enso-history-fold .enso-pastprice-plate').count() == 1
+              and page.locator('.enso-pp-nowrow').count() == 0
+              and '2026 so far' not in page.locator('#enso-money').text_content())
+        # 2026-09-30: the watch calendar is a compact dated trigger table: World price, now against a year earlier, next dated
+        # trigger, exposed places; the ECB 16-month lag is one cited text line, not a shaded band.
+        check("Which prices to watch is a dated trigger table with priced rows and the ECB lag as one line", page.evaluate("""async () => {
             const O = (await (await fetch('data/enso_outlook.json')).json()).data, R = (await (await fetch('data/trade_restrictions.json')).json()).data;
             const pl = document.querySelector('.enso-pricewatch-plate'); if (!pl) return false;
-            const labels = [...pl.querySelectorAll('.enso-pw-labels span')].map(e => e.textContent);
-            const harvests = O.rows_all.filter(r => r.status === 'shown' && !r.in_season && ['corn', 'wheat', 'rice'].includes(r.crop)).length;
-            const dated = R.filter(r => r.status !== 'historical' && (r.ends_date || (r.next_step && r.next_step.date))).length;
-            return labels.length >= 5 && labels.filter(t => /\$[\d,]+\/t/.test(t)).length >= 5
-                && pl.querySelectorAll('.enso-pw-bar.is-modelled').length >= 1 && pl.querySelectorAll('.enso-pw-bar.is-modelled').length <= harvests
-                && pl.querySelectorAll('.enso-pw-bar.is-point').length === dated
-                && !!pl.querySelector('.enso-pw-lag') && !pl.querySelector('table');
+            const heads = [...pl.querySelectorAll('thead th')].map(e => e.textContent);
+            const rows = [...pl.querySelectorAll('tbody tr')];
+            const live = R.filter(r => r.status !== 'historical' && (r.ends_date || (r.next_step && r.next_step.date)));
+            return JSON.stringify(heads) === JSON.stringify(['World price', 'Now, against a year earlier', 'Next dated trigger', 'Exposed places'])
+                && rows.length >= 5 && rows.filter(r => /\\$[\\d,]+\\/t/.test(r.cells[1].textContent)).length >= 5
+                && pl.querySelectorAll('.enso-pw-d').length >= 3
+                && live.every(r => pl.textContent.includes(r.country))
+                && /ECB lag:.*16 months after onset.*Economic Bulletin 6\\/2023/.test(pl.textContent)
+                && !pl.querySelector('.enso-pw-bar, .enso-pw-lag, .enso-pw-timeline');
         }"""))
         # 2026-09-27: the humanitarian record is its own fold at the end of Prices; the estimates fold into the past-price plate.
         check("reported humanitarian need is its own fold; the published models sit inside the past-price plate",
@@ -1292,7 +1303,8 @@ def main() -> int:
                     const P = (await (await fetch('data/enso_price_outlook.json')).json()).data;
                     const rows = P.rows.filter(r => r.aftermath && r.aftermath.now);
                     const btn = [...document.querySelectorAll('#enso-map-ranking button')];
-                    const vals = btn.map(b => parseFloat(b.querySelector('.enso-rank-value').textContent.replace('−', '-')));
+                    // 2026-09-30: the rail is a table; its Now column carries the value
+                    const vals = [...document.querySelectorAll('#enso-map-ranking tbody tr')].map(tr => parseFloat(tr.querySelector('.enso-pt-now').textContent.replace('−', '-')));
                     const title = document.querySelector('#enso-map-ranking .enso-legend-t').textContent;
                     const m = document.getElementById('enso-map').getBoundingClientRect();
                     const a = document.getElementById('enso-map-ranking').getBoundingClientRect();
@@ -1649,7 +1661,7 @@ def main() -> int:
             page.wait_for_timeout(150)
             # 2026-09-29: the default view shades the price-outlook countries by their real change since March, the larger
             # move where a country has two staples; other land stays neutral.
-            check(f"Prices at {width}: El Niño countries shaded by their staple price class, labels on the largest moves", page.evaluate("""async () => {
+            check(f"Prices at {width}: El Niño countries shaded by their staple price class, one-line labels (or, if crowded, the 10% moves only)", page.evaluate("""async () => {
                 const P = (await (await fetch('data/enso_price_outlook.json')).json()).data;
                 const tele = new Set(P.rows.map(r => r.iso3)), seen = new Set();
                 const lead = {}; P.rows.forEach(r => { const v = r.aftermath.now && r.aftermath.now.pct; if (typeof v === 'number' && (lead[r.iso3] == null || Math.abs(v) > Math.abs(lead[r.iso3]))) lead[r.iso3] = v; });
@@ -1666,9 +1678,12 @@ def main() -> int:
                 let shaded = 0, circles = 0; _stageHMap.eachLayer(l => { if (l.feature && classes.includes(l.options.fillColor)) shaded++; if (l instanceof L.CircleMarker && !l.feature && l.options.radius >= 4) circles++; });
                 const pane = _stageHMap.getPane('ensoGraticule');
                 // 2026-09-29 round 2: text labels became one chip per country (no size encoding); every country fits.
+                // 2026-09-30 verdict: every country carries a one-line "name +x%" label; where 17 labels cannot fit without
+                // covering one another, only the moves of 10% or more (five at most) are labelled and names wait for hover.
+                const big = Object.values(lead).filter(v => Math.abs(v) >= 10).length, n = document.querySelectorAll('#enso-map .enso-pchip').length;
                 return good && seen.size === tele.size && shaded >= 10 && circles === 0 && pane.style.zIndex === '210'
                     && pane.querySelectorAll('.enso-grat-lab').length === 3
-                    && document.querySelectorAll('#enso-map .enso-pchip').length === tele.size;
+                    && (n === tele.size || n === Math.min(5, big));
             }"""))
 
         # 2026-09-29 audit, Prices, round 2 ("I prefer not to have circles on maps"; ?pmap default a). The same months
@@ -1683,34 +1698,37 @@ def main() -> int:
         _chip_js = """async ev => {
             const P = (await (await fetch('data/enso_price_outlook.json')).json()).data;
             const pct = v => Math.round(v) === 0 ? '0%' : (v > 0 ? '+' : '−') + Math.abs(v).toFixed(0) + '%';
-            const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const NAME = {ZAF: 'South Africa', MOZ: 'Mozambique', ZMB: 'Zambia', THA: 'Thailand', HND: 'Honduras', MWI: 'Malawi'};
+            const lead = {};
+            P.rows.forEach(r => { const v = r.aftermath.now && r.aftermath.now.pct; if (typeof v === 'number' && (!lead[r.iso3] || Math.abs(v) > Math.abs(lead[r.iso3].v))) lead[r.iso3] = {v, r}; });
+            const big = Object.entries(lead).filter(([i, q]) => Math.abs(q.v) >= 10).sort((a, b) => Math.abs(b[1].v) - Math.abs(a[1].v)).slice(0, 5).map(x => x[0]);
+            const chips = [...document.querySelectorAll('#enso-map .enso-pchip')];
             const bad = [];
-            for (const iso of ['ZAF', 'MOZ', 'ZMB', 'THA']) {
-                const r = P.rows.filter(x => x.iso3 === iso).sort((x, y) => Math.abs(y.aftermath.now.pct) - Math.abs(x.aftermath.now.pct))[0];
-                const a = r.aftermath, e = r.effect_replay.paths[ev], an = r.analog.paths[ev];
-                const chip = [...document.querySelectorAll('#enso-map .enso-pchip')].find(c => c.textContent.startsWith(iso === 'ZAF' ? 'South Africa' : iso === 'MOZ' ? 'Mozambique' : iso === 'ZMB' ? 'Zambia' : 'Thailand'));
-                const t = chip ? chip.textContent.replace(/\s+/g, ' ') : '';
-                const peak = ((1 + a[ev].pct / 100) * (1 + an.peak_pct / 100) - 1) * 100;
-                const want = [pct(a.now.pct), ev + ' ' + pct(a[ev].pct), 'peak ' + pct(peak),
-                    'normal ' + (e.normal_at_peak_pct == null ? 'n/a' : pct(e.normal_at_peak_pct)),
-                    'with El Niño ' + pct(e.peak_pct) + ' by ' + M[+e.peak_month.slice(5, 7) - 1] + ' ' + e.peak_month.slice(0, 4)];
-                if (iso === 'THA') want.push('Bangkok wholesale');
-                const main = chip && chip.querySelector('.enso-pchip-v');
-                want.forEach(w => { if (!t.includes(w)) bad.push(iso + ' lacks ' + w); });
-                if (!main || main.textContent !== pct(a.now.pct)) bad.push(iso + ' main number');
+            // one-line label per country: name, then the change since March on a coloured block; nothing forward
+            for (const iso of Object.keys(NAME)) {
+                const q = lead[iso], chip = chips.find(c => c.textContent.startsWith(NAME[iso]));
+                if (!chip) { if (chips.length === Object.keys(lead).length) bad.push(iso + ' has no label'); continue; }
+                const main = chip.querySelector('.enso-pchip-v'), t = chip.textContent.replace(/\s+/g, ' ');
+                if (!main || main.textContent !== pct(q.v)) bad.push(iso + ' main number');
+                const a = q.r.aftermath[ev], second = chip.querySelector('.enso-pchip-p');
+                if (big.includes(iso)) {
+                    if (!second || !second.textContent.includes('last El Niño, same stage: ' + ev + ' ' + (a ? pct(a.pct) : 'no series'))) bad.push(iso + ' second line');
+                } else if (second) bad.push(iso + ' has a second line under 10%');
+                if (/normal|with El Niño|replay|peak|by [A-Z][a-z]{2} \d{4}/.test(t)) bad.push(iso + ' carries a forward or replay number: ' + t);
             }
+            if (chips.filter(c => c.querySelector('.enso-pchip-p')).length !== big.length && chips.length === Object.keys(lead).length) bad.push('expanded labels: want ' + big.length);
             return bad.length ? bad.join('; ') : true;
         }"""
         _r = page.evaluate(_chip_js, '2023-24')
-        check("Prices chips: now, 2023-24 same stage and peak, normal year and El Niño-effect replay equal the file" + ('' if _r is True else f' ({_r})'), _r is True and page.evaluate("""() => {
+        check("Prices labels: one line per country, moves of 10% or more (five at most) add the last El Niño at the same stage" + ('' if _r is True else f' ({_r})'), _r is True and page.evaluate("""() => {
             const tag = document.getElementById('enso-maptag').textContent;
-            return !document.querySelector('[data-pstage]') && tag.startsWith('After inflation, Mar')
-                && tag.includes('no better than replaying them: not shown.') && tag.includes('take out inflation and world-price moves')
-                && !/forecast:/i.test(tag) && document.querySelectorAll('[data-pev]').length === 2;
+            return !document.querySelector('[data-pstage]') && tag.startsWith('Observed, after inflation, Mar')
+                && !/forecast:|replay/i.test(tag) && document.querySelectorAll('[data-pev]').length === 2
+                && !!document.querySelector('.enso-fill-switch [data-pview="since"]');
         }"""))
         page.click('[data-pev="2015-16"]'); page.wait_for_timeout(1200)
         _r = page.evaluate(_chip_js, '2015-16')
-        check("Prices 2015-16 switch: chips re-read the same stage, peak and replay of 2015-16" + ('' if _r is True else f' ({_r})'), _r is True)
+        check("Prices 2015-16 switch: the expanded labels re-read the same stage of 2015-16" + ('' if _r is True else f' ({_r})'), _r is True)
         page.click('[data-pev="2023-24"]'); page.wait_for_timeout(900)
         page.click('[data-pview="pays"]'); page.wait_for_timeout(900)
         check("Prices 'Who pays' view: buyers filled by tonnes from the outlook file, a chip each, no circles, modelled frame", page.evaluate("""async () => {
@@ -1725,40 +1743,94 @@ def main() -> int:
                 && document.getElementById('enso-legend').textContent.includes('lost from its own harvest');
         }"""))
         page.click('[data-pview="since"]'); page.wait_for_timeout(600)
-        check("no price-model number on Prices: the model failed its skill test", page.evaluate("""async () => {
+        # 2026-09-30 court verdict: no El Niño forward % anywhere on the lens. The retired replay traces, the hatched chip line,
+        # the "normal year plus El Niño effect" estimate and the model-test line must not come back.
+        check("no El Niño forward number or replay on Prices (map, rail, plates, hover)", page.evaluate("""async () => {
             const P = (await (await fetch('data/enso_price_outlook.json')).json()).data;
             const t = document.getElementById('subview-ensomoney').textContent + document.getElementById('enso-mapwrap').textContent;
-            return P.model_status !== 'no_skill' || (P.rows.every(r => r.model == null) && !/forecast of|price forecast:/i.test(t));
+            return P.rows.every(r => r.model == null) && !/replay|normal year plus|with El Niño [+−]|Price model tested|est\\. [+−]|±\\d+ pts/i.test(t)
+                && !document.querySelector('.enso-pchip-f, .enso-pchip-bar, .enso-est-block, .enso-pa-miss, .is-est, #enso-pchip-hatch, #enso-pchip-key-h');
         }"""))
-        check("Who pays follows the map; the past-price plate has a 2026 row from the FAO index and one fold", page.evaluate("""async () => {
+        check("Who pays follows the map, labelled as modelled trade exposure, not price pressure", page.evaluate("""async () => {
             const order = [...document.querySelectorAll('#subview-ensomoney > *')].map(e => e.id || e.className);
-            const F = (await (await fetch('data/fao_ffpi.json')).json()).data.series.map(x => x.fpi), n = F.length;
-            const avg = a => a.reduce((t, x) => t + x, 0) / a.length, prev = (avg(F.slice(n - 6)) / avg(F.slice(n - 12, n - 6)) - 1) * 100;
-            const pl = document.querySelector('.enso-pastprice-plate'), now = pl.querySelector('.enso-pp-nowrow');
-            const txt = now ? now.textContent.replace('−', '-') : '';
+            const O = (await (await fetch('data/enso_outlook.json')).json()).data, oni = O.cases.record.oni;
+            const sub = document.querySelector('.enso-whopays-plate .enso-plate-sub').textContent;
+            const want = ['.enso-mapgrid', '#enso-whopays', '#enso-priceanalog', '#enso-pricewatch', '#enso-money', '#enso-people'];
             return order.indexOf('enso-whopays') === order.findIndex(x => /enso-mapgrid/.test(x)) + 1
-                && !!now && txt.includes((prev > 0 ? '+' : '') + prev.toFixed(1) + '%')
-                && pl.querySelectorAll('.plate-body > details').length === 1 && /up to 9% for food/.test(pl.textContent);
+                && sub.includes('Modelled trade exposure in tonnes at the ONI ' + (oni > 0 ? '+' : '') + oni.toFixed(1) + ' winter scenario, not price pressure')
+                && want.every((sel, i) => i === 0 || order.findIndex(x => x === sel.slice(1)) > order.findIndex(x => want[i - 1].startsWith('.') ? /enso-mapgrid/.test(x) : x === want[i - 1].slice(1)));
         }"""))
-        check("maize panels are scaled to their own data and carry the replay's past misses", page.evaluate("""() => {
+        check("maize panels keep their own y-axes and carry the 3-year seasonal median; replay lines and ± badges are gone", page.evaluate("""() => {
             const tops = [...document.querySelectorAll('.enso-pa-svg')].map(s => Math.max(...[...s.querySelectorAll('text.enso-hw-t')].map(t => +t.textContent).filter(Number.isFinite)));
-            return tops.length >= 6 && new Set(tops).size >= 3 && document.querySelectorAll('.enso-pa-miss').length >= 3
-                && /missed the highest month by about \d+ points/.test(document.querySelector('.enso-pa-plate .enso-est-block').textContent);
+            return tops.length >= 6 && new Set(tops).size >= 3
+                && document.querySelectorAll('.enso-pa-svg .enso-season').length >= 6
+                && !document.querySelector('.enso-pa-miss, .is-est, .enso-est-block');
         }"""))
-        # 2026-09-29 round 2: the dashed estimate and its ± are the El Niño-effect replay (effect_replay / replay_skill).
-        check("maize panels: dashed estimate and ± from the El Niño-effect replay", page.evaluate("""async () => {
-            const P = (await (await fetch('data/enso_price_outlook.json')).json()).data;
-            const r = P.rows.find(x => x.iso3 === 'ZAF' && x.staple === 'maize');
-            const cell = [...document.querySelectorAll('.enso-pa-cell')].find(c => c.querySelector('h4').textContent.startsWith('South Africa'));
-            const miss = cell && cell.querySelector('.enso-pa-miss');
-            const A = (await (await fetch('data/enso_price_analogs.json')).json()).data.countries.find(c => c.iso === 'ZAF');
-            const now = A.events['2026-27'].slice(-1)[0][1], tops = Object.values(r.effect_replay.paths).map(p => Math.round(now * (1 + p.peak_pct / 100) - 100)).sort((a, b) => a - b);
-            const pct = d => (d > 0 ? '+' : d < 0 ? '−' : '') + Math.abs(d) + '%';
-            const est = cell && cell.querySelector('.is-est');
-            const block = document.querySelector('.enso-pa-plate .enso-est-block').textContent;
-            return !!miss && miss.textContent === '±' + Math.round(r.effect_replay.skill.mae_adjusted) + ' pts'
-                && !!est && est.textContent === 'est. ' + pct(tops[0]) + ' to ' + pct(tops[tops.length - 1])
-                && block.includes('about ' + Math.round(P.replay_skill.mae_adjusted) + ' points') && block.includes('normal year plus the El Niño effect');
+        # 2026-09-30: the grey fan is the price-risk band, drawn only for a market whose band passed its test, from the data
+        # file; the p50 line and the fan keep stable class names for the motion pass.
+        check("maize panels: a grey fan and p50 line only where the price-risk band passed, equal to the risk file", page.evaluate("""async () => {
+            const R = (await (await fetch('data/enso_price_risk.json')).json()).data;
+            const A = (await (await fetch('data/enso_price_analogs.json')).json()).data;
+            const cells = [...document.querySelectorAll('.enso-pa-cell')];
+            let ok = true, fans = 0;
+            for (const c of A.countries) {
+                const e = R.series.find(x => x.iso3 === c.iso && x.staple === 'maize');
+                const cell = cells.find(x => x.querySelector('h4').textContent.startsWith(({ZAF: 'South Africa', ZMB: 'Zambia', MWI: 'Malawi', MOZ: 'Mozambique', SWZ: 'eSwatini', LSO: 'Lesotho', NAM: 'Namibia', BWA: 'Botswana'})[c.iso]));
+                if (!e || !cell) { ok = false; continue; }
+                let reach = 0; for (const h of [3, 6, 12]) { if (!e.h[h].pass) break; reach = h; }   // the longest run of passing horizons from 3 months
+                const has = !!cell.querySelector('.enso-fan .enso-fan-band') && !!cell.querySelector('.enso-fan .enso-fan-mid');
+                if (reach > 0) { fans++; ok = ok && has && new RegExp(reach + '-month range').test(cell.querySelector('.is-band').textContent); }
+                else ok = ok && !has && !cell.querySelector('.is-band');
+            }
+            return ok && (fans === 0 || document.querySelectorAll('.enso-pa-cell .enso-fan').length === fans);
+        }"""))
+        check("decomposition bars (world price, exchange rate, local) sit beside the maize plate and add up to the real move", page.evaluate("""async () => {
+            const R = (await (await fetch('data/enso_price_risk.json')).json()).data;
+            const want = R.series.filter(e => e.decomposition), rows = [...document.querySelectorAll('.enso-pa-plate .enso-dc-row')];
+            return want.length >= 2 && rows.length === want.length
+                && want.every(e => Math.abs(e.decomposition.world_pct + e.decomposition.fx_pct + e.decomposition.local_pct - e.decomposition.total_pct) < 0.35)
+                && want.every(e => rows.some(r => r.querySelector('.enso-dc-n i').textContent.replace('−', '-') === (Math.round(e.decomposition.total_pct) > 0 ? '+' : '') + Math.round(e.decomposition.total_pct) + '%' && r.querySelectorAll('svg.enso-dc-bar rect').length >= 4))
+                && !document.querySelector('.enso-fan .enso-dc-bar, .enso-pa-cell .enso-dc-bar');
+        }"""))
+
+        # 2026-09-30 court verdict: the rail is one ranked table (Now, the last El Niño at the same stage, the grey 12-month
+        # range or "no reliable band", the next watch date); the notes under it carry the band's label, the ONI finding
+        # (only while the file's verdict is "adds_nothing") and the forecast-log line with its first date.
+        check("Prices rail: ranked table with grey 12-month range only where the band passed, plus label, ONI finding and log line", page.evaluate("""async () => {
+            const P = (await (await fetch('data/enso_price_outlook.json')).json()).data, R = (await (await fetch('data/enso_price_risk.json')).json()).data;
+            const L = (await (await fetch('data/enso_price_forecast_log.json')).json()).data;
+            const pct = v => Math.round(v) === 0 ? '0%' : (v > 0 ? '+' : '−') + Math.abs(v).toFixed(0) + '%';
+            const rail = document.getElementById('enso-map-ranking'), rows = [...rail.querySelectorAll('tbody tr')];
+            const heads = [...rail.querySelectorAll('thead th')].map(t => t.textContent);
+            const want = P.rows.filter(r => r.aftermath.now && typeof r.aftermath.now.pct === 'number').sort((a, b) => b.aftermath.now.pct - a.aftermath.now.pct);
+            let ok = heads.length === 5 && heads[1] === 'Now' && heads[2].startsWith('2023-24') && heads[3] === '12-month range' && heads[4] === 'Next watch' && rows.length === want.length;
+            let bands = 0;
+            want.forEach((r, i) => {
+                const row = rows[i]; if (!row) { ok = false; return; }
+                const e = R.series.find(x => x.key === r.iso3 + ':' + r.commodity), h = e && e.h['12'];
+                const shown = h && h.pass && e.latest_month === r.latest.month;
+                ok = ok && row.querySelector('button').dataset.mapCountry === r.iso3 && row.cells[1].textContent === pct(r.aftermath.now.pct)
+                    && row.cells[2].textContent === (r.aftermath['2023-24'] ? pct(r.aftermath['2023-24'].pct) : 'none')
+                    && (shown ? row.cells[3].textContent === pct(h.p10) + ' to ' + pct(h.p90) && !!row.cells[3].querySelector('.enso-pr-band')
+                              : row.cells[3].textContent === 'no reliable band' && !row.cells[3].querySelector('svg'));
+                bands += shown ? 1 : 0;
+            });
+            const notes = rail.querySelector('.enso-pt-notes').textContent, first = L.entries[0].run_date;
+            const oni = R.oni_test.verdict === 'adds_nothing' ? notes.includes('Adding El Niño (ONI) did not improve these ranges at 3-12 months (tested ' + R.spec.first_origin.slice(0, 4) + '-' + R.last_origin.slice(0, 4) + ').') : !notes.includes('did not improve');
+            return ok && bands === R.series.filter(e => e.h['12'].pass).length
+                && notes.includes('Price-risk band: seasonality and pull back toward the 3-year level, not an El Niño forecast.')
+                && oni && notes.includes('Ranges first published ') && notes.includes(first.slice(0, 4)) && notes.includes(String(+first.slice(8, 10))) && notes.includes('checked against prices as months arrive');
+        }"""))
+        # the status sentence leads the lens head, computed from the rows (southern African maize panel countries, biggest risers)
+        check("Prices lens head opens with the status sentence from the data, then the world-price finding", page.evaluate("""async () => {
+            const P = (await (await fetch('data/enso_price_outlook.json')).json()).data, A = (await (await fetch('data/enso_price_analogs.json')).json()).data;
+            const lead = {}; P.rows.forEach(r => { const v = r.aftermath.now && r.aftermath.now.pct; if (typeof v === 'number' && (lead[r.iso3] == null || Math.abs(v) > Math.abs(lead[r.iso3]))) lead[r.iso3] = v; });
+            const sa = A.countries.map(c => c.iso).filter(i => lead[i] != null), down = sa.filter(i => Math.round(lead[i]) < 0).length, up = sa.filter(i => Math.round(lead[i]) > 0).length;
+            const li = [...document.querySelectorAll('#tab-elnino .enso-view-heading .enso-lens-lede > li')].map(x => x.textContent.replace(/\s+/g, ' '));
+            const head = down * 2 > sa.length ? 'Staple prices are down in ' + down + ' of ' + sa.length + ' southern African countries since March' : up * 2 > sa.length ? 'Staple prices are up in ' + up + ' of ' + sa.length + ' southern African countries since March' : 'Staple prices are mixed in southern Africa since March';
+            const E = (await (await fetch('data/enso_econ.json')).json()).data, pk = E.record.peaks, upk = pk.filter(q => q.prev6m > 0 && q.yoy > 0).length;
+            return li.length === 2 && li[0].startsWith(head) && /(no El Niño price surge yet|median [+−]?\d+% across \d+ countries)\.$/.test(li[0])
+                && li[1].includes(upk + ' of ' + pk.length + ' past El Niños') && !/2026 so far|FAO food index/.test(li[1]);
         }"""))
 
         # 2026-09-28: the El Niño month slider was removed at the owner's request (it mixed observed, estimated
@@ -2016,6 +2088,27 @@ def main() -> int:
         check("the Reported badge counts what its label names",
               page.locator('#viewbtn-ensolive .enso-view-desc').inner_text().strip() == 'news & alerts')
 
+        # 2026-09-30 court verdict: the price-risk file obeys its own frozen rule, and the forecast log is append-only and dated.
+        _rk = _pjson.load(open(ROOT / 'data' / 'enso_price_risk.json'))['data']
+        _lg = _pjson.load(open(ROOT / 'data' / 'enso_price_forecast_log.json'))['data']['entries']
+        _bad = []
+        for _e in _rk['series']:
+            for _h, _x in _e['h'].items():
+                if not _x['pass']:
+                    continue
+                _s, _w = _x['select'], _x['windows']
+                _tot = sum(v['n'] for v in _w.values())
+                _hit = sum(v['n'] * v['coverage'] for v in _w.values() if v['n'])
+                if not (_s['n'] >= 36 and all(_s[f'model_{q}'] < _s[f'{b}_{q}'] for q in ('p10', 'p90') for b in ('uncond', 'calmonth'))
+                        and 0.70 <= _s['coverage'] <= 0.90 and (_tot < 8 or _hit / _tot >= 0.70) and _x['p10'] <= _x['p50'] <= _x['p90']):
+                    _bad.append(f"{_e['key']} h{_h}")
+        _tails = {e['iso3']: e['dropped_tail'] for e in _rk['series'] if e['iso3'] in ('MDG', 'ETH')}
+        _bra = [e for e in _rk['series'] if e['key'].startswith('BRA:Maize')][0]
+        check("price-risk file: every shown band passed the early-fold rule, the log is dated, hashed and one entry per run date, MDG/ETH tails dropped, BRA gap flagged",
+              not _bad and [e['run_date'] for e in _lg] == sorted({e['run_date'] for e in _lg}) and all(e['spec_hash'] for e in _lg)
+              and _lg[0]['spec_hash'] == _rk['spec_hash'] and _lg[0]['run_date'] <= _rk['run_date']
+              and all(len(v) == 3 for v in _tails.values()) and set(_tails) == {'MDG', 'ETH'} and (_bra['gap'] or {}).get('months', 0) >= 48
+              and _rk['oni_test']['verdict'] in ('adds_nothing', 'improves'), str(_bad))
         check("no console errors", not errors, "; ".join(errors[:2]))
         browser.close()
 
