@@ -11846,6 +11846,14 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 /* CPC strength odds (2026-09-23). */
 #tab-elnino .enso-strength-plate, #tab-elnino .enso-whopays-plate, #tab-elnino .enso-pricewatch-plate { margin:0 0 var(--enso-gap); }
 #tab-elnino .enso-whopays-plate th[scope=row] span { color:var(--t2); }
+/* 2026-09-30 replacement plate: who replaces a lost export, who is left short. Reuses the outlook table; one ink for the residual. */
+#tab-elnino .enso-repl-plate { margin:0 0 var(--enso-gap); }
+#tab-elnino .enso-repl-plate .enso-repl-h { margin:16px 0 4px; font:500 10.5px/1.35 'Geist Mono',monospace; letter-spacing:.05em; text-transform:uppercase; color:var(--t3); }
+#tab-elnino .enso-repl-plate :is(td,th).enso-repl-n { font-family:'Geist Mono',monospace; white-space:nowrap; }
+#tab-elnino .enso-repl-plate .enso-repl-short { color:#e0864a; font-weight:600; }
+#tab-elnino .enso-repl-plate .enso-repl-ok { color:var(--t2); }
+#tab-elnino .enso-repl-plate td small, #tab-elnino .enso-repl-plate th small { display:block; font:11px/1.4 'Geist Mono',monospace; color:var(--t3); }
+#tab-elnino .enso-repl-plate .enso-repl-new { font:10.5px 'Geist Mono',monospace; color:var(--t3); margin-left:6px; }
 #tab-elnino .enso-strength-table { width:100%; border-collapse:collapse; table-layout:fixed; font:12px 'Geist Mono',monospace; }
 #tab-elnino .enso-strength-table th, #tab-elnino .enso-strength-table td { border:1px solid var(--grid); padding:6px 4px; text-align:center; }
 #tab-elnino .enso-strength-table thead th { color:var(--t2); font-weight:400; }
@@ -13476,6 +13484,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
         <div id="enso-priceanalog"></div>
         <div id="enso-pricewatch"></div>
         <div id="enso-whopays"></div>
+        <div id="enso-replace"></div>
         <section id="enso-money" class="enso-sec"></section>
         <section id="enso-people" class="enso-sec"></section>
       </div>
@@ -44144,13 +44153,13 @@ function showCommodityDetail(key) {
                  'sst_anomaly', 'portwatch_history', 'crop_calendars',
                  'portwatch', 'rtfp', 'fao_ffpi',
                  'asap', 'gdacs', 'ipc', 'reliefweb_alerts',
-                 'enso_news', 'trade_restrictions', 'enso_outlook', 'enso_gauges', 'enso_situation', 'chokepoint_flows', 'enso_strengths', 'worldbank_pink_sheet', 'enso_ports', 'enso_hindcast', 'enso_portfolio_hindcast', 'faostat_food', 'usda_psd', 'enso_freight', 'enso_price_analogs', 'enso_published_effects', 'fpma_prices', 'sst_composites', 'seasonal_outlook', 'rain_anomaly', 'enso_past_events', 'sst_months', 'rain_months', 'enso_recent_events', 'enso_auto_events', 'enso_outlook_events', 'enso_price_outlook', 'enso_forecast_skill', 'enso_price_risk', 'enso_price_forecast_log', 'ref/access_thresholds', 'enso_distribution', 'enso_changes'];
+                 'enso_news', 'trade_restrictions', 'enso_outlook', 'enso_gauges', 'enso_situation', 'chokepoint_flows', 'enso_strengths', 'worldbank_pink_sheet', 'enso_ports', 'enso_hindcast', 'enso_portfolio_hindcast', 'faostat_food', 'usda_psd', 'enso_freight', 'enso_price_analogs', 'enso_published_effects', 'fpma_prices', 'sst_composites', 'seasonal_outlook', 'rain_anomaly', 'enso_past_events', 'sst_months', 'rain_months', 'enso_recent_events', 'enso_auto_events', 'enso_outlook_events', 'enso_price_outlook', 'enso_forecast_skill', 'enso_price_risk', 'enso_price_forecast_log', 'ref/access_thresholds', 'enso_distribution', 'enso_changes', 'enso_replacement'];
     var out = await Promise.all(names.map(get));
     var keys = ['enso', 'exp', 'model', 'regions', 'lanes', 'corridors', 'econ', 'mech', 'indices', 'bulletins',
                 'sst', 'pwhist', 'calendars',
                 'portwatch', 'rtfp', 'ffpi',
                 'asap', 'gdacs', 'ipc', 'relief',
-                'news', 'restrictions', 'outlook', 'gauges', 'situation', 'chokeflows', 'strengths', 'pink', 'ports', 'hindcast', 'pfhind', 'fcpi', 'psd', 'freight', 'panalog', 'pubfx', 'fpma', 'sstcomp', 'seasonal', 'rainnow', 'pastev', 'sstmon', 'rainmon', 'recentev', 'autoev', 'olev', 'pout', 'fskill', 'prisk', 'pflog', 'accthr', 'dist', 'chg'];
+                'news', 'restrictions', 'outlook', 'gauges', 'situation', 'chokeflows', 'strengths', 'pink', 'ports', 'hindcast', 'pfhind', 'fcpi', 'psd', 'freight', 'panalog', 'pubfx', 'fpma', 'sstcomp', 'seasonal', 'rainnow', 'pastev', 'sstmon', 'rainmon', 'recentev', 'autoev', 'olev', 'pout', 'fskill', 'prisk', 'pflog', 'accthr', 'dist', 'chg', 'repl'];
     S.feedNames = {};
     S.oniLive = null;
     keys.forEach(function (k, i) {
@@ -52172,6 +52181,100 @@ function showCommodityDetail(key) {
     el.querySelectorAll('[data-map-country]').forEach(function (b) { b.onclick = function () { ensoFocus(b.getAttribute('data-map-country')); }; });
     animWhoPays(el);
   }
+  /* ── Who replaces it, and who is left short ─────────────────────────────
+     2026-09-30 (the missing half of Who pays): data/enso_replacement.json, built by scripts/build_enso_replacement.py.
+     For each short supplier, the lost exports and its own import need go to buyers; each buyer's need is met from its
+     usual suppliers (FAOSTAT matrix, at most 3x their normal volume) or, as a ceiling, from any major exporter with
+     headroom (USDA stocks and exports, export bans and exporters that lose their own harvest left out). Three headroom
+     cases give the spread. Nothing is typed here: every figure is read from that file. Scenario, not a forecast. */
+  function renderReplace() {
+    var el = document.getElementById('enso-replace'); if (!el) return;
+    var R = S.repl, O = S.outlook;
+    if (!R || !R.pairs || !R.pairs.length) { el.innerHTML = ''; return; }
+    var kt = function (v) { return fmtKt(Math.abs(v)).replace('+', ''); };
+    var nm = function (iso) { return iso === 'EU27' ? 'EU-27' : nameFor(iso); };
+    var cap = function (t) { return t.replace(/^\w/, function (c) { return c.toUpperCase(); }); };
+    var rng = function (a, b) { var lo = Math.min(a, b), hi = Math.max(a, b); return Math.round(lo) === Math.round(hi) || fmtKt(lo) === fmtKt(hi) ? kt(lo) : kt(lo) + ' to ' + kt(hi); };
+    var KEYS = ['low', 'mid', 'high'];
+    var crops = []; R.pairs.forEach(function (p) { if (crops.indexOf(p.crop) < 0) crops.push(p.crop); });
+    var need = function (cr) { return R.pairs.filter(function (p) { return p.crop === cr; }).reduce(function (a, p) { return a + p.buyers.reduce(function (b, x) { return b + x.need_kt; }, 0); }, 0); };
+    crops.sort(function (a, b) { return need(b) - need(a); });
+    var normalOf = function (iso, cr) { var e = (R.exporters || []).filter(function (x) { return x.iso === iso && x.crop === cr; })[0]; return e ? e.normal_exports_kt : null; };
+    var cropBlock = function (cr) {
+      var A = R.aggregate[cr], pairs = R.pairs.filter(function (p) { return p.crop === cr; });
+      var who = pairs.map(function (p) { return nm(p.iso); }).join(' and ');
+      var tot = A.mid.open.need_kt;
+      var uRes = KEYS.map(function (k) { return A[k].usual.residual_kt; }), oRes = KEYS.map(function (k) { return A[k].open.residual_kt; });
+      var uCov = tot - Math.max.apply(null, uRes);
+      var pct = function (a, b) { return b ? Math.round(a / b * 100) : 0; };
+      /* Buyers, pooled over the short suppliers that hit them. */
+      var B = {};
+      pairs.forEach(function (p) { p.buyers.forEach(function (b) {
+        var r = B[b.iso] = B[b.iso] || { iso: b.iso, need: 0, from: [], cons: b.consumption_kt, cases: {} };
+        r.need += b.need_kt; var fr0 = b.kind === 'own' ? 'its own harvest' : nm(b.from); if (r.from.indexOf(fr0) < 0) r.from.push(fr0);
+        KEYS.forEach(function (k) { ['usual', 'open'].forEach(function (sc) { var c = r.cases[k + sc] = r.cases[k + sc] || { res: 0 }; c.res += b.cases[k][sc].residual_kt; }); });
+      }); });
+      var buyers = Object.keys(B).map(function (i) { return B[i]; }).sort(function (a, b) { return b.cases.midusual.res - a.cases.midusual.res; });
+      /* Suppliers: tonnes at the middle case with the spread over the three, and who they would serve. */
+      var S0 = {};
+      KEYS.forEach(function (k) { A[k].open.suppliers.forEach(function (x) { var r = S0[x.iso] = S0[x.iso] || { iso: x.iso, kt: {}, to: {}, usual: false }; r.kt[k] = x.kt; }); });
+      pairs.forEach(function (p) { p.buyers.forEach(function (b) { b.cases.mid.open.replaced.forEach(function (l) { var r = S0[l.from]; if (!r) return; r.to[b.iso] = (r.to[b.iso] || 0) + l.kt; if (l.tier === 'usual') r.usual = true; }); }); });
+      var sup = Object.keys(S0).map(function (i) { return S0[i]; }).sort(function (a, b) { return (b.kt.mid || 0) - (a.kt.mid || 0); });
+      var supRow = function (r) {
+        var vs = KEYS.map(function (k) { return r.kt[k] || 0; }), n = normalOf(r.iso, cr), mid = r.kt.mid || 0;
+        var to = Object.keys(r.to).sort(function (a, b) { return r.to[b] - r.to[a]; }).slice(0, 3).map(function (i) { return esc(nm(i)) + ' ' + esc(kt(r.to[i])); }).join(', ');
+        return '<tr><th scope="row">' + esc(nm(r.iso)) + (r.usual ? '' : '<span class="enso-repl-new">new line</span>') + '</th><td class="enso-repl-n">' + esc(kt(mid)) + '</td><td class="enso-repl-n">' + esc(rng(Math.min.apply(null, vs), Math.max.apply(null, vs))) + '</td><td class="enso-repl-n">' +
+          (n ? Math.round(mid / n * 1000) / 10 + '%' : 'n/a') + '</td><td>' + to + '</td></tr>';
+      };
+      var buyRow = function (r) {
+        var u = KEYS.map(function (k) { return r.cases[k + 'usual'].res; }), o = KEYS.map(function (k) { return r.cases[k + 'open'].res; });
+        var wk = r.cons ? Math.round(Math.max.apply(null, u) / r.cons * 52) : null;
+        var short = Math.max.apply(null, u) >= 1, openShort = Math.max.apply(null, o) >= 1;
+        return '<tr><th scope="row"><button type="button" data-map-country="' + esc(r.iso) + '">' + esc(nm(r.iso)) + '</button><small>needs ' + esc(kt(r.need)) + ' · from ' + esc(r.from.join(', ')) + '</small></th>' +
+          '<td class="enso-repl-n ' + (short ? 'enso-repl-short' : 'enso-repl-ok') + '">' + esc(short ? rng(Math.min.apply(null, u), Math.max.apply(null, u)) : 'none') + (short && wk ? '<small>' + wk + ' weeks of use</small>' : '') + '</td>' +
+          '<td class="enso-repl-n ' + (openShort ? 'enso-repl-short' : 'enso-repl-ok') + '">' + esc(openShort ? rng(Math.min.apply(null, o), Math.max.apply(null, o)) : 'none') + '</td></tr>';
+      };
+      var shortList = A.mid.usual.short_countries.slice(0, 3).map(function (c) { return esc(nm(c.iso)) + (pairs.some(function (p) { return p.iso === c.iso; }) ? ' (own harvest)' : '') + ' ' + esc(kt(c.residual_kt)); }).join(', ');
+      var top = A.mid.open.suppliers.slice(0, 2).map(function (x) { var n = normalOf(x.iso, cr); return esc(nm(x.iso)) + ' ' + esc(kt(x.kt)) + (n ? ' (' + (Math.round(x.kt / n * 1000) / 10) + '% of its normal exports)' : ''); }).join(' and ');
+      var strAll = {}; KEYS.forEach(function (k) { A[k].open.stretched.forEach(function (x) { strAll[x.iso] = Math.max(strAll[x.iso] || 0, x.extra_pct_of_normal_exports); }); });
+      var strTxt = Object.keys(strAll).map(function (i) { return esc(nm(i)) + ' (+' + Math.round(strAll[i]) + '%)'; }).join(', ');
+      var unrouted = pairs.reduce(function (a, p) { return a + (p.unrouted_other_buyers_kt || 0); }, 0);
+      var lede = '<p class="enso-wp-lede"><b>' + esc(cap(payCrop(cr))) + ':</b> ' + esc(kt(tot)) + ' of potential import need from ' + esc(who) + ' in this scenario. Buyers’ usual suppliers could cover ' + esc(kt(uCov)) + ' (' + pct(uCov, tot) + '%); the rest needs suppliers they do not use today.</p>';
+      var bl = bulletList([
+        '<b>Usual suppliers only:</b> ' + esc(rng(Math.min.apply(null, uRes), Math.max.apply(null, uRes))) + ' uncovered' + (shortList ? ', mostly ' + shortList : '') + '. Each usual supplier is held to ' + esc(String(R.params.usual_ramp_x)) + 'x its normal volume to that buyer.',
+        '<b>If buyers open new suppliers:</b> ' + (Math.max.apply(null, oRes) < 1 ? 'nothing is left uncovered in any of the three headroom cases' : esc(rng(Math.min.apply(null, oRes), Math.max.apply(null, oRes))) + ' uncovered') + (top ? '; ' + top + ' carry most at the middle case' : '') + '. A ceiling: contracts, ports, freight and grain type are not priced in.',
+        '<b>Stretched:</b> ' + (strTxt ? strTxt + ' above ' + Math.round(R.params.stretch_share * 100) + '% of normal exports in the tightest case' : 'no exporter above ' + Math.round(R.params.stretch_share * 100) + '% of its normal exports in any case') + (unrouted ? '. ' + esc(kt(unrouted)) + ' of other buyers is not placed.' : '.')
+      ]);
+      var head = function (cols) { return '<thead><tr>' + cols.map(function (c) { return '<th scope="col">' + c + '</th>'; }).join('') + '</tr></thead>'; };
+      var more = function (rows, fn, n) { return rows.slice(0, n).map(fn).join('') ; };
+      var T1 = '<div class="enso-repl-h">Who would supply it, source to buyer · middle case, new suppliers allowed</div><table class="enso-outlook-table">' +
+        head(['Source', 'Tonnes', 'Range, 25% to 100% of stocks', 'Share of its normal exports', 'To']) + '<tbody>' + more(sup, supRow, 3) + '</tbody></table>' +
+        (sup.length > 3 ? '<details class="enso-ol-more"><summary>' + (sup.length - 3) + ' more sources</summary><table class="enso-outlook-table"><tbody>' + sup.slice(3).map(supRow).join('') + '</tbody></table></details>' : '');
+      var T2 = '<div class="enso-repl-h">Who is left short · tonnes uncovered, range over the three headroom cases</div><table class="enso-outlook-table">' +
+        head(['Buyer', 'Uncovered, usual suppliers only', 'Uncovered, new suppliers allowed']) + '<tbody>' + more(buyers, buyRow, 3) + '</tbody></table>' +
+        (buyers.length > 3 ? '<details class="enso-ol-more"><summary>' + (buyers.length - 3) + ' more buyers</summary><table class="enso-outlook-table"><tbody>' + buyers.slice(3).map(buyRow).join('') + '</tbody></table></details>' : '');
+      return lede + bl + T1 + T2;
+    };
+    var first = crops[0], rest = crops.slice(1);
+    var M = (S.meta && S.meta.repl) || {}, asm = (M.assumptions || []).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('');
+    var sens = R.sensitivity.map(function (s) {
+      var c = R.aggregate[first][s.key];
+      return '<tr><th scope="row">' + Math.round(s.stock_share * 100) + '% of stocks, ' + Math.round(s.slack_share * 100) + '% slack</th><td class="enso-repl-n">' + esc(kt(c.usual.residual_kt)) + '</td><td class="enso-repl-n">' + esc(kt(c.open.residual_kt)) + '</td><td>' +
+        c.open.suppliers.slice(0, 3).map(function (x) { return esc(nm(x.iso)) + ' ' + esc(kt(x.kt)); }).join(', ') + '</td></tr>';
+    }).join('');
+    var fr = R.freight_signal, pa = R.panama || {};
+    el.innerHTML = '<figure class="enso-plate enso-repl-plate is-modelled">' +
+      plateHead('Who replaces it, and who is left short', 'Modelled re-routing of lost exports at the ONI ' + num(R.oni, 1) + ' scenario · FAOSTAT trade matrix × USDA stocks and exports × export bans × Panama and Gulf freight', stamp(metaDate('repl')), 'modelled') +
+      '<div class="plate-body">' + cropBlock(first) +
+      rest.map(function (cr) { return '<details class="enso-ol-more"><summary>' + esc(cap(payCrop(cr))) + ': ' + esc(R.pairs.filter(function (p) { return p.crop === cr; }).map(function (p) { return nm(p.iso); }).join(', ')) + '</summary>' + cropBlock(cr) + '</details>'; }).join('') + '</div>' +
+      '<figcaption class="enso-log">Scenario, not a forecast: potential import need, not a prediction of who buys what. “New line” = a supplier the buyer does not use today in the FAOSTAT matrix, so its tonnes are a ceiling.</figcaption>' +
+      '<details class="enso-evidence-note"><summary>How this is counted, and the sensitivity</summary>' +
+      '<table class="enso-outlook-table"><thead><tr><th scope="col">Headroom case, ' + esc(payCrop(first)) + '</th><th scope="col">Uncovered, usual suppliers only</th><th scope="col">Uncovered, new suppliers allowed</th><th scope="col">Largest sources</th></tr></thead><tbody>' + sens + '</tbody></table>' +
+      '<ul class="enso-bullets">' + asm + '</ul>' +
+      (fr ? '<p>Cost signal, not a price: ' + esc(fr.series) + ' is $' + esc(String(fr.latest.value)) + ' a tonne in ' + esc(isoText(fr.latest.date.slice(0, 7))) + ', ' + esc(String(fr.vs_baseline_pct)) + '% above its ' + esc(fr.baseline_label || 'baseline') + '.' + (pa.slots_now ? ' Panama Canal: ' + esc(String(pa.slots_now)) + ' booking slots a day against a normal ' + esc(String(pa.normal_slots)) + ' (advisory ' + esc(pa.advisory || '') + '), ' + esc(String(pa.slots_floor_2023)) + ' at the 2023 floor. Only US exports to East and Southeast Asian buyers are scaled by it.' : '') + '</p>' : '') +
+      '</details></figure>';
+    el.querySelectorAll('[data-map-country]').forEach(function (b) { b.onclick = function () { ensoFocus(b.getAttribute('data-map-country')); }; });
+  }
   /* ── Which prices to watch, and when: a dated trigger table ─────────────
      2026-09-30 verdict (was a watch calendar): one row per world price, the next dated trigger (an export-measure date
      or a harvest window the FoodShield model moves), and the places exposed. Today's World Bank price and its change
@@ -53064,7 +53167,7 @@ function showCommodityDetail(key) {
       elnino: ['.enso-mapgrid', '#enso-pacific', '#enso-strengths', '.enso-oni-plate', '#enso-next12', '#enso-agencies', '#subview-ensomech'],
       ensoharvest: ['.enso-mapgrid', '#enso-outlook', '#enso-dist', '#enso-hindcast', '#enso-pubfx', '#enso-land-head', '.enso-harvest-pair', '#enso-calendar'],
       ensowater: ['.enso-mapgrid', '#enso-water'],
-      ensomoney: ['.enso-mapgrid', '#enso-whopays', '#enso-priceanalog', '#enso-pricewatch', '#enso-money', '#enso-people'],
+      ensomoney: ['.enso-mapgrid', '#enso-whopays', '#enso-replace', '#enso-priceanalog', '#enso-pricewatch', '#enso-money', '#enso-people'],
       ensolive: ['.enso-mapgrid', '#enso-live-lead', '#enso-live']
     };
     Object.keys(ORDER).forEach(function (sub) {
@@ -53452,7 +53555,7 @@ function showCommodityDetail(key) {
         renderControls(); renderCoeffs(); renderDetail(); renderCalendar(); renderOutlook(); renderHindcast(); renderDist();
         if (S.drawn.live) renderLive();
         if (S.drawn.water) renderWater();
-        if (S.drawn.money) { renderPriceAnalog(); renderWhoPays(); renderPriceWatch(); renderMoney(); renderPeople(); }
+        if (S.drawn.money) { renderPriceAnalog(); renderWhoPays(); renderReplace(); renderPriceWatch(); renderMoney(); renderPeople(); }
         if (S.drawn.mech) { renderMechanism(); renderPacific(); }
         S.drawn.map = true;
       }
@@ -53463,7 +53566,7 @@ function showCommodityDetail(key) {
     if (S.sub === 'ensowater' && !S.drawn.water) {
       renderWater(); S.drawn.water = true;
     } else if (S.sub === 'ensomoney' && !S.drawn.money) {
-      renderPriceAnalog(); renderWhoPays(); renderPriceWatch(); renderMoney(); renderPeople(); S.drawn.money = true;
+      renderPriceAnalog(); renderWhoPays(); renderReplace(); renderPriceWatch(); renderMoney(); renderPeople(); S.drawn.money = true;
     }
     /* Only draw charts for the view being entered. drawCharts() used to run on
        every switch, tearing down and rebuilding all five Chart.js instances

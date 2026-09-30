@@ -1450,6 +1450,42 @@ def main() -> int:
             const un = (h.match(/not calibrated/g) || []).length, all = (h.match(/calibrated/g) || []).length;
             return Object.values(T).every(e => e.supported === (typeof e.line === 'number')) && un === Object.values(T).filter(e => !e.supported).length && all - un === Object.values(T).filter(e => e.supported).length;
         }"""))
+        # 2026-09-30 replacement engine (data/enso_replacement.json, scripts/build_enso_replacement.py): the file's own
+        # arithmetic is gated (conservation per buyer, no source past its headroom, no banned or short exporter used),
+        # and the plate must print the file's numbers.
+        check("replacement file: replaced + residual = need for every buyer, case and scope; no source above its headroom; no banned or fitted-short exporter used", page.evaluate("""async () => {
+            const R = (await (await fetch('data/enso_replacement.json')).json()).data;
+            const O = (await (await fetch('data/enso_outlook.json')).json()).data, X = (await (await fetch('data/trade_restrictions.json')).json()).data;
+            const rx = c => c === 'corn' ? /maize|corn/i : new RegExp(c, 'i'), today = new Date().toISOString().slice(0, 10);
+            let bad = [];
+            const used = {};
+            R.pairs.forEach(p => p.buyers.forEach(b => Object.keys(b.cases).forEach(k => ['usual', 'open'].forEach(sc => {
+                const c = b.cases[k][sc];
+                if (Math.abs(c.replaced_kt + c.residual_kt - b.need_kt) > 0.06 || c.residual_kt < -0.001) bad.push('conserve ' + p.iso + '>' + b.iso + ' ' + k + sc);
+                c.replaced.forEach(l => {
+                    const q = p.crop + k + sc + l.from; used[q] = (used[q] || 0) + l.kt;
+                    if (X.some(m => m.iso === l.from && /ban/i.test(m.measure) && rx(p.crop).test(m.commodity) && m.status !== 'historical' && (!m.ends_date || m.ends_date >= today))) bad.push('banned ' + l.from);
+                    if (O.rows_all.some(r => r.iso === l.from && r.crop === p.crop && r.status === 'shown' && r.change_pct_record < 0)) bad.push('short ' + l.from);
+                });
+            }))));
+            R.exporters.forEach(e => Object.keys(e.cases).forEach(ck => {
+                const [k, sc] = ck.split('_'), u = used[e.crop + k + sc + e.iso] || 0;
+                if (u > e.cases[ck].headroom_kt + 0.5 * R.pairs.length) bad.push('headroom ' + e.iso + ' ' + ck);
+            }));
+            window.__replBad = bad;
+            return R.pairs.length > 0 && bad.length === 0;
+        }"""), str(page.evaluate("window.__replBad")))
+        check("Who replaces it plate prints the file's need, the usual-supplier shortfall and the new-supplier ceiling, modelled frame, no dashes", page.evaluate("""async () => {
+            const R = (await (await fetch('data/enso_replacement.json')).json()).data;
+            const pl = document.querySelector('#enso-replace .enso-repl-plate'); if (!pl) return false;
+            const first = Object.keys(R.aggregate).map(c => [c, R.aggregate[c].mid.open.need_kt]).sort((a, b) => b[1] - a[1])[0];
+            const txt = pl.textContent, need = first[1] >= 1000 ? (first[1] / 1000).toFixed(1) + ' Mt' : Math.round(first[1]) + ' kt';
+            return pl.classList.contains('is-modelled') && txt.includes('Who replaces it, and who is left short') && txt.includes(need)
+                && /uncovered/.test(txt) && /potential import need/.test(txt) && !/forecast of/.test(txt.replace(/not a forecast|not a prediction/g, ''))
+                && !/[\u2014\u2013]/.test(pl.querySelector('.plate-body').textContent)
+                && (R.aggregate[first[0]].mid.usual.residual_kt < 1 || pl.querySelectorAll('.enso-repl-short').length > 0)
+                && getComputedStyle(pl).borderTopLeftRadius === '0px';
+        }"""))
         # 2026-09-24: past El Niños and world prices are one dot plot; food inflation by country is the
         # map and its ranked list only (the bar chart and 37-row table repeated it).
         # 2026-09-30 court verdict: the world-price event study, the published models and the other drivers are one fold,

@@ -91,6 +91,7 @@ import refresh_rain_months      # CPC + CHIRPS rain for the last six complete mo
 import refresh_shipping_gauges  # Gatún, St. Louis (+ barge rate), Kaub, Rosario, Manaus: the water behind the lanes
 import refresh_import_ports     # PortWatch dry-bulk imports at the gateway ports of the El Niño concern regions
 import refresh_enso_freight     # USDA AgTransport: Gulf/PNW->Japan grain freight, export inspections, barged grain
+import build_enso_replacement   # El Niño replacement trades: who replaces a lost export, who is left short (stdlib, no network)
 import build_enso_outlook       # El Niño outlook: fitted pairs x production x harvest, plus live signals per region
 import build_enso_changes       # El Niño "what changed": snapshot of every tracked measure + 6 h / 24 h / 7 d differences
 import build_countries_dataset
@@ -207,6 +208,7 @@ STEPS = [
     ("Grain freight (USDA)",   refresh_enso_freight.main,       "enso_freight.json"),
     # Derived, no network: reads the feeds above and the fitted model, so it runs after them.
     ("El Niño outlook",        build_enso_outlook.main,         "enso_outlook.json"),
+    ("El Niño replacement",    build_enso_replacement.main,     "enso_replacement.json"),
     # Derived, no network: must run after every El Niño step above (it snapshots their outputs). Also appends data/enso_snapshots.json.
     ("El Niño what changed",   build_enso_changes.main,         "enso_changes.json"),
     ("Countries dataset",      build_countries_dataset.main,    "countries.json"),

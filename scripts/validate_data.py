@@ -120,6 +120,7 @@ EXPECTED_FILES = {
     # El Niño tab's Reported view reads it. Empty on a quiet cycle is honest.
     'enso_news.json':             ('soft',     'dict_or_empty'),
     'enso_outlook.json':          ('soft',     'dict_or_empty'),
+    'enso_replacement.json':      ('soft',     'dict_or_empty'),
     'enso_gauges.json':           ('soft',     'dict_or_empty'),
     'enso_changes.json':          ('soft',     'enso_changes'),        # server-side "what changed", ranked by a written rule
     'enso_snapshots.json':        ('soft',     'enso_snapshots'),      # rolling archive the changes are computed from
