@@ -482,7 +482,171 @@ def acp_advisories(today: date) -> dict:
     if not rows:
         raise RuntimeError("ACP advisory listing parsed no advisories for this year")
     rows.sort(key=lambda r: -r["number"])
+    # Operational fields for the newest two only. Failure here must never lose the listing.
+    for r in rows[:2]:
+        try:
+            r["extracted"] = extract_advisory(r, rows[0]["number"])
+        except Exception as e:  # noqa: BLE001
+            r["extracted"] = {"status": "extraction failed", "reason": f"{type(e).__name__}: {e}", "fields": {}}
     return {"year": today.year, "latest": rows[0], "recent": rows[:5], "source": ACP_LIST}
+
+
+# ---- Advisory interpretation -------------------------------------------------------------------------------
+# Reads the operational fields out of the advisory text. Every field keeps the sentence it came from, so a person
+# can check it in seconds. Status is always "automated extraction, pending review": nothing here reaches the
+# curated data/enso_lanes.json live_2026 block, which a person still updates by hand.
+ACP_FEED = "https://pancanal.com/en/feed/"
+_MONTHS = {m: i for i, m in enumerate(["January", "February", "March", "April", "May", "June", "July", "August",
+                                        "September", "October", "November", "December"], 1)}
+_WORDNUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+            "ten": 10, "eleven": 11, "twelve": 12}
+_DATE = r"((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+20\d\d)"
+
+
+def _iso(text: str) -> str | None:
+    m = re.match(r"([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})$", text.strip())
+    return f"{m.group(3)}-{_MONTHS[m.group(1)]:02d}-{int(m.group(2)):02d}" if m and m.group(1) in _MONTHS else None
+
+
+def _num(tok: str) -> int | None:
+    tok = tok.lower()
+    return _WORDNUM.get(tok) or (int(tok) if tok.isdigit() else None)
+
+
+def _sentences(text: str) -> list[str]:
+    flat = re.sub(r"\s+", " ", text)
+    return [x.strip() for x in re.split(r"(?<=[.;])\s+(?=[A-Z0-9])", flat) if x.strip()]
+
+
+def _advisory_pdf_text(url: str) -> str | None:
+    """PDF text through pypdf when it is installed (CI may not have it); None otherwise."""
+    try:
+        import pypdf  # noqa: PLC0415
+    except ImportError:
+        return None
+    r = get(url)
+    r.raise_for_status()
+    rd = pypdf.PdfReader(io.BytesIO(r.content))
+    return "\n".join((pg.extract_text() or "") for pg in rd.pages)
+
+
+def _advisory_news_text(adv: dict) -> tuple[str, str, str, str] | None:
+    """Fallback: the ACP news item that reports the same advisory, found in ACP's own news feed. Sure match: the
+    advisory number appears in the item. Otherwise a weak match: the NEWEST item that shares at least half of the
+    advisory subject's longer words, labelled as such. Only used for the newest advisory."""
+    import html as _html  # noqa: PLC0415
+    from email.utils import parsedate_to_datetime  # noqa: PLC0415
+    xml = get(ACP_FEED).text
+    words = {w for w in re.findall(r"[a-z]{5,}", adv["title"].lower())}
+    hits = []
+    for it in re.findall(r"<item>(.*?)</item>", xml, re.S):
+        cm = re.search(r"<content:encoded>(.*?)</content:encoded>", it, re.S)
+        body = _html.unescape(re.sub(r"<[^>]+>", " ", cm.group(1))) if cm else ""
+        title = _html.unescape(re.search(r"<title>(.*?)</title>", it, re.S).group(1))
+        link = re.sub(r"\?utm_.*$", "", _html.unescape(re.search(r"<link>(.*?)</link>", it).group(1)))
+        pub = re.search(r"<pubDate>(.*?)</pubDate>", it)
+        try:
+            when = parsedate_to_datetime(pub.group(1)) if pub else None
+        except (TypeError, ValueError):
+            when = None
+        shared = len(words & set(re.findall(r"[a-z]{5,}", (title + " " + body).lower())))
+        body = re.sub(r"\s+", " ", body).strip()
+        if adv["id"] in body:
+            return body, link, pub.group(1) if pub else "", "advisory number found in the item"
+        if words and shared / len(words) >= 0.5 and when:
+            hits.append((when, body, link, pub.group(1), f"weak match: {shared} of {len(words)} subject words, newest such item"))
+    if hits:
+        h = max(hits, key=lambda x: x[0])
+        return h[1], h[2], h[3], h[4]
+    return None
+
+
+def extract_advisory(adv: dict, max_no: int = 0) -> dict:
+    text, method, src = None, None, adv["url"]
+    pub = ""
+    try:
+        text = _advisory_pdf_text(adv["url"])
+        method = "ACP advisory PDF (pypdf)"
+    except Exception as e:  # noqa: BLE001
+        print(f"  note pdf read failed for {adv['id']}: {e}")
+    if not text or len(text.strip()) < 200:
+        news = _advisory_news_text(adv) if adv.get("number") == max_no else None
+        if not news:
+            return {"status": "text unavailable", "reason": "PDF reader not installed or unreadable, and no ACP news item matched",
+                    "fields": {}}
+        text, src, pub, how = news
+        method = f"ACP news item (fallback, PDF text not read; {how})"
+    flat = re.sub(r"\s+", " ", text)
+    sents = _sentences(text)
+    fields: dict = {}
+
+    def put(key, value, snippet, **extra):
+        fields[key] = {"value": value, "snippet": snippet[:320], **extra}
+
+    def around(src, m, before=130, after=90):
+        """The text around a match, cut at word boundaries, so a reader can find the field in the advisory."""
+        a, b = max(0, m.start() - before), min(len(src), m.end() + after)
+        if a > 0 and " " in src[a:m.start()]:
+            a = src.index(" ", a) + 1
+        if b < len(src) and " " in src[m.end():b]:
+            b = src.rindex(" ", m.end(), b)
+        return ("... " if a > 0 else "") + src[a:b].strip() + (" ..." if b < len(src) else "")
+
+    # Advisory date: the PDF dates itself; the news item only has its publication day.
+    m = re.search(r"Advisory to Shipping No\. [A-Z]-\d+-\d{4}\s+" + _DATE, flat)
+    if m and _iso(m.group(1)):
+        put("advisory_date", _iso(m.group(1)), m.group(0))
+    elif pub:
+        try:
+            put("advisory_date", datetime.strptime(pub[:16], "%a, %d %b %Y").date().isoformat(), "news item pubDate: " + pub,
+                note="publication day of the ACP news item; the advisory itself is dated the same day or earlier")
+        except ValueError:
+            pass
+    # New draft: a sentence about the draft limit that gives metres and feet.
+    for sn in sents:
+        if re.search(r"\bdraft\b", sn, re.I):
+            d = re.search(r"(\d{2}\.\d{1,2})\s*m(?:etres|eters)?\s*\((\d{2}(?:\.\d)?)\s*(?:feet|ft)", sn)
+            if d and re.search(r"maximum (?:authori[sz]ed|allowable)? ?draft", sn, re.I):
+                ft = float(d.group(2))
+                snip = around(sn, d, 160, 40)
+                put("draft_ft", ft, snip)
+                put("draft_m", float(d.group(1)), snip)
+                e = re.search(r"effective (immediately|" + _DATE[1:-1] + ")", sn)
+                if e:
+                    put("draft_effective", "immediately" if e.group(1) == "immediately" else _iso(e.group(1)), around(sn, e, 20, 60))
+                if re.search(r"until further notice", sn, re.I):
+                    put("draft_until", "further notice", snip)
+                if re.search(r"remain(?:s)? in effect|postpon", sn, re.I):
+                    put("draft_kind", "unchanged or postponed, not a new limit", snip)
+                break
+    # Daily capacity and first booking date.
+    m = re.search(r"from (\w+) to (\w+) (?:daily )?slots", flat) or re.search(r"increase to (\w+) the number of daily", flat, re.I)
+    if m:
+        n = _num(m.group(m.lastindex if m.lastindex == 2 and _num(m.group(2)) else 1))
+        if n:
+            put("neopanamax_slots", n, around(flat, m, 120, 60))
+    m = re.search(r"total (?:daily )?capacity to (\d{2}) (?:transit )?slots", flat) or re.search(r"total of (\d{2}) daily slots", flat)
+    if m:
+        put("total_slots", int(m.group(1)), around(flat, m, 120, 60))
+    m = re.search(r"booking dates beginning " + _DATE, flat) or re.search(r"slots[^.]{0,80}beginning " + _DATE, flat)
+    if m and _iso(m.group(1)):
+        put("first_booking_date", _iso(m.group(1)), around(flat, m, 120, 40))
+    m = re.search(r"effective (?:on )?" + _DATE, flat)
+    if m and _iso(m.group(1)):
+        put("rules_effective_date", _iso(m.group(1)), around(flat, m, 40, 90),
+            note="date the booking rules take effect; a draft limit can differ, see draft_effective")
+    if "draft_effective" in fields and fields["draft_effective"]["value"] == "immediately" and "advisory_date" in fields:
+        put("draft_effective_date", fields["advisory_date"]["value"], fields["draft_effective"]["snippet"],
+            note="'effective immediately' read as the advisory date")
+    # Supersedes: only what the text says about an earlier advisory or a scheduled step it replaces.
+    for sn in sents:
+        o = [x for x in re.findall(r"A-\d+-\d{4}", sn) if x != adv["id"]]
+        if o and re.search(r"supersed|replac|postpone|cancel|amend|as announced|modif", sn, re.I):
+            put("supersedes", o[0], sn)
+            break
+    else:
+        fields["supersedes"] = {"value": None, "snippet": "", "note": "the text names no earlier advisory it replaces"}
+    return {"status": "automated extraction, pending review", "method": method, "source_url": src, "fields": fields}
 
 
 def main() -> int:

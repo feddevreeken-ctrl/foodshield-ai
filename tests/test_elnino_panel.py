@@ -1059,7 +1059,7 @@ def main() -> int:
         # 2026-09-29 audit (Ocean): read everything from the data files, never from typed numbers.
         check("Ocean audit: the strip says when the newest El Niño feed was collected", page.evaluate("""async () => {
             // The page's rule: every loaded feed named enso*, sst_*, rain_* or seasonal_outlook, except the hand-run forecast track record.
-            const names = ['enso','enso_exposure','enso_model','enso_regions','enso_lanes','enso_corridors','enso_econ','enso_mechanism','enso_indices','enso_bulletins','sst_anomaly','enso_news','enso_outlook','enso_gauges','enso_situation','enso_strengths','enso_ports','enso_hindcast','enso_freight','enso_price_analogs','enso_published_effects','sst_composites','seasonal_outlook','rain_anomaly','enso_past_events','sst_months','rain_months','enso_recent_events','enso_auto_events','enso_outlook_events','enso_price_outlook','enso_price_risk','enso_price_forecast_log'];
+            const names = ['enso','enso_exposure','enso_model','enso_regions','enso_lanes','enso_corridors','enso_econ','enso_mechanism','enso_indices','enso_bulletins','sst_anomaly','enso_news','enso_outlook','enso_gauges','enso_situation','enso_strengths','enso_ports','enso_hindcast','enso_freight','enso_price_analogs','enso_published_effects','sst_composites','seasonal_outlook','rain_anomaly','enso_past_events','sst_months','rain_months','enso_recent_events','enso_auto_events','enso_outlook_events','enso_price_outlook','enso_price_risk','enso_price_forecast_log','enso_changes'];
             const ds =(await Promise.all(names.map(n => fetch('data/' + n + '.json').then(r => r.json()).catch(() => null)))).filter(Boolean).map(j => new Date(j._meta.generated_at || j._meta.generated)).filter(d => !isNaN(d));
             const t = (document.querySelector('#enso-status-home .enso-now-upd') || {}).textContent || '';
             const hm = d => String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0');
@@ -2409,6 +2409,31 @@ def main() -> int:
               and _lg[0]['spec_hash'] == _rk['spec_hash'] and _lg[0]['run_date'] <= _rk['run_date']
               and all(len(v) == 3 for v in _tails.values()) and set(_tails) == {'MDG', 'ETH'} and (_bra['gap'] or {}).get('months', 0) >= 48
               and _rk['oni_test']['verdict'] in ('adds_nothing', 'improves'), str(_bad))
+        # 2026-09-30 intelligence plumbing: server-side changes, ACP extraction, evidence cards.
+        _ch = _pjson.load(open(ROOT / 'data' / 'enso_changes.json'))['data']
+        _sn = _pjson.load(open(ROOT / 'data' / 'enso_snapshots.json'))['data']['snapshots']
+        _cl = [c for w in _ch['windows'].values() for c in w['changes']]
+        intel = page.evaluate("""() => { const I = window.__ensoIntel; if (!I) return null;
+            const out = { chg: ['6h', '24h', '7d'].map(w => I.changesHTML(w)), x: I.acpExtracted(), xh: I.acpExtractedHTML(), cards: {} };
+            for (const k of ['panama', 'nino_forecast', 'zimbabwe_maize', 'pattern_sa', 'food_access']) { const d = I.evidenceCardData(k);
+                out.cards[k] = d && { rating: d.rating, n: d.checks.length, kinds: d.checks.map(c => c.k).join(','), html: I.evidenceCardHTML(k).length, dash: I.evidenceCardHTML(k).indexOf('\u2014') >= 0 }; }
+            return out; }""")
+        check("what changed: a server file with a written rank rule, snapshots in time order, every window says its baseline, no em dash",
+              bool(intel) and _ch['rank_rule']['score'] and set(_ch['windows']) == {'6h', '24h', '7d'} and [x['t'] for x in _sn] == sorted({x['t'] for x in _sn})
+              and all((w['status'] == 'ok') == bool(w['baseline_t']) for w in _ch['windows'].values())
+              and all(abs(c['materiality'] * c['confidence'] * c['relevance'] - c['score']) < 0.002 and '\u2014' not in c['text'] for c in _cl)
+              and all(len(h) > 20 for h in intel['chg']), str(intel and intel['chg'][0][:120]))
+        _gx = _pjson.load(open(ROOT / 'data' / 'enso_gauges.json'))['data']['acp_advisories']['latest']
+        _xf = (_gx.get('extracted') or {}).get('fields', {})
+        _a36 = _gx['id'] != 'A-36-2026' or (_xf['draft_ft']['value'] == 49.0 and _xf['neopanamax_slots']['value'] == 10 and _xf['total_slots']['value'] == 33
+                                            and _xf['first_booking_date']['value'] == '2026-10-15' and _xf['advisory_date']['value'] == '2026-09-28')
+        check("ACP advisory: the newest one is read into draft, slots and booking date with the source sentence; marked pending review; the curated live_2026 draft is untouched",
+              _a36 and _gx['extracted']['status'] == 'automated extraction, pending review' and all(v['snippet'] for k, v in _xf.items() if v['value'] is not None)
+              and bool(intel and intel['x'] and 'pending review' in intel['xh'] and intel['x']['curated_draft_ft'] == 49.0), str(intel and intel['xh'][:160]))
+        check("evidence cards: five claims, each with the same seven checks and a High, Moderate or Low word from the written rule, no em dash",
+              bool(intel) and set(intel['cards']) == {'panama', 'nino_forecast', 'zimbabwe_maize', 'pattern_sa', 'food_access'}
+              and all(c and c['rating'] in ('High', 'Moderate', 'Low') and c['n'] == 7 and c['kinds'] == 'source,age,validation,coverage,fvo,attr,confirm' and not c['dash']
+                      for c in intel['cards'].values()), str(intel and intel['cards']))
         check("no console errors", not errors, "; ".join(errors[:2]))
         browser.close()
 

@@ -92,6 +92,7 @@ import refresh_shipping_gauges  # Gatún, St. Louis (+ barge rate), Kaub, Rosari
 import refresh_import_ports     # PortWatch dry-bulk imports at the gateway ports of the El Niño concern regions
 import refresh_enso_freight     # USDA AgTransport: Gulf/PNW->Japan grain freight, export inspections, barged grain
 import build_enso_outlook       # El Niño outlook: fitted pairs x production x harvest, plus live signals per region
+import build_enso_changes       # El Niño "what changed": snapshot of every tracked measure + 6 h / 24 h / 7 d differences
 import build_countries_dataset
 import snapshot_fdrs
 import validate_fdrs
@@ -206,6 +207,8 @@ STEPS = [
     ("Grain freight (USDA)",   refresh_enso_freight.main,       "enso_freight.json"),
     # Derived, no network: reads the feeds above and the fitted model, so it runs after them.
     ("El Niño outlook",        build_enso_outlook.main,         "enso_outlook.json"),
+    # Derived, no network: must run after every El Niño step above (it snapshots their outputs). Also appends data/enso_snapshots.json.
+    ("El Niño what changed",   build_enso_changes.main,         "enso_changes.json"),
     ("Countries dataset",      build_countries_dataset.main,    "countries.json"),
     # v23 — re-verify trade fields (suppliers/supPct/imports/exports) from the
     # Comtrade pulls, patching countries.json AFTER it's built. Must run after

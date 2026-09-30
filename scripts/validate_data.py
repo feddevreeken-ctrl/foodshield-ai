@@ -121,6 +121,8 @@ EXPECTED_FILES = {
     'enso_news.json':             ('soft',     'dict_or_empty'),
     'enso_outlook.json':          ('soft',     'dict_or_empty'),
     'enso_gauges.json':           ('soft',     'dict_or_empty'),
+    'enso_changes.json':          ('soft',     'enso_changes'),        # server-side "what changed", ranked by a written rule
+    'enso_snapshots.json':        ('soft',     'enso_snapshots'),      # rolling archive the changes are computed from
     'enso_ports.json':            ('soft',     'dict_or_empty'),
     'enso_freight.json':          ('soft',     'dict_or_empty'),
     'enso_price_analogs.json':    ('soft',     'dict_or_empty'),
@@ -435,6 +437,38 @@ def _check_enso_price_forecast_log(text, data):
     return True, f"ok — {len(es)} entries, first {dates[0]}, last {dates[-1]}"
 
 
+def _check_enso_changes(text, data):
+    """Every window carries its own baseline time; every change has a sentence, a score and a lens; scores follow the rule."""
+    w = (data or {}).get('windows') if isinstance(data, dict) else None
+    if not isinstance(w, dict) or set(w) != {'6h', '24h', '7d'}:
+        return False, "windows 6h, 24h and 7d are required"
+    if not isinstance(data.get('rank_rule'), dict):
+        return False, "rank_rule is missing: the ranking must be written out"
+    n = 0
+    for k, x in w.items():
+        if x.get('status') == 'ok' and not x.get('baseline_t'):
+            return False, f"{k}: ok without a baseline time"
+        for c in x.get('changes', []):
+            n += 1
+            if not c.get('text') or '\u2014' in c['text'] or not c.get('lens'):
+                return False, f"{k}: a change lacks text or lens, or carries an em dash"
+            if abs(c['materiality'] * c['confidence'] * c['relevance'] - c['score']) > 0.002:
+                return False, f"{k}: score is not materiality x confidence x relevance for {c.get('key')}"
+    return True, f"ok - {n} changes, snapshots kept {data.get('snapshots_kept')}"
+
+
+def _check_enso_snapshots(text, data):
+    s = (data or {}).get('snapshots') if isinstance(data, dict) else None
+    if not isinstance(s, list) or not s:
+        return False, "no snapshots"
+    ts = [x.get('t') for x in s]
+    if ts != sorted(set(ts)):
+        return False, "snapshots are not unique and in time order"
+    if len(s) > (data.get('cap') or 10 ** 9):
+        return False, "over the cap"
+    return True, f"ok - {len(s)} snapshots, {ts[0]} to {ts[-1]}"
+
+
 def validate_one(filename, spec):
     """Returns (ok: bool, message: str)."""
     criticality, shape = spec
@@ -546,6 +580,10 @@ def validate_one(filename, spec):
         return _check_enso_price_risk(p.read_text(), data)
     elif shape == 'enso_price_forecast_log':
         return _check_enso_price_forecast_log(p.read_text(), data)
+    elif shape == 'enso_changes':
+        return _check_enso_changes(p.read_text(), data)
+    elif shape == 'enso_snapshots':
+        return _check_enso_snapshots(p.read_text(), data)
     elif shape == 'sst_recent':
         if not isinstance(data, dict) or not data:
             return False, f"no sea months yet ({notes[:60] if notes else 'no notes'})"
