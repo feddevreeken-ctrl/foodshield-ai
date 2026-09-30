@@ -1022,12 +1022,12 @@ def main() -> int:
             const O = (await (await fetch('data/enso_outlook.json')).json()).data, f = document.getElementById('enso-foodband');
             if (!f || f.hidden) return null;
             const first = O.rows_all.filter(r => r.status === 'shown' && r.change_kt_record < 0).sort((a, b) => a.change_kt_record - b.change_kt_record)[0];
-            return { text: f.innerText, pct: Math.round(first.change_pct_record), kt: first.iso, links: [...f.querySelectorAll('[data-go]')].map(b => b.dataset.go), nav: !!document.getElementById('enso-view-nav'),
-                     before: f.compareDocumentPosition(document.getElementById('subview-elnino')) & Node.DOCUMENT_POSITION_FOLLOWING };
+            return { text: f.innerText, all: f.textContent, pct: Math.round(first.change_pct_record), links: [...f.querySelectorAll('.enso-rl [data-go]')].map(b => b.dataset.go), lit: f.querySelectorAll('.enso-rl .is-on').length,
+                     strip: !!f.querySelector('#enso-status-home #enso-status-short'), before: f.compareDocumentPosition(document.getElementById('subview-elnino')) & Node.DOCUMENT_POSITION_FOLLOWING };
         }""")
-        check("the food-security band leads the lens: crops, supply chains, countries, each linking to its lens, with the scenario caveat",
-              bool(band) and all(w in band['text'] for w in ['What it means for food', 'Crops', 'Supply chains', 'Countries and people', 'Scenario, not a forecast'])
-              and set(band['links']) == {'ensoharvest', 'ensowater', 'ensolive'} and str(abs(band['pct'])) in band['text'].replace('\u2212', '') and band['before'], str(band)[:300])
+        check("the food-security frame leads the lens: five linked nodes (this lens lit, the others linking), the readout strip inside it, the scenario caveat in its fold",
+              bool(band) and all(w in band['text'] for w in ['Pacific', 'Harvests', 'Shipping', 'Prices', 'People'])
+              and len(band['links']) == 4 and band['lit'] == 1 and band['strip'] and 'Scenario, not a forecast' in band['all'] and str(abs(band['pct'])) in band['text'].replace('\u2212', '') and band['before'], str(band)[:300])
         check("the tonnage copy never says grain has to be found elsewhere, and east-based is east-weighted", page.evaluate("""() => !/to find from other exporters|Grain to find|east-based/i.test(document.getElementById('tab-elnino').innerText)"""))
         # 2026-09-24: the Ocean lens leads with a dated calendar joined from the other lenses' data.
         page.evaluate("showTab('elnino')")
