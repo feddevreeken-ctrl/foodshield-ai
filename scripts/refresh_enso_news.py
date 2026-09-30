@@ -193,6 +193,14 @@ def gdelt_named() -> list[dict]:
     return out
 
 
+def _story_key(title) -> str:
+    """Collapse key for syndicated copies. GDELT returns one wire story once per regional masthead, titled
+    "Headline | Masthead" (2026-09-30: six ACM papers carried one BoM story), so the trailing " | …" goes
+    before the title is normalised."""
+    t = re.sub(r"\s+\|\s+[^|]*$", "", title or "")
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", "", t.lower())).strip()[:70]
+
+
 def _previous() -> list[dict]:
     p = DATA / OUTFILE
     if not p.exists():
@@ -260,7 +268,7 @@ def main() -> int:
     # crowded out by press copies, and flag the stories about food.
     stories: dict[str, dict] = {}
     for it in items:
-        key = re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", "", (it.get("title") or "").lower())).strip()[:70]
+        key = _story_key(it.get("title"))
         if key in stories:
             stories[key]["outlets"] = stories[key].get("outlets", 1) + it.get("outlets", 1)
             continue
