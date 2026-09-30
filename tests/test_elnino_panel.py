@@ -1016,7 +1016,8 @@ def main() -> int:
         # 2026-09-30 (external review, "the tabs do not link to food security"): every lens opens with the food-security
         # band (about 0.3k). Ocean gives up its 5250 cap by 100; Prices gains the access ledger (5 rows + fold) and keeps 5400.
         # 2026-09-30: Harvests gains the NOAA-forecast distribution plate (measured +725 px at 1440x1000: 4260 -> 4985), cap 5000 -> 5725.
-        CEIL = {'elnino': 5350, 'ensoharvest': 5725, 'ensowater': 7300, 'ensomoney': 5400, 'ensolive': 6100}
+        # 2026-09-30 (replacement engine): Prices gains "Who replaces it, and who is left short" (about 1.0k at 1440 wide), ceiling +1000.
+        CEIL = {'elnino': 5350, 'ensoharvest': 5725, 'ensowater': 7300, 'ensomoney': 6400, 'ensolive': 6100}
         check("no lens grows past its height ceiling", all(heights.get(k, 0) <= v for k, v in CEIL.items()), str(heights))
         # 2026-09-30: the food-security band leads every lens, is computed from the feeds and links to the lenses that hold the evidence.
         band = page.evaluate("""async () => {
@@ -1059,7 +1060,7 @@ def main() -> int:
         # 2026-09-29 audit (Ocean): read everything from the data files, never from typed numbers.
         check("Ocean audit: the strip says when the newest El Niño feed was collected", page.evaluate("""async () => {
             // The page's rule: every loaded feed named enso*, sst_*, rain_* or seasonal_outlook, except the hand-run forecast track record.
-            const names = ['enso','enso_exposure','enso_model','enso_regions','enso_lanes','enso_corridors','enso_econ','enso_mechanism','enso_indices','enso_bulletins','sst_anomaly','enso_news','enso_outlook','enso_gauges','enso_situation','enso_strengths','enso_ports','enso_hindcast','enso_freight','enso_price_analogs','enso_published_effects','sst_composites','seasonal_outlook','rain_anomaly','enso_past_events','sst_months','rain_months','enso_recent_events','enso_auto_events','enso_outlook_events','enso_price_outlook','enso_price_risk','enso_price_forecast_log','enso_changes'];
+            const names = ['enso','enso_exposure','enso_model','enso_regions','enso_lanes','enso_corridors','enso_econ','enso_mechanism','enso_indices','enso_bulletins','sst_anomaly','enso_news','enso_outlook','enso_gauges','enso_situation','enso_strengths','enso_ports','enso_hindcast','enso_freight','enso_price_analogs','enso_published_effects','sst_composites','seasonal_outlook','rain_anomaly','enso_past_events','sst_months','rain_months','enso_recent_events','enso_auto_events','enso_outlook_events','enso_price_outlook','enso_price_risk','enso_price_forecast_log','enso_changes','enso_replacement'];
             const ds =(await Promise.all(names.map(n => fetch('data/' + n + '.json').then(r => r.json()).catch(() => null)))).filter(Boolean).map(j => new Date(j._meta.generated_at || j._meta.generated)).filter(d => !isNaN(d));
             const t = (document.querySelector('#enso-status-home .enso-now-upd') || {}).textContent || '';
             const hm = d => String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0');
