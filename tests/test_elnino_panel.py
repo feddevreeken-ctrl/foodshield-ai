@@ -811,7 +811,7 @@ def main() -> int:
             const tab = document.getElementById('tab-elnino'), root = tab.querySelector('.content-page'), doc = document.scrollingElement;
             const vw = innerWidth, vh = innerHeight, sub = tab.dataset.sub;
             const bar = document.getElementById('enso-view-nav'), on = bar.querySelector('.viewswitch-btn.active'), bb = bar.getBoundingClientRect(), ob = on.getBoundingClientRect();
-            const skip = e => e.closest('svg, script, style, #subview-ensomoney, .enso-sr');
+            const skip = e => e.closest('svg, script, style, .enso-sr');
             const smallText = [], smallCopy = [];
             const tw = document.createTreeWalker(tab, NodeFilter.SHOW_TEXT); let n;
             while ((n = tw.nextNode())) {
@@ -822,7 +822,7 @@ def main() -> int:
                 else if (copy && fs < 14) smallCopy.push(fs + ' ' + (p.className || p.tagName) + ': ' + n.nodeValue.trim().slice(0, 24));
             }
             const solo = [...tab.querySelectorAll('button, summary, [role="tab"], a.enso-now-link')].filter(e => {
-                if (e.closest('#subview-ensomoney, .leaflet-container, .enso-sr') || e.matches('.enso-asap-btn, .enso-chip, .enso-inline-link, .enso-next12-bar')) return false;
+                if (e.closest('.leaflet-container, .enso-sr') || e.matches('.enso-asap-btn, .enso-chip, .enso-inline-link, .enso-next12-bar')) return false;
                 const r = e.getBoundingClientRect(); return r.width > 1 && r.height > 1 && getComputedStyle(e).visibility !== 'hidden' && r.height < 43.5;
             }).map(e => Math.round(e.getBoundingClientRect().height) + ' ' + (e.id || e.className || e.tagName) + ' ' + (e.textContent || '').trim().slice(0, 20));
             const plates = [...tab.querySelectorAll('#subview-' + sub + ' .enso-plate:not(.enso-plate .enso-plate), #subview-' + sub + ' #enso-mapwrap')].filter(e => e.getClientRects().length);
@@ -838,7 +838,7 @@ def main() -> int:
         phone_lens = {}
         for width in (390, 430, 360):
             page.set_viewport_size({"width": width, "height": 844 if width < 430 else 932})
-            for tab in ("elnino", "ensoharvest", "ensowater", "ensolive"):
+            for tab in ("elnino", "ensoharvest", "ensowater", "ensomoney", "ensolive"):
                 open_panel(page, base, tab)
                 page.wait_for_timeout(2500)
                 page.eval_on_selector_all("#tab-elnino details", "els => els.forEach(e => e.open = true)")
