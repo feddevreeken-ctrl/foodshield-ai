@@ -11643,6 +11643,9 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-th-row b { display:block; font:500 12.5px/1.35 'Geist',sans-serif; color:var(--t1); }
 #tab-elnino .enso-th-row > div > span { display:block; margin-top:2px; font:400 10.5px/1.45 'Geist Mono',monospace; color:var(--t3); }
 #tab-elnino .enso-th-row em { font-style:normal; color:var(--t2); }
+#tab-elnino .enso-th-row em.is-stale, #tab-elnino .enso-th-row em.is-resolved { color:var(--t3); }
+#tab-elnino .enso-th-row { padding:7px 8px 7px 0; }
+#tab-elnino .enso-th-rest .enso-th-list { margin-top:8px; }
 #tab-elnino .enso-th-att.is-attributed b { color:#e0864a; }
 #tab-elnino .enso-th-att.is-not_assessed b { color:var(--t3); font-weight:400; }
 #tab-elnino .enso-th-chain { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 0; font:400 10.5px/1.6 'Geist Mono',monospace; color:var(--t3); }
@@ -11652,6 +11655,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
 #tab-elnino .enso-th-more { margin-left:6px; }
 @media (max-width:900px) { #tab-elnino .enso-th-row { grid-template-columns:minmax(0,1fr); } }
 #tab-elnino .enso-cf-bar { display:block; width:100%; max-width:260px; margin-top:3px; }
+#tab-elnino .enso-cf-pct b { font-weight:500; color:var(--t2); }
 #tab-elnino .enso-pa-facts .is-cf { padding:0 5px; color:var(--t2); background:rgba(235,233,226,.1); }
 /* Lede-level bullets (a list straight under a plate body) read at body size; fine print stays small. */
 #tab-elnino .plate-body > .enso-bullets { margin:0 0 14px; font:14px/1.5 'Geist',sans-serif; color:var(--t2); max-width:100ch; }
@@ -52091,17 +52095,23 @@ function showCommodityDetail(key) {
         return '<span><i style="background:' + e[1] + '"></i>' + e[0] + ' <b>' + pct(top[1]) + '</b></span>';
       }).join('');
       return '<div class="enso-pa-cell"><h4>' + esc(nameFor(c.iso)) + '<span>' + esc(String(c.commodity || '').toLowerCase() + ', ' + (c.market === 'National Average' ? 'national average' : c.market)) + (c.price_type === 'wholesale' ? ', wholesale' : c.price_type === 'retail' ? ', retail' : '') + '</span></h4>' +
-        '<p class="enso-pa-facts">' + facts + (sm ? '<span class="is-cf"><b>' + sgn(sm.r.excess_pct.vs_fx_and_world) + '</b> vs expected (' + sgn(sm.r.excess_pct.range_fx_and_world[0]) + ' to ' + sgn(sm.r.excess_pct.range_fx_and_world[1]) + ')</span>' : '') + (fan && fan.reach ? '<span class="is-band">' + fan.reach + '-month range ' + esc(riskText(fan.b)) + '</span>' : '') + '</p><svg class="enso-hw enso-pa-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(nameFor(c.iso) + ' maize price after inflation, March of the El Niño year = 100, around 2015-16, 2023-24 and now, with the expected seasonal band from normal years' + (fan ? ' and the price-risk range' : '')) + '">' + grid + smSvg + fanSvg + lines + '</svg></div>';
+        '<p class="enso-pa-facts">' + facts + (sm ? '<span class="is-cf"><b>' + sgn(sm.r.excess_pct.vs_fx_and_world) + '</b> vs expected (' + sgn(sm.r.excess_pct.range_fx_and_world[0]) + ' to ' + sgn(sm.r.excess_pct.range_fx_and_world[1]) + ') · ' + (sm.r.placebo.current_outside_normal_spread ? (sm.r.excess_pct.vs_fx_and_world > sm.r.placebo.max ? 'above' : 'below') + ' all ' + sm.r.placebo.n + ' normal yrs' : esc(ord(sm.r.placebo.current_percentile)) + ' pct of ' + sm.r.placebo.n + ' normal yrs') + '</span>' : '') + (fan && fan.reach ? '<span class="is-band">' + fan.reach + '-month range ' + esc(riskText(fan.b)) + '</span>' : '') + '</p><svg class="enso-hw enso-pa-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(nameFor(c.iso) + ' maize price after inflation, March of the El Niño year = 100, around 2015-16, 2023-24 and now, with the expected seasonal band from normal years' + (fan ? ' and the price-risk range' : '')) + '">' + grid + smSvg + fanSvg + lines + '</svg></div>';
     };
     var s15 = A.summary['2015-16'], s23 = A.summary['2023-24'], s26 = A.summary['2026-27'];
     var shown = A.countries.filter(function (c) { return F[c.iso]; }), hidden = A.countries.filter(function (c) { return !F[c.iso]; });
     /* Counterfactual ledger: per series, the excess (actual real price against the normal-year expectation, then after
        currency and world maize) with its range, on one axis. Every figure is the file's; nothing here says El Niño. */
     var cfRows = A.countries.map(function (c) { return CF[c.iso]; }).filter(Boolean);
+    /* 2026-09-30: how unusual is the excess? Its percentile among the placebo excesses (the same calculation on each normal
+       year, file fields placebo.current_percentile and current_outside_normal_spread). With 3 to 8 normal years it is a rank. */
+    var ord = function (n) { var t = n % 100, u = n % 10; return n + (t >= 11 && t <= 13 ? 'th' : u === 1 ? 'st' : u === 2 ? 'nd' : u === 3 ? 'rd' : 'th'); };
+    var cfPctText = function (r) { var p = r.placebo; return p.current_outside_normal_spread ? (r.excess_pct.vs_fx_and_world > p.max ? 'above' : 'below') + ' all ' + p.n + ' comparable non-El-Niño years' : ord(p.current_percentile) + ' percentile of ' + p.n + ' comparable non-El-Niño years'; };
+    var cfSpread = function (r) { var p = r.placebo; return p.current_outside_normal_spread ? 'outside the normal-year spread (' + sgn(p.min) + ' to ' + sgn(p.max) + ')' : 'inside the normal-year spread (' + sgn(p.min) + ' to ' + sgn(p.max) + '), unremarkable'; };
+    var cfByUnusual = cfRows.slice().sort(function (a, b) { return b.placebo.unusual_score - a.placebo.unusual_score; });
     var cfLede = function () {
       if (!cfRows.length) return '';
       var hi = cfRows.filter(function (r) { return r.excess_pct.range_fx_and_world[0] > 0; }), lo = cfRows.filter(function (r) { return r.excess_pct.range_fx_and_world[1] < 0; });
-      return '<b>Against a normal year:</b> below the expected band in ' + lo.length + ' of ' + cfRows.length + ' markets' + (lo.length ? ' (' + lo.map(function (r) { return esc(nameFor(r.iso)); }).join(', ') + ')' : '') + ', above it in ' + hi.length + ', after season, currency and world maize. Not an El Niño effect.';
+      return '<b>Against a normal year:</b> below the expected band in ' + lo.length + ' of ' + cfRows.length + ' markets' + (lo.length ? ' (' + lo.map(function (r) { return esc(nameFor(r.iso)); }).join(', ') + ')' : '') + ', above it in ' + hi.length + ', after season, currency and world maize. Not an El Niño effect. ' + cfRows.filter(function (r) { return !r.placebo.current_outside_normal_spread; }).length + ' of ' + cfRows.length + ' excesses sit inside the spread of the same calculation run on normal years (' + Math.min.apply(null, cfRows.map(function (r) { return r.placebo.n; })) + ' to ' + Math.max.apply(null, cfRows.map(function (r) { return r.placebo.n; })) + ' normal years per market), so most are not unusual.';
     };
     var cfMethod = function () { var M = (S.pcf && S.pcf.method) || {}, n = cfRows.map(function (r) { return r.normal_years.n; }), used = cfRows.filter(function (r) { return r.regression.used_fx || r.regression.used_world; }).length;
       return cfRows.length ? '<b>Expected price:</b> ' + esc(M.expected_seasonal || '') + ' ' + esc(M.regression || '') + ' Here ' + used + ' of ' + cfRows.length + ' series use a currency or world coefficient (fit R² ' + cfRows.map(function (r) { return r.regression.r2; }).filter(function (x) { return x != null; }).sort(function (a, b) { return a - b; }).map(function (x) { return x.toFixed(2); }).filter(function (x, i, a) { return i === 0 || i === a.length - 1; }).join(' to ') + ', ' + Math.min.apply(null, n) + ' to ' + Math.max.apply(null, n) + ' normal years). ' + esc(M.caveat || '') + ' Years left out: ' + esc((S.pcf.excluded_years_rule || '')) : ''; };
@@ -52114,10 +52124,10 @@ function showCommodityDetail(key) {
         '<rect x="' + x(rg[0]).toFixed(1) + '" y="5" width="' + Math.max(1, x(rg[1]) - x(rg[0])).toFixed(1) + '" height="6" fill="#8b8980" fill-opacity=".5"/>' +
         '<rect x="' + (x(e.vs_fx_and_world) - 1.5).toFixed(1) + '" y="2" width="3" height="12" fill="#ebe9e2"/></svg>';
     };
-    var cfBlock = cfRows.length ? '<div class="enso-dc enso-cf" role="group" aria-label="Movement not explained by season, currency or world prices"><div class="enso-dc-h"><span class="enso-dc-t">Movement not explained by season, currency or world prices, March to latest month, %</span><span class="enso-dc-k"><span>bar: range against the middle half of normal years</span><span>white tick: against the median</span></span></div><div class="enso-dc-rows">' + cfRows.map(function (r) {
+    var cfBlock = cfRows.length ? '<div class="enso-dc enso-cf" role="group" aria-label="Movement not explained by season, currency or world prices"><div class="enso-dc-h"><span class="enso-dc-t">Movement not explained by season, currency or world prices, March to latest month, %</span><span class="enso-dc-k"><span>bar: range against the middle half of normal years</span><span>white tick: against the median</span><span>sorted by how unusual the excess is</span></span></div><div class="enso-dc-rows">' + cfByUnusual.map(function (r) {
       var e = r.excess_pct;
       return '<div class="enso-dc-row enso-cf-row"><span class="enso-dc-n"><b>' + esc(nameFor(r.iso)) + '</b> ' + esc(String(r.commodity).replace(/\s*\(.*$/, '').toLowerCase()) + ', ' + esc(r.price_type) + ' <i>' + esc(sgn(e.vs_fx_and_world)) + ' (' + esc(sgn(e.range_fx_and_world[0])) + ' to ' + esc(sgn(e.range_fx_and_world[1])) + ')</i></span>' + cfBar(r) +
-        '<span class="enso-dc-v">season ' + esc(sgn(e.vs_seasonal)) + ' · currency ' + esc(sgn(e.vs_fx_adjusted)) + ' · world ' + esc(sgn(e.vs_fx_and_world)) + ' · ' + r.normal_years.n + ' yrs' + (r.normal_years.thin ? ', thin' : '') + '</span></div>'; }).join('') + '</div></div>' : '';
+        '<span class="enso-dc-v">season ' + esc(sgn(e.vs_seasonal)) + ' · currency ' + esc(sgn(e.vs_fx_adjusted)) + ' · world ' + esc(sgn(e.vs_fx_and_world)) + ' · ' + r.normal_years.n + ' yrs' + (r.normal_years.thin ? ', thin' : '') + '</span><span class="enso-dc-v enso-cf-pct"><b>' + esc(cfPctText(r)) + '</b> · ' + esc(cfSpread(r)) + ' · only ' + r.placebo.n + ' normal years, a rank, not a probability</span></div>'; }).join('') + '</div></div>' : '';
     var dc = cfBlock ? '<details class="enso-evidence-note enso-cf-fold"><summary>Excess by market: against the season, then after currency and world maize</summary>' + cfBlock + '</details>' : '';
     var lede = bulletList([
       s15 && s23 ? '<b>Past:</b> after inflation, a median ' + pct(100 + s15.median_peak_pct) + ' in 2015-16 (' + s15.n + ' countries), peaking around ' + esc(monthAt('2015-16', s15.median_peak_k)) + '; ' + pct(100 + s23.median_peak_pct) + ' in 2023-24, a year after the peak, by ' + esc(monthAt('2023-24', s23.median_peak_k)) + '.' : '',
@@ -53091,11 +53101,20 @@ function showCommodityDetail(key) {
        attribution (set by a person; the merge never raises it). Not the map marks: this lists events, the map places them. */
     var threadsPlate = (function () {
       var T = S.evthreads; if (!T || !T.threads || !T.threads.length || !T.stats) return '';
-      var st = T.stats, N = 5, top = T.threads.slice(0, N);
+      var st = T.stats;
+      /* 2026-09-30 default view: high and medium confidence threads, plus low-confidence threads marked material by the script
+         (people counted, an IPC or FEWS link, or an export measure). The rest sit in a fold, same rows. */
+      var shownT = T.threads.filter(function (t) { return t.event_confidence.level !== 'low' || t.material; }),
+          restT = T.threads.filter(function (t) { return !(t.event_confidence.level !== 'low' || t.material); });
+      /* Shown open: the well-sourced threads plus the first few material ones (most reasons, then newest); the other material
+         threads sit in a second fold, so the plate stays one screen and nothing scrolls inside it. */
+      var OPEN_LOW = 0, hiT = shownT.filter(function (t) { return t.event_confidence.level !== 'low'; }),
+          matT = shownT.filter(function (t) { return t.event_confidence.level === 'low'; }).sort(function (a, b) { return b.material_because.length - a.material_because.length || (a.last_dated_report < b.last_dated_report ? 1 : -1); }),
+          openT = hiT.concat(matT.slice(0, OPEN_LOW)), moreMatT = matT.slice(OPEN_LOW);
       var ATT = { attributed: 'Attributed', pattern_consistent: 'Pattern-consistent', not_assessed: 'Not assessed' };
       var ATT_T = { attributed: 'A person has checked that the cited source ties this event to El Niño.', pattern_consistent: 'Fits the known El Niño pattern for this place and season; the source does not name El Niño.', not_assessed: 'Nobody has assessed a link to El Niño.' };
       var CONF = { low: 'One source', medium: 'Corroborated', high: 'Cross-checked' };
-      var STATE = { new: 'New', reported: 'Reported', confirmed: 'Confirmed', worsening: 'Worsening', easing: 'Easing', resolved: 'Resolved' };
+      var STATE = { new: 'New', active: 'Active', confirmed: 'Confirmed', worsening: 'Worsening', easing: 'Easing', stale: 'Stale', resolved: 'Resolved' };
       var dmon = function (iso) { var d = new Date(iso + 'T00:00:00Z'); return isNaN(d) ? '' : d.getUTCDate() + ' ' + MON3[d.getUTCMonth()]; };
       var chain = function (t) {
         var ch = t.chain, show = ch.slice(0, 3), more = ch.length - show.length;
@@ -53104,30 +53123,44 @@ function showCommodityDetail(key) {
           return c.url ? '<a href="' + esc(safeUrl(c.url)) + '" target="_blank" rel="noopener">' + lab + '</a>' : '<span>' + lab + '</span>';
         }).join('<span class="enso-th-arrow" aria-hidden="true">›</span>') + (more > 0 ? '<span class="enso-th-more">+' + more + ' more</span>' : '');
       };
+      /* State, in one clause: stale says how long the silence is against the hazard's window; resolved names the evidence. */
+      var stateNote = function (t) {
+        if (t.state === 'stale') return ' (no dated report for ' + t.days_silent + ' days, window ' + t.stale_after_days + ')';
+        if (t.state === 'resolved' && t.end_evidence) return ' (' + esc(t.end_evidence.what.replace(/\s*\(.*$/, '')) + ', ' + esc(dmon(t.end_evidence.date)) + ')';
+        if (t.state === 'worsening' || t.state === 'easing') return t.trend ? ' (' + esc(t.trend.measure) + ' ' + (t.trend.pct > 0 ? '+' : '') + t.trend.pct + '%)' : '';
+        return '';
+      };
       var row = function (t) {
         var c = t.event_confidence, a = t.el_nino_attribution, where = t.iso3.slice(0, 3).map(function (i) { return esc(nameFor(i)); }).join(', ') + (t.iso3.length > 3 ? ' +' + (t.iso3.length - 3) : '');
         return '<div class="enso-th-row" role="row" data-thread="' + esc(t.id) + '">' +
-          '<div class="enso-th-ev" role="cell"><b>' + esc(t.title) + '</b><span>' + esc(t.hazard) + ' · ' + where + ' · ' + esc(dmon(t.start)) + ' to ' + esc(dmon(t.end)) + ' · <em class="is-' + esc(t.state) + '">' + esc(STATE[t.state] || t.state) + '</em></span></div>' +
+          '<div class="enso-th-ev" role="cell"><b>' + esc(t.title) + '</b><span>' + esc(t.hazard) + ' · ' + where + ' · ' + esc(dmon(t.start)) + ' to ' + esc(dmon(t.end)) + ' · <em class="is-' + esc(t.state) + '">' + esc(STATE[t.state] || t.state) + '</em>' + stateNote(t) + '</span></div>' +
           '<div class="enso-th-conf" role="cell"><b>' + esc(CONF[c.level]) + '</b><span>' + c.n_independent + ' independent source' + (c.n_independent === 1 ? '' : 's') + ' · ' + esc(c.classes.join(', ')) + ' · ' + t.n_reports + ' report' + (t.n_reports === 1 ? '' : 's') + (t.n_same_item_in_two_feeds ? ', one item seen in two feeds' : '') + '</span></div>' +
           '<div class="enso-th-att is-' + esc(a.status) + '" role="cell" title="' + esc(ATT_T[a.status]) + '"><b>' + esc(ATT[a.status]) + '</b><span>' + (a.status === 'not_assessed' ? 'no link assessed' : a.checked_by_person ? 'checked by a person' : 'machine rule, unchecked') + '</span></div>' +
           '<div class="enso-th-chain" role="cell">' + chain(t) + '</div></div>';
       };
-      var lede = '<p class="enso-plate-lede"><b>' + st.event_reports + ' event reports, ' + st.threads + ' events.</b> ' + st.reports_in_those_threads + ' of the reports describe just ' + st.threads_with_2_or_more_reports + ' events; the other ' + (st.threads - st.threads_with_2_or_more_reports) + ' have one report each. ' + (st.raw_items - st.event_reports) + ' further feed items are not event reports and are left out.</p>' + bulletList([
-        '<b>Two readings, kept apart:</b> how well an event is sourced, and whether anyone has tied it to El Niño. A well-sourced event can have no El Niño link, and the reverse.',
-        '<b>More than one publisher:</b> ' + (st.by_confidence.medium + st.by_confidence.high) + ' of ' + st.threads + ' events; ' + (st.by_attribution.attributed || 0) + ' are attributed to El Niño by a checked source.'
+      var bs = st.by_state;
+      var lede = '<p class="enso-plate-lede"><b>' + st.event_reports + ' event reports, ' + st.threads + ' events.</b> Default view: the ' + shownT.length + ' that are well sourced (' + hiT.length + ') or material (' + matT.length + '); the first ' + openT.length + ' are open, the other ' + moreMatT.length + ' material ones are in the first fold. ' + restT.length + ' single-source events with no people count, IPC or FEWS link or export measure are in the fold.</p>' + bulletList([
+        '<b>State today:</b> ' + [['new', 'new'], ['active', 'active'], ['confirmed', 'confirmed'], ['worsening', 'worsening'], ['easing', 'easing'], ['stale', 'stale'], ['resolved', 'resolved']].map(function (x) { return (bs[x[0]] || 0) + ' ' + x[1]; }).join(', ') + '. Stale means no news, not over; only ' + (bs.resolved || 0) + ' have a source saying the event ended.',
+        '<b>Two readings, kept apart:</b> how well an event is sourced, and whether anyone has tied it to El Niño. ' + (st.by_confidence.medium + st.by_confidence.high) + ' of ' + st.threads + ' events have more than one publisher; ' + (st.by_attribution.attributed || 0) + ' are attributed to El Niño by a checked source.'
       ]);
       var rule = bulletList([
         '<b>Merged when</b> hazard and a country match, dates overlap, and the place matches (two located events within 350 km, or shared place words).',
         '<b>Independent source:</b> one publishing organisation. Two outlets carrying the same wire story count once where the credit says so; syndication with no credit cannot be seen.',
         '<b>Confidence:</b> one source, corroborated (2 or more of one class), cross-checked (2 or more across agency, NGO and press).',
         '<b>Attribution:</b> set by a person on the hand-curated list, or shown as a machine pattern match and marked unchecked. Merging reports never raises it; a headline that names El Niño is a mention, not proof.',
-        '<b>State:</b> resolved when nothing is dated in 21 days; worsening or easing only when two reports give the same measure and it moved 10% or more (' + (st.by_state.worsening + st.by_state.easing) + ' events today); confirmed with 2 or more sources; new within 7 days.'
+        '<b>Resolved only with evidence:</b> a GDACS window that closed, a curated entry a person marked ended, or an agency headline saying it ended. Silence never resolves an event.',
+        '<b>Stale:</b> no dated report for longer than the hazard allows (' + Object.keys(T.rule.stale_days || {}).map(function (k) { return k + ' ' + T.rule.stale_days[k] + ' days'; }).join(', ') + ').',
+        '<b>Worsening or easing</b> only when two dated reports give the same measure and it moved 10% or more (' + (bs.worsening + bs.easing) + ' events today). <b>Confirmed:</b> 2 or more sources. <b>New:</b> first report within 7 days.',
+        '<b>Material</b> (decides what is shown, not the state): people, displaced, affected or deaths counted; FEWS NET phase 4 or higher or IPC phase 4 or 5 people in a country; or an export measure in force.'
       ]);
+      var matFold = moreMatT.length ? '<details class="enso-evidence-note enso-th-rest enso-th-mat"><summary>' + moreMatT.length + ' more single-source events that are material (people counted, IPC or FEWS link, or export measure)</summary><div class="enso-th-list" role="table" aria-label="More material events">' + moreMatT.map(row).join('') + '</div></details>' : '';
+      var restFold = restT.length ? '<details class="enso-evidence-note enso-th-rest"><summary>' + restT.length + ' more single-source events without a people count, IPC or FEWS link or export measure</summary><div class="enso-th-list" role="table" aria-label="Other events">' + restT.map(row).join('') + '</div></details>' : '';
       return '<figure class="enso-plate is-published enso-threads-plate" data-kind="published">' +
         plateHead('The same event, reported more than once', 'Hand-curated El Niño reports · GDACS · ReliefWeb · press wire · merged by rule', stamp(metaDate('evthreads')), 'published') +
-        '<div class="plate-body">' + lede + '<div class="enso-th-list" role="table" aria-label="Events with the most independent sources">' + top.map(row).join('') + '</div></div>' +
-        '<figcaption class="enso-log">Top ' + top.length + ' of ' + st.threads + ' events, most independent sources first. Confidence is about the report, not the cause.</figcaption>' +
-        '<details class="enso-evidence-note"><summary>How reports are merged and scored</summary>' + rule + '</details></figure>';
+        '<div class="plate-body">' + lede + '<div class="enso-th-list" role="table" aria-label="Well-sourced and material events">' + openT.map(row).join('') + '</div></div>' +
+        '<figcaption class="enso-log">' + openT.length + ' of ' + st.threads + ' events open, ' + shownT.length + ' shown by default with the folds below. Confidence is about the report, not the cause.</figcaption>' +
+        matFold + restFold +
+        '<details class="enso-evidence-note"><summary>How reports are merged, scored and given a state</summary>' + rule + '</details></figure>';
     })();
 
     var leadEl = document.getElementById('enso-live-lead');

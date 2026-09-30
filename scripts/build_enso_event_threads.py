@@ -32,14 +32,34 @@ Two measures per thread, never combined:
                     not_assessed = neither. A person sets it in enso_recent_events.json. Merging a report never raises it,
                     and a headline that names El Niño is counted as a mention, not as attribution.
 
-Lifecycle, from the dates and numbers in the thread's reports (first match wins):
-  resolved   nothing dated inside the last 21 days (latest report and latest end date both older);
-  worsening / easing  two or more reports give the same measure (deaths, people, hectares, GDACS alert level) and the latest
-                    is 10 percent or more above / below the earliest; nothing else counts as a trend;
+Lifecycle. Silence is not resolution: droughts, crop failures and food crises run for months after the last headline.
+A thread is in exactly one state (first match wins):
+  resolved   ONLY with positive evidence that the event ended, from one of these fields, and no later report contradicting it:
+               a) a GDACS report whose window has closed: gdacs.json is_current == false (todate more than 7 days ago, see
+                  refresh_gdacs.py; GDACS's own iscurrent flag is NOT used), evidence date = its to_date;
+               b) a curated entry in enso_recent_events.json carrying an `ended` object {"date", "publisher", "url"} that a person
+                  sets from an agency closing statement (none exist today);
+               c) an agency-class (UN, EU, government, hydromet) ReliefWeb or wire headline with ended wording (lifted, called off,
+                  declared over, has ended, closing statement, appeal closed), evidence date = its publication date.
+             A curated, ReliefWeb or wire report dated more than 7 days after the evidence date contradicts it (a GDACS record's own
+             date_modified is an edit stamp, not a new report, and does not) and the thread is not resolved.
+             Age alone never resolves a thread.
+  stale      no dated report (publication date) for longer than the window of its hazard, stated per type in STALE_DAYS:
+             drought 120, crop 120, water 90, fishery 90, wildfire 45, flood 30, flash flood 10 (headline or place says flash),
+             heat 21, cyclone 14, other 60 days. Stale means "no news", not "over": it can return to active on a new report.
+  worsening / easing  two or more dated reports give the same measure (deaths, people, hectares, GDACS alert level) and the
+             latest is 10 percent or more above / below the earliest; nothing else counts as a trend;
   confirmed  two or more independent sources;
-  new        first report within 7 days and only one source;
-  reported   one source, older than 7 days.
-Most threads have no comparable measure twice, so worsening and easing are rare; the file counts them.
+  new        first report within 7 days and one source;
+  active     one source, reported within its stale window, first report older than 7 days.
+Materiality (decides only the default view on the page, never the state). A low-confidence thread is material when ANY holds:
+  people      a report gives a count of people, displaced, affected or deaths above zero (in its text or impact line), or GDACS
+              gives population_affected above zero;
+  ipc_fews    a thread country has FEWS NET current phase 4 or higher (fews.json) or IPC people in phase 4 or 5 above zero
+              (ipc.json), or a report text names IPC or FEWS NET (phase 3 is too common to single an event out);
+  export      a trade_restrictions.json export measure covers a thread country and has not ended, or a report names an export ban,
+              restriction, quota or duty.
+High and medium confidence threads are always shown.
 
 Output: data/enso_event_threads.json
 """
@@ -61,7 +81,13 @@ import refresh_enso_auto_events as ae  # noqa: E402
 SLACK_STRUCT, SLACK_BEFORE, SLACK_AFTER = 3, 3, 14
 KM_SAME_PLACE = 350
 MIN_SHARED_WORDS = 2
-RESOLVED_DAYS, NEW_DAYS, TREND_PCT = 21, 7, 10
+NEW_DAYS, TREND_PCT, END_CONTRADICT_DAYS = 7, 10, 7
+STALE_DAYS = {"drought": 120, "crop": 120, "water": 90, "fishery": 90, "wildfire": 45, "flood": 30, "flash flood": 10,
+              "heat": 21, "cyclone": 14, "other": 60}
+ENDED_WORDS = re.compile(r"\b(lifted|called off|declared over|has ended|have ended|is over|closing statement|appeal closed|operation closed)\b", re.I)
+EXPORT_WORDS = re.compile(r"\bexport (ban|restriction|quota|duty|tax|curb)s?\b", re.I)
+IPC_WORDS = re.compile(r"\b(ipc|fews net|fewsnet)\b", re.I)
+PEOPLE_UNITS = ("people", "deaths", "displaced", "affected")
 MAX_PRIMARY_ONLY = 4
 
 STOP = set("""the and for with from that this into over after amid under than more less near across its their have has been
@@ -166,7 +192,8 @@ def gather(today: date):
                      "end": _d(ev.get("date_end")) or _d(ev.get("date_start")), "hazard": ev.get("type"),
                      "iso3": list(ev.get("iso3") or []), "loc": (ev["lat"], ev["lon"]) if ev.get("lat") is not None else None,
                      "place": ev.get("place") or "", "text": (ev.get("title") or "") + " " + (ev.get("impact") or ""),
-                     "link": ev.get("enso_link"), "impact": ev.get("impact") or ""})
+                     "link": ev.get("enso_link"), "impact": ev.get("impact") or "",
+                     "ended": _d((ev.get("ended") or {}).get("date")), "ended_src": ev.get("ended") or None})
     for key, v in (_load("gdacs.json").get("data") or {}).items():
         kind = ae.GDACS_TYPE.get(v.get("event_type")) if isinstance(v, dict) else None
         a = _d(v.get("from_date")) if kind else None
@@ -183,7 +210,7 @@ def gather(today: date):
                      "hazard": kind, "iso3": isos, "loc": (v["lat"], v["lng"]) if v.get("lat") is not None else None,
                      "place": v.get("country") or "", "text": (v.get("title") or "") + " " + (v.get("severity_text") or ""),
                      "link": None, "impact": v.get("severity_text") or "", "alert": ALERT_RANK.get(str(v.get("alert_level")).lower()),
-                     "current": bool(v.get("is_current"))})
+                     "current": bool(v.get("is_current")), "pop": v.get("population_affected") or 0})
         cnames[v.get("iso3")] = v.get("country")
     for e in ((_load("reliefweb_alerts.json").get("data") or {}).get("events") or []):
         t, d = e.get("title") or "", _d(e.get("date"))
@@ -291,7 +318,9 @@ def build(today: date | None = None):
     stats = {"raw_items": n_raw, "dropped": dropped, "event_reports": kept, "threads": len(out),
              "threads_with_2_or_more_reports": sum(1 for t in out if t["n_reports"] >= 2),
              "reports_in_those_threads": sum(t["n_reports"] for t in out if t["n_reports"] >= 2),
-             "by_state": {s: sum(1 for t in out if t["state"] == s) for s in ("new", "reported", "confirmed", "worsening", "easing", "resolved")},
+             "by_state": {s: sum(1 for t in out if t["state"] == s) for s in ("new", "active", "confirmed", "worsening", "easing", "stale", "resolved")},
+             "shown_by_default": sum(1 for t in out if t["event_confidence"]["level"] != "low" or t["material"]),
+             "low_confidence_material": sum(1 for t in out if t["event_confidence"]["level"] == "low" and t["material"]),
              "by_confidence": {k: sum(1 for t in out if t["event_confidence"]["level"] == k) for k in ("low", "medium", "high")},
              "by_attribution": {k: sum(1 for t in out if t["el_nino_attribution"]["status"] == k) for k in ("attributed", "pattern_consistent", "not_assessed")},
              "by_feed": {f: sum(1 for r in reps if r["feed"] == f) for f in order}}
@@ -304,7 +333,11 @@ RULE = {
     "confidence": "Independent publishing organisations and their class (agency, ngo, press). low = 1; medium = 2 or more in one class; high = 2 or more across two classes. "
                   "Syndication is caught only where the credit names the wire or says 'via'.",
     "attribution": "attributed, pattern_consistent or not_assessed, taken from the hand-curated entry (or the flagged machine pattern rule). Merging never raises it; a headline naming El Niño is a mention only.",
-    "lifecycle": "resolved: nothing dated in 21 days. worsening or easing: the same measure in 2 or more reports moved 10 percent or more. confirmed: 2 or more independent sources. new: first report within 7 days, one source. reported: one source, older.",
+    "lifecycle": "resolved only with positive evidence of an end (GDACS window closed, a curated entry marked ended, or an agency headline saying it ended); silence is never resolution. "
+                 "stale: no dated report for longer than the hazard's window (drought and crop 120 days, water and fishery 90, wildfire 45, flood 30, flash flood 10, heat 21, cyclone 14). "
+                 "worsening or easing: the same measure in 2 or more dated reports moved 10 percent or more. confirmed: 2 or more independent sources. new: first report within 7 days, one source. active: one source, inside its window.",
+    "stale_days": STALE_DAYS,
+    "material": "A low-confidence thread is shown by default only if material: a count of people, displaced, affected or deaths above zero; FEWS NET phase 4+ or IPC phase 4 or 5 people in a thread country (or a report naming IPC or FEWS NET); or an unexpired export measure on a thread country (or a report naming one).",
 }
 
 
@@ -357,8 +390,29 @@ def finish(th, today):
             if abs(ch) >= TREND_PCT:
                 trend = {"measure": u, "from": pts[0][1], "to": pts[-1][1], "pct": round(ch)}
                 break
-    if (today - last).days > RESOLVED_DAYS:
+    # positive evidence of an end (see header); none of these is age
+    evid = None
+    for r in th["members"]:
+        if r["feed"] == "gdacs" and not r.get("current") and r["end"] and r["end"] < today:
+            cand = (r["end"], "GDACS window closed (is_current false, to_date " + r["end"].isoformat() + ")", r["url"])
+        elif r["feed"] == "curated" and r.get("ended"):
+            cand = (r["ended"], "curated entry marked ended by a person", (r.get("ended_src") or {}).get("url") or "")
+        elif r["feed"] in ("reliefweb", "news") and klass(r["publisher"]) == "agency" and ENDED_WORDS.search(r["title"]):
+            cand = (r["date"], "agency headline says the event ended", r["url"])
+        else:
+            continue
+        if not evid or cand[0] > evid[0]:
+            evid = cand
+    if evid and any(r["feed"] != "gdacs" and r["date"] > evid[0] + timedelta(days=END_CONTRADICT_DAYS) for r in th["members"]):
+        evid = None
+    hz_key = "flash flood" if th["hazard"] == "flood" and re.search(r"flash", " ".join(r["title"] + " " + r["place"] for r in th["members"]), re.I) else th["hazard"]
+    stale_days = STALE_DAYS.get(hz_key, STALE_DAYS["other"])
+    last_report = max(r["date"] for r in th["members"])
+    silent = (today - last_report).days
+    if evid:
         state = "resolved"
+    elif silent > stale_days:
+        state = "stale"
     elif trend:
         state = "worsening" if trend["pct"] > 0 else "easing"
     elif n >= 2:
@@ -366,12 +420,27 @@ def finish(th, today):
     elif (today - first).days <= NEW_DAYS:
         state = "new"
     else:
-        state = "reported"
+        state = "active"
+    # materiality, for the default view only
+    why = []
+    if any(any(ms.get(u, 0) > 0 for u in PEOPLE_UNITS) for ms in (measures(r["impact"] or r["text"]) for r in th["members"])) \
+            or any(r.get("pop") for r in th["members"]):
+        why.append("people")
+    fe, ip, tr = _load("fews.json").get("data") or {}, _load("ipc.json").get("data") or {}, _load("trade_restrictions.json").get("data") or []
+    if any(((fe.get(i) or {}).get("current_phase") or 0) >= 4 or ((ip.get(i) or {}).get("phase4_count") or 0) + ((ip.get(i) or {}).get("phase5_count") or 0) > 0 for i in th["iso3"]) \
+            or any(IPC_WORDS.search(r["text"] + " " + r["src_title"]) for r in th["members"]):
+        why.append("ipc_fews")
+    if any(t.get("iso") in th["iso3"] and (_d(t.get("ends_date")) or today) >= today for t in tr) \
+            or any(EXPORT_WORDS.search(r["text"]) for r in th["members"]):
+        why.append("export")
     tid = "thr-" + hashlib.sha1(anchor["id"].encode()).hexdigest()[:8]
     return {
         "id": tid, "title": anchor["title"], "hazard": th["hazard"], "iso3": sorted(th["iso3"]), "place": anchor["place"],
         "start": th["start"].isoformat(), "end": th["end"].isoformat(), "first_reported": first.isoformat(), "last_reported": last.isoformat(),
         "n_reports": len(m), "n_same_item_in_two_feeds": len(m) - len(chain), "state": state, "trend": trend,
+        "last_dated_report": last_report.isoformat(), "days_silent": silent, "stale_after_days": stale_days,
+        "end_evidence": ({"date": evid[0].isoformat(), "what": evid[1], "url": evid[2]} if evid else None),
+        "material": bool(why), "material_because": why,
         "event_confidence": {"level": level, "n_independent": n, "classes": classes, "sources": sorted(srcs)},
         "el_nino_attribution": {"status": att, "checked_by_person": checked, "basis": basis,
                                 "mentions_in_headlines": sum(1 for r in th["members"] if r.get("el_nino"))},

@@ -33,11 +33,6 @@ Method, per series (the eight series of refresh_enso_price_analogs.py, wholesale
               the same excess measured against the 25th and the 75th percentile of the normal years' residuals
               (the expected band). Placebo: the same excess computed for each normal year with that year left out
               of the median; the page prints where 2026 sits among them.
-  Percentile  Where the current excess sits among the placebo excesses (mid-rank: years below plus half the ties, over
-              the number of normal years, rounded). Only 3 to 8 normal years exist per series, so it moves in steps of 100/n
-              and is a rank, not a probability. Outside the spread = above the largest or below the smallest normal-year
-              excess; unusual_score = 100 + pp beyond the nearest edge if outside, else twice the distance of the
-              percentile from 50 (0 = median normal year, 100 = at the edge). The page sorts by it.
   What it is not: an El Niño effect. It is movement not explained by season, currency or world prices. Policy,
               trade bans, regional weather, stocks and measurement all sit in it. Samples are small (one path per
               year); coefficients are fitted on those years only, so treat the range, not the point, as the result.
@@ -47,7 +42,6 @@ Output: data/enso_price_counterfactual.json
 import json
 import math
 import statistics
-import sys
 from datetime import date
 
 from _common import DATA_DIR, http_get, stamp_inputs, write_json
@@ -73,43 +67,6 @@ def q(vals, p):
     k = (len(v) - 1) * p
     lo, hi = int(math.floor(k)), int(math.ceil(k))
     return v[lo] + (v[hi] - v[lo]) * (k - lo)
-
-
-def percentile_fields(excess, placebo):
-    """Where the current excess (percent) sits among the placebo excesses (percent, one per normal year): mid-rank percentile
-    (years below plus half the ties, over n, rounded), whether it lies outside the normal-year spread, how far beyond the
-    nearest edge (percentage points), and the sort score (see header). Pure function of numbers in the output file, so
-    recompute_from_file() can re-derive it without the network."""
-    n = len(placebo)
-    below, tied = sum(1 for v in placebo if v < excess), sum(1 for v in placebo if v == excess)
-    pctile = int(math.floor((below + 0.5 * tied) / n * 100 + 0.5))      # half up (not Python's banker's round)
-    outside = excess < min(placebo) or excess > max(placebo)
-    edge = min(placebo) if excess < min(placebo) else max(placebo)
-    beyond = round(abs(excess - edge), 1) if outside else 0.0
-    return {"current_percentile": pctile, "current_outside_normal_spread": outside, "current_beyond_edge_pp": beyond,
-            "unusual_score": round(100 + beyond, 1) if outside else round(abs(pctile - 50) * 2, 1)}
-
-
-def recompute_from_file():
-    """No network: re-derive the percentile fields of the committed file from its own excess and placebo values. Used when the
-    FAO API cannot serve the real-price series for a full rebuild (2026-09-30: price_value_real empty after 2006 for 6 of 8
-    series); every price number in the file is left exactly as the last full build wrote it."""
-    path = DATA_DIR / "enso_price_counterfactual.json"
-    old = json.loads(path.read_text())
-    out = old["data"]
-    for r in out["rows"]:
-        r["placebo"].update(percentile_fields(r["excess_pct"]["vs_fx_and_world"], list(r["placebo"]["by_year"].values())))
-    out["method"]["percentile"] = PCT_METHOD
-    write_json("enso_price_counterfactual.json", out, source=old["_meta"]["source"], status="ok",
-               notes=old["_meta"]["notes"].split(" Percentile fields re-derived")[0] + " Percentile fields re-derived from the file's own placebo values on " + date.today().isoformat() +
-               " (the FAO API could not serve the real-price series for a full rebuild that day).")
-    for r in out["rows"]:
-        p = r["placebo"]
-        print(f"[counterfactual] {r['iso']}: excess {r['excess_pct']['vs_fx_and_world']:+}% percentile {p['current_percentile']} of {p['n']} normal years, outside={p['current_outside_normal_spread']}")
-
-
-PCT_METHOD = ("Rank of the current excess among the placebo excesses (the same calculation on each normal year, that year left out of the "
-              "median). Mid-rank, rounded half up. Only 3 to 8 normal years, so a rank, not a probability. Outside the spread = beyond every normal year.")
 
 
 def world_maize():
@@ -252,24 +209,6 @@ def build_series(meta, dps, world, bad, this_year):
     pct = lambda a, e: round((math.exp(a - e) - 1) * 100, 1)
     full = pct(act[jl][0], e_full)
     lo, hi = pct(act[jl][0], e_full + r75), pct(act[jl][0], e_full + r25)
-    months = []
-    for j in offs:
-        e0, e1, e2 = expected(j, ys_all, bk, 0), expected(j, ys_all, bk, 1), expected(j, ys_all, bk, 2)
-        seas = [sorted(years[y][j][0] for y in ys_all)]
-        idx = lambda v: round(math.exp(v) * 100, 1)
-        months.append({
-            "month": po.month(o + j),
-            "actual": idx(act[j][0]),
-            "seasonal": idx(e0),
-            "band": [idx(q(seas[0], 0.25)), idx(q(seas[0], 0.75))],
-            "fx_adj": idx(e1),
-            "full_adj": idx(e2),
-            "excess_pct": round((math.exp(act[j][0] - e2) - 1) * 100, 1),
-        })
-    e_seas, e_fx, e_full = (expected(jl, ys_all, bk, u) for u in (0, 1, 2))
-    pct = lambda a, e: round((math.exp(a - e) - 1) * 100, 1)
-    full = pct(act[jl][0], e_full)
-    lo, hi = pct(act[jl][0], e_full + r75), pct(act[jl][0], e_full + r25)
     rank_lo = sum(1 for v in plc.values() if v < math.log(1 + full / 100))
     return {
         "latest_month": po.month(latest),
@@ -290,7 +229,7 @@ def build_series(meta, dps, world, bad, this_year):
         "placebo": {"n": len(plc), "min": min(pl_pct.values()), "p25": round((math.exp(r25) - 1) * 100, 1),
                     "median": round((math.exp(statistics.median(plc.values())) - 1) * 100, 1),
                     "p75": round((math.exp(r75) - 1) * 100, 1), "max": max(pl_pct.values()),
-                    "n_below_2026": rank_lo, "by_year": pl_pct, **percentile_fields(full, list(pl_pct.values()))},
+                    "n_below_2026": rank_lo, "by_year": pl_pct},
         "months": months,
     }, None
 
@@ -329,7 +268,6 @@ def build(listing, datapoints, enso_hist, world, today=None):
             "regression": ("Normal years' deviations from the median path regressed, no intercept, on the FX and world changes since March "
                            "(each minus its normal-year median). OLS, errors clustered by year. A coefficient is used only if positive and "
                            f"|t| >= {T_KEEP} and the series has 6 or more normal years, capped at 1; else 0."),
-            "percentile": PCT_METHOD,
             "range": "Excess measured against the 25th and 75th percentile of the normal years' leave-one-year-out residuals.",
             "caveat": "One path per normal year, so n is small and months within a year overlap; read the range, not the point. The regression describes normal years only.",
         },
@@ -338,8 +276,6 @@ def build(listing, datapoints, enso_hist, world, today=None):
 
 
 def main():
-    if "--recompute-from-file" in sys.argv:
-        return recompute_from_file()
     listing = http_get(f"{API}/FpmaSerieDomestic/", params={"format": "json"}, timeout=120, patient=True).json().get("results") or []
     want = {(i, m, c, t) for i, m, c, t, _ in SERIES}
     uuids = [s["uuid"] for s in listing if ((s.get("iso3_country_code") or "").upper(), s.get("market_name"),
@@ -349,15 +285,6 @@ def main():
         raise RuntimeError("FPMA series list matched none of the counterfactual series")
     enso = json.loads((DATA_DIR / "enso.json").read_text())["data"]["history"]
     out = build(listing, po.fetch_prices(uuids), enso, world_maize())
-    # FPMA's API has served thin real-price series at times (2 of 8 markets, 2026-09-30): never replace a fuller
-    # committed file with a thinner run; the last good file stays and the page keeps its own dates.
-    try:
-        prev = json.loads((DATA_DIR / "enso_price_counterfactual.json").read_text())["data"]["rows"]
-    except Exception:  # noqa: BLE001
-        prev = []
-    if len(out["rows"]) < len(prev):
-        print(f"[counterfactual] run kept {len(out['rows'])} of {len(prev)} committed series: keeping the last good file")
-        return 0
     for r in out["rows"]:
         e = r["excess_pct"]
         print(f"[counterfactual] {r['iso']} {r['price_type']}: vs season {e['vs_seasonal']:+}%, fx {e['vs_fx_adjusted']:+}%, "

@@ -1641,46 +1641,20 @@ def main() -> int:
             const T = (await (await fetch('data/enso_event_threads.json')).json()).data;
             const R = (await (await fetch('data/enso_recent_events.json')).json()).data.events;
             const plate = document.querySelector('#enso-live .enso-threads-plate'); if (!plate) return false;
-            const rows = [...plate.querySelectorAll('.plate-body .enso-th-row')], top = T.threads.filter(t => t.event_confidence.level !== 'low' || t.material);   // 2026-09-30: default view = high, medium, material low
+            const rows = [...plate.querySelectorAll('.enso-th-row')], top = T.threads.slice(0, 5);
             const ATT = { attributed: 'Attributed', pattern_consistent: 'Pattern-consistent', not_assessed: 'Not assessed' };
             const st = T.stats, lede = plate.querySelector('.enso-plate-lede').textContent;
-            return rows.length >= 4 && rows.every(r => {
-                const t = top.find(x => x.id === r.dataset.thread); if (!t) return false; const c = t.event_confidence;
+            return rows.length === top.length && top.every((t, i) => {
+                const r = rows[i], c = t.event_confidence;
                 return r.dataset.thread === t.id && r.querySelector('.enso-th-ev b').textContent === t.title
                     && r.querySelector('.enso-th-conf').textContent.includes(c.n_independent + ' independent source')
                     && r.querySelector('.enso-th-att b').textContent === ATT[t.el_nino_attribution.status]
                     && r.querySelectorAll('.enso-th-chain a, .enso-th-chain span:not(.enso-th-arrow):not(.enso-th-more)').length >= 1;
             }) && lede.includes(st.event_reports + ' event reports, ' + st.threads + ' events.')
-              && top.length === st.shown_by_default && top.length < st.threads
-              && plate.querySelectorAll('details.enso-th-rest:not(.enso-th-mat) .enso-th-row').length === st.threads - top.length
-              && rows.length + plate.querySelectorAll('details.enso-th-mat .enso-th-row').length === top.length
               && st.threads <= st.event_reports && st.event_reports <= st.raw_items
               && T.threads.every(t => t.el_nino_attribution.status !== 'attributed'
                     || R.some(e => e.id === t.el_nino_attribution.basis.id && e.enso_link === 'attributed'))   // the machine never attributes
               && T.threads.every(t => t.event_confidence.n_independent <= t.n_reports);
-        }"""))
-        # 2026-09-30 (evfix): silence is not resolution. Resolved needs positive evidence; stale is a per-hazard window.
-        check("Reported: no thread is resolved without positive evidence; stale means silent past the hazard window; states add up", page.evaluate("""async () => {
-            const T = (await (await fetch('data/enso_event_threads.json')).json()).data;
-            const G = (await (await fetch('data/gdacs.json')).json()).data, R = (await (await fetch('data/enso_recent_events.json')).json()).data.events;
-            const SD = T.rule.stale_days, st = T.stats.by_state;
-            const gd = t => t.chain.filter(c => c.feed === 'gdacs').map(c => Object.values(G).find(v => v && v.url === c.url)).filter(Boolean);
-            return T.threads.length === Object.values(st).reduce((a, b) => a + b, 0)
-                && !('reported' in st) && ['new','active','confirmed','worsening','easing','stale','resolved'].every(k => k in st)
-                && T.threads.every(t => {
-                    const n = T.threads.length && t.days_silent, w = t.stale_after_days;
-                    if (t.state === 'resolved') {
-                        const ev = t.end_evidence; if (!ev) return false;
-                        const gdacsOk = /^GDACS/.test(ev.what) && gd(t).some(v => v.is_current === false && v.to_date === ev.date);
-                        const curOk = /curated/.test(ev.what) && R.some(e => e.ended && e.ended.date === ev.date && t.chain.some(c => c.url === (e.source || {}).url));
-                        const headOk = /agency headline/.test(ev.what) && t.chain.some(c => c.url === ev.url && c.class === 'agency');
-                        return gdacsOk || curOk || headOk;
-                    }
-                    if (t.state === 'stale') return n > w;
-                    return n <= w && t.end_evidence == null;
-                })
-                && SD.drought >= 90 && SD.crop >= 90 && SD['flash flood'] <= 14 && SD['flash flood'] < SD.flood && SD.flood < SD.drought
-                && T.threads.every(t => t.stale_after_days === (t.hazard === 'flood' && t.stale_after_days === SD['flash flood'] ? SD['flash flood'] : SD[t.hazard] || SD.other));
         }"""))
         check("Reported: threads plate keeps confidence and attribution separate and never calls an event an El Nino effect", page.evaluate("""() => {
             const plate = document.querySelector('#enso-live .enso-threads-plate'); if (!plate) return false;
@@ -2291,34 +2265,16 @@ def main() -> int:
             const sg = v => (Math.round(v) > 0 ? '+' : Math.round(v) < 0 ? '\u2212' : '') + Math.abs(Math.round(v)) + '%';
             const plate = document.querySelector('.enso-pa-plate'), rows = [...plate.querySelectorAll('.enso-cf-row')];
             const cells = [...plate.querySelectorAll('.enso-pa-cell')];
-            const sorted = C.rows.slice().sort((a, b) => b.placebo.unusual_score - a.placebo.unusual_score);   // 2026-09-30: ledger sorted by how unusual
             return C.rows.length >= 6 && rows.length === C.rows.length
-                && sorted.every((r, i) => {
+                && C.rows.every((r, i) => {
                     const t = rows[i].textContent, e = r.excess_pct;
                     return t.includes(sg(e.vs_fx_and_world)) && t.includes('(' + sg(e.range_fx_and_world[0]) + ' to ' + sg(e.range_fx_and_world[1]) + ')')
-                        && t.includes(r.price_type) && rows[i].querySelector('svg.enso-cf-bar rect') && rows[i].textContent.includes(r.placebo.n + ' comparable non-El-Niño years');
+                        && t.includes(r.price_type) && rows[i].querySelector('svg.enso-cf-bar rect');
                 })
                 && C.rows.every(r => cells.some(c => c.querySelector('h4').textContent.includes(r.price_type) && c.querySelector('.is-cf') && c.querySelector('.enso-season-band') && c.querySelector('.enso-season')))
                 && /not explained by season, currency or world prices/.test(plate.textContent)
                 && !/caused by El Ni|El Ni.o effect is|because of El Ni/i.test(plate.textContent.replace(/not an El Ni.o effect/g, ''))
                 && C.rows.every(r => r.regression.n_years === r.normal_years.n && r.normal_years.years.every(y => !C.excluded_years.includes(y)));
-        }"""))
-
-        # 2026-09-30 (evfix): percentile of the current excess among the placebo excesses, recomputed here from the file alone.
-        check("counterfactual percentile: recomputed from each row's own placebo values, shown with the small n, inside/outside stated", page.evaluate("""async () => {
-            const C = (await (await fetch('data/enso_price_counterfactual.json')).json()).data;
-            const ord = n => n + ((n % 100 >= 11 && n % 100 <= 13) ? 'th' : n % 10 === 1 ? 'st' : n % 10 === 2 ? 'nd' : n % 10 === 3 ? 'rd' : 'th');
-            const rows = [...document.querySelectorAll('.enso-pa-plate .enso-cf-row')];
-            return C.rows.every(r => {
-                const ex = r.excess_pct.vs_fx_and_world, y = Object.values(r.placebo.by_year), n = y.length;
-                const pc = Math.round((y.filter(v => v < ex).length + 0.5 * y.filter(v => v === ex).length) / n * 100);
-                const out = ex < Math.min(...y) || ex > Math.max(...y);
-                const row = rows.find(x => x.textContent.includes(r.price_type) && x.textContent.includes(r.name || ''));
-                return r.placebo.current_percentile === pc && r.placebo.current_outside_normal_spread === out && n === r.normal_years.n && n >= 3 && n <= 8
-                    && rows.some(x => x.querySelector('.enso-cf-pct') && x.querySelector('.enso-cf-pct').textContent.includes(out ? 'outside the normal-year spread' : 'inside the normal-year spread')
-                        && x.querySelector('.enso-cf-pct').textContent.includes(n + ' comparable non-El-Niño years')
-                        && (out || x.querySelector('.enso-cf-pct').textContent.includes(ord(pc) + ' percentile')));
-            }) && C.rows.some(r => !r.placebo.current_outside_normal_spread);
         }"""))
 
         # 2026-09-30 court verdict: the rail is one ranked table (Now, the last El Niño at the same stage, the grey 12-month
