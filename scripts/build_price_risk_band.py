@@ -73,7 +73,7 @@ SPEC = {
     "windows": {k: list(v) for k, v in WINDOWS.items()},
 }
 SPEC_HASH = hashlib.sha256(json.dumps(SPEC, sort_keys=True).encode()).hexdigest()[:16]
-DECOMP = {"ZAF": "maize", "HND": "maize", "ZMB": "maize"}   # import-parity series (cointegrated with the world price)
+DECOMP = {"ZAF": "maize", "HND": "maize", "ZMB": "maize"}   # import-parity maize series (cointegrated with the world price); HND beans has no world benchmark
 SINCE = "2026-03"
 LOG_FILE = "enso_price_forecast_log.json"
 OUT_FILE = "enso_price_risk.json"
@@ -468,7 +468,7 @@ def build(series, world_usd, oni, today=None):
     dec = {}
     for s in series:
         st = DECOMP.get(s["iso3"])
-        if st and s["key"] in P and st in world_usd:
+        if st and s["staple"] == st and s["key"] in P and st in world_usd:
             d = decompose(s["datapoints"], world_usd[st])
             if d:
                 dec[s["key"]] = d

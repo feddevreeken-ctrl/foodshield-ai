@@ -376,6 +376,16 @@ class DataFixes(unittest.TestCase):
         out = b.build([s], {}, {})
         self.assertEqual(out["series"][0]["gap"]["months"], 48)
 
+    def test_only_the_import_parity_staple_is_decomposed(self):
+        # HND beans has no world benchmark: a maize decomposition would be wrong for it
+        hnd_maize = dict(self._series("HND"), staple="maize", key="HND:maize")
+        hnd_beans = dict(self._series("HND"), staple="beans", key="HND:beans")
+        world = {"maize": {b.mi(f"{2018 + i // 12}-{i % 12 + 1:02d}"): 200.0 + i for i in range(100)}}
+        out = b.build([hnd_maize, hnd_beans], world, {})
+        by = {e["key"]: e for e in out["series"]}
+        self.assertIn("decomposition", by["HND:maize"])
+        self.assertNotIn("decomposition", by["HND:beans"])
+
     def test_short_series_is_left_out_with_a_reason(self):
         out = b.build([self._series("XXX", 20)], {}, {})
         self.assertEqual(out["series"], [])
