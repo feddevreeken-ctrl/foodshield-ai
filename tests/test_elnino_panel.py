@@ -1275,7 +1275,8 @@ def main() -> int:
             const rows = [...document.querySelectorAll('.enso-ports-table tbody tr:not(.enso-ol-year)')];
             return P.length >= 5 && rows.length === P.length && rows.every((r, i) => r.textContent.includes(P[i].name) || P.some(p => r.textContent.includes(p.name)))
                 && !document.querySelector('.enso-meet-plate') && document.querySelector('.enso-ports-plate').textContent.includes('South Africa’s maize')
-                && document.querySelector('#enso-water > figure') === document.querySelector('.enso-ports-plate');
+                && (() => { const f = [...document.querySelectorAll('#enso-water > figure')];  // 2026-09-30: Gatún leads, ports second
+                    return f[0] === document.querySelector('.enso-gatunfit-plate') && f[1] === document.querySelector('.enso-ports-plate'); })();
         }"""))
         # 2026-09-24 (court): hand-checked facts expire. A hand-kept file older than its review window,
         # or an export measure past its end date still marked in force, fails the gate.
