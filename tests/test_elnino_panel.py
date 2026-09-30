@@ -141,9 +141,14 @@ def main() -> int:
 
         page.on("pageerror", lambda e: note(str(e)))
         page.on("console", on_console)
-        # A fetch cut off by the test's own navigation (the live-alerts poll) is not an application error.
+        # A fetch cut off by the test's own navigation (the live-alerts poll) is not an application error. Nor is a
+        # publisher's news thumbnail that refuses a headless browser (2026-09-30: ReliefWeb answers the HeadlessChrome
+        # user agent with a 403 HTML page, which Chrome blocks as ERR_BLOCKED_BY_ORB; real Chrome gets the image, and the
+        # page's onerror drops a failed thumbnail). First-party failures still count.
         page.on("requestfailed",
-                lambda r: None if 'ERR_ABORTED' in str(r.failure or '') else note(f"request failed: {r.failure or ''}", r.url))
+                lambda r: None if 'ERR_ABORTED' in str(r.failure or '')
+                or ('ERR_BLOCKED_BY_ORB' in str(r.failure or '') and not r.url.startswith(base))
+                else note(f"request failed: {r.failure or ''}", r.url))
 
         print("\nindex strip — comparability")
         open_panel(page, base)
