@@ -76,6 +76,7 @@ import refresh_trade_restrictions
 import refresh_fpma_prices      # FAO GIEWS FPMA: staple-food price YoY, ~125 countries, monthly
 import refresh_enso_price_analogs  # FAO GIEWS FPMA: southern African maize, real prices, around past El Niños
 import build_enso_price_outlook   # derived: FPMA staple prices in high-effect El Niño countries, analog path, skill-gated model
+import build_price_risk_band      # derived: grey 3/6/12-month price-risk bands (quantile regression, tested out of sample) + append-only forecast log; needs numpy
 import refresh_giews_crea       # FAO GIEWS countries requiring external assistance (3x/yr list)
 import refresh_imf_food_cpi     # IMF CPI food (CP01) YoY, monthly, fresher than FAOSTAT's CPI
 import refresh_commodity_news   # v46 — GDELT + EC RSS commodity headlines (claims, not data)
@@ -164,6 +165,9 @@ STEPS = [
     ("FAO GIEWS FPMA prices",  refresh_fpma_prices.main,        "fpma_prices.json"),
     ("FPMA El Niño analogs",   refresh_enso_price_analogs.main, "enso_price_analogs.json"),
     ("El Niño price outlook",  build_enso_price_outlook.main,   "enso_price_outlook.json"),
+    # Own step after the outlook: its rolling-origin test (about 80 s) must not eat the outlook's time, and a failure
+    # keeps the last good bands and log (the log is append-only; safe_run never touches it).
+    ("Price-risk band",        build_price_risk_band.main,      "enso_price_risk.json"),
     ("FAO GIEWS CREA list",    refresh_giews_crea.main,         "giews_crea.json"),
     ("IMF food CPI",           refresh_imf_food_cpi.main,       "imf_food_cpi.json"),
     ("FX rates (v23)",         refresh_fx.main,                 "fx_rates.json"),
@@ -280,7 +284,8 @@ OPTIONAL_OUTPUTS = {"commodity_interpretation.json", "commodity_article_notes.js
 # file. 2700s covers the observed worst case (~55 rate-limited calls × up to
 # 3 × 30s backoff) with headroom; all other steps keep the 900s default.
 STEP_TIMEOUTS = {"Comtrade": 2700, "Commodity interpretation": 900, "Article notes": 900,  # ~55 model calls at 6 s spacing
-                 "CPC observed rain": 450}  # CPC ~1-2 min + the CHIRPS fill's 150 s budget
+                 "CPC observed rain": 450,  # CPC ~1-2 min + the CHIRPS fill's 150 s budget
+                 "Price-risk band": 600}  # ~80 s of rolling-origin quantile fits, plus the FPMA, Pink Sheet and ONI pulls
 
 
 # v79 — GLOBAL WALL-CLOCK BUDGET.

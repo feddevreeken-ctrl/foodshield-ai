@@ -125,6 +125,8 @@ EXPECTED_FILES = {
     'enso_freight.json':          ('soft',     'dict_or_empty'),
     'enso_price_analogs.json':    ('soft',     'dict_or_empty'),
     'enso_price_outlook.json':    ('soft',     'enso_price_outlook'),  # derived from FPMA + the harvest model
+    'enso_price_risk.json':       ('soft',     'enso_price_risk'),     # grey price-risk bands + their out-of-sample test
+    'enso_price_forecast_log.json': ('soft',   'enso_price_forecast_log'),  # append-only frozen bands
     'enso_hindcast.json':         ('soft',     'dict_or_empty'),
     'enso_situation.json':        ('soft',     'dict_or_empty'),
     'enso_strengths.json':        ('soft',     'dict_or_empty'),
@@ -392,6 +394,45 @@ def _check_enso_price_outlook(text, data):
     return True, f"ok — {len(data['rows'])} rows, model {status} ({n_model} rows with model numbers)"
 
 
+def _check_enso_price_risk(text, data):
+    """build_price_risk_band.py: finite numbers, ordered quantiles, a band only for a series that passed its test, the
+    spec hash, and a verdict on the ONI test (the page prints the ONI sentence only when the verdict says adds_nothing)."""
+    try:
+        json.loads(text, parse_constant=lambda c: (_ for _ in ()).throw(ValueError(c)))
+    except ValueError as e:
+        return False, f"non-finite number in the file: {e}"
+    if not isinstance(data, dict) or not isinstance(data.get('series'), list) or not data['series']:
+        return False, "no series"
+    if not data.get('spec_hash') or (data.get('oni_test') or {}).get('verdict') not in ('adds_nothing', 'improves'):
+        return False, "no spec hash or no ONI verdict"
+    n_pass = 0
+    for e in data['series']:
+        for h, x in (e.get('h') or {}).items():
+            q = [x.get(k) for k in ('p10', 'p50', 'p90')]
+            if all(isinstance(v, (int, float)) for v in q) and not q[0] <= q[1] <= q[2]:
+                return False, f"{e.get('key')} h{h}: quantiles out of order {q}"
+            if x.get('pass') and not all(isinstance(v, (int, float)) for v in q):
+                return False, f"{e.get('key')} h{h}: passes but has no numbers"
+            n_pass += bool(x.get('pass')) and h == str(data.get('default_horizon'))
+        d = e.get('decomposition')
+        if d and abs(d['world_pct'] + d['fx_pct'] + d['local_pct'] - d['total_pct']) > 0.35:
+            return False, f"{e.get('key')}: decomposition does not add up"
+    return True, f"ok — {len(data['series'])} series, {n_pass} with a {data.get('default_horizon')}-month band, ONI {data['oni_test']['verdict']}"
+
+
+def _check_enso_price_forecast_log(text, data):
+    """Append-only log: dated entries in order, one per run date, each carrying the spec hash."""
+    es = (data or {}).get('entries') if isinstance(data, dict) else None
+    if not isinstance(es, list) or not es:
+        return False, "no entries"
+    dates = [e.get('run_date') for e in es]
+    if dates != sorted(set(dates)):
+        return False, "entries are not one per run date in date order"
+    if any(not e.get('spec_hash') or not e.get('series') for e in es):
+        return False, "an entry lacks its spec hash or series"
+    return True, f"ok — {len(es)} entries, first {dates[0]}, last {dates[-1]}"
+
+
 def validate_one(filename, spec):
     """Returns (ok: bool, message: str)."""
     criticality, shape = spec
@@ -499,6 +540,10 @@ def validate_one(filename, spec):
                       f"{len(valid)} cells, median {med:+d}%{extra}")
     elif shape == 'enso_price_outlook':
         return _check_enso_price_outlook(p.read_text(), data)
+    elif shape == 'enso_price_risk':
+        return _check_enso_price_risk(p.read_text(), data)
+    elif shape == 'enso_price_forecast_log':
+        return _check_enso_price_forecast_log(p.read_text(), data)
     elif shape == 'sst_recent':
         if not isinstance(data, dict) or not data:
             return False, f"no sea months yet ({notes[:60] if notes else 'no notes'})"

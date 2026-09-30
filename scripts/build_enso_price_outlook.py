@@ -102,6 +102,10 @@ WORLD = {"maize": ("Maize", "World Bank Pink Sheet maize (US Gulf), deflated by 
          "rice": ("Rice, Thai 5%", "World Bank Pink Sheet rice (Thai 5% broken), deflated by US CPI")}
 SEASON_MIN_YEARS = 3          # every calendar month needs this many non-El-Niño years, else the series has no normal year
 BETA_MIN_MONTHS, BETA_T = 48, 1.96
+# FPMA's CPI deflator for these steps near-constantly over its last months, which looks extrapolated: their last three
+# months are dropped from the map fill and from the price-risk band (build_price_risk_band.py reads this).
+TAIL_TRIM = {"MDG": 3, "ETH": 3}
+GAP_MIN_MONTHS = 12          # a run of missing months this long inside a series is flagged in series.gap
 
 
 def mi(iso):
@@ -110,6 +114,13 @@ def mi(iso):
 
 def month(m):
     return f"{m // 12}-{m % 12 + 1:02d}"
+
+
+def _gap(real):
+    """Longest run of missing months between two observed ones, when it is GAP_MIN_MONTHS or more, else None."""
+    ms = sorted(real)
+    best = max(((b - a - 1, a + 1, b - 1) for a, b in zip(ms, ms[1:])), default=None)
+    return {"months": best[0], "from": month(best[1]), "to": month(best[2])} if best and best[0] >= GAP_MIN_MONTHS else None
 
 
 def pct(a, b):
@@ -473,6 +484,10 @@ def build(listing, datapoints, enso_hist, model, outlook, regions, effects, toda
         real = {mi(d["date"]): d["price_value_real"] for d in dps
                 if d.get("date") and isinstance(d.get("price_value_real"), (int, float)) and d["price_value_real"] > 0}
         nom = {mi(d["date"]): d["price_value"] for d in dps if d.get("date") and isinstance(d.get("price_value"), (int, float))}
+        trimmed = sorted(real)[-TAIL_TRIM[iso]:] if TAIL_TRIM.get(iso) else []
+        for m in trimmed:
+            real.pop(m)
+            nom.pop(m, None)
         if not real or today_m - max(real) > MAX_AGE_MONTHS:
             excluded.append({"iso3": iso, "commodity": commodity, "reason": "no current CPI-deflated monthly series"})
             continue
@@ -509,7 +524,8 @@ def build(listing, datapoints, enso_hist, model, outlook, regions, effects, toda
             "series": {"market": s.get("market_name"), "price_type": ptype.lower(), "currency": s.get("currency"),
                        "unit": s.get("measure_unit_label"), "real": True, "deflator": "FPMA CPI-deflated price",
                        "series_source": s.get("source_name"), "source_url": TOOL_URL, "fpma_uuid": s["uuid"],
-                       "first_month": month(min(real))},
+                       "first_month": month(min(real)), "trimmed_tail": [month(m) for m in trimmed],
+                       "gap": _gap(real)},
             "latest": {"month": month(L), "value": nom.get(L), "real_value": real[L], "months_from_peak": k0},
             "aftermath": {"now": aftermath(real, p_now, k0), **after},
             "analog": analog(real, L, k0, peaks),
