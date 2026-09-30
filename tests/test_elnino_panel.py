@@ -1015,7 +1015,8 @@ def main() -> int:
         # from FPMA (+0.6k) and pays part of it back: prices beside their sparklines, a one-line map key (5.26k), cap 5400.
         # 2026-09-30 (external review, "the tabs do not link to food security"): every lens opens with the food-security
         # band (about 0.3k). Ocean gives up its 5250 cap by 100; Prices gains the access ledger (5 rows + fold) and keeps 5400.
-        CEIL = {'elnino': 5350, 'ensoharvest': 5000, 'ensowater': 7300, 'ensomoney': 5400, 'ensolive': 6100}
+        # 2026-09-30: Harvests gains the NOAA-forecast distribution plate (measured +725 px at 1440x1000: 4260 -> 4985), cap 5000 -> 5725.
+        CEIL = {'elnino': 5350, 'ensoharvest': 5725, 'ensowater': 7300, 'ensomoney': 5400, 'ensolive': 6100}
         check("no lens grows past its height ceiling", all(heights.get(k, 0) <= v for k, v in CEIL.items()), str(heights))
         # 2026-09-30: the food-security band leads every lens, is computed from the feeds and links to the lenses that hold the evidence.
         band = page.evaluate("""async () => {
@@ -1368,6 +1369,44 @@ def main() -> int:
                 && [...document.querySelectorAll('.enso-ol-chart .enso-ol-row:not(.enso-ol-head):not(.enso-ol-axisrow) .enso-ol-skill')].every(sp => /^\d+\/\d+ right/.test(sp.textContent))
                 && !txt.includes('has not been scored') && txt.includes('held-out harvests');
         }"""))
+        # 2026-09-30: the production-weighted aggregate is scored as an aggregate (build_enso_portfolio_hindcast.py).
+        check("portfolio hindcast plate prints the file's counts, recounted from its rows", page.evaluate("""async () => {
+            const P = (await (await fetch('data/enso_portfolio_hindcast.json')).json()).data;
+            const sc = P.events.filter(e => e.scored), pl = document.querySelector('.enso-pf-plate');
+            if (!pl) return false;
+            const right = sc.filter(e => e.global.sign_right).length, alarms = sc.filter(e => e.global.predicted_kt < 0 && e.global.actual_kt > 0).length;
+            const t = pl.querySelector('.enso-pf-lede').textContent.replace(/\s+/g, ' ');
+            return right === P.overall.sign_right && alarms === P.overall.false_alarms && sc.length === P.overall.events
+                && +pl.dataset.n === sc.length && +pl.dataset.right === right && +pl.dataset.alarms === alarms
+                && t.includes('Direction right in ' + right + ' of ' + sc.length + ' winters') && t.includes('False alarms: ' + alarms + ' of ' + sc.length)
+                && pl.querySelectorAll('.enso-pf-row').length === P.events.length
+                && pl.querySelectorAll('.enso-pf-row.is-hit').length === right;
+        }"""))
+        check("portfolio hindcast keeps five rows in view and folds the rest, in the Harvests order after the outlook", page.evaluate("""() => {
+            const pl = document.querySelector('.enso-pf-plate'), pn = document.getElementById('subview-ensoharvest');
+            const kids = [...pn.children].map(c => c.id || c.className);
+            return !!pl && pl.querySelectorAll(':scope > .plate-body > .enso-pf-rows .enso-pf-row').length <= 5
+                && kids.indexOf('enso-hindcast') > kids.indexOf('enso-outlook') && /is-modelled/.test(pl.className);
+        }"""))
+        # 2026-09-30: the NOAA-forecast distribution plate prints the file's percentiles, and they are ordered.
+        check("Harvests distribution plate prints each pair's median and 90% range from enso_distribution.json", page.evaluate("""async () => {
+            const D = (await (await fetch('data/enso_distribution.json')).json()).data;
+            const plate = document.querySelector('.enso-dist-plate'); if (!plate) return false;
+            const rows = [...plate.querySelectorAll('.enso-dist-row[data-k]')];
+            const n0 = v => (v > 0 ? '+' : v < 0 ? '\u2212' : '') + Math.abs(v).toFixed(0) + '%';
+            return rows.length >= 5 && rows.length <= 8 && rows.every(r => {
+                const p = D.pairs.find(q => q.key === r.dataset.k); if (!p) return false;
+                const c = p.change_pct, lab = r.querySelector('.enso-dist-track').getAttribute('aria-label');
+                return r.textContent.includes(n0(c.p50)) && lab.includes(n0(c.p05)) && lab.includes(n0(c.p95));
+            }) && plate.textContent.includes(D.target.oni_draw.p50.toFixed(1)) && plate.dataset.kind !== 'observed' && !!plate.querySelector('details.enso-evidence-note');
+        }"""))
+        check("Distribution percentiles are ordered and the aggregate sits inside its pairs' range", page.evaluate("""async () => {
+            const D = (await (await fetch('data/enso_distribution.json')).json()).data;
+            const ord = c => ['p05','p10','p25','p50','p75','p90','p95'].every((k, i, a) => i === 0 || c[a[i - 1]] <= c[k]) && c.prob_fall >= 0 && c.prob_fall <= 1;
+            const o = D.target.oni_draw;
+            return D.pairs.length > 0 && D.pairs.every(p => ord(p.change_pct)) && Object.values(D.crops).every(c => ord(c.change_pct))
+                && o.p05 <= o.p50 && o.p50 <= o.p95 && D.bridge.DJF.n > 60;
+        }"""))
         page.evaluate("showTab('ensowater')")
         page.wait_for_selector('#subview-ensowater.active .enso-lane-board')
         page.evaluate("document.querySelector('.enso-lanes-other').open = true")
@@ -1395,6 +1434,21 @@ def main() -> int:
                 && (!zwe || /lost from its own harvest/.test(zwe.textContent) && /less from South Africa/.test(zwe.textContent))
                 && document.querySelector('.enso-whopays-plate').textContent.includes('hit twice')
                 && document.querySelectorAll('.enso-whopays-plate .enso-wp-total').length === ((await (await fetch('data/enso_outlook.json')).json()).data.who_pays_totals || []).length;
+        }"""))
+        # 2026-09-30 (access): IPC exactness and calibrated lines, all read from data files.
+        check("Access ledger shows Phase 3+ as a share of the analysed population, marks partial coverage, and reads its lines from access_thresholds.json", page.evaluate("""async () => {
+            const T = (await (await fetch('data/ref/access_thresholds.json')).json()).data, ipc = (await (await fetch('data/ipc.json')).json()).data;
+            const pl = document.querySelector('.enso-access-plate'); if (!pl) return false;
+            const t = pl.textContent, rows = [...pl.querySelectorAll('tbody tr')];
+            const okRows = rows.length > 0 && rows.every(r => /analysed|no IPC analysis/.test(r.textContent));
+            const anyPartial = Object.values(ipc).some(x => x.analysis_coverage_ratio < 1);
+            return okRows && (!anyPartial || pl.querySelectorAll('.enso-acc-part').length > 0) && t.includes('line ' + T.lines.economic_access.line)
+                && t.includes('additional shock') && !/El Niño would add/.test(t) && !/\u2014/.test(t);
+        }"""))
+        check("Uncalibrated components are labelled as reference lines, calibrated ones as calibrated", page.evaluate("""async () => {
+            const T = (await (await fetch('data/ref/access_thresholds.json')).json()).data.lines, h = document.querySelector('.enso-access-plate thead').textContent;
+            const un = (h.match(/not calibrated/g) || []).length, all = (h.match(/calibrated/g) || []).length;
+            return Object.values(T).every(e => e.supported === (typeof e.line === 'number')) && un === Object.values(T).filter(e => !e.supported).length && all - un === Object.values(T).filter(e => e.supported).length;
         }"""))
         # 2026-09-24: past El Niños and world prices are one dot plot; food inflation by country is the
         # map and its ranked list only (the bar chart and 37-row table repeated it).

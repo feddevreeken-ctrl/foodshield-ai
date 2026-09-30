@@ -1,0 +1,1890 @@
+{
+ "_meta": {
+  "generated_at": "2026-09-30T19:51:16+00:00",
+  "builder": "scripts/build_access_thresholds.py (hand-run, numpy+scipy, output committed; not on the cron)",
+  "sources": {
+   "food_price_shock_outcome": {
+    "name": "IMF CPI, food and non-alcoholic beverages (COICOP CP01), year-on-year %, monthly",
+    "url": "https://data.imf.org/en/datasets/IMF.STA:CPI",
+    "api": "https://api.imf.org/external/sdmx/3.0/data/dataflow/IMF.STA/CPI/+/*.CPI.CP01.YOY_PCH_PA_PT.M?c%5BTIME_PERIOD%5D=ge:2004-01",
+    "licence": "IMF data terms, free reuse with attribution"
+   },
+   "import_dependence_and_reserve": {
+    "name": "USDA FAS PSD Online, grains (wheat, rice, corn): imports, domestic consumption, ending stocks, by market year",
+    "url": "https://apps.fas.usda.gov/psdonline/downloads/psd_grains_pulses_csv.zip",
+    "licence": "US Government public domain"
+   },
+   "economic_access": {
+    "name": "World Bank WDI: FI.RES.TOTL.MO, DT.TDS.DECT.EX.ZS, NY.GNP.PCAP.CD, PA.NUS.FCRF",
+    "url": "https://api.worldbank.org/v2/",
+    "licence": "CC BY 4.0"
+   },
+   "ipc_history": {
+    "name": "HDX HAPI food security (IPC/CH population in phase, national level), 2021 onward",
+    "url": "https://hapi.humdata.org/docs",
+    "licence": "CC BY-IGO via HDX"
+   }
+  },
+  "fetched": "2026-09-30",
+  "method": {
+   "panel": "country-years P=2005..2024 not already in a shock in year P; predictors measured in/before P (PSD market year P-1, WDI year P); outcome in year P+1",
+   "outcome": "entered a food-price shock: peak monthly y/y food CPI in P+1 >= 20 % while the peak in P was below it (nominal). Sensitivity T = [15, 25, 30].",
+   "components": "same formulas as scripts/build_countries_dataset.py (import dependence, grain buffer, economic access) rebuilt from historical inputs",
+   "line_choice": "argmax of Youden J (recall minus false-positive rate) on the 5-point grid 30..80; a line is 'supported' only if the country-clustered bootstrap 95% CI of the AUC excludes 0.5",
+   "bootstrap": "1000 country-clustered resamples, seed 20260930"
+  },
+  "episodes_note": "Episodes are all country-years meeting the outcome rule in the IMF series, not hand-picked; their list is in `episodes`.",
+  "limits": [
+   "Import dependence and grain reserve use USDA PSD grain balances, the page's c[0] uses FAOSTAT food balance sheets; the reconstruction check gives the rank correlation.",
+   "Economic access is rebuilt from annual WDI series with Atlas GNI per capita (the page uses PPP GNI from UNDP) and an annual-average exchange-rate change, so it is an analogue, not the identical number.",
+   "Supplier concentration, production trend, climate, conflict and supply-chain components are not calibrated here.",
+   "Outcome is nominal food CPI; in very high-inflation economies a 20 % peak is not necessarily a shock in real terms, and IMF CPI covers fewer low-income countries than the page lists.",
+   "Episodes cluster in 2008, 2011 and 2021 to 2023 (global price shocks); the result is about which countries were hit when prices rose, not a forecast.",
+   "IPC history on HAPI starts in 2021 and covers about 50 countries that run IPC/CH analyses, so the IPC line rests on few countries and is weaker evidence than the price-shock lines."
+  ],
+  "reconstruction_check": {
+   "note": "Spearman rho of the reconstructed 2023 value against the page's current component (n, rho)",
+   "import_dependence_PSD_vs_FAOSTAT_c0": [
+    129,
+    0.913
+   ],
+   "grain_reserve_PSD2023_vs_c8": [
+    129,
+    0.824
+   ],
+   "economic_access_reconstructed_vs_c7": [
+    189,
+    0.877
+   ]
+  }
+ },
+ "data": {
+  "price_shock_primary": {
+   "import_dependence": {
+    "component": "import_dependence",
+    "n": 999,
+    "events": 76,
+    "base_rate": 0.076,
+    "countries": 77,
+    "auc": 0.314,
+    "auc_ci95": [
+     0.245,
+     0.381
+    ],
+    "line_p25_p50_p75": [
+     35.0,
+     65.0,
+     80.0
+    ],
+    "line_share_at_modal": 0.46,
+    "supported": false,
+    "best_line_youden": 80,
+    "at_lines": [
+     {
+      "line": 30,
+      "flagged": 690,
+      "flagged_share": 0.691,
+      "tp": 34,
+      "fp": 656,
+      "recall": 0.447,
+      "precision": 0.049,
+      "lift": 0.65,
+      "youden_j": -0.263
+     },
+     {
+      "line": 35,
+      "flagged": 645,
+      "flagged_share": 0.646,
+      "tp": 30,
+      "fp": 615,
+      "recall": 0.395,
+      "precision": 0.047,
+      "lift": 0.61,
+      "youden_j": -0.272
+     },
+     {
+      "line": 40,
+      "flagged": 598,
+      "flagged_share": 0.599,
+      "tp": 26,
+      "fp": 572,
+      "recall": 0.342,
+      "precision": 0.043,
+      "lift": 0.57,
+      "youden_j": -0.278
+     },
+     {
+      "line": 45,
+      "flagged": 560,
+      "flagged_share": 0.561,
+      "tp": 23,
+      "fp": 537,
+      "recall": 0.303,
+      "precision": 0.041,
+      "lift": 0.54,
+      "youden_j": -0.279
+     },
+     {
+      "line": 50,
+      "flagged": 525,
+      "flagged_share": 0.526,
+      "tp": 20,
+      "fp": 505,
+      "recall": 0.263,
+      "precision": 0.038,
+      "lift": 0.5,
+      "youden_j": -0.284
+     },
+     {
+      "line": 55,
+      "flagged": 485,
+      "flagged_share": 0.485,
+      "tp": 13,
+      "fp": 472,
+      "recall": 0.171,
+      "precision": 0.027,
+      "lift": 0.35,
+      "youden_j": -0.34
+     },
+     {
+      "line": 60,
+      "flagged": 448,
+      "flagged_share": 0.448,
+      "tp": 13,
+      "fp": 435,
+      "recall": 0.171,
+      "precision": 0.029,
+      "lift": 0.38,
+      "youden_j": -0.3
+     },
+     {
+      "line": 65,
+      "flagged": 418,
+      "flagged_share": 0.418,
+      "tp": 12,
+      "fp": 406,
+      "recall": 0.158,
+      "precision": 0.029,
+      "lift": 0.38,
+      "youden_j": -0.282
+     },
+     {
+      "line": 70,
+      "flagged": 384,
+      "flagged_share": 0.384,
+      "tp": 9,
+      "fp": 375,
+      "recall": 0.118,
+      "precision": 0.023,
+      "lift": 0.31,
+      "youden_j": -0.288
+     },
+     {
+      "line": 75,
+      "flagged": 347,
+      "flagged_share": 0.347,
+      "tp": 6,
+      "fp": 341,
+      "recall": 0.079,
+      "precision": 0.017,
+      "lift": 0.23,
+      "youden_j": -0.291
+     },
+     {
+      "line": 80,
+      "flagged": 295,
+      "flagged_share": 0.295,
+      "tp": 5,
+      "fp": 290,
+      "recall": 0.066,
+      "precision": 0.017,
+      "lift": 0.22,
+      "youden_j": -0.248
+     }
+    ],
+    "percentiles_of_non_events": {
+     "50": 56.0,
+     "75": 86.8,
+     "90": 100.0
+    },
+    "percentiles_of_events": {
+     "25": 5.4,
+     "50": 26.8,
+     "75": 50.2
+    }
+   },
+   "economic_access": {
+    "component": "economic_access",
+    "n": 1387,
+    "events": 93,
+    "base_rate": 0.067,
+    "countries": 106,
+    "auc": 0.692,
+    "auc_ci95": [
+     0.633,
+     0.755
+    ],
+    "line_p25_p50_p75": [
+     35.0,
+     40.0,
+     40.0
+    ],
+    "line_share_at_modal": 0.62,
+    "supported": true,
+    "best_line_youden": 40,
+    "at_lines": [
+     {
+      "line": 30,
+      "flagged": 915,
+      "flagged_share": 0.66,
+      "tp": 86,
+      "fp": 829,
+      "recall": 0.925,
+      "precision": 0.094,
+      "lift": 1.4,
+      "youden_j": 0.284
+     },
+     {
+      "line": 35,
+      "flagged": 821,
+      "flagged_share": 0.592,
+      "tp": 81,
+      "fp": 740,
+      "recall": 0.871,
+      "precision": 0.099,
+      "lift": 1.47,
+      "youden_j": 0.299
+     },
+     {
+      "line": 40,
+      "flagged": 671,
+      "flagged_share": 0.484,
+      "tp": 72,
+      "fp": 599,
+      "recall": 0.774,
+      "precision": 0.107,
+      "lift": 1.6,
+      "youden_j": 0.311
+     },
+     {
+      "line": 45,
+      "flagged": 527,
+      "flagged_share": 0.38,
+      "tp": 54,
+      "fp": 473,
+      "recall": 0.581,
+      "precision": 0.102,
+      "lift": 1.53,
+      "youden_j": 0.215
+     },
+     {
+      "line": 50,
+      "flagged": 402,
+      "flagged_share": 0.29,
+      "tp": 44,
+      "fp": 358,
+      "recall": 0.473,
+      "precision": 0.109,
+      "lift": 1.63,
+      "youden_j": 0.196
+     },
+     {
+      "line": 55,
+      "flagged": 281,
+      "flagged_share": 0.203,
+      "tp": 33,
+      "fp": 248,
+      "recall": 0.355,
+      "precision": 0.117,
+      "lift": 1.75,
+      "youden_j": 0.163
+     },
+     {
+      "line": 60,
+      "flagged": 200,
+      "flagged_share": 0.144,
+      "tp": 26,
+      "fp": 174,
+      "recall": 0.28,
+      "precision": 0.13,
+      "lift": 1.94,
+      "youden_j": 0.145
+     },
+     {
+      "line": 65,
+      "flagged": 135,
+      "flagged_share": 0.097,
+      "tp": 20,
+      "fp": 115,
+      "recall": 0.215,
+      "precision": 0.148,
+      "lift": 2.21,
+      "youden_j": 0.126
+     },
+     {
+      "line": 70,
+      "flagged": 90,
+      "flagged_share": 0.065,
+      "tp": 14,
+      "fp": 76,
+      "recall": 0.151,
+      "precision": 0.156,
+      "lift": 2.32,
+      "youden_j": 0.092
+     },
+     {
+      "line": 75,
+      "flagged": 64,
+      "flagged_share": 0.046,
+      "tp": 8,
+      "fp": 56,
+      "recall": 0.086,
+      "precision": 0.125,
+      "lift": 1.86,
+      "youden_j": 0.043
+     },
+     {
+      "line": 80,
+      "flagged": 46,
+      "flagged_share": 0.033,
+      "tp": 7,
+      "fp": 39,
+      "recall": 0.075,
+      "precision": 0.152,
+      "lift": 2.27,
+      "youden_j": 0.045
+     }
+    ],
+    "percentiles_of_non_events": {
+     "50": 38.6,
+     "75": 51.0,
+     "90": 62.9
+    },
+    "percentiles_of_events": {
+     "25": 40.2,
+     "50": 48.5,
+     "75": 63.1
+    }
+   },
+   "grain_reserve": {
+    "component": "grain_reserve",
+    "n": 999,
+    "events": 76,
+    "base_rate": 0.076,
+    "countries": 77,
+    "auc": 0.51,
+    "auc_ci95": [
+     0.428,
+     0.586
+    ],
+    "line_p25_p50_p75": [
+     50.0,
+     55.0,
+     55.0
+    ],
+    "line_share_at_modal": 0.3,
+    "supported": false,
+    "best_line_youden": 50,
+    "at_lines": [
+     {
+      "line": 30,
+      "flagged": 926,
+      "flagged_share": 0.927,
+      "tp": 74,
+      "fp": 852,
+      "recall": 0.974,
+      "precision": 0.08,
+      "lift": 1.05,
+      "youden_j": 0.051
+     },
+     {
+      "line": 35,
+      "flagged": 899,
+      "flagged_share": 0.9,
+      "tp": 74,
+      "fp": 825,
+      "recall": 0.974,
+      "precision": 0.082,
+      "lift": 1.08,
+      "youden_j": 0.08
+     },
+     {
+      "line": 40,
+      "flagged": 874,
+      "flagged_share": 0.875,
+      "tp": 72,
+      "fp": 802,
+      "recall": 0.947,
+      "precision": 0.082,
+      "lift": 1.08,
+      "youden_j": 0.078
+     },
+     {
+      "line": 45,
+      "flagged": 849,
+      "flagged_share": 0.85,
+      "tp": 72,
+      "fp": 777,
+      "recall": 0.947,
+      "precision": 0.085,
+      "lift": 1.11,
+      "youden_j": 0.106
+     },
+     {
+      "line": 50,
+      "flagged": 815,
+      "flagged_share": 0.816,
+      "tp": 70,
+      "fp": 745,
+      "recall": 0.921,
+      "precision": 0.086,
+      "lift": 1.13,
+      "youden_j": 0.114
+     },
+     {
+      "line": 55,
+      "flagged": 776,
+      "flagged_share": 0.777,
+      "tp": 67,
+      "fp": 709,
+      "recall": 0.882,
+      "precision": 0.086,
+      "lift": 1.13,
+      "youden_j": 0.113
+     },
+     {
+      "line": 60,
+      "flagged": 725,
+      "flagged_share": 0.726,
+      "tp": 62,
+      "fp": 663,
+      "recall": 0.816,
+      "precision": 0.086,
+      "lift": 1.12,
+      "youden_j": 0.097
+     },
+     {
+      "line": 65,
+      "flagged": 665,
+      "flagged_share": 0.666,
+      "tp": 54,
+      "fp": 611,
+      "recall": 0.711,
+      "precision": 0.081,
+      "lift": 1.07,
+      "youden_j": 0.049
+     },
+     {
+      "line": 70,
+      "flagged": 617,
+      "flagged_share": 0.618,
+      "tp": 49,
+      "fp": 568,
+      "recall": 0.645,
+      "precision": 0.079,
+      "lift": 1.04,
+      "youden_j": 0.029
+     },
+     {
+      "line": 75,
+      "flagged": 562,
+      "flagged_share": 0.563,
+      "tp": 44,
+      "fp": 518,
+      "recall": 0.579,
+      "precision": 0.078,
+      "lift": 1.03,
+      "youden_j": 0.018
+     },
+     {
+      "line": 80,
+      "flagged": 502,
+      "flagged_share": 0.503,
+      "tp": 40,
+      "fp": 462,
+      "recall": 0.526,
+      "precision": 0.08,
+      "lift": 1.05,
+      "youden_j": 0.026
+     }
+    ],
+    "percentiles_of_non_events": {
+     "50": 80.2,
+     "75": 100.0,
+     "90": 100.0
+    },
+    "percentiles_of_events": {
+     "25": 62.9,
+     "50": 83.8,
+     "75": 94.5
+    }
+   },
+   "count_over_line_all_three": {
+    "50": {
+     "n": 999,
+     "base_rate": 0.076,
+     "by_count": {
+      "0": {
+       "country_years": 56,
+       "event_rate": 0.054
+      },
+      "1": {
+       "country_years": 347,
+       "event_rate": 0.092
+      },
+      "2": {
+       "country_years": 478,
+       "event_rate": 0.065
+      },
+      "3": {
+       "country_years": 118,
+       "event_rate": 0.085
+      }
+     }
+    },
+    "60": {
+     "n": 999,
+     "base_rate": 0.076,
+     "by_count": {
+      "0": {
+       "country_years": 117,
+       "event_rate": 0.094
+      },
+      "1": {
+       "country_years": 464,
+       "event_rate": 0.086
+      },
+      "2": {
+       "country_years": 391,
+       "event_rate": 0.054
+      },
+      "3": {
+       "country_years": 27,
+       "event_rate": 0.148
+      }
+     }
+    },
+    "70": {
+     "n": 999,
+     "base_rate": 0.076,
+     "by_count": {
+      "0": {
+       "country_years": 208,
+       "event_rate": 0.091
+      },
+      "1": {
+       "country_years": 516,
+       "event_rate": 0.089
+      },
+      "2": {
+       "country_years": 274,
+       "event_rate": 0.036
+      },
+      "3": {
+       "country_years": 1,
+       "event_rate": 1.0
+      }
+     }
+    }
+   }
+  },
+  "price_shock_sensitivity": {
+   "T15": {
+    "import_dependence": {
+     "n": 862,
+     "events": 104,
+     "auc": 0.333,
+     "best_line_youden": 35
+    },
+    "economic_access": {
+     "n": 1223,
+     "events": 135,
+     "auc": 0.632,
+     "best_line_youden": 35
+    },
+    "grain_reserve": {
+     "n": 862,
+     "events": 104,
+     "auc": 0.534,
+     "best_line_youden": 60
+    }
+   },
+   "T25": {
+    "import_dependence": {
+     "n": 1065,
+     "events": 54,
+     "auc": 0.357,
+     "best_line_youden": 65
+    },
+    "economic_access": {
+     "n": 1464,
+     "events": 67,
+     "auc": 0.731,
+     "best_line_youden": 40
+    },
+    "grain_reserve": {
+     "n": 1065,
+     "events": 54,
+     "auc": 0.503,
+     "best_line_youden": 45
+    }
+   },
+   "T30": {
+    "import_dependence": {
+     "n": 1094,
+     "events": 44,
+     "auc": 0.314,
+     "best_line_youden": 65
+    },
+    "economic_access": {
+     "n": 1503,
+     "events": 54,
+     "auc": 0.746,
+     "best_line_youden": 40
+    },
+    "grain_reserve": {
+     "n": 1094,
+     "events": 44,
+     "auc": 0.549,
+     "best_line_youden": 45
+    }
+   }
+  },
+  "import_and_reserve_among_weak_access": {
+   "economic_access_ge_40": {
+    "n": 512,
+    "events": 59,
+    "auc_import_dependence": 0.347,
+    "auc_grain_reserve": 0.51
+   },
+   "economic_access_ge_50": {
+    "n": 317,
+    "events": 34,
+    "auc_import_dependence": 0.376,
+    "auc_grain_reserve": 0.55
+   }
+  },
+  "price_shock_by_global_regime": {
+   "global_shock_years": [
+    2007,
+    2008,
+    2010,
+    2011,
+    2021,
+    2022
+   ],
+   "rule": "annual-mean FAO Food Price Index up >= 10 % on the year before",
+   "ffpi_annual_change_pct": {
+    "2005": 2.6,
+    "2006": 7.7,
+    "2007": 29.8,
+    "2008": 24.5,
+    "2009": -22.0,
+    "2010": 16.4,
+    "2011": 23.3,
+    "2012": -6.8,
+    "2013": -2.1,
+    "2014": -4.3,
+    "2015": -19.1,
+    "2016": -1.2,
+    "2017": 6.5,
+    "2018": -2.2,
+    "2019": -0.9,
+    "2020": 3.3,
+    "2021": 28.2,
+    "2022": 14.9,
+    "2023": -13.8,
+    "2024": -2.0,
+    "2025": 4.3
+   },
+   "blocks": {
+    "outcome_year_is_global_price_shock_year": {
+     "import_dependence": {
+      "component": "import_dependence",
+      "n": 267,
+      "events": 47,
+      "base_rate": 0.176,
+      "countries": 72,
+      "auc": 0.306,
+      "auc_ci95": [
+       0.232,
+       0.393
+      ],
+      "line_p25_p50_p75": [
+       75.0,
+       80.0,
+       80.0
+      ],
+      "line_share_at_modal": 0.7,
+      "supported": false,
+      "best_line_youden": 80,
+      "percentiles_of_non_events": {
+       "50": 59.0,
+       "75": 83.9,
+       "90": 100.0
+      },
+      "percentiles_of_events": {
+       "25": 6.1,
+       "50": 26.4,
+       "75": 48.8
+      }
+     },
+     "economic_access": {
+      "component": "economic_access",
+      "n": 371,
+      "events": 57,
+      "base_rate": 0.154,
+      "countries": 100,
+      "auc": 0.718,
+      "auc_ci95": [
+       0.646,
+       0.782
+      ],
+      "line_p25_p50_p75": [
+       40.0,
+       40.0,
+       40.0
+      ],
+      "line_share_at_modal": 0.77,
+      "supported": true,
+      "best_line_youden": 40,
+      "percentiles_of_non_events": {
+       "50": 37.9,
+       "75": 50.1,
+       "90": 62.6
+      },
+      "percentiles_of_events": {
+       "25": 42.5,
+       "50": 50.0,
+       "75": 60.0
+      }
+     },
+     "grain_reserve": {
+      "component": "grain_reserve",
+      "n": 267,
+      "events": 47,
+      "base_rate": 0.176,
+      "countries": 72,
+      "auc": 0.519,
+      "auc_ci95": [
+       0.425,
+       0.606
+      ],
+      "line_p25_p50_p75": [
+       50.0,
+       55.0,
+       60.0
+      ],
+      "line_share_at_modal": 0.43,
+      "supported": false,
+      "best_line_youden": 50,
+      "percentiles_of_non_events": {
+       "50": 80.2,
+       "75": 100.0,
+       "90": 100.0
+      },
+      "percentiles_of_events": {
+       "25": 64.4,
+       "50": 80.6,
+       "75": 93.0
+      }
+     }
+    },
+    "outcome_year_is_not": {
+     "import_dependence": {
+      "component": "import_dependence",
+      "n": 732,
+      "events": 29,
+      "base_rate": 0.04,
+      "countries": 76,
+      "auc": 0.31,
+      "auc_ci95": [
+       0.216,
+       0.404
+      ],
+      "line_p25_p50_p75": [
+       35.0,
+       45.0,
+       53.75
+      ],
+      "line_share_at_modal": 0.3,
+      "supported": false,
+      "best_line_youden": 35,
+      "percentiles_of_non_events": {
+       "50": 54.9,
+       "75": 87.0,
+       "90": 100.0
+      },
+      "percentiles_of_events": {
+       "25": 3.8,
+       "50": 27.5,
+       "75": 50.1
+      }
+     },
+     "economic_access": {
+      "component": "economic_access",
+      "n": 1016,
+      "events": 36,
+      "base_rate": 0.035,
+      "countries": 105,
+      "auc": 0.668,
+      "auc_ci95": [
+       0.578,
+       0.744
+      ],
+      "line_p25_p50_p75": [
+       30.0,
+       35.0,
+       40.0
+      ],
+      "line_share_at_modal": 0.41,
+      "supported": true,
+      "best_line_youden": 30,
+      "percentiles_of_non_events": {
+       "50": 39.0,
+       "75": 51.4,
+       "90": 63.4
+      },
+      "percentiles_of_events": {
+       "25": 38.9,
+       "50": 45.2,
+       "75": 65.5
+      }
+     },
+     "grain_reserve": {
+      "component": "grain_reserve",
+      "n": 732,
+      "events": 29,
+      "base_rate": 0.04,
+      "countries": 76,
+      "auc": 0.499,
+      "auc_ci95": [
+       0.384,
+       0.612
+      ],
+      "line_p25_p50_p75": [
+       45.0,
+       55.0,
+       66.25
+      ],
+      "line_share_at_modal": 0.26,
+      "supported": false,
+      "best_line_youden": 45,
+      "percentiles_of_non_events": {
+       "50": 80.2,
+       "75": 100.0,
+       "90": 100.0
+      },
+      "percentiles_of_events": {
+       "25": 62.6,
+       "50": 84.9,
+       "75": 94.4
+      }
+     }
+    }
+   }
+  },
+  "ipc_history": {
+   "n_analyses": 349,
+   "countries": 50,
+   "pairs": 294,
+   "period_span": [
+    "2020-10",
+    "2026-06"
+   ],
+   "worsening_ge5pp": {
+    "component": "ipc_share_vs_worsening_ge5pp",
+    "n": 294,
+    "events": 35,
+    "base_rate": 0.119,
+    "countries": 47,
+    "auc": 0.498,
+    "auc_ci95": [
+     0.401,
+     0.586
+    ],
+    "line_p25_p50_p75": [
+     5.0,
+     10.0,
+     15.0
+    ],
+    "line_share_at_modal": 0.45,
+    "supported": false,
+    "best_line_youden": 5,
+    "at_lines": [
+     {
+      "line": 5,
+      "flagged": 254,
+      "flagged_share": 0.864,
+      "tp": 32,
+      "fp": 222,
+      "recall": 0.914,
+      "precision": 0.126,
+      "lift": 1.06,
+      "youden_j": 0.057
+     },
+     {
+      "line": 10,
+      "flagged": 184,
+      "flagged_share": 0.626,
+      "tp": 23,
+      "fp": 161,
+      "recall": 0.657,
+      "precision": 0.125,
+      "lift": 1.05,
+      "youden_j": 0.036
+     },
+     {
+      "line": 15,
+      "flagged": 134,
+      "flagged_share": 0.456,
+      "tp": 17,
+      "fp": 117,
+      "recall": 0.486,
+      "precision": 0.127,
+      "lift": 1.07,
+      "youden_j": 0.034
+     },
+     {
+      "line": 20,
+      "flagged": 94,
+      "flagged_share": 0.32,
+      "tp": 9,
+      "fp": 85,
+      "recall": 0.257,
+      "precision": 0.096,
+      "lift": 0.8,
+      "youden_j": -0.071
+     },
+     {
+      "line": 25,
+      "flagged": 70,
+      "flagged_share": 0.238,
+      "tp": 6,
+      "fp": 64,
+      "recall": 0.171,
+      "precision": 0.086,
+      "lift": 0.72,
+      "youden_j": -0.076
+     },
+     {
+      "line": 30,
+      "flagged": 50,
+      "flagged_share": 0.17,
+      "tp": 4,
+      "fp": 46,
+      "recall": 0.114,
+      "precision": 0.08,
+      "lift": 0.67,
+      "youden_j": -0.063
+     },
+     {
+      "line": 35,
+      "flagged": 38,
+      "flagged_share": 0.129,
+      "tp": 1,
+      "fp": 37,
+      "recall": 0.029,
+      "precision": 0.026,
+      "lift": 0.22,
+      "youden_j": -0.114
+     },
+     {
+      "line": 40,
+      "flagged": 30,
+      "flagged_share": 0.102,
+      "tp": 1,
+      "fp": 29,
+      "recall": 0.029,
+      "precision": 0.033,
+      "lift": 0.28,
+      "youden_j": -0.083
+     }
+    ],
+    "percentiles_of_non_events": {
+     "50": 13.2,
+     "75": 23.9,
+     "90": 42.4
+    },
+    "percentiles_of_events": {
+     "25": 8.9,
+     "50": 14.2,
+     "75": 20.0
+    }
+   },
+   "bins": [
+    {
+     "share_from": 0,
+     "share_to": 5,
+     "pairs": 40,
+     "countries": 11,
+     "worsened_ge5pp": 0.075,
+     "median_change_pp": 1.1,
+     "next_share_ge20": 0.0
+    },
+    {
+     "share_from": 5,
+     "share_to": 10,
+     "pairs": 70,
+     "countries": 22,
+     "worsened_ge5pp": 0.129,
+     "median_change_pp": -0.1,
+     "next_share_ge20": 0.0
+    },
+    {
+     "share_from": 10,
+     "share_to": 15,
+     "pairs": 50,
+     "countries": 21,
+     "worsened_ge5pp": 0.12,
+     "median_change_pp": -0.3,
+     "next_share_ge20": 0.08
+    },
+    {
+     "share_from": 15,
+     "share_to": 20,
+     "pairs": 40,
+     "countries": 19,
+     "worsened_ge5pp": 0.2,
+     "median_change_pp": -1.2,
+     "next_share_ge20": 0.25
+    },
+    {
+     "share_from": 20,
+     "share_to": 30,
+     "pairs": 44,
+     "countries": 20,
+     "worsened_ge5pp": 0.114,
+     "median_change_pp": -2.1,
+     "next_share_ge20": 0.636
+    },
+    {
+     "share_from": 30,
+     "share_to": 100,
+     "pairs": 50,
+     "countries": 16,
+     "worsened_ge5pp": 0.08,
+     "median_change_pp": -3.6,
+     "next_share_ge20": 0.9
+    }
+   ],
+   "entry_to_20pct_from_below": {
+    "component": "ipc_share_vs_entry_to_20pct",
+    "n": 200,
+    "events": 14,
+    "base_rate": 0.07,
+    "countries": 38,
+    "auc": 0.857,
+    "auc_ci95": [
+     0.763,
+     0.932
+    ],
+    "line_p25_p50_p75": [
+     10.0,
+     10.0,
+     15.0
+    ],
+    "line_share_at_modal": 0.57,
+    "supported": true,
+    "best_line_youden": 10,
+    "at_lines": [
+     {
+      "line": 5,
+      "flagged": 160,
+      "flagged_share": 0.8,
+      "tp": 14,
+      "fp": 146,
+      "recall": 1.0,
+      "precision": 0.087,
+      "lift": 1.25,
+      "youden_j": 0.215
+     },
+     {
+      "line": 10,
+      "flagged": 90,
+      "flagged_share": 0.45,
+      "tp": 14,
+      "fp": 76,
+      "recall": 1.0,
+      "precision": 0.156,
+      "lift": 2.22,
+      "youden_j": 0.591
+     },
+     {
+      "line": 15,
+      "flagged": 40,
+      "flagged_share": 0.2,
+      "tp": 10,
+      "fp": 30,
+      "recall": 0.714,
+      "precision": 0.25,
+      "lift": 3.57,
+      "youden_j": 0.553
+     }
+    ],
+    "percentiles_of_non_events": {
+     "50": 9.1,
+     "75": 12.8,
+     "90": 16.4
+    },
+    "percentiles_of_events": {
+     "25": 14.5,
+     "50": 15.6,
+     "75": 17.2
+    }
+   },
+   "_latest_current": {
+    "AFG": {
+     "share_pct": 28.3,
+     "p3plus": 13775635,
+     "analysed": 48595631,
+     "period_start": "2025-09"
+    },
+    "AGO": {
+     "share_pct": 49.3,
+     "p3plus": 1315532,
+     "analysed": 2667790,
+     "period_start": "2021-06"
+    },
+    "BGD": {
+     "share_pct": 15.4,
+     "p3plus": 15270914,
+     "analysed": 99213141,
+     "period_start": "2026-05"
+    },
+    "BEN": {
+     "share_pct": 6.9,
+     "p3plus": 191108,
+     "analysed": 2771518,
+     "period_start": "2025-10"
+    },
+    "BFA": {
+     "share_pct": 7.6,
+     "p3plus": 1749437,
+     "analysed": 22969083,
+     "period_start": "2024-03"
+    },
+    "BDI": {
+     "share_pct": 13.7,
+     "p3plus": 1765517,
+     "analysed": 12864685,
+     "period_start": "2026-04"
+    },
+    "CMR": {
+     "share_pct": 10.6,
+     "p3plus": 3120294,
+     "analysed": 29414764,
+     "period_start": "2025-10"
+    },
+    "CPV": {
+     "share_pct": 7.3,
+     "p3plus": 37752,
+     "analysed": 513997,
+     "period_start": "2025-10"
+    },
+    "CAF": {
+     "share_pct": 29.4,
+     "p3plus": 1928733,
+     "analysed": 6567377,
+     "period_start": "2025-09"
+    },
+    "TCD": {
+     "share_pct": 10.7,
+     "p3plus": 1927580,
+     "analysed": 18070731,
+     "period_start": "2025-10"
+    },
+    "COD": {
+     "share_pct": 21.2,
+     "p3plus": 24812776,
+     "analysed": 116917366,
+     "period_start": "2025-09"
+    },
+    "CIV": {
+     "share_pct": 4.2,
+     "p3plus": 1033335,
+     "analysed": 24801516,
+     "period_start": "2025-10"
+    },
+    "DJI": {
+     "share_pct": 16.1,
+     "p3plus": 165896,
+     "analysed": 1029661,
+     "period_start": "2026-05"
+    },
+    "DOM": {
+     "share_pct": 8.6,
+     "p3plus": 924905,
+     "analysed": 10795677,
+     "period_start": "2024-10"
+    },
+    "ECU": {
+     "share_pct": 13.8,
+     "p3plus": 2541934,
+     "analysed": 18416440,
+     "period_start": "2025-12"
+    },
+    "SLV": {
+     "share_pct": 13.3,
+     "p3plus": 841190,
+     "analysed": 6325827,
+     "period_start": "2021-07"
+    },
+    "ETH": {
+     "share_pct": 29.7,
+     "p3plus": 16756345,
+     "analysed": 56346877,
+     "period_start": "2021-05"
+    },
+    "GMB": {
+     "share_pct": 5.4,
+     "p3plus": 131930,
+     "analysed": 2422712,
+     "period_start": "2024-10"
+    },
+    "GHA": {
+     "share_pct": 4.5,
+     "p3plus": 1561223,
+     "analysed": 34378759,
+     "period_start": "2025-10"
+    },
+    "GTM": {
+     "share_pct": 13.4,
+     "p3plus": 2453907,
+     "analysed": 18312373,
+     "period_start": "2026-04"
+    },
+    "GIN": {
+     "share_pct": 11.9,
+     "p3plus": 1480656,
+     "analysed": 12414765,
+     "period_start": "2025-10"
+    },
+    "GNB": {
+     "share_pct": 6.7,
+     "p3plus": 121695,
+     "analysed": 1816450,
+     "period_start": "2025-03"
+    },
+    "HTI": {
+     "share_pct": 50.4,
+     "p3plus": 5697628,
+     "analysed": 11293795,
+     "period_start": "2025-09"
+    },
+    "HND": {
+     "share_pct": 13.6,
+     "p3plus": 1387086,
+     "analysed": 10186738,
+     "period_start": "2025-11"
+    },
+    "KEN": {
+     "share_pct": 20.2,
+     "p3plus": 3702706,
+     "analysed": 18351021,
+     "period_start": "2026-01"
+    },
+    "LBN": {
+     "share_pct": 16.8,
+     "p3plus": 873739,
+     "analysed": 5191667,
+     "period_start": "2025-11"
+    },
+    "LSO": {
+     "share_pct": 15.4,
+     "p3plus": 234468,
+     "analysed": 1525954,
+     "period_start": "2026-05"
+    },
+    "LBR": {
+     "share_pct": 7.4,
+     "p3plus": 418213,
+     "analysed": 5625874,
+     "period_start": "2025-10"
+    },
+    "MDG": {
+     "share_pct": 7.9,
+     "p3plus": 2572569,
+     "analysed": 32683605,
+     "period_start": "2026-03"
+    },
+    "MWI": {
+     "share_pct": 10.1,
+     "p3plus": 1935075,
+     "analysed": 19085563,
+     "period_start": "2026-04"
+    },
+    "MLI": {
+     "share_pct": 3.3,
+     "p3plus": 855640,
+     "analysed": 25568962,
+     "period_start": "2025-10"
+    },
+    "MRT": {
+     "share_pct": 5.6,
+     "p3plus": 295561,
+     "analysed": 5323969,
+     "period_start": "2025-10"
+    },
+    "MOZ": {
+     "share_pct": 12.5,
+     "p3plus": 1204836,
+     "analysed": 9623782,
+     "period_start": "2025-10"
+    },
+    "NAM": {
+     "share_pct": 15.1,
+     "p3plus": 455668,
+     "analysed": 3022401,
+     "period_start": "2025-07"
+    },
+    "NER": {
+     "share_pct": 6.6,
+     "p3plus": 1855774,
+     "analysed": 28095488,
+     "period_start": "2025-10"
+    },
+    "NGA": {
+     "share_pct": 12.5,
+     "p3plus": 27212933,
+     "analysed": 217933704,
+     "period_start": "2025-10"
+    },
+    "PAK": {
+     "share_pct": 19.7,
+     "p3plus": 10553872,
+     "analysed": 53441149,
+     "period_start": "2026-03"
+    },
+    "PSE": {
+     "share_pct": 58.5,
+     "p3plus": 1239657,
+     "analysed": 2118215,
+     "period_start": "2026-04"
+    },
+    "SEN": {
+     "share_pct": 2.6,
+     "p3plus": 504386,
+     "analysed": 19573989,
+     "period_start": "2025-10"
+    },
+    "SLE": {
+     "share_pct": 11.0,
+     "p3plus": 998608,
+     "analysed": 9077691,
+     "period_start": "2025-10"
+    },
+    "SOM": {
+     "share_pct": 31.0,
+     "p3plus": 6030282,
+     "analysed": 19442156,
+     "period_start": "2026-04"
+    },
+    "SSD": {
+     "share_pct": 42.0,
+     "p3plus": 5972144,
+     "analysed": 14203031,
+     "period_start": "2025-09"
+    },
+    "SDN": {
+     "share_pct": 41.0,
+     "p3plus": 19466533,
+     "analysed": 47535794,
+     "period_start": "2026-02"
+    },
+    "SWZ": {
+     "share_pct": 18.0,
+     "p3plus": 222251,
+     "analysed": 1236356,
+     "period_start": "2026-06"
+    },
+    "TZA": {
+     "share_pct": 10.4,
+     "p3plus": 1028267,
+     "analysed": 9929218,
+     "period_start": "2026-02"
+    },
+    "TLS": {
+     "share_pct": 26.9,
+     "p3plus": 360097,
+     "analysed": 1340434,
+     "period_start": "2023-11"
+    },
+    "TGO": {
+     "share_pct": 4.5,
+     "p3plus": 288383,
+     "analysed": 6469612,
+     "period_start": "2025-10"
+    },
+    "UGA": {
+     "share_pct": 31.6,
+     "p3plus": 473368,
+     "analysed": 1496117,
+     "period_start": "2026-03"
+    },
+    "YEM": {
+     "share_pct": 47.5,
+     "p3plus": 4980505,
+     "analysed": 10479422,
+     "period_start": "2026-03"
+    },
+    "ZMB": {
+     "share_pct": 3.7,
+     "p3plus": 697809,
+     "analysed": 19065868,
+     "period_start": "2026-04"
+    }
+   }
+  },
+  "episodes": [
+   {
+    "iso": "AFG",
+    "year_entered": 2007
+   },
+   {
+    "iso": "AZE",
+    "year_entered": 2007
+   },
+   {
+    "iso": "BOL",
+    "year_entered": 2007
+   },
+   {
+    "iso": "CRI",
+    "year_entered": 2007
+   },
+   {
+    "iso": "ETH",
+    "year_entered": 2007
+   },
+   {
+    "iso": "KGZ",
+    "year_entered": 2007
+   },
+   {
+    "iso": "KHM",
+    "year_entered": 2007
+   },
+   {
+    "iso": "UKR",
+    "year_entered": 2007
+   },
+   {
+    "iso": "XKX",
+    "year_entered": 2007
+   },
+   {
+    "iso": "BDI",
+    "year_entered": 2008
+   },
+   {
+    "iso": "BLR",
+    "year_entered": 2008
+   },
+   {
+    "iso": "DOM",
+    "year_entered": 2008
+   },
+   {
+    "iso": "ECU",
+    "year_entered": 2008
+   },
+   {
+    "iso": "HTI",
+    "year_entered": 2008
+   },
+   {
+    "iso": "JOR",
+    "year_entered": 2008
+   },
+   {
+    "iso": "KIR",
+    "year_entered": 2008
+   },
+   {
+    "iso": "OMN",
+    "year_entered": 2008
+   },
+   {
+    "iso": "PSE",
+    "year_entered": 2008
+   },
+   {
+    "iso": "RUS",
+    "year_entered": 2008
+   },
+   {
+    "iso": "SDN",
+    "year_entered": 2008
+   },
+   {
+    "iso": "SUR",
+    "year_entered": 2008
+   },
+   {
+    "iso": "SWZ",
+    "year_entered": 2008
+   },
+   {
+    "iso": "VNM",
+    "year_entered": 2008
+   },
+   {
+    "iso": "WSM",
+    "year_entered": 2008
+   },
+   {
+    "iso": "GEO",
+    "year_entered": 2010
+   },
+   {
+    "iso": "KGZ",
+    "year_entered": 2010
+   },
+   {
+    "iso": "MOZ",
+    "year_entered": 2010
+   },
+   {
+    "iso": "BLR",
+    "year_entered": 2011
+   },
+   {
+    "iso": "ETH",
+    "year_entered": 2011
+   },
+   {
+    "iso": "GIN",
+    "year_entered": 2011
+   },
+   {
+    "iso": "KEN",
+    "year_entered": 2011
+   },
+   {
+    "iso": "MDG",
+    "year_entered": 2011
+   },
+   {
+    "iso": "SDN",
+    "year_entered": 2011
+   },
+   {
+    "iso": "SRB",
+    "year_entered": 2011
+   },
+   {
+    "iso": "SUR",
+    "year_entered": 2011
+   },
+   {
+    "iso": "VNM",
+    "year_entered": 2011
+   },
+   {
+    "iso": "BDI",
+    "year_entered": 2012
+   },
+   {
+    "iso": "TCD",
+    "year_entered": 2012
+   },
+   {
+    "iso": "BLR",
+    "year_entered": 2014
+   },
+   {
+    "iso": "UKR",
+    "year_entered": 2014
+   },
+   {
+    "iso": "GIN",
+    "year_entered": 2015
+   },
+   {
+    "iso": "MMR",
+    "year_entered": 2015
+   },
+   {
+    "iso": "RUS",
+    "year_entered": 2015
+   },
+   {
+    "iso": "ZMB",
+    "year_entered": 2015
+   },
+   {
+    "iso": "AZE",
+    "year_entered": 2016
+   },
+   {
+    "iso": "EGY",
+    "year_entered": 2016
+   },
+   {
+    "iso": "MOZ",
+    "year_entered": 2016
+   },
+   {
+    "iso": "RWA",
+    "year_entered": 2016
+   },
+   {
+    "iso": "SUR",
+    "year_entered": 2016
+   },
+   {
+    "iso": "BDI",
+    "year_entered": 2017
+   },
+   {
+    "iso": "KEN",
+    "year_entered": 2017
+   },
+   {
+    "iso": "SLE",
+    "year_entered": 2017
+   },
+   {
+    "iso": "LBR",
+    "year_entered": 2018
+   },
+   {
+    "iso": "ZWE",
+    "year_entered": 2018
+   },
+   {
+    "iso": "ETH",
+    "year_entered": 2019
+   },
+   {
+    "iso": "HTI",
+    "year_entered": 2019
+   },
+   {
+    "iso": "RWA",
+    "year_entered": 2019
+   },
+   {
+    "iso": "AGO",
+    "year_entered": 2020
+   },
+   {
+    "iso": "LBN",
+    "year_entered": 2020
+   },
+   {
+    "iso": "PAK",
+    "year_entered": 2020
+   },
+   {
+    "iso": "SUR",
+    "year_entered": 2020
+   },
+   {
+    "iso": "ZMB",
+    "year_entered": 2020
+   },
+   {
+    "iso": "KGZ",
+    "year_entered": 2021
+   },
+   {
+    "iso": "LKA",
+    "year_entered": 2021
+   },
+   {
+    "iso": "AFG",
+    "year_entered": 2022
+   },
+   {
+    "iso": "AZE",
+    "year_entered": 2022
+   },
+   {
+    "iso": "BDI",
+    "year_entered": 2022
+   },
+   {
+    "iso": "BIH",
+    "year_entered": 2022
+   },
+   {
+    "iso": "COL",
+    "year_entered": 2022
+   },
+   {
+    "iso": "DJI",
+    "year_entered": 2022
+   },
+   {
+    "iso": "EGY",
+    "year_entered": 2022
+   },
+   {
+    "iso": "GEO",
+    "year_entered": 2022
+   },
+   {
+    "iso": "LAO",
+    "year_entered": 2022
+   },
+   {
+    "iso": "MDA",
+    "year_entered": 2022
+   },
+   {
+    "iso": "MWI",
+    "year_entered": 2022
+   },
+   {
+    "iso": "PAK",
+    "year_entered": 2022
+   },
+   {
+    "iso": "RWA",
+    "year_entered": 2022
+   },
+   {
+    "iso": "SLE",
+    "year_entered": 2022
+   },
+   {
+    "iso": "SRB",
+    "year_entered": 2022
+   },
+   {
+    "iso": "TCD",
+    "year_entered": 2022
+   },
+   {
+    "iso": "UKR",
+    "year_entered": 2022
+   },
+   {
+    "iso": "WSM",
+    "year_entered": 2022
+   },
+   {
+    "iso": "XKX",
+    "year_entered": 2022
+   },
+   {
+    "iso": "COM",
+    "year_entered": 2023
+   },
+   {
+    "iso": "DEU",
+    "year_entered": 2023
+   },
+   {
+    "iso": "GMB",
+    "year_entered": 2023
+   },
+   {
+    "iso": "KIR",
+    "year_entered": 2023
+   },
+   {
+    "iso": "LBR",
+    "year_entered": 2023
+   },
+   {
+    "iso": "MAR",
+    "year_entered": 2023
+   },
+   {
+    "iso": "PSE",
+    "year_entered": 2023
+   },
+   {
+    "iso": "BOL",
+    "year_entered": 2025
+   },
+   {
+    "iso": "UKR",
+    "year_entered": 2025
+   },
+   {
+    "iso": "ZMB",
+    "year_entered": 2025
+   }
+  ],
+  "outcome": {
+   "price_shock_threshold_pct": 20.0,
+   "panel_years": [
+    2005,
+    2024
+   ],
+   "ipc_entry_threshold_pct": 20
+  },
+  "lines": {
+   "import_dependence": {
+    "line": null,
+    "high_line": null,
+    "flagged_share_at_line": 0.295,
+    "lift_at_line": 0.22,
+    "auc": 0.314,
+    "auc_ci95": [
+     0.245,
+     0.381
+    ],
+    "supported": false,
+    "n": 999,
+    "events": 76,
+    "countries": 77
+   },
+   "economic_access": {
+    "line": 40,
+    "high_line": 65,
+    "flagged_share_at_line": 0.484,
+    "lift_at_line": 1.6,
+    "auc": 0.692,
+    "auc_ci95": [
+     0.633,
+     0.755
+    ],
+    "supported": true,
+    "n": 1387,
+    "events": 93,
+    "countries": 106
+   },
+   "grain_reserve": {
+    "line": null,
+    "high_line": null,
+    "flagged_share_at_line": 0.816,
+    "lift_at_line": 1.13,
+    "auc": 0.51,
+    "auc_ci95": [
+     0.428,
+     0.586
+    ],
+    "supported": false,
+    "n": 999,
+    "events": 76,
+    "countries": 77
+   },
+   "ipc_phase3plus_pct": {
+    "line": 10,
+    "high_line": 10,
+    "outcome": "next IPC analysis 5 to 19 months later has Phase 3+ share >= 20 % (the IPC area Crisis convention), from analyses below 20 %",
+    "worsening_ge5pp_auc": 0.498,
+    "worsening_ge5pp_auc_ci95": [
+     0.401,
+     0.586
+    ],
+    "lift_at_line": 2.22,
+    "flagged_share_at_line": 0.45,
+    "auc": 0.857,
+    "auc_ci95": [
+     0.763,
+     0.932
+    ],
+    "supported": true,
+    "n": 200,
+    "events": 14,
+    "countries": 38
+   }
+  }
+ }
+}

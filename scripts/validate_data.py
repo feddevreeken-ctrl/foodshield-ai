@@ -128,6 +128,8 @@ EXPECTED_FILES = {
     'enso_price_risk.json':       ('soft',     'enso_price_risk'),     # grey price-risk bands + their out-of-sample test
     'enso_price_forecast_log.json': ('soft',   'enso_price_forecast_log'),  # append-only frozen bands
     'enso_hindcast.json':         ('soft',     'dict_or_empty'),
+    'enso_distribution.json':     ('soft',     'dict_or_empty'),
+    'enso_portfolio_hindcast.json': ('soft',   'dict_or_empty'),  # hand-run builder (scipy), committed
     'enso_situation.json':        ('soft',     'dict_or_empty'),
     'enso_strengths.json':        ('soft',     'dict_or_empty'),
     'seasonal_outlook.json':      ('soft',     'dict_or_empty'),  # NMME outlook maps, monthly upstream
