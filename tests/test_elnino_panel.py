@@ -811,7 +811,7 @@ def main() -> int:
             const tab = document.getElementById('tab-elnino'), root = tab.querySelector('.content-page'), doc = document.scrollingElement;
             const vw = innerWidth, vh = innerHeight, sub = tab.dataset.sub;
             const bar = document.getElementById('enso-view-nav'), on = bar.querySelector('.viewswitch-btn.active'), bb = bar.getBoundingClientRect(), ob = on.getBoundingClientRect();
-            const skip = e => e.closest('svg, script, style, #subview-ensomoney, .enso-sr');
+            const skip = e => e.closest('svg, script, style, .enso-sr');
             const smallText = [], smallCopy = [];
             const tw = document.createTreeWalker(tab, NodeFilter.SHOW_TEXT); let n;
             while ((n = tw.nextNode())) {
@@ -822,7 +822,7 @@ def main() -> int:
                 else if (copy && fs < 14) smallCopy.push(fs + ' ' + (p.className || p.tagName) + ': ' + n.nodeValue.trim().slice(0, 24));
             }
             const solo = [...tab.querySelectorAll('button, summary, [role="tab"], a.enso-now-link')].filter(e => {
-                if (e.closest('#subview-ensomoney, .leaflet-container, .enso-sr') || e.matches('.enso-asap-btn, .enso-chip, .enso-inline-link, .enso-next12-bar')) return false;
+                if (e.closest('.leaflet-container, .enso-sr') || e.matches('.enso-asap-btn, .enso-chip, .enso-inline-link, .enso-next12-bar')) return false;
                 const r = e.getBoundingClientRect(); return r.width > 1 && r.height > 1 && getComputedStyle(e).visibility !== 'hidden' && r.height < 43.5;
             }).map(e => Math.round(e.getBoundingClientRect().height) + ' ' + (e.id || e.className || e.tagName) + ' ' + (e.textContent || '').trim().slice(0, 20));
             const plates = [...tab.querySelectorAll('#subview-' + sub + ' .enso-plate:not(.enso-plate .enso-plate), #subview-' + sub + ' #enso-mapwrap')].filter(e => e.getClientRects().length);
@@ -835,10 +835,42 @@ def main() -> int:
                 mapH: map.height, dock, legendBelow: !document.getElementById('enso-legend') || document.getElementById('enso-legend').getBoundingClientRect().top >= map.bottom - 1,
                 cols: status.gridTemplateColumns.split(' ').length};
         }"""
+        # 2026-09-30 phone pass 2: "On this page" is the last cell of the lens strip; walking the whole page, it never meets a plate head.
+        ONPAGE_PROBE = """async () => {
+            const btn = document.getElementById('enso-onpage-btn'), bar = document.getElementById('enso-view-nav'), root = document.querySelector('#tab-elnino .content-page');
+            if (!btn) return {ok: false, why: 'no button'};
+            const hits = []; const heads = () => [...document.querySelectorAll('#tab-elnino .enso-plate-h')].filter(e => e.getClientRects().length);
+            const max = root.scrollHeight - root.clientHeight; let n = 0;
+            for (let y = 0; y <= max + 300 && n < 80; y += 300, n++) {
+                root.scrollTop = Math.min(y, max); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+                const b = btn.getBoundingClientRect();
+                heads().forEach(h => { const r = h.getBoundingClientRect(), top = Math.max(r.top, bar.getBoundingClientRect().bottom); if (b.left < r.right && b.right > r.left && b.top < r.bottom && b.bottom > top) hits.push(Math.round(root.scrollTop) + ' ' + (h.textContent || '').trim().slice(0, 24)); });
+            }
+            root.scrollTop = 0; await new Promise(r => requestAnimationFrame(r)); const b = btn.getBoundingClientRect(), bb = bar.getBoundingClientRect(), top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+            return {ok: btn.parentNode === bar && Math.round(b.width) >= 44 && Math.round(b.height) >= 44 && b.left >= bb.left && b.right <= bb.right + 1 && b.top >= bb.top - 1 && b.bottom <= bb.bottom + 1 && !hits.length && (top === btn || btn.contains(top)),
+                    inBar: btn.parentNode === bar, size: [b.width, b.height], hits: hits.slice(0, 5)};
+        }"""
+        # Prices at a phone: the controls sit under the map, cards replace the tables, the map labels fit inside the map and clear of one another.
+        PRICES_PROBE = """() => {
+            const q = s => document.querySelector(s), all = s => [...document.querySelectorAll(s)];
+            const map = q('#enso-map').getBoundingClientRect(), ctl = q('#enso-controls').getBoundingClientRect(), vis = e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
+            const btns = all('#enso-controls .enso-instrument-row button, #enso-controls summary').filter(vis).map(e => e.getBoundingClientRect().height);
+            const rows = all('.enso-ptable tbody tr'), pw = all('.enso-pw-table tbody tr');
+            const cardOk = (t, trs) => !!t && getComputedStyle(t.querySelector('thead')).display === 'none' && trs.length > 0 && trs.every(r => r.getBoundingClientRect().width <= t.getBoundingClientRect().width + 1 && [...r.children].every(c => getComputedStyle(c).display === 'block'));
+            const rail = q('#enso-map-ranking'), chips = all('#enso-map .leaflet-marker-icon.enso-pchip').map(e => e.getBoundingClientRect());
+            const inside = chips.every(c => c.left >= map.left - 1 && c.right <= map.right + 1 && c.top >= map.top - 1 && c.bottom <= map.bottom + 1);
+            let clash = 0; chips.forEach((a, i) => chips.forEach((b, j) => { if (j > i && a.left < b.right - 1 && a.right > b.left + 1 && a.top < b.bottom - 1 && a.bottom > b.top + 1) clash++; }));
+            const cells = all('.enso-pa-cell').map(e => e.getBoundingClientRect()), dc = all('.enso-dc-bar').map(e => e.getBoundingClientRect().width);
+            const fan = q('.enso-fan-band'), fb = fan ? fan.getBoundingClientRect() : null;
+            const who = all('.enso-wp-who button').filter(vis).map(e => e.getBoundingClientRect().height);
+            return {ctlBelow: ctl.top >= map.bottom - 1, ctlH: btns, ptable: cardOk(q('.enso-ptable'), rows), nRows: rows.length, pw: cardOk(q('.enso-pw-table'), pw), nPw: pw.length,
+                railScroll: [rail.scrollWidth, rail.clientWidth], nChips: chips.length, inside, clash,
+                oneCol: cells.length > 3 && cells.every(c => Math.abs(c.left - cells[0].left) < 1 && c.width > 300), dcW: Math.min(...dc), fanW: fb ? fb.width : 0, whoH: who.length ? Math.min(...who) : 99};
+        }"""
         phone_lens = {}
         for width in (390, 430, 360):
             page.set_viewport_size({"width": width, "height": 844 if width < 430 else 932})
-            for tab in ("elnino", "ensoharvest", "ensowater", "ensolive"):
+            for tab in ("elnino", "ensoharvest", "ensowater", "ensomoney", "ensolive"):
                 open_panel(page, base, tab)
                 page.wait_for_timeout(2500)
                 page.eval_on_selector_all("#tab-elnino details", "els => els.forEach(e => e.open = true)")
@@ -851,6 +883,19 @@ def main() -> int:
                       r["nSmall"] == 0 and r["nCopy"] == 0, f"{r['nSmall']} small {r['smallText']}; {r['nCopy']} copy {r['smallCopy']}")
                 check(f"phone {width}px {tab}: lens strip 46 px, scrolls, buttons 44 px, the open lens in view; status strip is two columns",
                       r["nav"]["h"] == 46 and r["nav"]["scrolls"] and r["nav"]["onIn"] and r["nav"]["minBtn"] >= 44 and r["cols"] == 2, str(r["nav"]) + f" cols {r['cols']}")
+                op = page.evaluate(ONPAGE_PROBE)
+                check(f"phone {width}px {tab}: 'On this page' is a 44 px button in the lens strip and meets no plate head at any scroll position", op["ok"], str(op))
+                if tab == "ensomoney" and width == 390:
+                    pr = page.evaluate(PRICES_PROBE)
+                    phone_lens["prices_probe"] = pr
+                    check("phone Prices: the controls sit under the map (never over it), every one 44 px tall",
+                          pr["ctlBelow"] and pr["ctlH"] and min(pr["ctlH"]) >= 43.5, str(pr["ctlH"]) + f" below {pr['ctlBelow']}")
+                    check("phone Prices: the rail table and the watch table are cards (no header row, every cell a block, none wider than its card)",
+                          pr["ptable"] and pr["nRows"] >= 5 and pr["pw"] and pr["nPw"] >= 3 and pr["railScroll"][0] <= pr["railScroll"][1] + 1, str({k: pr[k] for k in ('ptable', 'nRows', 'pw', 'nPw', 'railScroll')}))
+                    check("phone Prices: map labels stay inside the map and clear of one another",
+                          pr["nChips"] >= 3 and pr["inside"] and pr["clash"] == 0, f"{pr['nChips']} chips, inside {pr['inside']}, clashes {pr['clash']}")
+                    check("phone Prices: maize panels one per row, decomposition bars fill the card, the grey fan is wide enough to read, buyer names are 44 px targets",
+                          pr["oneCol"] and pr["dcW"] >= 300 and pr["fanW"] >= 14 and pr["whoH"] >= 43.5, f"oneCol {pr['oneCol']} dc {pr['dcW']} fan {pr['fanW']} who {pr['whoH']}")
                 if width == 390:
                     check(f"phone {width}px {tab}: plates are one edge-to-edge column; map 60-70% of the screen with its legend, chooser and Now box under it",
                           not r["wide"] and 0.6 * r["vh"] - 2 <= r["mapH"] <= 0.7 * r["vh"] + 2 and r["legendBelow"] and all(r["dock"]),
