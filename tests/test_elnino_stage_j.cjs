@@ -56,7 +56,9 @@ function choke(x,y,w,h){
 }
 test('measured labels stay inside a phone plate and clear graticule text on repeated placement',()=>{
  const labels=[choke(280,70,124,38),choke(85,140,130,38)],grat={getBoundingClientRect:()=>rect(140,182,140,12)};
- const host={getBoundingClientRect:()=>rect(30,40,350,330),querySelectorAll:s=>s==='.enso-choke-label'?labels:[grat]};
+ /* the pins themselves are obstacles (the real selector list includes `.enso-choke > i`) */
+ const pins=[{getBoundingClientRect:()=>rect(30+280+6,40+70+6,12,12)},{getBoundingClientRect:()=>rect(30+85+6,40+140+6,12,12)}];
+ const host={getBoundingClientRect:()=>rect(30,40,350,330),querySelectorAll:s=>s==='.enso-choke-label'?labels:[grat].concat(pins)};
  S.map={getContainer:()=>host,latLngToContainerPoint(){}};S.showLanes=true;S.corridorLabels=[];
  for(let pass=0;pass<2;pass++){
   api.placeChokepointLabels();
@@ -64,7 +66,9 @@ test('measured labels stay inside a phone plate and clear graticule text on repe
    assert(r.left>=34&&r.right<=376&&r.top>=44&&r.bottom<=366);
    assert(r.right<=g.left||r.left>=g.right||r.bottom<=g.top||r.top>=g.bottom);
   }
-  assert.equal(labels[0].style.right,'25px','right-edge label flips to the left of its pin');
+  /* 2026-09-30: the right-edge label no longer has to flip left; any of right, left, above or below is fine while it clears its pin and stays on the plate */
+  const r0=labels[0].getBoundingClientRect(),p0=pins[0].getBoundingClientRect();
+  assert(r0.right<=p0.left||r0.left>=p0.right||r0.bottom<=p0.top||r0.top>=p0.bottom,'right-edge label clears its pin');
  }
  S.showLanes=false;
 });
