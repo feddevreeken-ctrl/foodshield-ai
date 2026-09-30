@@ -165,11 +165,12 @@ def main() -> int:
         # content bleeding through the translucent bar read as a gap).
         check("view switcher leads the tab, pins as an opaque docked bar, and only shows on its host tab",
               leads and visible_here and hidden_elsewhere and switcher.is_visible())
-        check("view bar has five equal cells with descriptors and an orange top rule",
+        check("view bar has five equal cells with live figures and an orange top rule",
               switcher.evaluate("""el => {
                 const tabs = [...el.querySelectorAll('[role="tab"]')];
                 const widths = tabs.map(t => t.getBoundingClientRect().width);
                 return tabs.length === 5 && tabs.every(t => t.querySelector('.enso-view-desc')?.textContent)
+                    && tabs.every(t => t.title && /[.] · /.test(t.title))
                     && Math.max(...widths) - Math.min(...widths) < 1
                     && el.getBoundingClientRect().height === 40
                     && getComputedStyle(el.querySelector('[aria-selected="true"]')).borderTopColor === 'rgb(201, 119, 58)';
@@ -1046,17 +1047,22 @@ def main() -> int:
         }""")
         check("crop-area weights sum to 1 for every region and crop in the regions file", cb['n'] >= 10 and not cb['missing'] and cb['maxdev'] < 1e-6, str(cb))
         check("every crop-belt status on the Reported lens is recomputed from the weight file and the live SPI", not cb['bad'] and cb['rows'] >= cb['n'], str(cb))
-        # 2026-09-30: the food-security band leads every lens, is computed from the feeds and links to the lenses that hold the evidence.
+        # 2026-09-30: the five feed-derived figures moved into the tabs; the frame now holds only the readout and closed evidence fold.
         band = page.evaluate("""async () => {
-            const O = (await (await fetch('data/enso_outlook.json')).json()).data, f = document.getElementById('enso-foodband');
+            const O = (await (await fetch('data/enso_outlook.json')).json()).data, W = (await (await fetch('data/enso_situation.json')).json()).data.wfp_projection, f = document.getElementById('enso-foodband');
             if (!f || f.hidden) return null;
             const first = O.rows_all.filter(r => r.status === 'shown' && r.change_kt_record < 0).sort((a, b) => a.change_kt_record - b.change_kt_record)[0];
-            return { text: f.innerText, all: f.textContent, pct: Math.round(first.change_pct_record), links: [...f.querySelectorAll('.enso-rl [data-go]')].map(b => b.dataset.go), lit: f.querySelectorAll('.enso-rl .is-on').length,
-                     strip: !!f.querySelector('#enso-status-home #enso-status-short'), before: f.compareDocumentPosition(document.getElementById('subview-elnino')) & Node.DOCUMENT_POSITION_FOLLOWING };
+            const tabs = [...document.querySelectorAll('#enso-view-nav [role="tab"]')], figures = tabs.map(t => t.querySelector('.enso-view-desc').textContent.trim());
+            const fold = f.querySelector(':scope > details.enso-fs-more'), only = [...f.children].every(x => x.id === 'enso-status-home' || x === fold);
+            return { all: f.textContent, pct: Math.round(first.change_pct_record), wfp: W.added_m + ' m', figures,
+                     titles: tabs.map(t => t.title), noRail: !f.querySelector('.enso-rl'), only, fold: !!fold && !fold.open,
+                     strip: !!f.querySelector('#enso-status-home #enso-status-short'), before: !!(f.compareDocumentPosition(document.getElementById('subview-elnino')) & Node.DOCUMENT_POSITION_FOLLOWING) };
         }""")
-        check("the food-security frame leads the lens: five linked nodes (this lens lit, the others linking), the readout strip inside it, the scenario caveat in its fold",
-              bool(band) and all(w in band['text'] for w in ['Pacific', 'Harvests', 'Shipping', 'Prices', 'People'])
-              and len(band['links']) == 4 and band['lit'] == 1 and band['strip'] and 'Scenario, not a forecast' in band['all'] and str(abs(band['pct'])) in band['text'].replace('\u2212', '') and band['before'], str(band)[:300])
+        check("the food-security frame leads the lens with the readout and fold only; all five tabs carry live figures and evidence titles",
+              bool(band) and band['noRail'] and band['only'] and band['fold'] and band['strip'] and band['before']
+              and len(band['figures']) == 5 and all(band['figures']) and str(abs(band['pct'])) in band['figures'][1].replace('\u2212', '')
+              and band['figures'][4] == band['wfp'] and all('. · ' in t for t in band['titles'])
+              and 'Scenario, not a forecast' in band['all'], str(band)[:400])
         check("the tonnage copy never says grain has to be found elsewhere, and east-based is east-weighted", page.evaluate("""() => !/to find from other exporters|Grain to find|east-based/i.test(document.getElementById('tab-elnino').innerText)"""))
         # 2026-09-24: the Ocean lens leads with a dated calendar joined from the other lenses' data.
         page.evaluate("showTab('elnino')")
@@ -1153,12 +1159,11 @@ def main() -> int:
                 && !!pk && pk.title.startsWith(top.season) && rows.length >= 2 && [...rows].every(r => r.getBoundingClientRect().height < 40)
                 && !!plate.querySelector('details.enso-strength-notes .enso-bul-skip');
         }"""))
-        check("Ocean audit: the hero's CPC odds come from the strength table, not a typed row", page.evaluate("""async () => {
+        check("Ocean audit: the hero leads with season-by-season CPC odds from the strength table", page.evaluate("""async () => {
             const T = (await (await fetch('data/enso_strengths.json')).json()).data;
-            const top = T.roni_outlook.slice().sort((a, b) => b.median - a.median)[0], s = T.seasons.find(x => x.season === top.season);
-            const t = document.querySelector('#enso-agency-status').textContent;
-            return t.includes(s.classes['very strong El Niño'] + '% chance') && !/beats every event/.test(t)
-                && (!T.roni_record || top.median <= T.roni_record.value || t.includes(T.roni_record.value.toFixed(2)));
+            const li = document.querySelector('#enso-agency-status > li'), t = li.textContent.replace(/\\s+/g, ' ');
+            const odds = T.seasons.filter(x => x.classes['very strong El Niño'] > 0).map(x => x.classes['very strong El Niño'] + '%');
+            return t.startsWith('CPC’s very-strong odds by season:') && odds.every(x => t.includes(x)) && !/beats every event/.test(t);
         }"""))
         check("Ocean audit: the twelve months adds the map's forecasts by region and stays within 14 rows", page.evaluate("""async () => {
             const J = await (await fetch('data/enso_outlook_events.json')).json(), E = (J.data || J).events || [];
@@ -1479,36 +1484,51 @@ def main() -> int:
                 && Math.abs(r.scenario_kt - r.neutral_kt - r.change_kt_record) <= 1) && O.who_pays.every(w => {
                     const r = rows.find(x => x.iso === w.iso && x.crop === w.crop); return r && Math.abs(w.loss_kt + r.change_kt_record) <= 1; });
         }"""))
+        check("Harvests lens head compares USDA with neutral first and does not repeat the tab's largest-loss figure", page.evaluate("""async () => {
+            const O = (await (await fetch('data/enso_outlook.json')).json()).data;
+            const rows = O.rows_all.filter(r => r.status === 'shown' && !r.in_season && r.usda_same_harvest && typeof r.usda_vs_neutral_pct === 'number' && typeof r.change_pct_observed === 'number')
+                .sort((a, b) => Math.abs(a.usda_vs_neutral_pct - a.change_pct_observed) - Math.abs(b.usda_vs_neutral_pct - b.change_pct_observed));
+            const li = [...document.querySelectorAll('.enso-view-heading .enso-lens-lede > li')].map(x => x.textContent.replace(/\\s+/g, ' '));
+            const pct = v => (v > 0 ? '+' : v < 0 ? '\u2212' : '') + Math.abs(v).toFixed(0) + '%';
+            const worst = O.rows_all.filter(r => r.status === 'shown' && typeof r.change_kt_record === 'number' && r.change_kt_record < 0).sort((a, b) => a.change_kt_record - b.change_kt_record)[0];
+            return rows.length > 1 && li.length >= 2 && li.length <= 4 && /^USDA sits nearest the fit/.test(li[0]) && /^It sits furthest away/.test(li[1])
+                && li[0].includes(pct(rows[0].usda_vs_neutral_pct)) && li[1].includes(pct(rows.at(-1).usda_vs_neutral_pct))
+                && li.some(x => /validated flags/.test(x)) && !li.join(' ').includes(pct(worst.change_pct_record));
+        }"""))
         # 2026-09-30: the production-weighted aggregate is scored as an aggregate (build_enso_portfolio_hindcast.py).
         check("portfolio hindcast plate prints the file's counts, recounted from its rows", page.evaluate("""async () => {
             const P = (await (await fetch('data/enso_portfolio_hindcast.json')).json()).data;
             const sc = P.events.filter(e => e.scored), pl = document.querySelector('.enso-pf-plate');
             if (!pl) return false;
+            const fold = pl.closest('details.enso-fold-plate');
             const right = sc.filter(e => e.global.sign_right).length, alarms = sc.filter(e => e.global.predicted_kt < 0 && e.global.actual_kt > 0).length;
             const t = pl.querySelector('.enso-pf-lede').textContent.replace(/\s+/g, ' ');
-            return right === P.overall.sign_right && alarms === P.overall.false_alarms && sc.length === P.overall.events
+            return !!fold && !fold.open && fold.querySelector(':scope > summary').textContent.includes('direction right ' + right + ' of ' + sc.length + ' winters')
+                && right === P.overall.sign_right && alarms === P.overall.false_alarms && sc.length === P.overall.events
                 && +pl.dataset.n === sc.length && +pl.dataset.right === right && +pl.dataset.alarms === alarms
                 && t.includes('Direction right in ' + right + ' of ' + sc.length + ' winters') && t.includes('False alarms: ' + alarms + ' of ' + sc.length)
                 && pl.querySelectorAll('.enso-pf-row').length === P.events.length
                 && pl.querySelectorAll('.enso-pf-row.is-hit').length === right;
         }"""))
-        check("portfolio hindcast keeps five rows in view and folds the rest, in the Harvests order after the outlook", page.evaluate("""() => {
+        check("portfolio hindcast keeps five lead rows inside its closed fold, after the distribution fold", page.evaluate("""() => {
             const pl = document.querySelector('.enso-pf-plate'), pn = document.getElementById('subview-ensoharvest');
             const kids = [...pn.children].map(c => c.id || c.className);
             return !!pl && pl.querySelectorAll(':scope > .plate-body > .enso-pf-rows .enso-pf-row').length <= 5
-                && kids.indexOf('enso-hindcast') > kids.indexOf('enso-outlook') && /is-modelled/.test(pl.className);
+                && kids.indexOf('enso-dist') > kids.indexOf('enso-outlook') && kids.indexOf('enso-hindcast') > kids.indexOf('enso-dist') && /is-modelled/.test(pl.className);
         }"""))
         # 2026-09-30: the NOAA-forecast distribution plate prints the file's percentiles, and they are ordered.
         check("Harvests distribution plate prints each pair's median and 90% range from enso_distribution.json", page.evaluate("""async () => {
             const D = (await (await fetch('data/enso_distribution.json')).json()).data;
             const plate = document.querySelector('.enso-dist-plate'); if (!plate) return false;
+            const fold = plate.closest('details.enso-fold-plate');
             const rows = [...plate.querySelectorAll('.enso-dist-row[data-k]')];
             const n0 = v => (v > 0 ? '+' : v < 0 ? '\u2212' : '') + Math.abs(v).toFixed(0) + '%';
             return rows.length >= 5 && rows.length <= 8 && rows.every(r => {
                 const p = D.pairs.find(q => q.key === r.dataset.k); if (!p) return false;
                 const c = p.change_pct, lab = r.querySelector('.enso-dist-track').getAttribute('aria-label');
                 return r.textContent.includes(n0(c.p50)) && lab.includes(n0(c.p05)) && lab.includes(n0(c.p95));
-            }) && plate.textContent.includes(D.target.oni_draw.p50.toFixed(1)) && plate.dataset.kind !== 'observed' && !!plate.querySelector('details.enso-evidence-note');
+            }) && !!fold && !fold.open && fold.querySelector(':scope > summary').textContent.includes('for ' + rows.length + ' harvests')
+                && plate.textContent.includes(D.target.oni_draw.p50.toFixed(1)) && plate.dataset.kind !== 'observed' && !!plate.querySelector('details.enso-evidence-note');
         }"""))
         check("Distribution percentiles are ordered and the aggregate sits inside its pairs' range", page.evaluate("""async () => {
             const D = (await (await fetch('data/enso_distribution.json')).json()).data;
@@ -1545,20 +1565,33 @@ def main() -> int:
                 && document.querySelector('.enso-whopays-plate').textContent.includes('hit twice')
                 && document.querySelectorAll('.enso-whopays-plate .enso-wp-total').length === ((await (await fetch('data/enso_outlook.json')).json()).data.who_pays_totals || []).length;
         }"""))
-        # 2026-09-30 (access): IPC exactness and calibrated lines, all read from data files.
-        check("Access ledger shows Phase 3+ as a share of the analysed population, marks partial coverage, and reads its lines from access_thresholds.json", page.evaluate("""async () => {
+        # 2026-09-30 (access): only economic access and IPC carry validated flags; import dependence and reserves are neutral context.
+        check("Access ledger shows exact IPC coverage and only the two validated lines from access_thresholds.json", page.evaluate("""async () => {
             const T = (await (await fetch('data/ref/access_thresholds.json')).json()).data, ipc = (await (await fetch('data/ipc.json')).json()).data;
             const pl = document.querySelector('.enso-access-plate'); if (!pl) return false;
-            const t = pl.textContent, rows = [...pl.querySelectorAll('tbody tr')];
-            const okRows = rows.length > 0 && rows.every(r => /analysed|no IPC analysis/.test(r.textContent));
+            const t = pl.textContent, rows = [...pl.querySelectorAll(':scope > .plate-body > table > tbody > tr')];
+            const okRows = rows.length > 0 && rows.every(r => {
+                const cells = r.cells, noIpc = /no IPC analysis/.test(cells[3].textContent), context = cells[4];
+                return /analysed|no IPC analysis/.test(cells[3].textContent)
+                    && cells[2].querySelectorAll('.enso-acc-track u').length === 1
+                    && (noIpc ? cells[3].querySelectorAll('.enso-acc-track u').length === 0 && /of 1/.test(cells[5].textContent)
+                              : cells[3].querySelectorAll('.enso-acc-track u').length === 1 && /of 2/.test(cells[5].textContent))
+                    && context.querySelectorAll('.enso-acc-track').length === 2 && !context.querySelector('u, .is-strain');
+            });
             const anyPartial = Object.values(ipc).some(x => x.analysis_coverage_ratio < 1);
-            return okRows && (!anyPartial || pl.querySelectorAll('.enso-acc-part').length > 0) && t.includes('line ' + T.lines.economic_access.line)
+            return okRows && (!anyPartial || pl.querySelectorAll('.enso-acc-part').length > 0)
+                && t.includes('line ' + T.lines.economic_access.line) && t.includes('line ' + T.lines.ipc_phase3plus_pct.line + '%')
                 && t.includes('additional shock') && !/El Niño would add/.test(t) && !/\u2014/.test(t);
         }"""))
-        check("Uncalibrated components are labelled as reference lines, calibrated ones as calibrated", page.evaluate("""async () => {
-            const T = (await (await fetch('data/ref/access_thresholds.json')).json()).data.lines, h = document.querySelector('.enso-access-plate thead').textContent;
-            const un = (h.match(/not calibrated/g) || []).length, all = (h.match(/calibrated/g) || []).length;
-            return Object.values(T).every(e => e.supported === (typeof e.line === 'number')) && un === Object.values(T).filter(e => !e.supported).length && all - un === Object.values(T).filter(e => e.supported).length;
+        check("Access ledger counts validated flags only; context has no traffic-light line", page.evaluate("""async () => {
+            const T = (await (await fetch('data/ref/access_thresholds.json')).json()).data, pl = document.querySelector('.enso-access-plate');
+            const h = pl.querySelector('thead').textContent, fold = pl.querySelector('details.enso-evidence-note').textContent;
+            return (h.match(/validated/g) || []).length === 2 && !/not calibrated|reference line/.test(pl.textContent)
+                && h.includes('Import dependence and grain reserve did not predict shocks in the test')
+                && fold.includes('AUC ' + T.price_shock_primary.economic_access.auc.toFixed(2))
+                && fold.includes('AUC ' + T.price_shock_primary.import_dependence.auc.toFixed(2))
+                && fold.includes('AUC ' + T.price_shock_primary.grain_reserve.auc.toFixed(2))
+                && fold.includes('AUC ' + T.ipc_history.entry_to_20pct_from_below.auc.toFixed(2));
         }"""))
         # 2026-09-30 replacement engine (data/enso_replacement.json, scripts/build_enso_replacement.py): the file's own
         # arithmetic is gated (conservation per buyer, no source past its headroom, no banned or short exporter used),
@@ -2614,8 +2647,10 @@ def main() -> int:
               audit["lede"] and audit["bullets"] and audit["legendFolded"], str(audit))
         check("fitted responses sit behind Show per country; the calendar is open with the outlook's pairs first",
               audit["noCoefPlate"] and audit["calOpen"] and audit["calH"] <= 520, str(audit))
-        check("the Reported badge counts what its label names",
-              page.locator('#viewbtn-ensolive .enso-view-desc').inner_text().strip() == 'news & alerts')
+        # The Reported tab figure is WFP's projection from enso_situation.json, not a static descriptor.
+        _wfp_added = _pjson.load(open(ROOT / 'data' / 'enso_situation.json'))['data']['wfp_projection']['added_m']
+        check("the Reported tab prints WFP's live projection",
+              page.locator('#viewbtn-ensolive .enso-view-desc').inner_text().strip() == f'{_wfp_added} m')
 
         # 2026-09-30 court verdict: the price-risk file obeys its own frozen rule, and the forecast log is append-only and dated.
         _rk = _pjson.load(open(ROOT / 'data' / 'enso_price_risk.json'))['data']
