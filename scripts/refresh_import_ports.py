@@ -22,6 +22,7 @@ Source: IMF PortWatch, anonymous ArcGIS FeatureServer, no key.
 """
 from __future__ import annotations
 
+import json
 import sys
 from collections import defaultdict
 from datetime import date, timedelta
@@ -47,6 +48,31 @@ PORTS = [
     ("port146", "Berbera", "SOM", "East Africa", "Somaliland; corridor to Ethiopia"),
     ("port977", "Port Sudan", "SDN", "East Africa", "Sudan's main port"),
 ]
+
+
+PORTS_DB = ("https://services9.arcgis.com/weJ1QsnbMYJlCHdG/ArcGIS/rest/services/"
+            "PortWatch_ports_database/FeatureServer/0/query")
+
+
+def coords() -> dict[str, tuple[float, float]]:
+    """Port positions from PortWatch's own ports database, so the map places each port where IMF does. If that
+    query fails, the positions in the previous file are kept (a port does not move)."""
+    try:
+        ids = ",".join(f"'{p[0]}'" for p in PORTS)
+        r = http_get(PORTS_DB, timeout=60, headers=UA, retries=3, params={
+            "where": f"portid IN ({ids})", "outFields": "portid,lat,lon",
+            "returnGeometry": "false", "f": "json"}).json()
+        got = {f["attributes"]["portid"]: (round(f["attributes"]["lat"], 4), round(f["attributes"]["lon"], 4))
+               for f in r.get("features", []) if f["attributes"].get("lat") is not None}
+        if got:
+            return got
+    except Exception as e:  # noqa: BLE001 -- positions are reference geography; fall back to the last file
+        print(f"  ports database unavailable ({type(e).__name__}); keeping the previous positions")
+    try:
+        prev = json.loads((Path(__file__).resolve().parent.parent / "data" / "enso_ports.json").read_text())
+        return {p["portid"]: (p["lat"], p["lon"]) for p in prev["data"]["ports"] if "lat" in p}
+    except Exception:  # noqa: BLE001 -- first run without a previous file: ports simply carry no position
+        return {}
 
 
 def fetch(portid: str, since: str) -> list[dict]:
@@ -114,10 +140,12 @@ def summarise(rows: list[dict]) -> dict:
 def main() -> int:
     since = (date.today() - timedelta(days=366 * 8)).isoformat()
     ports, unavailable = [], []
+    at = coords()
     for pid, name, iso, region, serves in PORTS:
         try:
             s = summarise(fetch(pid, since))
-            ports.append({"portid": pid, "name": name, "iso3": iso, "region": region, "serves": serves, **s})
+            pos = {"lat": at[pid][0], "lon": at[pid][1]} if pid in at else {}
+            ports.append({"portid": pid, "name": name, "iso3": iso, "region": region, "serves": serves, **pos, **s})
             print(f"  ok   {name}: {s['dry_bulk_import_t']:,} t in {WINDOW}d to {s['latest_date']}, "
                   f"y/y {s['yoy_pct']}%, vs {s['prior_years']} mean {s['vs_mean_pct']}%")
         except Exception as e:  # noqa: BLE001 -- one port down must not blank the rest

@@ -49283,11 +49283,9 @@ function showCommodityDetail(key) {
     });
     drawPorts();
   }
-  /* The 10 African gateway ports of enso_ports, as small solid marks. PortWatch gives no coordinates, so the port
-     positions are the ports' own (reference geography, keyed by PortWatch id). The mark is one size for every port:
+  /* The 10 African gateway ports of enso_ports, as small solid marks, placed at the positions PortWatch's own ports
+     database gives (lat/lon in the file, written by refresh_import_ports.py). The mark is one size for every port:
      the number is the label, never the mark. The southern-Africa import need is text only, read from enso_outlook. */
-  var PORT_AT = { port311: [-29.87, 31.03], port702: [-25.97, 32.57], port137: [-19.83, 34.84], port784: [-14.54, 40.68], port278: [-6.82, 39.29],
-    port1381: [-22.96, 14.51], port757: [-4.05, 39.67], port294: [11.6, 43.15], port146: [10.44, 45.01], port977: [19.62, 37.22] };
   var PORT_NOTE = 'AIS-estimated dry-bulk imports, y/y; not grain availability or restrictions';
   function portScenarioText() {
     var O = S.outlook || {}, sa = (O.rows_all || []).filter(function (r) { return r.status === 'shown' && r.crop === 'corn' && /Southern Africa/.test(r.region || ''); }).map(function (r) { return r.iso; }), kt = 0, any = false;
@@ -49297,11 +49295,11 @@ function showCommodityDetail(key) {
   }
   function drawPorts() {
     (S.portPins || []).forEach(function (l) { try { if (S.map) S.map.removeLayer(l); } catch (e) {} }); S.portPins = [];
-    var P = ((S.ports && S.ports.ports) || []).filter(function (p) { return PORT_AT[p.portid]; }), need = portScenarioText();
+    var P = ((S.ports && S.ports.ports) || []).filter(function (p) { return typeof p.lat === 'number' && typeof p.lon === 'number'; }), need = portScenarioText();
     if (!P.length) return;
     var kt = function (t) { return t >= 1e6 ? (t / 1e6).toFixed(2) + ' Mt' : Math.round(t / 1e3) + ' kt'; }, yy = function (v) { return typeof v === 'number' ? (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(0) + '%' : 'n/a'; };
     P.slice().sort(function (a, b) { return Math.abs(b.yoy_pct || 0) - Math.abs(a.yoy_pct || 0); }).forEach(function (p, i) {
-      var at = PORT_AT[p.portid], tip = '<b>' + esc(p.name) + '</b> · ' + esc(nameFor(p.iso3)) + '<br>' + esc(p.serves || '') + '<br>' + esc(kt(p.dry_bulk_import_t)) + ' dry bulk in ' + p.window_days + ' days to ' + esc(shortDay(p.latest_date)) + ', ' + esc(yy(p.yoy_pct)) + ' y/y' +
+      var at = [p.lat, p.lon], tip ='<b>' + esc(p.name) + '</b> · ' + esc(nameFor(p.iso3)) + '<br>' + esc(p.serves || '') + '<br>' + esc(kt(p.dry_bulk_import_t)) + ' dry bulk in ' + p.window_days + ' days to ' + esc(shortDay(p.latest_date)) + ', ' + esc(yy(p.yoy_pct)) + ' y/y' +
         (typeof p.vs_mean_pct === 'number' ? ', ' + esc(yy(p.vs_mean_pct)) + ' against the ' + esc(p.prior_years || '') + ' average for these weeks' : '') +
         '<br><span class="enso-tip-src">Observed · IMF PortWatch. ' + esc(PORT_NOTE) + '.</span>' + (need && p.region === 'Southern Africa' ? '<br><span class="enso-tip-src">' + esc(need) + '. A model scenario, not a port reading.</span>' : '');
       var m = L.marker(at, { interactive: true, keyboard: false, alt: '', zIndexOffset: 300,
