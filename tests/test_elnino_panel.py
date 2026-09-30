@@ -681,9 +681,11 @@ def main() -> int:
                 .filter(e => { const c = getComputedStyle(e); return [c.borderTopLeftRadius, c.borderTopRightRadius, c.borderBottomLeftRadius, c.borderBottomRightRadius]
                     .some(r => parseFloat(r) > 0); })
                 .map(e => e.id || e.className).slice(0, 10)"""))
+            # 2026-09-30 phone pass: #enso-view-nav is a deliberate sideways strip, and .subview.active carries the edge-to-edge plates'
+            # 16 px negative margins in its scroll width; the page itself (html, .content-page) must not scroll sideways.
             overflow = page.evaluate("""() => {
-                const selectors = ['html', '#nav', '#enso-view-nav', '#tab-elnino',
-                    '#tab-elnino .content-page', '#tab-elnino .subview.active',
+                const selectors = ['html', '#nav', '#tab-elnino',
+                    '#tab-elnino .content-page',
                     '#tab-elnino .subview.active .enso-tblwrap'];
                 return selectors.filter(s => [...document.querySelectorAll(s)].some(e =>
                     e.clientWidth && e.scrollWidth > e.clientWidth + 1));
@@ -796,11 +798,98 @@ def main() -> int:
                     && one([...p.querySelectorAll('.pac-lane .pac-box em')]) && one([...p.querySelectorAll('.pac-peak b')]);
             }"""))
         page.set_viewport_size({"width":390,"height":844})
-        check("phone switcher stays one 36px row and the explainer stacks without overflow", page.evaluate("""() => {
+        page.wait_for_timeout(700)   # the phone script re-fits labels a beat after a resize
+        # 2026-09-30 phone pass: the lens strip is one 46 px row of 44 px buttons that scrolls sideways; the explainer stacks.
+        sw = page.evaluate("""() => {
             const root = document.querySelector('#tab-elnino .content-page'), bar = document.getElementById('enso-view-nav');
             const stack = document.getElementById('pac-stack').getBoundingClientRect(), side = document.querySelector('.pac-read').getBoundingClientRect();
-            return bar.getBoundingClientRect().height === 36 && side.top >= stack.bottom && root.scrollWidth <= root.clientWidth;
+            return {h: bar.getBoundingClientRect().height, sw: bar.scrollWidth, cw: bar.clientWidth, side: side.top, stack: stack.bottom, r: [root.scrollWidth, root.clientWidth]};
+        }""")
+        check("phone switcher stays one scrolling 46px row and the explainer stacks without overflow",
+              sw["h"] == 46 and sw["sw"] > sw["cw"] and sw["side"] >= sw["stack"] and sw["r"][0] <= sw["r"][1] + 1, str(sw))
+        PHONE_PROBE = """() => {
+            const tab = document.getElementById('tab-elnino'), root = tab.querySelector('.content-page'), doc = document.scrollingElement;
+            const vw = innerWidth, vh = innerHeight, sub = tab.dataset.sub;
+            const bar = document.getElementById('enso-view-nav'), on = bar.querySelector('.viewswitch-btn.active'), bb = bar.getBoundingClientRect(), ob = on.getBoundingClientRect();
+            const skip = e => e.closest('svg, script, style, #subview-ensomoney, .enso-sr');
+            const smallText = [], smallCopy = [];
+            const tw = document.createTreeWalker(tab, NodeFilter.SHOW_TEXT); let n;
+            while ((n = tw.nextNode())) {
+                const p = n.parentElement; if (!n.nodeValue.trim() || !p || skip(p) || !p.getClientRects().length) continue;
+                const cs = getComputedStyle(p), fs = parseFloat(cs.fontSize); if (!(fs >= 1)) continue;
+                const mono = /Mono/.test(cs.fontFamily), copy = !mono && p.closest('p, li, dd, figcaption');
+                if (fs < 12) smallText.push(fs + ' ' + (p.className || p.tagName) + ': ' + n.nodeValue.trim().slice(0, 24));
+                else if (copy && fs < 14) smallCopy.push(fs + ' ' + (p.className || p.tagName) + ': ' + n.nodeValue.trim().slice(0, 24));
+            }
+            const solo = [...tab.querySelectorAll('button, summary, [role="tab"], a.enso-now-link')].filter(e => {
+                if (e.closest('#subview-ensomoney, .leaflet-container, .enso-sr') || e.matches('.enso-asap-btn, .enso-chip, .enso-inline-link, .enso-next12-bar')) return false;
+                const r = e.getBoundingClientRect(); return r.width > 1 && r.height > 1 && getComputedStyle(e).visibility !== 'hidden' && r.height < 43.5;
+            }).map(e => Math.round(e.getBoundingClientRect().height) + ' ' + (e.id || e.className || e.tagName) + ' ' + (e.textContent || '').trim().slice(0, 20));
+            const plates = [...tab.querySelectorAll('#subview-' + sub + ' .enso-plate:not(.enso-plate .enso-plate), #subview-' + sub + ' #enso-mapwrap')].filter(e => e.getClientRects().length);
+            const map = document.getElementById('enso-map').getBoundingClientRect(), mrect = b => b ? b.getBoundingClientRect() : null;
+            const dock = [...tab.querySelectorAll('.enso-now, .enso-follow')].filter(e => !e.hidden && e.getClientRects().length).map(e => e.getBoundingClientRect().top >= map.bottom - 1);
+            const status = getComputedStyle(document.getElementById('enso-status-short'));
+            return {sub, sw: [root.scrollWidth, root.clientWidth, doc.scrollWidth, doc.clientWidth], vw, vh, smallText: smallText.slice(0, 8), nSmall: smallText.length, smallCopy: smallCopy.slice(0, 8), nCopy: smallCopy.length, solo: solo.slice(0, 8), nSolo: solo.length,
+                nav: {h: bar.getBoundingClientRect().height, scrolls: bar.scrollWidth > bar.clientWidth, onIn: ob.left >= bb.left - 1 && ob.right <= bb.right + 1, minBtn: Math.min(...[...bar.querySelectorAll('.viewswitch-btn')].map(b => b.getBoundingClientRect().height))},
+                wide: plates.filter(e => Math.abs(e.getBoundingClientRect().width - vw) > 1).map(e => e.className || e.id),
+                mapH: map.height, dock, legendBelow: !document.getElementById('enso-legend') || document.getElementById('enso-legend').getBoundingClientRect().top >= map.bottom - 1,
+                cols: status.gridTemplateColumns.split(' ').length};
+        }"""
+        phone_lens = {}
+        for width in (390, 430, 360):
+            page.set_viewport_size({"width": width, "height": 844 if width < 430 else 932})
+            for tab in ("elnino", "ensoharvest", "ensowater", "ensolive"):
+                open_panel(page, base, tab)
+                page.wait_for_timeout(2500)
+                page.eval_on_selector_all("#tab-elnino details", "els => els.forEach(e => e.open = true)")
+                page.wait_for_timeout(500)
+                r = page.evaluate(PHONE_PROBE)
+                phone_lens[(width, tab)] = r
+                check(f"phone {width}px {tab}: no horizontal page scroll (page and .content-page)",
+                      r["sw"][0] <= r["sw"][1] + 1 and r["sw"][2] <= r["sw"][3] + 1, str(r["sw"]))
+                check(f"phone {width}px {tab}: no text node under 12 px, and no running copy (p, li, dd) under 14 px",
+                      r["nSmall"] == 0 and r["nCopy"] == 0, f"{r['nSmall']} small {r['smallText']}; {r['nCopy']} copy {r['smallCopy']}")
+                check(f"phone {width}px {tab}: lens strip 46 px, scrolls, buttons 44 px, the open lens in view; status strip is two columns",
+                      r["nav"]["h"] == 46 and r["nav"]["scrolls"] and r["nav"]["onIn"] and r["nav"]["minBtn"] >= 44 and r["cols"] == 2, str(r["nav"]) + f" cols {r['cols']}")
+                if width == 390:
+                    check(f"phone {width}px {tab}: plates are one edge-to-edge column; map 60-70% of the screen with its legend, chooser and Now box under it",
+                          not r["wide"] and 0.6 * r["vh"] - 2 <= r["mapH"] <= 0.7 * r["vh"] + 2 and r["legendBelow"] and all(r["dock"]),
+                          f"wide {r['wide']} map {r['mapH']} legend {r['legendBelow']} dock {r['dock']}")
+                    check(f"phone {width}px {tab}: standalone buttons and summaries are 44 px tall (words set inside a sentence get a 44 px hit area instead)",
+                          r["nSolo"] == 0, f"{r['nSolo']} {r['solo']}")
+        # Shipping and Ocean figures drawn for a phone.
+        page.set_viewport_size({"width": 390, "height": 844})
+        open_panel(page, base, "ensowater")
+        page.wait_for_timeout(2500)
+        page.eval_on_selector_all("#tab-elnino details", "els => els.forEach(e => e.open = true)")
+        page.wait_for_timeout(400)
+        check("phone Shipping: the Panama pair and the Gatun section and fit are stacked, one above the other, each the width of its plate", page.evaluate("""() => {
+            const pan = document.querySelector('.enso-pan-since'), pr = pan.getBoundingClientRect(), vb = pan.viewBox.baseVal;
+            const st = document.querySelector('.enso-gfit-stack'), a = st && st.querySelector('.is-ph-a'), b = st && st.querySelector('.is-ph-b');
+            const ar = a && a.getBoundingClientRect(), br = b && b.getBoundingClientRect();
+            const ports = document.querySelector('.enso-ports-dots');
+            return pan.classList.contains('is-stacked') && vb.height / vb.width > 0.7 && !!a && !!b && br.top >= ar.bottom - 1 && Math.abs(ar.width - br.width) < 2 && ar.width > 300
+                && !!ports && ports.classList.contains('is-ph') && ports.viewBox.baseVal.width <= 400;
         }"""))
+        page.set_viewport_size({"width": 1440, "height": 900})
+        page.wait_for_timeout(1500)
+        check("crossing back to a laptop width redraws the Shipping figures side by side", page.evaluate("""() => {
+            const pan = document.querySelector('.enso-pan-since'), fit = document.querySelector('.enso-gatun-fit');
+            return !pan.classList.contains('is-stacked') && pan.viewBox.baseVal.width === 960 && !document.querySelector('.enso-gfit-stack') && fit.viewBox.baseVal.width === 1210;
+        }"""))
+        page.set_viewport_size({"width": 390, "height": 844})
+        open_panel(page, base, "elnino")
+        page.wait_for_timeout(2500)
+        page.eval_on_selector_all("#tab-elnino details", "els => els.forEach(e => e.open = true)")
+        page.wait_for_timeout(400)
+        check("phone Ocean: the five explainer steps are a strip that scrolls and snaps; the strength table scrolls in its own box; the analog labels moved under the chart", page.evaluate("""() => {
+            const rl = document.querySelector('.pac-main > .enso-ruler'), rs = getComputedStyle(rl), tb = document.querySelector('.enso-strength-table'), ts = getComputedStyle(tb);
+            const names = [...document.querySelectorAll('.enso-analog-names .enso-analog-note')].map(e => e.textContent);
+            return rl.scrollWidth > rl.clientWidth && /auto|scroll/.test(rs.overflowX) && /mandatory|proximity/.test(rs.scrollSnapType)
+                && tb.scrollWidth > tb.clientWidth && /auto|scroll/.test(ts.overflowX) && names.length >= 2
+                && getComputedStyle(document.querySelector('.enso-analog-fc-lab')).display === 'none';
+        }"""))
+        page.set_viewport_size({"width": 1440, "height": 1000})
         page.set_viewport_size({"width": 1440, "height": 1000})
         page.locator('#viewbtn-ensowater').click()
         page.wait_for_selector('#subview-ensowater.active .enso-pan-since')
@@ -1645,14 +1734,11 @@ def main() -> int:
         page.evaluate("showTab('ensowater')")
         page.locator('#enso-mapwrap [data-z="0"]').click()
         page.wait_for_timeout(350)
-        check("Stage J all chokepoint labels fit the plate at 390px", page.evaluate("""() => {
-            const box = document.getElementById('enso-map').getBoundingClientRect();
+        # 2026-09-30 phone pass: on a 390 px map the lane callouts collide, so they drop out; the marks stay and the lane cards under the map carry the words.
+        check("Stage J at 390px the chokepoint callouts drop out of the map (one per lane, all hidden) and every lane keeps its mark", page.evaluate("""() => {
             const labels = [...document.querySelectorAll('.enso-choke-label')];
-            return labels.length === LINKED && labels.every(e => {
-                const r = e.getBoundingClientRect();
-                return r.width > 0 && r.left >= box.left && r.right <= box.right
-                    && r.top >= box.top && r.bottom <= box.bottom;
-            });
+            return labels.length === LINKED && labels.every(e => getComputedStyle(e).display === 'none')
+                && document.querySelectorAll('#enso-map .enso-choke').length >= LINKED && !!document.querySelector('.enso-lane-board');
         }""".replace("LINKEDC", str(linked_corridors)).replace("LINKED", str(linked_lanes))))
         check("Stage J Panama has dated advisories and no ordinal slot chart", page.evaluate("""() => !document.getElementById('enso-c-panama') && !!document.querySelector('.enso-pansince-plate .enso-pan-step')"""))
         page.set_viewport_size({"width": 1440, "height": 1000})
