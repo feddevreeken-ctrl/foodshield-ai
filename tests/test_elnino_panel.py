@@ -1013,8 +1013,22 @@ def main() -> int:
         # 2026-09-27 (later): Shipping folds the ordinal slot chart into the monthly Panama chart and the freight plate
         # into the river chain (7.4k -> 6.9k), so its cap drops to 7300; Prices gains the southern-Africa maize analog
         # from FPMA (+0.6k) and pays part of it back: prices beside their sparklines, a one-line map key (5.26k), cap 5400.
-        CEIL = {'elnino': 5250, 'ensoharvest': 5000, 'ensowater': 7300, 'ensomoney': 5400, 'ensolive': 6100}
+        # 2026-09-30 (external review, "the tabs do not link to food security"): every lens opens with the food-security
+        # band (about 0.3k). Ocean gives up its 5250 cap by 100; Prices gains the access ledger (5 rows + fold) and keeps 5400.
+        CEIL = {'elnino': 5350, 'ensoharvest': 5000, 'ensowater': 7300, 'ensomoney': 5400, 'ensolive': 6100}
         check("no lens grows past its height ceiling", all(heights.get(k, 0) <= v for k, v in CEIL.items()), str(heights))
+        # 2026-09-30: the food-security band leads every lens, is computed from the feeds and links to the lenses that hold the evidence.
+        band = page.evaluate("""async () => {
+            const O = (await (await fetch('data/enso_outlook.json')).json()).data, f = document.getElementById('enso-foodband');
+            if (!f || f.hidden) return null;
+            const first = O.rows_all.filter(r => r.status === 'shown' && r.change_kt_record < 0).sort((a, b) => a.change_kt_record - b.change_kt_record)[0];
+            return { text: f.innerText, pct: Math.round(first.change_pct_record), kt: first.iso, links: [...f.querySelectorAll('[data-go]')].map(b => b.dataset.go), nav: !!document.getElementById('enso-view-nav'),
+                     before: f.compareDocumentPosition(document.getElementById('subview-elnino')) & Node.DOCUMENT_POSITION_FOLLOWING };
+        }""")
+        check("the food-security band leads the lens: crops, supply chains, countries, each linking to its lens, with the scenario caveat",
+              bool(band) and all(w in band['text'] for w in ['What it means for food', 'Crops', 'Supply chains', 'Countries and people', 'Scenario, not a forecast'])
+              and set(band['links']) == {'ensoharvest', 'ensowater', 'ensolive'} and str(abs(band['pct'])) in band['text'].replace('\u2212', '') and band['before'], str(band)[:300])
+        check("the tonnage copy never says grain has to be found elsewhere, and east-based is east-weighted", page.evaluate("""() => !/to find from other exporters|Grain to find|east-based/i.test(document.getElementById('tab-elnino').innerText)"""))
         # 2026-09-24: the Ocean lens leads with a dated calendar joined from the other lenses' data.
         page.evaluate("showTab('elnino')")
         page.wait_for_selector('#subview-elnino.active .enso-next12-bar')
@@ -1207,7 +1221,7 @@ def main() -> int:
         check("the monthly Panama chart with its slot limits leads the daily AIS with its actual coverage",
               water['lead'] and water['slot'] == 'observed' and water['ais'] == 'observed'
               and iso_text(history[0]) in water['source'] and iso_text(history[-1]) in water['source'])
-        board_slots = page.evaluate("async () => (await (await fetch('data/enso_lanes.json')).json()).data.lanes.find(l => l.id === 'panama').live_2026.steps.at(-1).total")
+        board_slots = page.evaluate("async () => (await (await fetch('data/enso_lanes.json')).json()).data.lanes.find(l => l.id === 'panama').live_2026.steps.filter(x => (x.booking_from || x.effective) <= new Date().toISOString().slice(0, 10)).at(-1).total")
         # 2026-09-29 audit: El Niño-linked lanes as tight rows, the lanes with no ENSO link in one closed fold.
         check("Shipping answers every lane from the current JSON: linked lanes as rows, the rest folded",
               page.locator('.enso-lcard[data-board-lane]').count() + page.locator('.enso-lanes-other li[data-board-lane]').count() == lane_count

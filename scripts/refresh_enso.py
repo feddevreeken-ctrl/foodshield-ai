@@ -155,7 +155,7 @@ def main() -> int:
             "nino12_anom": w["nino12_anom"],
             "east_based": bool(w["nino12_anom"] > w["nino34_anom"]),
             "east_based_note": (
-                "Ni\u00f1o 1+2 running warmer than Ni\u00f1o 3.4 indicates an EAST-BASED event, which "
+                "Ni\u00f1o 1+2 running warmer than Ni\u00f1o 3.4 indicates an east-weighted event, which "
                 "matters most for coastal Peru and Ecuador. Note: no published source was "
                 "found linking this structure to a distinct global crop-teleconnection "
                 "footprint, so the dashboard does not model one."),

@@ -213,7 +213,7 @@ def enfen_monthly() -> dict:
         "title": "Comunicado Oficial ENFEN N° " + n + "-" + yr,
         "summary": ("Peru's multisectoral ENSO committee; the communiqué sets the coastal El Niño alert level"
                     + (", stated as “" + state.group(1).strip() + "” in the newest post on the site" if state else "")
-                    + ". Coastal Peru is where an east-based event lands first."),
+                    + ". Coastal Peru is where an east-weighted event lands first."),
         "published": pub.isoformat(),
         "url": unescape(link.group(1)) if link else ENFEN_URL,
     }

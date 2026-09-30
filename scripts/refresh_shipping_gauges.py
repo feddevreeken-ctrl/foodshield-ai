@@ -66,6 +66,7 @@ VESSELS = "https://agtransport.usda.gov/resource/uiht-9xts.json"
 KAUB = "https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/KAUB/W"
 INA = "https://alerta.ina.gob.ar/a5/obs/puntual/series/34/observaciones"
 ANA = "https://telemetriaws1.ana.gov.br/ServiceANA.asmx/DadosHidrometeorologicos"
+ACP_LIST = "https://pancanal.com/en/maritime-services/advisory-to-shipping/"
 ANALOGS = (1997, 2015, 2023)   # El Nino onset years whose dry season forced Panama restrictions
 
 
@@ -465,9 +466,35 @@ def manaus(today: date) -> dict:
     }
 
 
+def acp_advisories(today: date) -> dict:
+    """Newest Advisories to Shipping listed by the Panama Canal Authority this year.
+
+    Headers only: the page lists number, title and PDF link, never a date. The El Niño shipping plate compares the
+    newest number with the advisory a person last read (data/enso_lanes.json live_2026.latest_advisory) and says so
+    when a newer one is out, so a stale curated module cannot pass as current.
+    """
+    html = get(ACP_LIST).text
+    rows = []
+    for url, ident, title in re.findall(r'<a href="([^"]+\.pdf)"[^>]*>.*?<h3>(A-\d+-\d{4})</h3><div class="d_des">(.*?)</div>', html, re.S | re.I):
+        m = re.match(r"A-(\d+)-(\d{4})$", ident)
+        if m and int(m.group(2)) == today.year:
+            rows.append({"id": ident, "number": int(m.group(1)), "title": re.sub(r"\s+", " ", title).strip(), "url": url})
+    if not rows:
+        raise RuntimeError("ACP advisory listing parsed no advisories for this year")
+    rows.sort(key=lambda r: -r["number"])
+    return {"year": today.year, "latest": rows[0], "recent": rows[:5], "source": ACP_LIST}
+
+
 def main() -> int:
     today = datetime.now(timezone.utc).date()
     gauges, unavailable = {}, []
+    advisories = None
+    try:
+        advisories = acp_advisories(today)
+        print(f"  ok   acp advisories: {advisories['latest']['id']}")
+    except Exception as e:  # noqa: BLE001 -- the gauges stand without it
+        unavailable.append({"key": "acp_advisories", "reason": f"{type(e).__name__}: {e}"})
+        print(f"  FAIL acp_advisories: {e}")
     for key, fn in (("gatun", lambda: gatun(today)), ("stlouis", stlouis), ("barge_stlouis", barge),
                     ("gulf_loadings", lambda: gulf_loadings(today)),
                     ("kaub", kaub), ("rosario", lambda: rosario(today)), ("manaus", lambda: manaus(today))):
@@ -479,7 +506,7 @@ def main() -> int:
             print(f"  FAIL {key}: {e}")
     if not gauges:
         raise RuntimeError("no gauge reachable -- keeping the previous file")
-    write_json("enso_gauges.json", {"gauges": gauges, "unavailable": unavailable},
+    write_json("enso_gauges.json", {"gauges": gauges, "unavailable": unavailable, "acp_advisories": advisories},
                source="Panama Canal Authority; NOAA NWPS; USDA AMS AgTransport; WSV PEGELONLINE; INA Argentina; ANA Brazil",
                notes="Measured water levels behind the El Niño shipping lanes, each from the agency that owns the gauge.",
                status="ok" if not unavailable else "partial")

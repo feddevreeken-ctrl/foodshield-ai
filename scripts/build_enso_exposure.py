@@ -214,12 +214,13 @@ def main() -> int:
             "version": "v1",
             "production_ready": False,
             "blocking": (
-                "ONE limitation is real and unresolved: NO OUT-OF-SAMPLE VALIDATION. The "
-                "aggregate has never been scored against harvests it was not fitted on, so "
-                "its calibration is unknown even where its direction is not. Until that is "
-                "settled the aggregate is a direction, not a magnitude, and the UI renders "
-                "it rounded to the whole percent and paints it in banded steps for that "
-                "reason. The second limitation is now RESOLVED: pairs whose phase slope passes "
+                "ONE limitation is real and unresolved: the production-weighted AGGREGATE has not "
+                "been scored as an aggregate. Each fitted pair HAS been held out and scored (see "
+                "data/enso_hindcast.json: leave-one-winter-out and a forward walk, direction and "
+                "rough size), but no past winter exceeded ONI +2.5, so the size of a stronger "
+                "winter cannot be tested. Until that is settled the aggregate is a direction with "
+                "a rough size, and the UI renders it rounded to the whole percent and paints it "
+                "in banded steps for that reason. The second limitation is now RESOLVED: pairs whose phase slope passes "
                 "on its own but whose ENSO signal does not survive the Indian Ocean Dipole "
                 "control are no longer inside the production-weighted sum. They are reported "
                 "separately under shared_iod_levels / shared_iod_commodities and are never "
