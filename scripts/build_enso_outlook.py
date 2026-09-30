@@ -8,6 +8,7 @@ Reads what the pipeline already holds and writes data/enso_outlook.json:
   - data/enso_model.json     fitted yield slopes, log points per ONI, and the El Nino
                              test per pair (nino_signal, q_nino) (build_enso_model.py)
   - data/crop_calendars.json harvest months per country-crop
+  - data/enso_neutral.json   ENSO-neutral trend yield + area basis per pair (build_enso_neutral.py, hand-run)
   - data/usda_psd.json       current production / imports / exports
   - data/worldbank_pink_sheet.json  latest world prices, $/t
   - data/enso.json           observed ONI (latest season) and the record DJF
@@ -77,7 +78,10 @@ PSD_HARVEST_OFFSET = {
     ("USA", "soybeans"): 0, ("IND", "millet"): 0, ("AGO", "rice"): 0,
 }
 PSD_INFERRED = {("AGO", "rice"), ("BRA", "barley")}
-DOUBLE_COUNT = "USDA's estimate for this same harvest; if it already allows for El Niño, this change double counts."
+# The shock is applied to an ENSO-neutral baseline (enso_neutral.json, build_enso_neutral.py),
+# never to USDA's figure, so an allowance USDA already made for El Niño is not counted twice.
+NEUTRAL_NOTE = ("Change is applied to an ENSO-neutral trend baseline, not to USDA's estimate, "
+                "so any allowance USDA already made for El Niño is not counted twice.")
 PRICE_KEY = {"corn": "maize", "wheat": "wheat", "rice": "rice", "soybeans": "soybeans"}
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 # The crops each published region is about. A country's other fitted crops are
@@ -132,6 +136,34 @@ def honesty_line(jan_year: int, record: dict) -> str:
     if hi > top:
         return line + f"The strongest winter in the fit is {rec}. A winter above it could bring larger changes than those shown."
     return line + f"That is within the fit, whose strongest winter is {rec}."
+
+
+def neutral_kt_at(nr: dict | None, h: int, usda: bool = True):
+    """ENSO-neutral production (kt) for harvest year h, on USDA's basis where the pair's USDA year
+    mapping is checked, else on FAOSTAT's. Yield = the model's own trend (no ONI term), area = USDA's
+    area for h if it has one (USDA basis), else the latest FAOSTAT area. Returns (kt, basis, area_ha)."""
+    if not nr:
+        return None, None, None
+    y_kg = math.exp(nr["anchor_log"] + nr["slope_log_per_yr"] * (h - nr["anchor_year"]))
+    if usda and nr.get("usda_mapped") and nr.get("kp") and nr.get("ka"):
+        ua = (nr.get("usda_area_kha_by_harvest") or {}).get(str(h))
+        if ua:
+            return y_kg * ua * 1000 * nr["kp"] / nr["ka"] / 1e6, "USDA area", ua * 1000
+        return y_kg * nr["fao_area_ha"] * nr["kp"] / 1e6, f"FAOSTAT {nr['fao_area_year']} area", nr["fao_area_ha"]
+    return y_kg * nr["fao_area_ha"] / 1e6, f"FAOSTAT {nr['fao_area_year']} area, FAOSTAT units", nr["fao_area_ha"]
+
+
+def usda_reading(gap: float | None, obs90: list | None) -> tuple[str | None, str | None]:
+    """Does USDA's figure already sit where the fit puts an El Niño at today's ONI?"""
+    if gap is None:
+        return None, None
+    if gap >= 0:
+        return "no_cut", "USDA is at or above the neutral baseline: it shows no cut for El Niño."
+    if obs90 and obs90[0] <= gap <= obs90[1]:
+        return "consistent", "USDA is below neutral by about what the fit predicts at today's ONI: it likely already allows for the event."
+    if obs90 and gap > obs90[1]:
+        return "shallower", "USDA is below neutral, but by less than the fit predicts at today's ONI: it may allow for part of the event."
+    return "deeper", "USDA is below neutral by more than the fit predicts at today's ONI: other causes are likely in it."
 
 
 def month_span(months: list[int]) -> str:
@@ -218,6 +250,11 @@ def main() -> int:
     news = body(load("enso_news.json")).get("items", [])
     restr = body(load("trade_restrictions.json"))
     exports_dest = body(load("comtrade_exports.json"))
+    try:
+        neutral_doc = load("enso_neutral.json")
+        neutral = body(neutral_doc).get("pairs") or {}
+    except (OSError, ValueError):
+        neutral_doc, neutral = {}, {}
 
     latest = enso["latest"]
     record = max(enso["history"], key=lambda h: h["anom"])
@@ -286,8 +323,6 @@ def main() -> int:
                                      f"{'below' if prod < prev else 'above'} {lab(my_prev)}; "
                                      f"on the {lab(my_prev)} crop the change would be "
                                      f"{'+' if slope > 0 else '−'}{abs(round(prev * (math.exp(slope / 100 * rec_oni) - 1) / 1000, 1))} Mt at ONI {rec_oni:+.1f}")
-                    if base_harvest == hyear:
-                        base_note = (base_note + "; " if base_note else "") + DOUBLE_COUNT
                 else:
                     prod, prod_basis = c.get("mean_production_kt"), "FAOSTAT 2015–2024 mean"
                     base_note = "a ten-year mean, not this year’s crop; a fast-growing crop is understated"
@@ -320,6 +355,39 @@ def main() -> int:
                 # The fit is in log-points (pct = 100 x log slope), so the change at
                 # a given ONI is exp(b*ONI) - 1, not b*ONI: linear overshoots badly at
                 # strong-event magnitudes. The 90% band uses the HAC standard error.
+                # The change is applied to the ENSO-neutral baseline (enso_neutral.json),
+                # not to USDA's figure, which may already allow for the event. Without a
+                # neutral baseline the row falls back to the production figure it had.
+                nr = neutral.get(f"{iso}/{crop}")
+                n_kt, n_area_basis, n_area = neutral_kt_at(nr, hyear)
+                n_alt = None
+                if nr and n_kt is not None:
+                    alt = dict(nr, anchor_year=nr["alt_anchor_year"], anchor_log=nr["alt_anchor_log"])
+                    n_alt = neutral_kt_at(alt, hyear)[0]
+                # Sensitivity when USDA's latest area is not the FAOSTAT area the baseline uses (USDA's own harvest
+                # is another year): the same trend yield on USDA's most recent area.
+                n_uarea = None
+                ua_last = ((nr or {}).get("usda_area_kha_by_harvest") or {}).get(str(base_harvest)) if base_harvest else None
+                if nr and nr.get("usda_mapped") and ua_last and n_kt is not None and base_harvest != hyear:
+                    y_kg = math.exp(nr["anchor_log"] + nr["slope_log_per_yr"] * (hyear - nr["anchor_year"]))
+                    n_uarea = y_kg * ua_last * 1000 * nr["kp"] / nr["ka"] / 1e6
+                usda_kt = prod if p.get("production_kt") is not None and isinstance(prod, (int, float)) else None
+                same = (base_harvest == hyear) if base_harvest is not None else None
+                n_usda = neutral_kt_at(nr, base_harvest)[0] if nr and base_harvest is not None else None
+                gap = round((usda_kt / n_usda - 1) * 100, 1) if usda_kt and n_usda and nr.get("usda_mapped") else None
+                base = n_kt if n_kt is not None else prod
+                row.update({
+                    "neutral_kt": round(n_kt, 0) if n_kt is not None else None,
+                    "neutral_kt_alt": round(n_alt, 0) if n_alt is not None else None,
+                    "neutral_kt_on_usda_area": round(n_uarea, 0) if n_uarea is not None else None,
+                    "neutral_harvest": hyear, "neutral_area_basis": n_area_basis,
+                    "neutral_area_ha": round(n_area) if n_area else None,
+                    "usda_kt": usda_kt, "usda_harvest": base_harvest, "usda_same_harvest": same,
+                    "usda_area_kha": ((nr or {}).get("usda_area_kha_by_harvest") or {}).get(str(base_harvest)) if base_harvest else None,
+                    "neutral_at_usda_harvest_kt": round(n_usda, 0) if n_usda is not None else None,
+                    "usda_vs_neutral_pct": gap,
+                    "baseline": "neutral" if n_kt is not None else "usda_or_mean",
+                })
                 b, se = slope / 100, (c.get("se_nino_pct") or 0) / 100
                 for k, case in cases.items():
                     pct = (math.exp(b * case["oni"]) - 1) * 100
@@ -327,9 +395,23 @@ def main() -> int:
                     hi = (math.exp((b + 1.645 * se) * case["oni"]) - 1) * 100
                     row[f"change_pct_{k}"] = round(pct, 1)
                     row[f"change_pct_{k}_90"] = [round(lo, 1), round(hi, 1)]
-                    row[f"change_kt_{k}"] = (round(prod * pct / 100, 0) if isinstance(prod, (int, float)) and not in_season else None)
+                    ok = isinstance(base, (int, float)) and not in_season
+                    row[f"change_kt_{k}"] = round(base * pct / 100, 0) if ok else None
+                    # The old figure, on USDA's (or the mean) production, kept so the two can be compared.
+                    row[f"change_kt_{k}_on_usda"] = (round(prod * pct / 100, 0) if isinstance(prod, (int, float)) and not in_season else None)
+                    row[f"scenario_kt_{k}"] = round(base * (1 + pct / 100), 0) if ok and n_kt is not None else None
+                    row[f"scenario_kt_{k}_90"] = ([round(base * (1 + lo / 100), 0), round(base * (1 + hi / 100), 0)]
+                                                  if ok and n_kt is not None else None)
                     if usd and row[f"change_kt_{k}"] is not None:
                         row[f"value_usd_m_{k}"] = round(row[f"change_kt_{k}"] * 1000 * usd / 1e6, 0)
+                # Headline aliases: the record-winter scenario.
+                row["scenario_kt"], row["scenario_kt_90"] = row["scenario_kt_record"], row["scenario_kt_record_90"]
+                key, txt = usda_reading(gap, row["change_pct_observed_90"])
+                row["usda_reading"], row["usda_reading_text"] = key, txt
+                # Both readings for the same harvest: (A) USDA ignores the event: scenario is the neutral baseline minus the
+                # fitted change; (B) USDA already allows for it: USDA is itself the event figure.
+                row["scenario_vs_usda_pct"] = (round((row["scenario_kt"] / usda_kt - 1) * 100, 1)
+                                               if same and usda_kt and row["scenario_kt"] is not None else None)
                 if usd:
                     row["price"] = {"usd_per_t": usd, "series": plabel.strip(), "month": pmonth}
                 rows.append(row)
@@ -424,7 +506,7 @@ def main() -> int:
                 ((psd.get(iso3) or {}).get(PSD_KEY.get(f["crop"], "")) or {}).get("imports_kt")))
             lost_exports_kt = round(lost_exports)
             b90 = f.get("change_pct_record_90") or [f["change_pct_record"], f["change_pct_record"]]
-            prod = f.get("production_kt") or 0
+            prod = f.get("neutral_kt") or f.get("production_kt") or 0     # the loss is taken from the neutral baseline
             chain.append({
                 "iso": f["iso"], "crop": f["crop"], "harvest": f["harvest"], "loss_kt": round(loss),
                 # The loss at the 90% band ends of the record case, and at today's ONI.
@@ -480,7 +562,14 @@ def main() -> int:
 
     write_json("enso_outlook.json", {
         "cases": cases, "harvest_winter": f"DJF {jan_year - 1}-{str(jan_year)[2:]}",
-        "method": "exp(fitted log-yield slope × ONI) − 1, × production, at two ONI values the record contains; value at stake = tonnes × latest World Bank price. No world-price model, no probability weighting.",
+        "method": ("exp(fitted log-yield slope × ONI) − 1, applied to an ENSO-neutral production baseline, at two ONI values the record contains. "
+                   "Neutral baseline = the model's own trend yield for the harvest year (centred 9-year moving average of log yield, extended by its recent slope, no El Niño term) "
+                   "× harvested area (USDA's area for that harvest where USDA is the basis, else the latest FAOSTAT area), on USDA's basis where the marketing-year mapping is checked (enso_neutral.json). "
+                   "USDA's estimate is shown beside it, not multiplied: USDA may already allow for El Niño. The 90% range is coefficient uncertainty only; it does not include weather or forecast error. "
+                   "Value at stake = tonnes × latest World Bank price. No world-price model, no probability weighting."),
+        "neutral_source": (neutral_doc.get("_meta") or {}).get("source"),
+        "neutral_generated_at": (neutral_doc.get("_meta") or {}).get("generated_at"),
+        "neutral_note": NEUTRAL_NOTE,
         "honesty": honesty_line(jan_year, record),
         # The El Niño test's family, stated once for the page: every fitted pair, not the joint-test survivors.
         "q_nino_family": n_fitted,
@@ -491,9 +580,9 @@ def main() -> int:
         "rows_all": rows_all,
         "who_pays": chain, "who_pays_totals": who_pays_totals,
         "who_pays_case": "record",
-        "who_pays_rule": f"At the fit's strongest winter (ONI {rec_oni:+.1f}). Shortfall cuts exports first, allocated to buyers by Comtrade value share, each capped at its usual imports (USDA) with the capped excess spread over the other named buyers; any remainder is extra import need. Priced at the latest World Bank price. Stocks shown, not subtracted.",
+        "who_pays_rule": f"At the fit's strongest winter (ONI {rec_oni:+.1f}). The shortfall is the fitted change on the ENSO-neutral baseline, not on USDA's figure. It cuts exports first, allocated to buyers by Comtrade value share, each capped at its usual imports (USDA) with the capped excess spread over the other named buyers; any remainder is extra import need. Priced at the latest World Bank price. Stocks shown, not subtracted.",
     }, source="Derived: enso_regions, enso_model, crop_calendars, USDA PSD, World Bank Pink Sheet; live signals from JRC ASAP, GDACS, World Bank RTFP, ReliefWeb, El Niño news feed, trade_restrictions",
-       notes="Tonnes first; value at stake is tonnes × latest World Bank price, not a price forecast.", status="ok")
+       notes="Tonnes first, on an ENSO-neutral baseline with USDA shown beside it; value at stake is tonnes × latest World Bank price, not a price forecast.", status="ok")
     print(f"[OK] enso_outlook: {len(out_regions)} regions, {sum(len(r['fitted']) for r in out_regions)} fitted rows, "
           f"cases {cases['observed']['oni']} / {cases['record']['oni']}")
     return 0

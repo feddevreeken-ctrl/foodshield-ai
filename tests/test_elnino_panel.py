@@ -1367,8 +1367,30 @@ def main() -> int:
             const H = (await (await fetch('data/enso_hindcast.json')).json()).data.pairs;
             const txt = document.querySelector('.enso-outlook-plate').textContent;
             return Object.keys(H).length > 0 && Object.values(H).every(h => txt.includes('sign right ' + h.sign_right + ' of ' + h.events)) && document.querySelectorAll('.enso-ol-chart .enso-ol-row').length > 0
-                && [...document.querySelectorAll('.enso-ol-chart .enso-ol-row:not(.enso-ol-head):not(.enso-ol-axisrow) .enso-ol-skill')].every(sp => /^\d+\/\d+ right/.test(sp.textContent))
+                && [...document.querySelectorAll('.enso-ol-chart .enso-ol-row:not(.enso-ol-head):not(.enso-ol-axisrow) .enso-ol-who')].every(sp => /past El Niños \d+\/\d+ right/.test(sp.textContent))
                 && !txt.includes('has not been scored') && txt.includes('held-out harvests');
+        }"""))
+        # 2026-09-30 (P0, double count): the scenario is applied to an ENSO-neutral baseline, USDA is shown beside it.
+        # Every shown row carries neutral_kt, usda_kt, usda_vs_neutral_pct and the scenario range in the file, and the
+        # plate prints the row's own neutral, USDA and scenario figures, never a number of its own.
+        check("Harvests rows carry neutral, USDA and scenario fields and the plate prints the row's own numbers", page.evaluate("""async () => {
+            const O = (await (await fetch('data/enso_outlook.json')).json()).data;
+            const rows = O.rows_all.filter(r => r.status === 'shown');
+            const fields = rows.length > 0 && rows.every(r => typeof r.neutral_kt === 'number' && typeof r.usda_kt === 'number'
+                && 'usda_vs_neutral_pct' in r && (r.in_season || (typeof r.scenario_kt === 'number' && r.scenario_kt_90 && r.scenario_kt_90.length === 2 && r.scenario_kt_90[0] <= r.scenario_kt_90[1])));
+            const unit = kt => { const a = Math.abs(kt); return a >= 1000 ? (a / 1000).toFixed(1) + ' Mt' : Math.round(a).toLocaleString('en-US') + ' kt'; };
+            const dom = [...document.querySelectorAll('.enso-ol-chart .enso-ol-row[data-k]')].map(d => [d.getAttribute('data-k'), d.textContent.replace(/\u00a0/g, ' ')]);
+            const scenOk = dom.length > 0 && dom.every(([k, t]) => { const r = O.rows_all.find(x => x.iso + '/' + x.crop === k); return r && t.includes(unit(r.neutral_kt)) && t.includes(unit(r.usda_kt)) && t.includes(unit(r.scenario_kt_record)); });
+            const txt = document.querySelector('.enso-outlook-plate').textContent;
+            return fields && scenOk && txt.includes('90% model range: coefficient uncertainty only; it does not include weather or forecast error')
+                && !/double count/.test(txt.replace(/not counted twice/g, '')) && /Neutral baseline/.test(txt) && /USDA now/.test(txt);
+        }"""))
+        check("Harvests neutral baseline is the trend yield without the El Niño term: neutral is not USDA times the change", page.evaluate("""async () => {
+            const O = (await (await fetch('data/enso_outlook.json')).json()).data;
+            const rows = O.rows_all.filter(r => r.status === 'shown' && !r.in_season);
+            return rows.length > 0 && rows.every(r => Math.abs(r.change_kt_record - r.neutral_kt * r.change_pct_record / 100) <= 0.001 * r.neutral_kt + 1   // pct is stored to 0.1
+                && Math.abs(r.scenario_kt - r.neutral_kt - r.change_kt_record) <= 1) && O.who_pays.every(w => {
+                    const r = rows.find(x => x.iso === w.iso && x.crop === w.crop); return r && Math.abs(w.loss_kt + r.change_kt_record) <= 1; });
         }"""))
         # 2026-09-30: the production-weighted aggregate is scored as an aggregate (build_enso_portfolio_hindcast.py).
         check("portfolio hindcast plate prints the file's counts, recounted from its rows", page.evaluate("""async () => {
@@ -2444,7 +2466,7 @@ def main() -> int:
             const allRows = [...document.querySelectorAll('#enso-calendar .cal-row:not(.cal-head)')].filter(r => r.firstElementChild.getBoundingClientRect().height > 0).length;
             document.querySelector('#enso-calendar .enso-cal-all').click();
             return {lede: !!lede && lede.textContent.includes((Math.abs(worst.change_kt_record) / 1000).toFixed(1) + ' Mt') && lede.textContent.includes(worst.harvest),
-                    bullets: bullets > 0 && bullets <= 2, legendFolded: !!legendLine && !!legendLine.closest('details'),
+                    bullets: bullets > 0 && bullets <= 3, legendFolded: !!legendLine && !!legendLine.closest('details'),
                     noCoefPlate: [...document.querySelectorAll('#tab-elnino .enso-plate-t')].every(t => t.textContent !== 'Fitted crop responses')
                         && /Show per country/.test(document.querySelector('#enso-harvest-fig > summary').textContent),
                     calOpen: !document.querySelector('#enso-calendar details.enso-cal-fold') && shortRows === calRows && allRows === cal.querySelectorAll('.cal-row:not(.cal-head)').length && allRows > shortRows,
