@@ -356,58 +356,22 @@ def main() -> int:
 
         page.evaluate("showTab('ensoharvest')")
         page.select_option('#enso-mode', 'impact')   # the scenario checks read the ONI-scaled production shock, now an alternate layer
-        # 2026-09-29 audit: the fitted table sits behind "Show per country"; open it to read rendered text.
-        page.locator('#enso-harvest-fig').evaluate('e => e.open = true')
+        # 2026-10-02: the "Show per country" block (country chooser, fitted slope table, #enso-detail) is deleted from Harvests.
+        # Its checks (selected marker follows the phase, ranking follows the phase) are replaced by one assertion that the block is gone.
         print("\nphase follows the selected scenario")
         page.select_option("#enso-country", "USA")
         page.wait_for_timeout(250)
-        head_nino = page.eval_on_selector_all("#enso-detail th", "e => e.map(x => x.textContent)")
-        order_nino = page.eval_on_selector_all("#enso-detail tbody tr td.nm", "e => e.map(x => x.textContent)")
         page.select_option("#enso-level", "-1.5")
         page.wait_for_timeout(250)
-        head_nina = page.eval_on_selector_all("#enso-detail th", "e => e.map(x => x.textContent)")
-        order_nina = page.eval_on_selector_all("#enso-detail tbody tr td.nm", "e => e.map(x => x.textContent)")
-        check("'selected' marker starts on the El Niño column",
-              any("selected" in h and "El" in h for h in head_nino), str(head_nino))
-        check("'selected' marker moves to the La Niña column",
-              any("selected" in h and "La" in h for h in head_nina), str(head_nina))
-        check("ranking changes with the phase", order_nino != order_nina,
-              f"{order_nino} vs {order_nina}")
+        check("the per-country fitted table and its fold are gone from Harvests",
+              page.locator('#enso-detail, #enso-harvest-fig, .enso-harvest-pair, #enso-coeffs, #enso-land-head, .enso-land-card').count() == 0)
         check("explicit scenario replaces interpolation once chosen by hand",
               "Explicit scenario:" in page.locator(".enso-tag-interpolation").text_content())
 
-        print("\ncrop colour encodes the change, not the raw slope")
-        # The coefficients are %/ONI slopes and ONI is negative under La Nina, so
-        # a POSITIVE nina slope is a production FALL. Colouring the raw slope is
-        # right under El Nino by coincidence and inverted under La Nina.
-        PALETTE = """el => {
-            const c = getComputedStyle(el).color.match(/\\d+/g).map(Number);
-            return c[0] > c[1] && c[1] > c[2] ? 'fall' : c[1] > c[0] && c[1] > c[2] ? 'rise' : 'neutral';
-        }"""
-
-        def slope_of(cell) -> float:
-            return float(cell.inner_text().replace("−", "-").replace("+", ""))
-
-        page.select_option("#enso-level", "1.5")
-        page.select_option("#enso-country", "USA")
-        page.wait_for_timeout(300)
-        cell = page.locator("#enso-detail tbody tr td.num").nth(0)
-        sl, colour = slope_of(cell), cell.get_attribute('data-direction')
-        check("El Nino: table records the implied yield direction",
-              colour == ("rise" if sl > 0 else "fall"), f"slope {sl}, colour={colour}")
-
-        page.select_option("#enso-level", "-1.5")
-        page.wait_for_timeout(300)
-        cell = page.locator("#enso-detail tbody tr td.num").nth(1)
-        sl, colour = slope_of(cell), cell.get_attribute('data-direction')
-        check("La Nina: positive slope records a yield fall",
-              colour == ("fall" if sl > 0 else "rise"), f"slope {sl}, colour={colour}")
-        check("the table states how La Nina reverses the slope sign",
-              "La Niña reverses the slope sign" in page.locator("#enso-detail").inner_text())
-        page.select_option("#enso-level", "1.5")
-
+        # 2026-10-02: the slope-table colour checks (data-direction cells, "La Niña reverses the slope sign" note) went with the table.
         print("\nthe crop legend describes what the fill encodes")
         page.select_option("#enso-mode", "crop")
+        page.select_option("#enso-level", "1.5")  # 2026-10-01: an earlier check that set this scenario was removed with the per-country table
         page.wait_for_timeout(350)
         leg = page.locator("#enso-legend").text_content()
         check("crop legend does not call the fill a %/ONI slope",
@@ -424,15 +388,11 @@ def main() -> int:
         page.wait_for_timeout(250)
 
         print("\nnon-ENSO-specific pairs are out of the aggregate")
+        # 2026-10-02: the Indonesia coverage / IOD-shared readout lived in #enso-detail, which is deleted; the map selection still works.
         page.select_option("#enso-level", "1.5")
         page.select_option("#enso-country", "IDN")
         page.wait_for_timeout(250)
-        # inner_text() returns RENDERED text, and these labels are uppercased by
-        # CSS text-transform — compare case-insensitively or the assertion tests
-        # the stylesheet rather than the content.
-        idn = page.locator("#enso-detail").inner_text().lower()
-        check("Indonesia reports no ENSO coverage", "coverage" in idn and "0%" in idn, idn[:110])
-        check("the excluded IOD-shared value is still shown", "shared with the iod" in idn)
+        check("selecting a country no longer renders the per-country table", page.locator('#enso-detail').count() == 0)
 
         print("\npanel styling stays inside the panel")
         # .viewswitch is site-wide (Rankings, Scenario, About & Method, Data all
@@ -869,7 +829,7 @@ def main() -> int:
             const rail = q('#enso-map-ranking'), chips = all('#enso-map .leaflet-marker-icon.enso-pchip').map(e => e.getBoundingClientRect());
             const inside = chips.every(c => c.left >= map.left - 1 && c.right <= map.right + 1 && c.top >= map.top - 1 && c.bottom <= map.bottom + 1);
             let clash = 0; chips.forEach((a, i) => chips.forEach((b, j) => { if (j > i && a.left < b.right - 1 && a.right > b.left + 1 && a.top < b.bottom - 1 && a.bottom > b.top + 1) clash++; }));
-            const cells = all('.enso-pa-cell').map(e => e.getBoundingClientRect()), dc = all('.pr2-waterfall').map(e => e.getBoundingClientRect().width);
+            const cells = all('.enso-pa-cell').map(e => e.getBoundingClientRect()), dc = all('.pr2-bench-svg').map(e => e.getBoundingClientRect().width);
             const fan = q('.enso-fan-band'), fb = fan ? fan.getBoundingClientRect() : null;
             const who = all('.pr2-compare button').filter(vis).map(e => e.getBoundingClientRect().height);
             return {ctlBelow: ctl.top >= map.bottom - 1, ctlH: btns, ptable: cardOk(q('.enso-ptable'), rows), nRows: rows.length, pw: cardOk(q('.enso-pw-table'), pw), nPw: pw.length,
@@ -903,7 +863,7 @@ def main() -> int:
                           pr["ptable"] and pr["nRows"] >= 5 and pr["pw"] and pr["nPw"] >= 3 and pr["railScroll"][0] <= pr["railScroll"][1] + 1, str({k: pr[k] for k in ('ptable', 'nRows', 'pw', 'nPw', 'railScroll')}))
                     check("phone Prices: map labels stay inside the map and clear of one another",
                           pr["nChips"] >= 3 and pr["inside"] and pr["clash"] == 0, f"{pr['nChips']} chips, inside {pr['inside']}, clashes {pr['clash']}")
-                    check("phone Prices: maize panels one per row, the waterfall fills the card, the grey fan is wide enough to read, comparison-table country names are 44 px targets",
+                    check("phone Prices: maize panels one per row, the price strips fill the card, the grey fan is wide enough to read, comparison-table country names are 44 px targets",
                           pr["oneCol"] and pr["dcW"] >= 300 and pr["fanW"] >= 14 and pr["whoH"] >= 43.5, f"oneCol {pr['oneCol']} dc {pr['dcW']} fan {pr['fanW']} who {pr['whoH']}")
                 if width == 390:
                     check(f"phone {width}px {tab}: plates are one edge-to-edge column; map 60-70% of the screen with its legend, chooser and Now box under it",
@@ -965,6 +925,8 @@ def main() -> int:
                 and page.is_checked('#enso-tog-sst') == (tab == 'elnino')
                 and page.is_checked('#enso-tog-lanes') == (tab == 'ensowater')
                 and page.is_checked('#enso-tog-alerts') == (tab == 'ensolive')
+                and page.is_checked('#enso-tog-headlines') == (tab == 'ensolive')
+                and page.is_checked('#enso-tog-elsewhere') is False
                 and page.evaluate("() => { const c = document.getElementById('enso-tog-responses'); return !c || !c.checked; }"))
             lens_texts.append(page.locator('#tab-elnino').inner_text())
             if tab == "ensomoney":
@@ -1004,6 +966,24 @@ def main() -> int:
                 return bad; }"""))
             frames.append(page.evaluate("""() => [...document.querySelectorAll('#tab-elnino .enso-plate[data-kind], #enso-mapwrap[data-kind]')].every(e =>
                 getComputedStyle(e).borderTopStyle === (['modelled','estimated'].includes(e.dataset.kind) ? 'dashed' : 'solid'))"""))
+        # 2026-10-01: Reported opens on three kinds of mark only: rain-pattern hatch, hazard discs, headline count tabs.
+        # Impact diamonds and IPC phase outlines belong to the IPC and Hotspots views.
+        check("Reported default map shows hazard discs and headline tabs, no impact diamonds and no legend row for them; IPC brings the diamonds back",
+              page.evaluate("""async () => {
+                  const n = sel => document.querySelectorAll(sel).length;
+                  const dflt = n('#enso-map .enso-hz-marker') > 0 && n('#enso-map .enso-hl-wrap') > 0
+                      && !document.querySelector('#enso-legend .rptsem-shape-block').textContent.includes('Diamond')
+                      && document.querySelector('#enso-legend .rptsem-shape-block').textContent.includes('Disc')
+                      && /headlines? in the last 7 days/.test(document.getElementById('enso-maptag').textContent);
+                  const hz0 = n('#enso-map .enso-hz-marker');
+                  const b = [...document.querySelectorAll('[data-native="enso-mode"]')].find(x => x.dataset.value === 'ipc'); b.click();
+                  await new Promise(r => setTimeout(r, 800));
+                  const ipc = n('#enso-map .enso-hz-marker') > hz0
+                      && document.querySelector('#enso-legend .rptsem-shape-block').textContent.includes('Diamond');
+                  const r = [...document.querySelectorAll('[data-native="enso-mode"]')].find(x => x.dataset.value === 'rain'); r.click();
+                  await new Promise(r => setTimeout(r, 800));
+                  return dflt && ipc && n('#enso-map .enso-hz-marker') === hz0;
+              }"""))
         check("Reported response squares are absent by default and appear only with their chip and key",
               page.evaluate("""() => {
                   const off = !document.querySelector('.rptsem-response-marker')
@@ -1267,7 +1247,7 @@ def main() -> int:
 
         print("\nstage B instruments and consolidated plates")
         page.evaluate("showTab('ensoharvest')")
-        page.wait_for_selector('#subview-ensoharvest.active #enso-harvest-fig')
+        page.wait_for_selector('#subview-ensoharvest.active #enso-chain .enso-plate')
         page.select_option('#enso-mode', 'impact')   # 2026-09-30: the rungs sit with the ONI-scaled layers; the default outlook is one fixed winter
         check("nine scenario rungs remain in All layers beside one instrument row",
               page.locator('[data-native="enso-level"]:not([data-value="observed"])').count() == 9
@@ -1283,22 +1263,17 @@ def main() -> int:
               and page.locator('[data-native="enso-level"][data-value="-1.5"]').get_attribute('aria-pressed') == 'true'
               and 'La Ni' in page.locator('#enso-legend').inner_text())
         country_name = page.locator('#enso-country option[value="ZWE"]').text_content()
-        page.locator('#enso-harvest-fig').evaluate('e => e.open = true')   # 2026-09-29: the table sits behind "Show per country"
-        # 2026-09-30 round 3 (owner: "Search country feature can go away"): no search box; the native select still drives the detail.
+        # 2026-10-02: the per-country fold is deleted; the select still drives the shared selection (and the map card).
         page.select_option('#enso-country', 'ZWE')
-        page.wait_for_function("() => document.getElementById('enso-harvest-fig').dataset.iso === 'ZWE'")
-        check("no country search box; the country select synchronises the fitted coefficients",
+        page.wait_for_function("() => document.getElementById('enso-country').value === 'ZWE'")
+        check("no country search box; the country select drives the shared selection",
               page.locator('#enso-country-search, .enso-country-search').count() == 0 and
-              page.input_value('#enso-country') == 'ZWE'
-              and country_name in page.locator('#enso-detail').inner_text()
-              and page.locator('#enso-harvest-fig td[data-direction="fall"]').count() > 0
-              and page.locator('#enso-harvest-fig .enso-tbl').count() == 1)
+              page.input_value('#enso-country') == 'ZWE' and page.locator('#enso-detail, #enso-harvest-fig').count() == 0)
         page.evaluate("ensoFocus('USA')")
-        page.wait_for_function("() => document.getElementById('enso-harvest-fig').dataset.iso === 'USA'")
-        check("ensoFocus updates the single fitted table and opens Show per country",
+        page.wait_for_function("() => document.getElementById('enso-country').value === 'USA'")
+        check("ensoFocus selects the country without a per-country fold",
               page.input_value('#enso-country') == 'USA'
-              and page.locator('#enso-harvest-fig').evaluate('e => e.open')
-              and page.locator('.enso-harvest-pair #enso-coeffs #enso-detail').count() == 1
+              and page.locator('.enso-harvest-pair, #enso-coeffs').count() == 0
               and page.locator('#enso-harvest-story').count() == 0)
         grouped = page.evaluate("""() => {
             const rows = [...document.querySelectorAll('#enso-calendar .cal-row:not(.cal-head)')];
@@ -1470,7 +1445,7 @@ def main() -> int:
         check("hand-checked El Niño facts are within their review windows", not _stale, str(_stale))
         # 2026-10-01 consolidation: held-out performance remains a separate closed fold immediately below the one answer plate.
         page.evaluate("showTab('ensoharvest')")
-        page.wait_for_selector('#subview-ensoharvest.active .enso-pf-plate', state='attached')
+        page.wait_for_selector('#subview-ensoharvest.active .enso-rp-plate', state='attached')
         check("Harvests keeps held-out performance in an open fold under the answer", page.evaluate("""() => {
             const answer = document.getElementById('enso-outlook'), hind = document.getElementById('enso-hindcast');
             const fold = hind && hind.querySelector(':scope > details.enso-fold-plate');
@@ -1480,27 +1455,34 @@ def main() -> int:
         }"""))
         # 2026-10-01 (round 2): the causal path stops at Trade; access and IPC remain a separate baseline.
         # Exposure keeps two same-scenario panels, now with rightward linear concern scales.
-        check("Harvests chain has five shock cards and two baseline cards; exposure has two linear same-scenario panels", page.evaluate("""() => {
+        check("Harvests chain is one rule with five nodes and a two-column absorb bracket; exposure has two linear same-scenario panels", page.evaluate("""() => {
             const ch = document.querySelector('#enso-chain .enso-plate'), ex = document.querySelector('#enso-exabs .enso-plate');
             if (!ch || !ex) return false;
-            const shock = [...ch.querySelectorAll('.enso-chain-shock > .enso-chain-card')];
-            const baseline = [...ch.querySelectorAll('.enso-chain-baseline > .enso-chain-card')];
+            const shock = [...ch.querySelectorAll('.enso-cp-flow > .enso-cp-node')];
+            const baseline = [...ch.querySelectorAll('.enso-cp-absorb-list > .enso-cp-absorb-node')];
             const cards = [...shock, ...baseline], states = cards.map(c => {
-                const s = c.querySelectorAll(':scope .enso-chain-status');
-                return s.length === 1 ? s[0].textContent.trim() : 'INVALID';
+                const s = c.querySelectorAll(':scope .enso-cp-state');
+                return s.length === 1 ? s[0].textContent.trim().toUpperCase() : 'INVALID';
             });
-            const fixed = /^(SCENARIO|PUBLISHED|MODELLED|OBSERVED)$/;
+            const fixed = /^(SCENARIO|PUBLISHED|MODELLED|OBSERVED|BEYOND FITTED RANGE|NOT YET MEASURED)$/;
             const answerBullets = document.querySelectorAll('#enso-outlook .enso-hv-answer .enso-ol-lead .enso-bullets > li');
             const ownMarks = [...ex.querySelectorAll('[data-exabs-panel="own"]')];
             const gapMarks = [...ex.querySelectorAll('[data-exabs-panel="gap"]')];
+            const key = ch.querySelector('.enso-cp-key'), absorb = ch.querySelector('.enso-cp-absorb');
             return shock.length === 5 && baseline.length === 2 && states.every(s => fixed.test(s))
-                && states.join(',') === 'SCENARIO,PUBLISHED,MODELLED,SCENARIO,SCENARIO,MODELLED,OBSERVED'
-                && ch.querySelectorAll('details.enso-chain-details').length === 1
-                && ch.querySelector('details.enso-chain-details > summary').textContent.trim() === 'Details by stage'
-                && ch.querySelectorAll('.enso-chain-picker select[data-chain-pick]').length === 1 && !ch.querySelector('.enso-chain-chip')
+                && states[0] === 'SCENARIO' && states[1] === 'PUBLISHED' && /^(MODELLED|BEYOND FITTED RANGE)$/.test(states[2]) && states[3] === 'SCENARIO'
+                && /^(SCENARIO|NOT YET MEASURED)$/.test(states[4]) && states[5] === 'MODELLED' && states[6] === 'OBSERVED'
+                && shock.every(n => n.querySelectorAll('.enso-cp-value').length === 1 && n.querySelectorAll('.enso-cp-dot').length === 1)
+                && ch.querySelectorAll('.enso-cp-flow > .enso-cp-node .enso-cp-segment').length === 4
+                && !!key && key.querySelectorAll('svg').length === 4 && /Observed/.test(key.textContent) && /Beyond the fitted range/.test(key.textContent) && /Not yet measured/.test(key.textContent)
+                && !!absorb && /Ability to absorb \(existing vulnerability, not the scenario's impact\)/.test(absorb.textContent)
+                && !ch.querySelector('.enso-chain-card, .enso-chain-shock, .enso-chain-baseline')
+                && ch.querySelectorAll('details.enso-cp-details').length === 1
+                && ch.querySelector('details.enso-cp-details > summary').textContent.trim() === 'Details by stage'
+                && ch.querySelectorAll('.enso-cp-picker select[data-chain-pick]').length === 1 && !ch.querySelector('.enso-chain-chip')
                 && /forecast/.test(ch.textContent) && !/—/.test(ch.textContent + ex.textContent)
                 && ex.querySelectorAll('svg.enso-exabs-svg g[data-exabs-iso]').length >= 4 && /Panel A/.test(ex.textContent) && /Panel B/.test(ex.textContent)
-                && !/satellite confirmation/i.test(ch.textContent) && ch.querySelector('.enso-chain-scroll[tabindex="0"]')
+                && !/satellite confirmation/i.test(ch.textContent) && ch.querySelector('.enso-cp-scroll[tabindex="0"]')
                 && /Same harvest scenario in both panels/.test(ex.textContent) && /under the scenario/.test(ex.textContent)
                 && /Modelled harvest loss [(]%[)]/.test(ex.textContent) && /Gap as % of normal annual consumption/.test(ex.textContent)
                 && ownMarks.length > 0 && gapMarks.length > 0 && [...ownMarks, ...gapMarks].every(m => +m.dataset.exabsX >= 0 && m.querySelector('title'))
@@ -1510,6 +1492,20 @@ def main() -> int:
                 && answerBullets.length <= 3 && ex.querySelectorAll('.enso-bullets > li').length === 0
                 && ex.querySelector('.enso-exabs-scroll[tabindex="0"]')
                 ;
+        }"""))
+        # 2026-10-02: the confirmation rail under the pipeline: one current step from a fixed set, a rule fold, no 0-100 score.
+        check("Harvests state rail: exactly one current step from the fixed set, rule fold present, no 0-100 score", page.evaluate("""() => {
+            const rail = document.querySelector('#enso-chain #enso-confirm-rail'); if (!rail) return false;
+            const steps = [...rail.querySelectorAll('.enso-cf-rail > .enso-cf-step')], cur = rail.querySelectorAll('.enso-cf-rail [aria-current="step"]');
+            const word = rail.querySelector('.enso-cf-word'), fold = rail.querySelector('details.enso-cf-fold');
+            const SET = ['Scenario', 'Emerging', 'Corroborated', 'Observed'];
+            return steps.length === 4 && steps.map(x => x.querySelector('.enso-cf-name').textContent.trim()).join() === SET.join()
+                && cur.length === 1 && rail.querySelectorAll('.enso-cf-step.is-current').length === 1 && cur[0].classList.contains('is-current')
+                && !!word && SET.includes(word.textContent.trim()) && word.textContent.trim() === cur[0].querySelector('.enso-cf-name').textContent.trim()
+                && rail.getAttribute('data-cf-state') === word.textContent.trim().toLowerCase()
+                && !!fold && fold.querySelector('summary').textContent.trim() === 'How the state is set' && !fold.open
+                && /Observed.*Not reached|Reached/.test(rail.textContent)
+                && !/(\d{1,3}\s*\/\s*100|\bscore of\b|\b\d{1,3}\s*%\s*(confidence|likely))/i.test(rail.textContent) && !/—/.test(rail.textContent) && !/as_of/.test(rail.textContent);
         }"""))
         # 2026-10-01 consolidation: the answer joins outlook baselines to forecast percentiles; the record winter is one tick.
         check("Harvests answer prints neutral, USDA and forecast percentiles with one record-winter tick per row", page.evaluate("""async () => {
@@ -1555,19 +1551,13 @@ def main() -> int:
             ].join('||');
         }"""))
         # 2026-09-30: the production-weighted aggregate is scored as an aggregate (build_enso_portfolio_hindcast.py).
-        check("portfolio hindcast plate prints the file's counts, recounted from its rows", page.evaluate("""async () => {
-            const P = (await (await fetch('data/enso_portfolio_hindcast.json')).json()).data;
-            const sc = P.events.filter(e => e.scored), pl = document.querySelector('.enso-pf-plate');
-            if (!pl) return false;
-            const fold = pl.closest('details.enso-fold-plate');
-            const right = sc.filter(e => e.global.sign_right).length, alarms = sc.filter(e => e.global.predicted_kt < 0 && e.global.actual_kt > 0).length;
-            const t = pl.querySelector('.enso-pf-lede').textContent.replace(/\s+/g, ' ');
-            return !!fold && !!fold.querySelector(':scope > .enso-rp-second .enso-pf-plate')
-                && right === P.overall.sign_right && alarms === P.overall.false_alarms && sc.length === P.overall.events
-                && +pl.dataset.n === sc.length && +pl.dataset.right === right && +pl.dataset.alarms === alarms
-                && t.includes('Direction right in ' + right + ' of ' + sc.length + ' winters') && t.includes('False alarms: ' + alarms + ' of ' + sc.length)
-                && pl.querySelectorAll('.enso-pf-row').length === P.events.length
-                && pl.querySelectorAll('.enso-pf-row.is-hit').length === right;
+        # 2026-10-02: the "portfolio hindcast, pairs chosen on the full record" plate (portfolioPlate) is removed; the replay is the one performance plate.
+        # The old check recounted that plate's rows from enso_portfolio_hindcast.json; it now asserts the plate is gone and the replay stands alone.
+        check("portfolio hindcast plate is gone; the selection-safe replay is the only performance plate", page.evaluate("""() => {
+            const hind = document.getElementById('enso-hindcast'); if (!hind) return false;
+            return !document.querySelector('.enso-pf-plate, .enso-rp-second, .enso-pf-row, .enso-pf-fold')
+                && hind.querySelectorAll('.enso-plate').length === 1 && hind.querySelectorAll('.enso-rp-plate').length === 1
+                && hind.querySelectorAll('details.enso-fold-plate').length === 1;
         }"""))
         # 2026-10-01: the selection-safe replay leads the fold (open since 10-01 evening, dumbbell chart above its table); every printed count is recounted from data/enso_replay.json.
         check("replay fold prints the file's rows, counts and error figures", page.evaluate("""async () => {
@@ -1586,7 +1576,7 @@ def main() -> int:
                 && t.includes('direction right in ' + F.sign_right + ' of ' + F.winters) && t.includes('(' + plume + ' of ' + sc.length + ' winters)')
                 && pl.querySelector('.enso-rp-zero-top')?.textContent === 'no effect' && pl.querySelectorAll('svg.enso-rp-chart g.is-miss').length === sc.filter(e => !e.sign_right).length
                 && !!pl.querySelector('svg.enso-rp-chart desc') && [...pl.querySelectorAll('svg.enso-rp-chart g.is-miss .enso-rp-verdict')].every(n => /MISS/.test(n.textContent))
-                && pl.closest('.enso-fold-plate').querySelector('.enso-rp-second .enso-pf-plate') && !/—/.test(pl.textContent);
+                && !pl.closest('.enso-fold-plate').querySelector('.enso-rp-second, .enso-pf-plate') && !/—/.test(pl.textContent);
         }"""))
         check("'What each number is' reads its statuses from _meta.maturity", page.evaluate("""async () => {
             const M = (await (await fetch('data/enso_model.json')).json())._meta.maturity;
@@ -1594,11 +1584,10 @@ def main() -> int:
             return rows.length === Object.keys(M).length && rows.every(r => { const [k, v] = r.dataset.maturity.split(':'); return M[k] === v && r.cells[1].textContent.trim().length > 0 && !/status not in the data/.test(r.textContent); });
         }"""))
         # 2026-10-01 consolidation: the retired distribution container is empty; hindcast now follows the joined answer directly.
-        check("portfolio hindcast keeps five lead rows inside its closed fold, directly after the answer", page.evaluate("""() => {
-            const pl = document.querySelector('.enso-pf-plate'), pn = document.getElementById('subview-ensoharvest');
+        check("the replay plate sits in the open fold directly after the answer", page.evaluate("""() => {
+            const pl = document.querySelector('.enso-rp-plate'), pn = document.getElementById('subview-ensoharvest');
             const kids = [...pn.children].map(c => c.id || c.className);
-            return !!pl && pl.querySelectorAll(':scope > .plate-body > .enso-pf-rows .enso-pf-row').length <= 5
-                && kids.indexOf('enso-hindcast') === kids.indexOf('enso-outlook') + 1 && !document.querySelector('#enso-dist .enso-plate') && /is-modelled/.test(pl.className);
+            return !!pl && kids.indexOf('enso-hindcast') === kids.indexOf('enso-outlook') + 1 && !document.querySelector('#enso-dist .enso-plate') && /is-modelled/.test(pl.className);
         }"""))
         # 2026-10-01 consolidation: forecast percentiles, extrapolation share and optional capped response live in the answer plate.
         check("Harvests answer prints distribution ranges, extrapolation share and any capped-response ticks", page.evaluate("""async () => {
@@ -1642,7 +1631,7 @@ def main() -> int:
         page.evaluate("showTab('ensomoney')")
         page.wait_for_selector('#subview-ensomoney.active #enso-c-record', state='attached')
         # 2026-10-01 consolidation: trade loss, replacement and access are one five-row country summary; full detail stays folded.
-        check("Market absorption answers for one selected country and crop with a two-group ladder, a five-column comparison table, the seven-column detail folded, and validated access lines", page.evaluate("""async () => {
+        check("Market absorption answers for one selected country and crop with one need bar (usual segment, hatched uncovered remainder, global export headroom marker) over three market columns, a five-column comparison table, the seven-column detail folded, and validated access lines", page.evaluate("""async () => {
             const R = (await (await fetch('data/enso_replacement.json')).json()).data;
             const T = (await (await fetch('data/ref/access_thresholds.json')).json()).data;
             const pl = document.querySelector('.enso-absorb-plate'); if (!pl) return false;
@@ -1652,17 +1641,20 @@ def main() -> int:
             const detail = [...pl.querySelectorAll('.enso-absorb-detail tbody tr')];
             const groups = [...pl.querySelectorAll('.pr2-group-h')].map(x => x.textContent);
             const labels = [...pl.querySelectorAll('.pr2-ladder .pr2-label')].map(x => x.textContent);
+            const bar = pl.querySelector('.pr2-absorb-track');
             return !!fold && !fold.open && cmp.querySelectorAll('thead th').length === 5 && rows.length >= want.size && rows.filter(r => r.getAttribute('aria-selected') === 'true').length === 1
                 && groups.join('|') === 'Physical absorption|Market and households'
-                && labels.join('|') === 'Supply shock|Usual suppliers|Global capacity ceiling|Price signal|Economic access|People in IPC Phase 3+'
+                && labels.join('|') === 'Price signal|Economic access|People in IPC Phase 3+'
+                && !!bar && !!bar.querySelector('.pr2-absorb-full') && !!bar.querySelector('.pr2-head-mark') && /Potential import need under a scenario/.test(pl.querySelector('.pr2-absorb').textContent) && /Global export headroom/.test(pl.querySelector('.pr2-absorb-key').textContent)
+                && !/capacity ceiling|capacity exists/i.test(pl.textContent)
                 && !!pl.querySelector('.pr2-answer') && !!pl.querySelector('.pr2-verdict-line') && !!pl.querySelector('#pr2-pay-select')
-                && fold.querySelector('.enso-absorb-table') && detail.length >= want.size && detail.every(r => r.cells.length === 7 && /Usual suppliers/.test(r.cells[2].textContent) && /Global capacity ceiling/.test(r.cells[2].textContent))
+                && fold.querySelector('.enso-absorb-table') && detail.length >= want.size && detail.every(r => r.cells.length === 7 && /Usual suppliers/.test(r.cells[2].textContent) && /Global export headroom/.test(r.cells[2].textContent))
                 && !pl.querySelector(':scope > .plate-body > .enso-absorb-table')
                 && pl.textContent.includes('Contracts, inland logistics, ports, grain type and freight are not modelled; a ceiling, not a confirmed route.')
-                && pl.textContent.includes('A ceiling on what exporters could ship, not a confirmed route: landlocked access, ports, contracts, grain type (white vs yellow maize) and freight are not modelled.')
+                && pl.textContent.includes('Theoretical export headroom: a ceiling on what exporters could ship, not a confirmed route: landlocked access, ports, contracts, grain type (white vs yellow maize) and freight are not modelled.')
                 && pl.textContent.includes('line ' + T.lines.economic_access.line + ' · validated')
                 && pl.textContent.includes('line ' + T.lines.ipc_phase3plus_pct.line + '% · validated')
-                && pl.textContent.includes('The scenario does not imply a food crisis.')
+                && pl.textContent.includes('The scenario does not imply a food crisis.') && /own shortfall/.test(cmp.textContent)
                 && !document.querySelector('#enso-replace .enso-plate, .enso-access-plate');
         }"""))
         check("Who absorbs the loss keeps context unflagged and the line evidence folded", page.evaluate("""async () => {
@@ -1703,20 +1695,20 @@ def main() -> int:
             const pl = document.querySelector('#enso-whopays .enso-absorb-plate'); if (!pl) return false;
             const txt = pl.textContent, open = Object.values(R.aggregate).reduce((n, c) => n + c.mid.open.residual_kt, 0);
             return pl.classList.contains('is-modelled') && txt.includes('CAN THE MARKET ABSORB A SUPPLY SHOCK') && txt.includes('Who absorbs the loss')
-                && txt.includes('Usual suppliers') && txt.includes('Global capacity ceiling') && txt.includes('usual suppliers')
-                && (open >= 1 || txt.includes('nothing short')) && /capacity ceiling/.test(txt)
+                && txt.includes('Usual suppliers') && txt.includes('Global export headroom') && txt.includes('usual suppliers')
+                && (open >= 1 || txt.includes('nothing short')) && /export headroom/.test(txt)
                 && !document.querySelector('#enso-replace .enso-plate') && getComputedStyle(pl).borderTopLeftRadius === '0px';
         }"""))
         # 2026-09-24: past El Niños and world prices are one dot plot; food inflation by country is the
         # map and its ranked list only (the bar chart and 37-row table repeated it).
         # 2026-09-30 court verdict: the world-price event study, the published models and the other drivers are one fold,
         # "What history can and cannot say"; the incomparable 2026 FAO row is gone from the World Bank graphic.
-        check("Prices shows past El Niños as one dot plot inside the closed Sources and method fold, without the 2026 FAO row, and food inflation once",
+        check("Prices shows past El Niño paths open as the third reading step and the dot plot in the closed Sources and method fold, without the 2026 FAO row, and food inflation once",
               page.locator('#enso-c-record .enso-event').count() == 7
               and page.locator('#enso-c-record .enso-pp-prev').count() == 7
               and page.locator('#enso-c-ffpi, #enso-c-rtfp, #enso-c-ffpilive, #enso-money-story').count() == 0
               and page.locator('#enso-pricewatch > details.pr2-past').count() == 1
-              and page.locator('#enso-pricewatch > details.pr2-past').get_attribute('open') is None
+              and page.locator('#enso-pricewatch > details.pr2-past').get_attribute('open') is not None
               and page.locator('#enso-money > details.pr2-sources').count() == 1
               and page.locator('#enso-money > details.pr2-sources').get_attribute('open') is None
               and page.locator('#enso-money > details.pr2-sources .enso-pastprice-plate').count() == 1
@@ -2362,15 +2354,15 @@ def main() -> int:
             return P.rows.every(r => r.model == null) && !/replay|normal year plus|with El Niño [+−]|Price model tested|est\\. [+−]|±\\d+ pts/i.test(t)
                 && !document.querySelector('.enso-pchip-f, .enso-pchip-bar, .enso-est-block, .enso-pa-miss, .is-est, #enso-pchip-hatch, #enso-pchip-key-h');
         }"""))
-        # 2026-10-01 consolidation: the three primary price plates lead; supporting evidence stays folded.
-        check("Prices leads with verdict, arithmetic decomposition and market absorption in that order", page.evaluate("""async () => {
+        # 2026-10-01 consolidation: verdict and market absorption lead, followed by the open historical price paths.
+        check("Prices leads with verdict, market absorption and open historical price paths in that order", page.evaluate("""async () => {
             const order = [...document.querySelectorAll('#subview-ensomoney > *')].map(e => e.id || e.className).filter(i => i !== 'enso-mapgrid');
             const sub = document.querySelector('.enso-whopays-plate .enso-plate-sub').textContent;
-            const titles = [...document.querySelectorAll('#enso-priceanalog > figure .enso-plate-t, #enso-whopays > figure .enso-plate-t')].map(x => x.textContent);
+            const titles = [...document.querySelectorAll('#enso-priceanalog > figure .enso-plate-t, #enso-whopays > figure .enso-plate-t, #enso-pricewatch > details.pr2-past figure .enso-plate-t')].map(x => x.textContent);
             return order.slice(0, 3).join('|') === 'enso-priceanalog|enso-whopays|enso-pricewatch'
-                && titles.join('|') === 'IS THE SHOCK IN PRICES YET|WHY DID THE PRICE MOVE|CAN THE MARKET ABSORB A SUPPLY SHOCK'
+                && titles.join('|') === 'IS THE SHOCK IN PRICES YET|CAN THE MARKET ABSORB A SUPPLY SHOCK|Maize prices in southern Africa through the last two El Niños, and now'
                 && sub.includes('FAOSTAT trade matrix') && sub.includes('FoodShield access scores') && !document.querySelector('#enso-replace .enso-plate')
-                && [...document.querySelectorAll('#enso-priceanalog > details, #enso-pricewatch > details, #enso-money > details, #enso-people > details')].every(d => !d.open);
+                && [...document.querySelectorAll('#enso-priceanalog > details, #enso-pricewatch > details, #enso-money > details, #enso-people > details')].every(d => d.classList.contains('pr2-past') ? d.open : !d.open);
         }"""))
         check("maize panels keep their own y-axes and carry the normal-season benchmark (median, dashed); replay lines and ± badges are gone", page.evaluate("""() => {
             const tops = [...document.querySelectorAll('.enso-pa-svg')].map(s => Math.max(...[...s.querySelectorAll('text.enso-hw-t')].map(t => +t.textContent).filter(Number.isFinite)));
@@ -2432,28 +2424,33 @@ def main() -> int:
             }) && C.rows.some(r => !r.placebo.current_outside_normal_spread);
         }"""))
 
-        check("Prices plate 1 derives verdicts from the benchmark for the two primary markets, keeps thin rows out of the strip, and the selected waterfall closes arithmetically", page.evaluate("""async () => {
+        check("Prices plate 1 derives verdicts from the benchmark, keeps the two primary markets first, adds every non-thin market on one shared scale, keeps thin rows out of the strip, and the selected decomposition table closes arithmetically", page.evaluate("""async () => {
             const C = (await (await fetch('data/enso_price_counterfactual.json')).json()).data;
             const verdict = r => r.actual_index < 100 && (!r.placebo.current_outside_normal_spread || r.excess_pct.vs_fx_and_world < r.placebo.min)
                 ? 'PRICES FALLING' : !r.placebo.current_outside_normal_spread ? 'NOT YET UNUSUAL'
                 : r.excess_pct.vs_fx_and_world > r.placebo.max ? 'UNUSUALLY HIGH' : 'UNUSUALLY LOW';
-            const primary = C.rows.filter(r => ['ZAF', 'ZMB'].includes(r.iso) && !(r.normal_years.thin || r.normal_years.n <= 3));
+            const included = C.rows.filter(r => !r.normal_years.thin);
             const hero = document.querySelector('.pr2-price-plate'), rowsEl = [...hero.querySelectorAll('.pr2-strip > .pr2-bench-row')];
             const za = rowsEl.find(b => b.dataset.priceCf === 'ZAF'), zm = rowsEl.find(b => b.dataset.priceCf === 'ZMB');
-            const thinRows = C.rows.filter(r => r.normal_years.thin || r.normal_years.n <= 3), thin = hero.querySelector('.pr2-thin');
+            const thinRows = C.rows.filter(r => r.normal_years.thin), thin = hero.querySelector('.pr2-thin');
             const selected = C.rows.find(r => r.iso === 'ZAF'), mv = selected.moves_since_base_pct, rg = selected.regression;
             const round1 = v => Math.round(v * 10) / 10, total = round1(selected.actual_index - 100), season = round1(selected.expected_index.seasonal - 100);
             const world = rg.used_world ? round1(rg.b_world_used * (mv.world_actual - mv.world_normal_median)) : 0;
             const fx = rg.used_fx ? round1(rg.b_fx_used * (mv.fx_actual - mv.fx_normal_median)) : 0, residual = round1(total - season - world - fx);
-            const d = document.querySelector('.pr2-decomp-plate'), txt = d.textContent;
-            return rowsEl.length === primary.length && primary.every(r => rowsEl.some(b => b.dataset.priceCf === r.iso && b.textContent.includes(verdict(r))))
+            const d = hero.querySelector('details.pr2-method .pr2-decomp-table'), txt = hero.textContent;
+            const rows = d ? [...d.querySelectorAll('.pr2-decomp-row')] : [];
+            return rowsEl.length === included.length && included.every(r => rowsEl.some(b => b.dataset.priceCf === r.iso && b.textContent.includes(verdict(r))))
+                && rowsEl[0].dataset.priceCf === 'ZAF' && rowsEl[1].dataset.priceCf === 'ZMB'
+                && !!hero.querySelector('.pr2-strip-legend') && !!hero.querySelector('.pr2-strip-scale') && /Other monitored markets/.test(txt) && /Falling prices after harvest are normal/.test(txt)
                 && za.textContent.includes('South Africa') && za.textContent.includes('WHOLESALE') && za.textContent.includes('NOT YET UNUSUAL') && za.textContent.includes('+5.0%') && za.textContent.includes('63rd percentile of 8 normal years')
                 && zm.textContent.includes('Zambia') && zm.textContent.includes('RETAIL') && zm.textContent.includes('PRICES FALLING')
-                && !!thin && thinRows.every(r => thin.textContent.includes(r.normal_years.n + ' normal years')) && !thin.open
-                && hero.textContent.includes('Forward price model: none passes the release gate, so no price forecast is shown')
-                && txt.includes('Arithmetic decomposition, not causal attribution') && txt.includes('Local residual')
+                && (!thinRows.length || (!!thin && thinRows.every(r => thin.textContent.includes(r.normal_years.n + ' normal years')) && !thin.open))
+                && txt.includes('Forward price model: none passes the release gate, so no price forecast is shown')
+                && !document.querySelector('.pr2-decomp-plate, .pr2-waterfall') && !hero.querySelector('details.pr2-method').open
+                && !!d && txt.includes('Arithmetic decomposition, not causal attribution') && txt.includes('Local residual')
                 && (rg.used_world && rg.used_fx || txt.includes('tested, not supported'))
-                && round1(season + world + fx + residual) === total && d.querySelectorAll('.pr2-wf-bar').length === 3 + Number(rg.used_world) + Number(rg.used_fx);
+                && round1(season + world + fx + residual) === total && rows.length === 3 + Number(rg.used_world) + Number(rg.used_fx)
+                && +d.dataset.total === total;
         }"""))
 
         # 2026-09-30 court verdict: the rail is one ranked table (Now, the last El Niño at the same stage, the grey 12-month
@@ -2740,12 +2737,8 @@ def main() -> int:
         }"""))
         # 2026-09-24: the list uses the outlook's own predicate, an El Niño slope
         # that passes on its own (shared-IOD and La Niña-only pairs are out).
-        check("the harvest country list names only countries whose El Niño slope passes", page.evaluate("""async () => {
-            const O = (await (await fetch('data/enso_outlook.json')).json()).data;
-            const want = new Set(O.rows_all.filter(r => r.status === 'shown').map(r => r.iso));
-            const chips = document.querySelectorAll('#enso-land-head .enso-country-list .enso-chip').length;
-            return chips === want.size && /passes on its own/.test(document.getElementById('enso-land-head').textContent);
-        }"""))
+        # 2026-10-02: the country chooser under the answer plate is deleted; the old count-of-chips check is now an assertion that it is gone.
+        check("the harvest country list is gone from Harvests", page.locator('#enso-land-head, .enso-country-list, .enso-chip.enso-land-card').count() == 0)
         # 2026-10-01 consolidation audit: one short lede, three bullets, one visible range key, then folded evidence.
         audit = page.evaluate("""async () => {
             const O = (await (await fetch('data/enso_outlook.json')).json()).data;
@@ -2763,13 +2756,13 @@ def main() -> int:
             return {lede: !!lede && lede.textContent.trim().split(/\s+/).length <= 35,
                     bullets: bullets > 0 && bullets <= 3, key: !!key && /median/.test(key.textContent) && /50% range/.test(key.textContent) && /90% range/.test(key.textContent),
                     noCoefPlate: [...document.querySelectorAll('#tab-elnino .enso-plate-t')].every(t => t.textContent !== 'Fitted crop responses')
-                        && /Show per country/.test(document.querySelector('#enso-harvest-fig > summary').textContent),
+                        && !document.getElementById('enso-harvest-fig') && !/Show per country/.test(document.getElementById('subview-ensoharvest').textContent),
                     calOpen: !document.querySelector('#enso-calendar details.enso-cal-fold') && shortRows === calRows && allRows === cal.querySelectorAll('.cal-row:not(.cal-head)').length && allRows > shortRows,
                     calH: Math.round(plateH)};
         }""")
         check("2027 plate: short lede, at most three bullets and one range key",
               audit["lede"] and audit["bullets"] and audit["key"], str(audit))
-        check("fitted responses sit behind Show per country; the calendar is open with the outlook's pairs first",
+        check("no per-country fold remains; the calendar is open with the outlook's pairs first",
               audit["noCoefPlate"] and audit["calOpen"] and audit["calH"] <= 520, str(audit))
         # The Reported tab figure is WFP's projection from enso_situation.json, not a static descriptor.
         _wfp_added = _pjson.load(open(ROOT / 'data' / 'enso_situation.json'))['data']['wfp_projection']['added_m']

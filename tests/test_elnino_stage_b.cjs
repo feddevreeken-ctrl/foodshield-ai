@@ -9,7 +9,7 @@ function node(id) { return nodes[id] || (nodes[id] = { innerHTML:'', value:'', s
 const ctx = vm.createContext({window:{location:{href:'http://localhost/index.html',search:''}}, matchMedia(){return {matches:false,addEventListener(){},removeEventListener(){}};},IntersectionObserver:class {observe(){} disconnect(){}}, document:{getElementById:node,querySelector(){return node('scroller');},querySelectorAll(){return [];},addEventListener(){}}, URL,console,Date,setTimeout,clearTimeout,Event, URLSearchParams, charts:{}});
 vm.runInContext(html.slice(start,end)+`
   mk = function(id,cfg) { if (!S._chartFilter || S._chartFilter.indexOf(id)>=0) globalThis.charts[id]=cfg; };
-  globalThis.api={S,renderMechanism,feedIssue,renderFailures,calendarSeason,calendarBasis,crossSection,pacWeights,renderLandHead,renderDetail,renderCoeffs,renderCalendar,renderWater,renderMoney,renderPeople,renderLimits,renderControls,syncInstruments,drawCharts,selectCountry,isoOf};
+  globalThis.api={S,renderMechanism,feedIssue,renderFailures,calendarSeason,crossSection,pacWeights,renderCalendar,renderWater,renderMoney,renderPeople,renderLimits,renderControls,syncInstruments,drawCharts,selectCountry,isoOf};
 })();`, ctx);
 const api = ctx.api, S=api.S;
 for (const [key,file] of Object.entries({model:'enso_model',calendars:'crop_calendars',enso:'enso',lanes:'enso_lanes',econ:'enso_econ',exp:'enso_exposure',portwatch:'portwatch',pwhist:'portwatch_history',rtfp:'rtfp',ffpi:'fao_ffpi',mech:'enso_mechanism',gauges:'enso_gauges'})) {
@@ -66,16 +66,6 @@ test('summer crop does not inherit DJF exposure',()=>{
 test('planting across New Year and second seasons remain bounded',()=>{
  const c={plant:[11,12,1],harvest:[3]};assert.equal(api.calendarSeason(c,2).stage,'in the ground');assert(api.calendarSeason(c,2).djf);
  const multi={plant:[2,3,8],harvest:[6,11]};assert.equal(api.calendarSeason(multi,7).stage,'between seasons');assert.equal(api.calendarSeason(multi,9).stage,'in the ground');assert(!api.calendarSeason(multi,9).djf);
-});
-test('La Nina slopes are printed once with phase direction recorded',()=>{
- S.sel='ZWE';S.explicitScenario=true;S.oni=-1.5;api.renderDetail();const out=nodes['enso-detail'].innerHTML;
- assert(out.includes('data-direction="fall">+8.'));assert(out.includes('La Niña reverses'));
- assert(!out.includes('hs-bar'));assert(out.includes('Fitted production change'));assert(!out.includes('q='));
- assert.equal(api.calendarBasis('harvest months [5, 6]'),'Harvest: May, Jun');
-});
-test('country and scenario changes update the single fitted table',()=>{
- S.sel='USA';api.renderCoeffs();assert.equal(nodes['enso-harvest-fig']['data-iso'],'USA');assert(nodes['enso-detail'].innerHTML.includes('La Niña %/ONI <span'));
- S.sel='ZWE';S.oni=1.5;api.renderDetail();assert.equal(nodes['enso-harvest-fig']['data-iso'],'ZWE');assert(nodes['enso-detail'].innerHTML.includes('El Niño %/ONI <span'));
 });
 test('calendar retains eligible crop rows, month names, and stage groups',()=>{
  api.renderCalendar();const out=nodes['enso-calendar'].innerHTML;

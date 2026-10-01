@@ -44,7 +44,7 @@ const pending=[];
 const ctx=vm.createContext({console,Date,URL,URLSearchParams,Event,L,charts:{},RAMP:['#1','#2','#3','#4','#5'],setTimeout:fn=>pending.push(fn),clearTimeout(){},window:{location:{href:'http://localhost/index.html',search:''},matchMedia(){return {matches:true};}},document:{getElementById:node,querySelector:s=>s==='#tab-elnino .content-page'?node('scroller'):null,querySelectorAll(){return [];},createElement:t=>new Element(t),createElementNS:(_,t)=>new Element(t),addEventListener(){}}});
 const start=html.indexOf('(function () {',html.indexOf('   THE MAP USES A DIVERGING')),end=html.indexOf('\n})();',start);
 vm.runInContext(html.slice(start,end)+`
-  globalThis.api={S,laneMeasurement,transitKey,renderMapRanking,rankedPrices,rankedHotspots,priceMapSentence,mapState,renderControls,syncInstruments,selectCountry,flyTo,drawAlerts,alertLegend,placeChokepointLabels,fitMapView,drawGraticule,renderLegend,drawLanes,laneGeometry,corridorGeometry,fillFor,rtfpColor,renderWater,renderMoney,renderCoeffs,renderCalendar,analogPlate,drawCharts,paint,toggleSST,buildDefs};
+  globalThis.api={S,laneMeasurement,transitKey,renderMapRanking,rankedPrices,rankedHotspots,priceMapSentence,mapState,renderControls,syncInstruments,selectCountry,flyTo,drawAlerts,alertLegend,placeChokepointLabels,fitMapView,drawGraticule,renderLegend,drawLanes,laneGeometry,corridorGeometry,fillFor,rtfpColor,renderWater,renderMoney,renderCalendar,analogPlate,drawCharts,paint,toggleSST,buildDefs};
   mk=function(id,cfg){ if(!S._chartFilter || S._chartFilter.indexOf(id)>=0) globalThis.charts[id]=cfg; };
   syncInstruments=renderMapTag=renderControls=renderDetail=renderFailures=wireTabKeys=syncTabRoving=wireRasterPlates=finishPlates=renderSubviewMeta=function(){};
 })();`,ctx);
@@ -358,8 +358,6 @@ test('hatch SVG strokes match visible ochre and green samples',()=>{
   const analog=api.analogPlate();for(const label of ['five strongest past events','last published season','±0.5','five marked analog winters'])assert(analog.includes(label));
   api.renderCalendar();for(const label of ['Outlined: planting','Filled: harvest','El Niño slope falls','El Niño slope rises','Tinted band: DJF','Vertical rule: this month','grows through DJF'])assert(node('enso-calendar').textContent.includes(label));
   assert(node('enso-calendar').innerHTML.indexOf('cal-key')<node('enso-calendar').innerHTML.indexOf('class="enso-cal"'));
-  // The sign rule moved into renderDetail (stubbed in this harness); the browser gate reads it from #enso-detail.
-  S.sel='ZWE';api.renderCoeffs();assert(node('enso-coeffs').textContent.includes('Show per country'));  /* 2026-09-29: the plate became a fold */assert(node('enso-coeffs').querySelector('#enso-detail'));
   api.renderMoney();assert(node('enso-money').querySelector('#enso-c-record'));for(const label of ['vs the previous six months','vs the same months a year earlier'])assert(node('enso-money').textContent.includes(label));
   api.drawCharts('ensowater');assert(!ctx.charts['enso-c-panama']);
   const ais=ctx.charts['enso-c-panama-daily'].keyNotes[0],dates=S.pwhist.chokepoints.panama.dates;const isoT=(d)=>{const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);return m?(+m[3])+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m[2]-1]+' '+m[1]:d;};for(const t of ['Points: observed daily','7-day means','slot limit from each advisory',isoT(dates[0]),isoT(dates[dates.length-1])])assert(ais.includes(t));
