@@ -1726,7 +1726,7 @@ def main() -> int:
               and page.locator('#enso-c-record .enso-pp-prev').count() == 7
               and page.locator('#enso-c-ffpi, #enso-c-rtfp, #enso-c-ffpilive, #enso-money-story').count() == 0
               and page.locator('#enso-pricewatch > details.pr2-past').count() == 1
-              and page.locator('#enso-pricewatch > details.pr2-past').get_attribute('open') is None
+              and page.locator('#enso-pricewatch > details.pr2-past').get_attribute('open') is not None  # 2026-10-01 owner: the past paths are the evidence behind the verdict, open
               and re.search(r'^Past El Niño price paths: median [+−]\d+% after inflation in 2015-16, [+−]\d+% in 2023-24; this year below the March level in \d+ of \d+ markets$', page.locator('#enso-pricewatch > details.pr2-past > summary').text_content()) is not None
               and page.locator('#enso-money > details.pr2-sources').count() == 1
               and page.locator('#enso-money > details.pr2-sources').get_attribute('open') is None
@@ -2422,14 +2422,15 @@ def main() -> int:
                 && !document.querySelector('.enso-pchip-f, .enso-pchip-bar, .enso-est-block, .enso-pa-miss, .is-est, #enso-pchip-hatch, #enso-pchip-key-h');
         }"""))
         # 2026-10-01 consolidation: verdict and market absorption lead, followed by the open historical price paths.
-        check("Prices leads with verdict, market absorption and closed historical price paths in that order", page.evaluate("""async () => {
+        check("Prices leads with verdict, market absorption and open historical price paths in that order", page.evaluate("""async () => {
             const order = [...document.querySelectorAll('#subview-ensomoney > *')].map(e => e.id || e.className).filter(i => i !== 'enso-mapgrid');
             const sub = document.querySelector('.enso-whopays-plate .enso-plate-sub').textContent;
             const titles = [...document.querySelectorAll('#enso-priceanalog > figure .enso-plate-t, #enso-whopays > figure .enso-plate-t, #enso-pricewatch > details.pr2-past figure .enso-plate-t')].map(x => x.textContent);
             return order.slice(0, 3).join('|') === 'enso-priceanalog|enso-whopays|enso-pricewatch'
                 && titles.join('|') === 'IS THE SHOCK IN PRICES YET|CAN THE MARKET ABSORB A SUPPLY SHOCK|Maize prices in southern Africa through the last two El Niños, and now'
                 && sub.includes('FAOSTAT trade matrix') && sub.includes('FoodShield access scores') && !document.querySelector('#enso-replace .enso-plate')
-                && [...document.querySelectorAll('#enso-priceanalog > details, #enso-pricewatch > details, #enso-money > details, #enso-people > details')].every(d => !d.open);
+                && document.querySelector('#enso-pricewatch > details.pr2-past').open
+                && [...document.querySelectorAll('#enso-priceanalog > details, #enso-pricewatch > details:not(.pr2-past), #enso-money > details, #enso-people > details')].every(d => !d.open);
         }"""))
         check("maize panels keep their own y-axes and carry the normal-season benchmark (median, dashed); replay lines and ± badges are gone", page.evaluate("""() => {
             const tops = [...document.querySelectorAll('.enso-pa-svg')].map(s => Math.max(...[...s.querySelectorAll('text.enso-hw-t')].map(t => +t.textContent).filter(Number.isFinite)));

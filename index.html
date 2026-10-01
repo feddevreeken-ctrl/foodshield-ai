@@ -52714,7 +52714,7 @@ function showCommodityDetail(key) {
         '<td class="enso-pw-e" data-label="Exposed places">' + (places.length ? esc(places.join(', ')) : '<span class="enso-pr-none">none tracked</span>') + '</td></tr>';
     }).join('');
     var cs = []; (S.restrictions || []).forEach(function (r) { if (r.country && cs.indexOf(r.country) < 0) cs.push(r.country); });
-    var past = S.priceHistoryHTML ? '<details class="enso-evidence-note pr2-support pr2-past"><summary>' + esc(S.priceHistorySummary || 'Past El Niño price paths') + '</summary>' + S.priceHistoryHTML + '</details>' : '';
+    var past = S.priceHistoryHTML ? '<details class="enso-evidence-note pr2-support pr2-past" open><summary>' + esc(S.priceHistorySummary || 'Past El Niño price paths') + '</summary>' + S.priceHistoryHTML + '</details>' : '';
     el.innerHTML = past + '<details class="enso-evidence-note pr2-support pr2-world"><summary>World-price watch</summary><figure class="enso-plate enso-pricewatch-plate is-published" data-kind="published">' +
       plateHead('Which prices to watch, and when', 'FoodShield model · export measures · ECB Economic Bulletin 6/2023 · World Bank Pink Sheet', stamp(metaDate('outlook')), 'published') +
       '<div class="plate-body"><div class="enso-tblwrap"><table class="enso-tbl enso-pw-table"><thead><tr><th scope="col">World price</th><th scope="col">Now, against a year earlier</th><th scope="col">Next dated trigger</th><th scope="col">Exposed places</th></tr></thead><tbody>' + body + '</tbody></table></div>' +
@@ -54107,7 +54107,14 @@ function showCommodityDetail(key) {
     if (!entList.length) { el.innerHTML = ''; return; }
     var nCrops = {}; entList.forEach(function (q) { nCrops[q.iso] = (nCrops[q.iso] || 0) + 1; });
     var entName = function (q) { return nm(q.iso) + (nCrops[q.iso] > 1 ? ', ' + crop(q.crop) : ''); };
-    var weakDefault = entList.filter(function (q) { var v = q.row && q.row.c && q.row.c[7]; return typeof v === 'number' && LN.acc.cal && v >= LN.acc.line; })[0];
+    /* Default (2026-10-01, owner: "not always Zimbabwe; pick the one that shows the block best"): the country whose ladder is most
+       complete, i.e. a modelled gap left by usual suppliers, a monitored price for the crop, an IPC analysis and an access score;
+       the larger potential import need breaks ties. A reader's own pick or the trace always wins. */
+    var CROP_RE = { corn: /maize/i, wheat: /wheat/i, rice: /rice/i, sorghum: /sorghum/i };
+    var fullness = function (q) { var re = CROP_RE[q.crop] || /./, v = q.row && q.row.c && q.row.c[7];
+      return (q.us >= 1 ? 1 : 0) + (((S.pcf && S.pcf.rows) || []).some(function (x) { return x.iso === q.iso && re.test(x.commodity || '') && x.placebo; }) ? 1 : 0) +
+        (ipcRow(q.iso) ? 1 : 0) + (typeof v === 'number' ? 1 : 0); };
+    var weakDefault = entList.slice().sort(function (a, b) { return fullness(b) - fullness(a) || b.need - a.need; })[0];
     var pick = ents[S.payPickKey] || weakDefault || entList[0];
     /* Plate 1's data: the abnormality verdict of this country's monitored market for the same crop (country and
        commodity matched in the loaded price feeds). A market in the outlook feed without a normal-year benchmark gives
@@ -54329,7 +54336,10 @@ function showCommodityDetail(key) {
     if (!el) return;
     if (!O || !D || !D.pairs || !D.target) { el.innerHTML = ''; return; }
     var rows = chainRows(); if (!rows.length) { el.innerHTML = ''; return; }
-    var pick = rows.filter(function (x) { return x.p.key === S.chainPick; })[0] || rows.filter(function (x) { return mqTier(x.f) === 'supported'; })[0] || rows[0];
+    /* Default (2026-10-01): the harvest with the largest modelled change in tonnes among supported and moderate pairs, so the
+       chain's supply and trade stages have something to carry; the reader's pick or the trace wins. */
+    var showcase = rows.filter(function (x) { return mqTier(x.f) !== 'exploratory' && typeof x.changeKt === 'number'; }).sort(function (a, b) { return Math.abs(b.changeKt) - Math.abs(a.changeKt); })[0];
+    var pick = rows.filter(function (x) { return x.p.key === S.chainPick; })[0] || showcase || rows[0];
     var p = pick.p, f = pick.f, T = D.target, cw = payCrop(p.crop), LN = accessLines(), CO = window.COUNTRIES || [];
     var kt = function (v) { return typeof v === 'number' ? fmtKt(Math.abs(v)).replace(/^\+/, '') : 'n/a'; };
     var seg = function (cls, uid) {
