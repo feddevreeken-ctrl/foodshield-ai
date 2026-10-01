@@ -866,8 +866,9 @@ def main() -> int:
                     check("phone Prices: maize panels one per row, the price strips fill the card, the grey fan is wide enough to read, comparison-table country names are 44 px targets",
                           pr["oneCol"] and pr["dcW"] >= 300 and pr["fanW"] >= 14 and pr["whoH"] >= 43.5, f"oneCol {pr['oneCol']} dc {pr['dcW']} fan {pr['fanW']} who {pr['whoH']}")
                 if width == 390:
-                    check(f"phone {width}px {tab}: plates are one edge-to-edge column; map 60-70% of the screen with its legend, chooser and Now box under it",
-                          not r["wide"] and 0.6 * r["vh"] - 2 <= r["mapH"] <= 0.7 * r["vh"] + 2 and r["legendBelow"] and all(r["dock"]),
+                    expected_map_h = max(280, min(400, 0.48 * r["vh"]))
+                    check(f"phone {width}px {tab}: plates are one edge-to-edge column; map follows the 280px/48svh/400px clamp with its legend, chooser and Now box under it",
+                          not r["wide"] and expected_map_h - 2 <= r["mapH"] <= expected_map_h + 2 and r["legendBelow"] and all(r["dock"]),
                           f"wide {r['wide']} map {r['mapH']} legend {r['legendBelow']} dock {r['dock']}")
                     check(f"phone {width}px {tab}: standalone buttons and summaries are 44 px tall (words set inside a sentence get a 44 px hit area instead)",
                           r["nSolo"] == 0, f"{r['nSolo']} {r['solo']}")
