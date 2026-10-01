@@ -135,6 +135,6 @@ test('Stage H scenario expands on request and stays fully visible for modelled p
  S.mode=mode;S.scenarioExpanded=expanded;
 });
 test('humanitarian need is labelled reported',()=>{
- api.renderPeople();const out=nodes['enso-people'].innerHTML;assert(out.includes('data-kind="reported"'));assert(!out.includes('<h2'));assert.equal((out.match(/<tbody>/g)||[]).length,1);
+ const out=api.renderPeople()||nodes['enso-people'].innerHTML;assert(out.includes('data-kind="reported"'));assert(!out.includes('<h2'));assert.equal((out.match(/<tbody>/g)||[]).length,1);
 });
 console.log(passed+'/'+passed+' non-browser runtime checks passed');
