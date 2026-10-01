@@ -380,6 +380,9 @@ def main() -> int:
                                 if pool[i]["exports_kt"] and u / pool[i]["exports_kt"] > PARAMS["stretch_share"]), key=lambda x: -x[1])
             agg.setdefault(k, {})[scope] = {
                 "need_kt": round(need, 1), "replaced_kt": round(sum(used.values()), 1),
+                # Global export headroom for the crop in this case: every eligible exporter's headroom before and after all buyers draw on it.
+                "headroom_total_kt": round(sum(head.values()), 1), "headroom_left_kt": round(sum(max(0.0, v) for v in left.values()), 1),
+                "headroom_exporters": sum(1 for v in head.values() if v > 0.05),
                 "residual_kt": round(sum(v for _, v in short), 1),
                 "short_countries": [{"iso": i, "residual_kt": v} for i, v in short],
                 "stretched": [{"iso": i, "extra_pct_of_normal_exports": v} for i, v in stretched],
@@ -410,6 +413,7 @@ def main() -> int:
             "Routes: US exports to East and Southeast Asian buyers are scaled by the Panama Canal capacity factor: booking slots in the step in force today under the newest advisory, " + str(pan.get("advisory") or "unknown") + " (mid, high cases; a step scheduled for a later date is carried as slots_next but not used), or the 2023 floor (low case), over the lower end of the stated normal 36-38 a day. Gulf ocean freight (USDA AMS, US Gulf to Japan) is carried as a cost signal with its own baseline; no freight cost is invented or used to rank suppliers. Landlocked access, port capacity and overland routes are not modelled.",
             "Residual weeks of use = uncovered tonnes over the buyer's USDA annual consumption x 52. Buyer stocks are shown, not subtracted.",
             "Forecast range (mid headroom): the same allocation re-run with each supplier's loss scaled to the P10, P50 and P90 of its forecast harvest change (response stopped at the strongest fitted winter) over the record-winter change that sized the demands. Lost exports are min(loss, normal exports); the remainder is the supplier's own extra import. Named buyers never scale above their record-winter need, because their usual imports from the supplier already cap it, so the P10 end is understated for them. P10 is the severe end. Scenario arithmetic, not a forecast.",
+            "Global export headroom (headroom_total_kt): the summed headroom of every eligible exporter in the case, before buyers draw on it; headroom_left_kt is what remains after all buyers in the scenario. A ceiling shared by every buyer, not a delivered quantity.",
             "Stretched exporters: extra tonnes above 25% of the exporter's normal exports.",
         ],
         "params": PARAMS, "panama": pan, "freight_signal": fr, "reference_date": today,

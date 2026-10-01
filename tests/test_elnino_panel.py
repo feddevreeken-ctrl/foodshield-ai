@@ -791,7 +791,7 @@ def main() -> int:
                 else if (copy && fs < 14) smallCopy.push(fs + ' ' + (p.className || p.tagName) + ': ' + n.nodeValue.trim().slice(0, 24));
             }
             const solo = [...tab.querySelectorAll('button, summary, [role="tab"], a.enso-now-link')].filter(e => {
-                if (e.closest('.leaflet-container, .enso-sr') || e.matches('.enso-asap-btn, .enso-chip, .enso-inline-link, .enso-next12-bar')) return false;
+                if (e.closest('.leaflet-container, .enso-sr') || e.matches('.enso-asap-btn, .enso-chip, .enso-inline-link, .enso-next12-bar, .enso-rq-inl')) return false;
                 const r = e.getBoundingClientRect(); return r.width > 1 && r.height > 1 && getComputedStyle(e).visibility !== 'hidden' && r.height < 43.5;
             }).map(e => Math.round(e.getBoundingClientRect().height) + ' ' + (e.id || e.className || e.tagName) + ' ' + (e.textContent || '').trim().slice(0, 20));
             const plates = [...tab.querySelectorAll('#subview-' + sub + ' .enso-plate:not(.enso-plate .enso-plate), #subview-' + sub + ' #enso-mapwrap')].filter(e => e.getClientRects().length);
@@ -974,7 +974,8 @@ def main() -> int:
                   const dflt = n('#enso-map .enso-hz-marker') > 0 && n('#enso-map .enso-hl-wrap') > 0
                       && !document.querySelector('#enso-legend .rptsem-shape-block').textContent.includes('Diamond')
                       && document.querySelector('#enso-legend .rptsem-shape-block').textContent.includes('Disc')
-                      && /headlines? in the last 7 days/.test(document.getElementById('enso-maptag').textContent);
+                      && /headlines? in the last 7 days/.test(document.getElementById('enso-maptag').textContent)
+                      && document.getElementById('enso-legend').textContent.includes('Headline count: reporting activity, not severity');
                   const hz0 = n('#enso-map .enso-hz-marker');
                   const b = [...document.querySelectorAll('[data-native="enso-mode"]')].find(x => x.dataset.value === 'ipc'); b.click();
                   await new Promise(r => setTimeout(r, 800));
@@ -1048,7 +1049,7 @@ def main() -> int:
             if (!f || f.hidden) return null;
             const first = O.rows_all.filter(r => r.status === 'shown' && r.change_kt_record < 0).sort((a, b) => a.change_kt_record - b.change_kt_record)[0];
             const tabs = [...document.querySelectorAll('#enso-view-nav [role="tab"]')], figures = tabs.map(t => t.querySelector('.enso-view-desc').textContent.trim());
-            const fold = f.querySelector(':scope > details.enso-fs-more'), only = [...f.children].every(x => x.id === 'enso-status-home' || x === fold);
+            const fold = f.querySelector(':scope > details.enso-fs-more'), only = [...f.children].every(x => x.id === 'enso-status-home' || x.id === 'enso-trace' || x === fold);  /* 2026-10-01: the trace line (one shock through the five views) leads the frame */
             return { all: f.textContent, pct: Math.round(first.change_pct_record), wfp: W.added_m + ' m', figures,
                      titles: tabs.map(t => t.title), noRail: !f.querySelector('.enso-rl'), only, fold: !!fold && !fold.open,
                      strip: !!f.querySelector('#enso-status-home #enso-status-short'), before: !!(f.compareDocumentPosition(document.getElementById('subview-elnino')) & Node.DOCUMENT_POSITION_FOLLOWING) };
@@ -1474,7 +1475,9 @@ def main() -> int:
                 && /^(SCENARIO|NOT YET MEASURED)$/.test(states[4]) && states[5] === 'MODELLED' && states[6] === 'OBSERVED'
                 && shock.every(n => n.querySelectorAll('.enso-cp-value').length === 1 && n.querySelectorAll('.enso-cp-dot').length === 1)
                 && ch.querySelectorAll('.enso-cp-flow > .enso-cp-node .enso-cp-segment').length === 4
-                && !!key && key.querySelectorAll('svg').length === 4 && /Observed/.test(key.textContent) && /Beyond the fitted range/.test(key.textContent) && /Not yet measured/.test(key.textContent)
+                && !!key && (() => { const cls = el => [...el.classList].find(c => /^is-/.test(c)), used = new Set([...ch.querySelectorAll('.enso-cp-flow .enso-cp-segment')].map(cls)), keyed = [...key.querySelectorAll('svg')].map(cls);
+                    const NAME = {'is-observed': 'Observed', 'is-published': 'Published', 'is-modelled': 'Modelled', 'is-scenario': 'Scenario', 'is-extrapolated': 'Beyond the fitted range', 'is-unmeasured': 'Not yet measured'};
+                    return used.size > 0 && keyed.length === used.size && [...used].every(c => keyed.includes(c) && key.textContent.includes(NAME[c])) && !/Modelled, published or scenario/.test(key.textContent); })()
                 && !!absorb && /Ability to absorb \(existing vulnerability, not the scenario's impact\)/.test(absorb.textContent)
                 && !ch.querySelector('.enso-chain-card, .enso-chain-shock, .enso-chain-baseline')
                 && ch.querySelectorAll('details.enso-cp-details').length === 1
@@ -1482,6 +1485,7 @@ def main() -> int:
                 && ch.querySelectorAll('.enso-cp-picker select[data-chain-pick]').length === 1 && !ch.querySelector('.enso-chain-chip')
                 && /forecast/.test(ch.textContent) && !/—/.test(ch.textContent + ex.textContent)
                 && ex.querySelectorAll('svg.enso-exabs-svg g[data-exabs-iso]').length >= 4 && /Panel A/.test(ex.textContent) && /Panel B/.test(ex.textContent)
+                && gapMarks.every(m => !!m.dataset.exabsCrop) && new Set(gapMarks.map(m => m.dataset.exabsIso + '|' + m.dataset.exabsCrop)).size === gapMarks.length
                 && !/satellite confirmation/i.test(ch.textContent) && ch.querySelector('.enso-cp-scroll[tabindex="0"]')
                 && /Same harvest scenario in both panels/.test(ex.textContent) && /under the scenario/.test(ex.textContent)
                 && /Modelled harvest loss [(]%[)]/.test(ex.textContent) && /Gap as % of normal annual consumption/.test(ex.textContent)
@@ -1498,13 +1502,16 @@ def main() -> int:
             const rail = document.querySelector('#enso-chain #enso-confirm-rail'); if (!rail) return false;
             const steps = [...rail.querySelectorAll('.enso-cf-rail > .enso-cf-step')], cur = rail.querySelectorAll('.enso-cf-rail [aria-current="step"]');
             const word = rail.querySelector('.enso-cf-word'), fold = rail.querySelector('details.enso-cf-fold');
-            const SET = ['Scenario', 'Emerging', 'Corroborated', 'Observed'];
+            const SET = ['Scenario', 'Emerging', 'Corroborated', 'Outcome evidence'];
             return steps.length === 4 && steps.map(x => x.querySelector('.enso-cf-name').textContent.trim()).join() === SET.join()
                 && cur.length === 1 && rail.querySelectorAll('.enso-cf-step.is-current').length === 1 && cur[0].classList.contains('is-current')
                 && !!word && SET.includes(word.textContent.trim()) && word.textContent.trim() === cur[0].querySelector('.enso-cf-name').textContent.trim()
-                && rail.getAttribute('data-cf-state') === word.textContent.trim().toLowerCase()
+                && rail.getAttribute('data-cf-state') === cur[0].getAttribute('data-cf-step') && word.textContent.trim().toLowerCase().startsWith(rail.getAttribute('data-cf-state'))
                 && !!fold && fold.querySelector('summary').textContent.trim() === 'How the state is set' && !fold.open
-                && /Observed.*Not reached|Reached/.test(rail.textContent)
+                && /Outcome evidence.*Not reached|Reached/.test(rail.textContent) && !rail.querySelector('[data-cf-step="observed"]') && !/\\b(Observed|Realised)\\b/.test(steps.map(x => x.textContent).join())
+                && (!/Reached:/.test(rail.textContent) || /magnitude not confirmed/.test(rail.textContent))
+                && rail.querySelector('.enso-cf-title').textContent.trim() === 'Crop-risk confirmation: ' + word.textContent.trim() && word.closest('.enso-cf-title')
+                && rail.querySelectorAll('.enso-cfk > li').length === 4 && /JRC ASAP/.test(rail.querySelector('.enso-cfk').textContent) && /Crop Monitor/.test(rail.querySelector('.enso-cfk').textContent) && [...rail.querySelectorAll('.enso-cfk > li')].every(li => /^[✓✕–]$/.test(li.querySelector('.enso-cfk-g').textContent.trim()))
                 && !/(\d{1,3}\s*\/\s*100|\bscore of\b|\b\d{1,3}\s*%\s*(confidence|likely))/i.test(rail.textContent) && !/—/.test(rail.textContent) && !/as_of/.test(rail.textContent);
         }"""))
         # 2026-10-01 consolidation: the answer joins outlook baselines to forecast percentiles; the record winter is one tick.
@@ -1575,7 +1582,10 @@ def main() -> int:
                 && (P.mae_kt > P.mae_yardstick_kt) === /does not beat the yardstick/.test(t)
                 && t.includes('direction right in ' + F.sign_right + ' of ' + F.winters) && t.includes('(' + plume + ' of ' + sc.length + ' winters)')
                 && pl.querySelector('.enso-rp-zero-top')?.textContent === 'no effect' && pl.querySelectorAll('svg.enso-rp-chart g.is-miss').length === sc.filter(e => !e.sign_right).length
-                && !!pl.querySelector('svg.enso-rp-chart desc') && [...pl.querySelectorAll('svg.enso-rp-chart g.is-miss .enso-rp-verdict')].every(n => /MISS/.test(n.textContent))
+                && !!pl.querySelector('svg.enso-rp-chart desc') && [...pl.querySelectorAll('svg.enso-rp-chart g.is-miss .enso-rp-verdict')].every(n => /^(miss|false alarm)$/i.test(n.textContent.trim()))
+                && [...pl.querySelectorAll('svg.enso-rp-chart g.is-hit .enso-rp-verdict')].every(n => /^hit$/i.test(n.textContent.trim()))
+                && pl.querySelectorAll('svg.enso-rp-chart g[data-outcome="false-alarm"]').length === sc.filter(e => !e.sign_right && e.false_alarm).length
+                && !pl.querySelector('svg.enso-rp-chart .enso-rp-miss-flag')
                 && !pl.closest('.enso-fold-plate').querySelector('.enso-rp-second, .enso-pf-plate') && !/—/.test(pl.textContent);
         }"""))
         check("'What each number is' reads its statuses from _meta.maturity", page.evaluate("""async () => {
@@ -1631,7 +1641,7 @@ def main() -> int:
         page.evaluate("showTab('ensomoney')")
         page.wait_for_selector('#subview-ensomoney.active #enso-c-record', state='attached')
         # 2026-10-01 consolidation: trade loss, replacement and access are one five-row country summary; full detail stays folded.
-        check("Market absorption answers for one selected country and crop with one need bar (usual segment, hatched uncovered remainder, global export headroom marker) over three market columns, a five-column comparison table, the seven-column detail folded, and validated access lines", page.evaluate("""async () => {
+        check("Market absorption answers for one selected country and crop with four labelled levels (need, usual suppliers on one need-scale bar, the crop's global headroom as a number from the file, confirmed deliverable not modelled) and a Shipping link over three market columns, a five-column comparison table, the seven-column detail folded, and validated access lines", page.evaluate("""async () => {
             const R = (await (await fetch('data/enso_replacement.json')).json()).data;
             const T = (await (await fetch('data/ref/access_thresholds.json')).json()).data;
             const pl = document.querySelector('.enso-absorb-plate'); if (!pl) return false;
@@ -1645,16 +1655,24 @@ def main() -> int:
             return !!fold && !fold.open && cmp.querySelectorAll('thead th').length === 5 && rows.length >= want.size && rows.filter(r => r.getAttribute('aria-selected') === 'true').length === 1
                 && groups.join('|') === 'Physical absorption|Market and households'
                 && labels.join('|') === 'Price signal|Economic access|People in IPC Phase 3+'
-                && !!bar && !!bar.querySelector('.pr2-absorb-full') && !!bar.querySelector('.pr2-head-mark') && /Potential import need under a scenario/.test(pl.querySelector('.pr2-absorb').textContent) && /Global export headroom/.test(pl.querySelector('.pr2-absorb-key').textContent)
+                && !!bar && !!bar.querySelector('.pr2-absorb-full') && !bar.querySelector('.pr2-head-mark') && /Potential import need under a scenario/i.test(pl.querySelector('.pr2-absorb').textContent)
+                && [...pl.querySelectorAll('.pr2-absorb .pr2-lvl > .pr2-label')].map(x => x.textContent).join('|') === 'Needed|Plausible through usual suppliers|Available globally, shared by every buyer|Confirmed deliverable'
+                && (() => { const crop = (pl.querySelector('#pr2-pay-select').value || '').split('|')[1], G = R.aggregate[crop].mid.open, g = pl.querySelector('.pr2-lvl.is-global');
+                    const kt = v => v >= 1000 ? (v / 1000).toFixed(1) + ' Mt' : Math.round(v) + ' kt';
+                    return !!g && g.querySelector('.pr2-figure').textContent === kt(G.headroom_total_kt) && g.textContent.includes(G.headroom_exporters + ' exporters') && g.textContent.includes(kt(G.headroom_left_kt) + ' left after all buyers in the scenario'); })()
+                && pl.querySelector('.pr2-lvl.is-confirmed .pr2-figure').textContent === 'not modelled'
+                && !!pl.querySelector('.pr2-absorb [data-goto-lens="ensowater"]')
                 && !/capacity ceiling|capacity exists/i.test(pl.textContent)
                 && !!pl.querySelector('.pr2-answer') && !!pl.querySelector('.pr2-verdict-line') && !!pl.querySelector('#pr2-pay-select')
-                && fold.querySelector('.enso-absorb-table') && detail.length >= want.size && detail.every(r => r.cells.length === 7 && /Usual suppliers/.test(r.cells[2].textContent) && /Global export headroom/.test(r.cells[2].textContent))
+                && fold.querySelector('.enso-absorb-table') && detail.length >= want.size && detail.every(r => r.cells.length === 7 && /Usual suppliers/.test(r.cells[2].textContent) && /Drawn from global headroom/.test(r.cells[2].textContent))
                 && !pl.querySelector(':scope > .plate-body > .enso-absorb-table')
-                && pl.textContent.includes('Contracts, inland logistics, ports, grain type and freight are not modelled; a ceiling, not a confirmed route.')
+                && pl.querySelector('.pr2-lvl.is-confirmed').textContent.includes('Contracts, inland logistics, ports, grain type and freight are not modelled.')
                 && pl.textContent.includes('Theoretical export headroom: a ceiling on what exporters could ship, not a confirmed route: landlocked access, ports, contracts, grain type (white vs yellow maize) and freight are not modelled.')
                 && pl.textContent.includes('line ' + T.lines.economic_access.line + ' · validated')
                 && pl.textContent.includes('line ' + T.lines.ipc_phase3plus_pct.line + '% · validated')
                 && pl.textContent.includes('The scenario does not imply a food crisis.') && /own shortfall/.test(cmp.textContent)
+                && rows.every(r => /^\\d+% uncovered$|^no need$/.test(r.cells[1].textContent) && /^\\d+% of analysed in Phase 3\\+$|^no IPC analysis$/.test(r.cells[4].textContent))
+                && (fold.textContent.match(/Display band, not a validated threshold/g) || []).length === 2
                 && !document.querySelector('#enso-replace .enso-plate, .enso-access-plate');
         }"""))
         check("Who absorbs the loss keeps context unflagged and the line evidence folded", page.evaluate("""async () => {
@@ -1703,12 +1721,13 @@ def main() -> int:
         # map and its ranked list only (the bar chart and 37-row table repeated it).
         # 2026-09-30 court verdict: the world-price event study, the published models and the other drivers are one fold,
         # "What history can and cannot say"; the incomparable 2026 FAO row is gone from the World Bank graphic.
-        check("Prices shows past El Niño paths open as the third reading step and the dot plot in the closed Sources and method fold, without the 2026 FAO row, and food inflation once",
+        check("Prices shows past El Niño paths closed as the third reading step with the finding in its summary, and the dot plot in the closed Sources and method fold, without the 2026 FAO row, and food inflation once",
               page.locator('#enso-c-record .enso-event').count() == 7
               and page.locator('#enso-c-record .enso-pp-prev').count() == 7
               and page.locator('#enso-c-ffpi, #enso-c-rtfp, #enso-c-ffpilive, #enso-money-story').count() == 0
               and page.locator('#enso-pricewatch > details.pr2-past').count() == 1
-              and page.locator('#enso-pricewatch > details.pr2-past').get_attribute('open') is not None
+              and page.locator('#enso-pricewatch > details.pr2-past').get_attribute('open') is None
+              and re.search(r'^Past El Niño price paths: median [+−]\d+% after inflation in 2015-16, [+−]\d+% in 2023-24; this year below the March level in \d+ of \d+ markets$', page.locator('#enso-pricewatch > details.pr2-past > summary').text_content()) is not None
               and page.locator('#enso-money > details.pr2-sources').count() == 1
               and page.locator('#enso-money > details.pr2-sources').get_attribute('open') is None
               and page.locator('#enso-money > details.pr2-sources .enso-pastprice-plate').count() == 1
@@ -1729,12 +1748,32 @@ def main() -> int:
                 && /ECB lag:.*16 months after onset.*Economic Bulletin 6\\/2023/.test(pl.textContent)
                 && !pl.querySelector('.enso-pw-bar, .enso-pw-lag, .enso-pw-timeline');
         }"""))
-        # 2026-10-01: the humanitarian record sits inside the Sources and method fold at the end of Prices; the estimates fold into the past-price plate.
-        check("reported humanitarian need is its own fold; the published models sit inside the past-price plate",
-              page.locator('#subview-ensomoney #enso-money .pr2-past-need tr').count() >= 5
-              and 'humanitarian' in page.locator('#enso-money .pr2-past-need').text_content().lower()
+        # 2026-10-01 code audit: the humanitarian record moves to Reported (that lens's checks own its presence); Prices no
+        # longer renders it, and the estimates still fold into the past-price plate.
+        check("Prices no longer carries the humanitarian record; the published models sit inside the past-price plate",
+              page.locator('#subview-ensomoney .pr2-past-need').count() == 0
+              and 'humanitarian need' not in page.locator('#subview-ensomoney').text_content().lower()
               and page.locator('.enso-pastprice-plate .enso-estimates-fold tr').count() >= 5)
         page.evaluate("showTab('ensolive')")
+        check("reported humanitarian need is its own closed fold at the end of Reported, labelled reported, not attributed",
+              page.evaluate("""() => {
+                  const f = document.querySelector('#subview-ensolive #enso-live-pastneed > details.enso-rq-pastneed'); if (!f) return false;
+                  const kids = [...document.querySelectorAll('#subview-ensolive > *')].filter(e => !e.classList.contains('enso-source-fold'));
+                  return !f.open && kids[kids.length - 1].id === 'enso-live-pastneed'
+                      && f.querySelectorAll('.pr2-past-need tr').length >= 5
+                      && f.textContent.toLowerCase().includes('humanitarian')
+                      && f.querySelector('summary').textContent === 'Past El Niño humanitarian need (reported, not attributed)';
+              }"""))
+        # 2026-10-01 (R4): below the map the lens follows the status queue: the pattern check, confirmed impacts, responses,
+        # early signals, the reporting feed; the long country ledger is one closed fold after them.
+        check("Reported reads confirmed impacts, responses, early signals, then the feed; the ledger is folded",
+              page.evaluate("""() => {
+                  const order = [...document.querySelectorAll('#enso-live > *')].map(e => e.classList.contains('enso-threads-plate') ? 'confirmed'
+                      : e.classList.contains('enso-policy-plate') ? 'response' : e.classList.contains('enso-rq-early-plate') ? 'early'
+                      : e.classList.contains('enso-wire-plate') ? 'feed' : e.classList.contains('enso-rq-ledger-fold') ? 'ledger' : '?');
+                  const led = document.querySelector('#enso-live .enso-rq-ledger-fold');
+                  return order.join('|') === 'confirmed|response|early|feed|ledger' && !led.open && !!led.querySelector('.enso-ledger-plate');
+              }"""))
         check("Reported board distinguishes published stories and reported assessments",
               'Everything on this board is observed' not in page.locator('#enso-live').inner_text()
               and page.locator('#enso-live .enso-wire-plate').get_attribute('data-kind') == 'published'
@@ -1745,7 +1784,12 @@ def main() -> int:
             const T = (await (await fetch('data/enso_event_threads.json')).json()).data;
             const R = (await (await fetch('data/enso_recent_events.json')).json()).data.events;
             const plate = document.querySelector('#enso-live .enso-threads-plate'); if (!plate) return false;
-            const rows = [...plate.querySelectorAll('.plate-body .enso-th-row')], top = T.threads.filter(t => t.event_confidence.n_independent >= 2 || t.material);   // confirmed by independent publishers, plus material early signals
+            // 2026-10-01 (R4): the threads follow the status queue in two plates: Confirmed impacts (every thread with two or more
+            // independent publishers, open) and Early signals (material single-source threads, five open, the rest folded).
+            const early = document.querySelector('#enso-live .enso-rq-early-plate'); if (!early) return false;
+            const hi = T.threads.filter(t => t.event_confidence.n_independent >= 2);
+            const confRows = [...plate.querySelectorAll('.plate-body .enso-th-row')];
+            const rows = [...confRows, ...early.querySelectorAll('.plate-body .enso-th-row')], top = T.threads.filter(t => t.event_confidence.n_independent >= 2 || t.material);   // confirmed by independent publishers, plus material early signals
             const ATT = { attributed: 'Attributed', pattern_consistent: 'Pattern-consistent, not attributed', not_assessed: 'Not assessed' };
             const st = T.stats, lede = plate.querySelector('.enso-plate-lede').textContent;
             return rows.length >= 4 && rows.every(r => {
@@ -1756,8 +1800,9 @@ def main() -> int:
                     && r.querySelectorAll('.enso-th-chain a, .enso-th-chain span:not(.enso-th-arrow):not(.enso-th-more)').length >= 1;
             }) && lede.includes(st.threads + ' threads, ' + st.threads_with_2_or_more_reports + ' with two or more reports.')
               && top.length === st.shown_by_default && top.length < st.threads
-              && plate.querySelectorAll('details.enso-th-rest:not(.enso-th-mat) .enso-th-row').length === st.threads - top.length
-              && rows.length + plate.querySelectorAll('details.enso-th-mat .enso-th-row').length === top.length
+              && early.querySelectorAll('details.enso-th-rest:not(.enso-th-mat) .enso-th-row').length === st.threads - top.length
+              && rows.length + early.querySelectorAll('details.enso-th-mat .enso-th-row').length === top.length
+              && confRows.length === hi.length && confRows.every(r => hi.some(t => t.id === r.dataset.thread))
               && st.threads <= st.event_reports && st.event_reports <= st.raw_items
               && T.threads.every(t => t.el_nino_attribution.status !== 'attributed'
                     || R.some(e => e.id === t.el_nino_attribution.basis.id && e.enso_link === 'attributed'))   // the machine never attributes
@@ -1941,16 +1986,38 @@ def main() -> int:
                         && (!zwe || document.getElementById('enso-map-ranking').textContent.includes('Zimbabwe'));
                 }
                 if (feed === 'reported') {
-                    // 2026-09-27: the Reported rail lists El Niño countries with a report, a crisis classification or a
-                    // headline, sorted by severity (crisis phase), then report count, then fits; the title counts the rows.
-                    const b = [...document.querySelectorAll('#enso-map-ranking button')];
-                    const k = x => [+x.dataset.phase, +x.dataset.total, +x.dataset.fits];
-                    const sorted = b.every((x, i) => { if (!i) return true; const p = k(b[i-1]), q = k(x);
-                        for (let j = 0; j < 3; j++) { if (p[j] !== q[j]) return p[j] > q[j]; } return true; });
+                    // 2026-10-01 (R4): the Reported rail is a status queue, not a country ranking. Confirmed holds the open threads with
+                    // two or more independent publishers, Early signal the open material single-source ones, each newest first, with
+                    // the headline count equal to the rows and each row's title, source count and attribution word from the file;
+                    // Response holds every country the Responses chip marks for the appeal and anticipatory action.
+                    const T = (await (await fetch('data/enso_event_threads.json')).json()).data;
+                    const sit = (await (await fetch('data/enso_situation.json')).json()).data;
+                    const ATT = { attributed: 'Attributed', pattern_consistent: 'Pattern-consistent, not attributed', not_assessed: 'Not assessed' };
+                    const open = T.threads.filter(t => t.state !== 'resolved' && t.state !== 'stale' && t.iso3.length);
+                    const want = { confirmed: open.filter(t => t.event_confidence.n_independent >= 2), early: open.filter(t => t.event_confidence.n_independent < 2 && t.material) };
+                    const sec = k => document.querySelector('#enso-map-ranking [data-rq="' + k + '"]');
+                    const threadsOk = ['confirmed', 'early'].every(k => {
+                        const s = sec(k); if (!s) return false;
+                        const rows = [...s.querySelectorAll('.enso-rq-row')], found = rows.map(r => want[k].find(x => x.id === r.dataset.rqId));
+                        return +s.querySelector('.enso-rq-h i').textContent === want[k].length && rows.length === want[k].length
+                            && s.querySelectorAll(':scope > .enso-rq-list > li').length <= 5
+                            && rows.every((r, i) => { const t = found[i]; return t && t.iso3.includes(r.dataset.mapCountry)
+                                && r.querySelector('.enso-rq-what').textContent === t.title
+                                && r.querySelector('.enso-rq-n').textContent === String(t.event_confidence.n_independent)
+                                && r.querySelector('.enso-rq-att').textContent === ATT[t.el_nino_attribution.status]; })
+                            && found.every((t, i) => !i || t.last_dated_report <= found[i - 1].last_dated_report);
+                    });
+                    const rs = sec('response'), rrows = rs ? [...rs.querySelectorAll('.enso-rq-row')] : [];
+                    const respIsos = [...(sit.fao_wfp_appeal || {}).priority_iso3 || [], ...((sit.wfp_projection || {}).aa_triggered || {}).iso3 || []];
+                    const respOk = !!rs && +rs.querySelector('.enso-rq-h i').textContent === rrows.length
+                        && respIsos.every(i => rrows.some(r => r.dataset.mapCountry === i))
+                        && rrows.every(r => ['Attributed', 'Not assessed'].includes(r.querySelector('.enso-rq-att').textContent)
+                            && (!/FAO and WFP joint/.test(r.querySelector('.enso-rq-what').textContent) || r.querySelector('.enso-rq-att').textContent === 'Attributed'));
                     const m = document.getElementById('enso-map').getBoundingClientRect();
                     const a = document.getElementById('enso-map-ranking').getBoundingClientRect();
                     const title = document.querySelector('#enso-map-ranking .enso-legend-t').textContent;
-                    return a.left >= m.right - 1 && sorted && b.length > 0 && title.includes(b.length + ' El Niño countries');
+                    return a.left >= m.right - 1 && threadsOk && respOk && title === 'Where each report stands'
+                        && !/\u2014/.test(document.getElementById('enso-map-ranking').textContent);
                 }
                 const data = (await (await fetch('data/' + feed + '.json')).json()).data;
                 const buttons = [...document.querySelectorAll('#enso-map-ranking button')];
@@ -2355,14 +2422,14 @@ def main() -> int:
                 && !document.querySelector('.enso-pchip-f, .enso-pchip-bar, .enso-est-block, .enso-pa-miss, .is-est, #enso-pchip-hatch, #enso-pchip-key-h');
         }"""))
         # 2026-10-01 consolidation: verdict and market absorption lead, followed by the open historical price paths.
-        check("Prices leads with verdict, market absorption and open historical price paths in that order", page.evaluate("""async () => {
+        check("Prices leads with verdict, market absorption and closed historical price paths in that order", page.evaluate("""async () => {
             const order = [...document.querySelectorAll('#subview-ensomoney > *')].map(e => e.id || e.className).filter(i => i !== 'enso-mapgrid');
             const sub = document.querySelector('.enso-whopays-plate .enso-plate-sub').textContent;
             const titles = [...document.querySelectorAll('#enso-priceanalog > figure .enso-plate-t, #enso-whopays > figure .enso-plate-t, #enso-pricewatch > details.pr2-past figure .enso-plate-t')].map(x => x.textContent);
             return order.slice(0, 3).join('|') === 'enso-priceanalog|enso-whopays|enso-pricewatch'
                 && titles.join('|') === 'IS THE SHOCK IN PRICES YET|CAN THE MARKET ABSORB A SUPPLY SHOCK|Maize prices in southern Africa through the last two El Niños, and now'
                 && sub.includes('FAOSTAT trade matrix') && sub.includes('FoodShield access scores') && !document.querySelector('#enso-replace .enso-plate')
-                && [...document.querySelectorAll('#enso-priceanalog > details, #enso-pricewatch > details, #enso-money > details, #enso-people > details')].every(d => d.classList.contains('pr2-past') ? d.open : !d.open);
+                && [...document.querySelectorAll('#enso-priceanalog > details, #enso-pricewatch > details, #enso-money > details, #enso-people > details')].every(d => !d.open);
         }"""))
         check("maize panels keep their own y-axes and carry the normal-season benchmark (median, dashed); replay lines and ± badges are gone", page.evaluate("""() => {
             const tops = [...document.querySelectorAll('.enso-pa-svg')].map(s => Math.max(...[...s.querySelectorAll('text.enso-hw-t')].map(t => +t.textContent).filter(Number.isFinite)));
@@ -2426,10 +2493,11 @@ def main() -> int:
 
         check("Prices plate 1 derives verdicts from the benchmark, keeps the two primary markets first, adds every non-thin market on one shared scale, keeps thin rows out of the strip, and the selected decomposition table closes arithmetically", page.evaluate("""async () => {
             const C = (await (await fetch('data/enso_price_counterfactual.json')).json()).data;
-            const verdict = r => r.actual_index < 100 && (!r.placebo.current_outside_normal_spread || r.excess_pct.vs_fx_and_world < r.placebo.min)
-                ? 'PRICES FALLING' : !r.placebo.current_outside_normal_spread ? 'NOT YET UNUSUAL'
+            const verdict = r => !r.placebo.current_outside_normal_spread ? 'NORMAL RANGE'
                 : r.excess_pct.vs_fx_and_world > r.placebo.max ? 'UNUSUALLY HIGH' : 'UNUSUALLY LOW';
+            const dir = r => { const d = Math.round(r.actual_index - 100); return d === 0 ? '→ unchanged since March' : (d > 0 ? '↑ ' : '↓ ') + Math.abs(d) + '% since March'; };
             const included = C.rows.filter(r => !r.normal_years.thin);
+            const above = included.filter(r => r.excess_pct.vs_fx_and_world > r.placebo.max).length, head = (document.querySelector('.pr2-price-plate .pr2-headline') || {}).textContent || '';
             const hero = document.querySelector('.pr2-price-plate'), rowsEl = [...hero.querySelectorAll('.pr2-strip > .pr2-bench-row')];
             const za = rowsEl.find(b => b.dataset.priceCf === 'ZAF'), zm = rowsEl.find(b => b.dataset.priceCf === 'ZMB');
             const thinRows = C.rows.filter(r => r.normal_years.thin), thin = hero.querySelector('.pr2-thin');
@@ -2442,10 +2510,14 @@ def main() -> int:
             return rowsEl.length === included.length && included.every(r => rowsEl.some(b => b.dataset.priceCf === r.iso && b.textContent.includes(verdict(r))))
                 && rowsEl[0].dataset.priceCf === 'ZAF' && rowsEl[1].dataset.priceCf === 'ZMB'
                 && !!hero.querySelector('.pr2-strip-legend') && !!hero.querySelector('.pr2-strip-scale') && /Other monitored markets/.test(txt) && /Falling prices after harvest are normal/.test(txt)
-                && za.textContent.includes('South Africa') && za.textContent.includes('WHOLESALE') && za.textContent.includes('NOT YET UNUSUAL') && za.textContent.includes('+5.0%') && za.textContent.includes('63rd percentile of 8 normal years')
-                && zm.textContent.includes('Zambia') && zm.textContent.includes('RETAIL') && zm.textContent.includes('PRICES FALLING')
+                && za.textContent.includes('South Africa') && za.textContent.includes('WHOLESALE') && za.textContent.includes('NORMAL RANGE') && za.textContent.includes('+5.0% vs benchmark') && za.textContent.includes(dir(selected)) && za.textContent.includes('63rd percentile of 8 normal years')
+                && zm.textContent.includes('Zambia') && zm.textContent.includes('RETAIL') && zm.textContent.includes(verdict(C.rows.find(r => r.iso === 'ZMB'))) && zm.textContent.includes(dir(C.rows.find(r => r.iso === 'ZMB')))
+                && !/PRICES FALLING|NOT YET UNUSUAL/.test(hero.textContent)
+                && (above === 0 ? head.startsWith('No unusual price pressure in any of ' + included.length + ' monitored markets') : above * 2 >= included.length ? head.startsWith('Broad unusual price pressure: ' + above + ' of ' + included.length) : head.startsWith('Unusual price pressure is visible in ' + above + ' of ' + included.length))
+                && !/El Niño/.test(head)
                 && (!thinRows.length || (!!thin && thinRows.every(r => thin.textContent.includes(r.normal_years.n + ' normal years')) && !thin.open))
-                && txt.includes('Forward price model: none passes the release gate, so no price forecast is shown')
+                && (() => { const f = hero.querySelector('.pr2-fwd'); return !!f && f.querySelector('.pr2-label').textContent === 'Forward price forecast' && f.querySelector('.pr2-fwd-v').textContent === 'Not published'
+                    && f.textContent.includes('No tested model meets FoodShield’s release standard for these markets.') && !!f.querySelector('details.pr2-fwd-why .pr2-release') && !f.querySelector('details.pr2-fwd-why').open; })()
                 && !document.querySelector('.pr2-decomp-plate, .pr2-waterfall') && !hero.querySelector('details.pr2-method').open
                 && !!d && txt.includes('Arithmetic decomposition, not causal attribution') && txt.includes('Local residual')
                 && (rg.used_world && rg.used_fx || txt.includes('tested, not supported'))

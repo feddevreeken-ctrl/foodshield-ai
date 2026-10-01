@@ -237,6 +237,22 @@ def gatun_outlook(rows: list[tuple[date, float]], last_day: date, last_ft: float
         loo.append(Y[i] - sum(a * c for a, c in zip(bi, X[i])))
         loo_clim.append(Y[i] - sum(Yi) / len(Yi))
     rmse = lambda e: math.sqrt(sum(x * x for x in e) / len(e))
+    # Model contest (audit 2026-10-01): does the El Nino term earn its place over the lake level alone?
+    # Same leave-one-out harness for every variant; El Nino winters (DJF ONI >= 1.0) scored separately.
+    def _loo(cols):
+        Xc = [[1.0] + [c(p) for c in cols] for p in pts]
+        err = []
+        for i in range(len(pts)):
+            bi, _, _, _ = _ols(Xc[:i] + Xc[i + 1:], Y[:i] + Y[i + 1:])
+            err.append(Y[i] - sum(a * c for a, c in zip(bi, Xc[i])))
+        return err
+    lvl, nin = (lambda p: p["level_then"]), (lambda p: max(p["oni_djf"], 0.0))
+    variants = {"average": loo_clim, "lake_level_only": _loo([lvl]), "el_nino_only": _loo([nin]), "lake_level_plus_el_nino": loo}
+    hot = [i for i, p in enumerate(pts) if p["oni_djf"] >= 1.0]
+    contest = {k: {"loo_rmse_ft": round(rmse(e), 2), "loo_rmse_el_nino_winters_ft": round(rmse([e[i] for i in hot]), 2) if hot else None}
+               for k, e in variants.items()}
+    contest["_el_nino_winters"] = len(hot)
+    contest["_note"] = "leave-one-out, each winter's actual December-February ONI known; real-time skill is lower for the El Nino variants"
     for p, e in zip(pts, res):
         p["fit"] = round(p["low"] - e, 2)
     recent = [e for p, e in zip(pts, res) if p["season"] >= 2017]
@@ -312,6 +328,7 @@ def gatun_outlook(rows: list[tuple[date, float]], last_day: date, last_ft: float
         "se": {"level_then": round(math.sqrt(cov[1][1]), 3), "el_nino_oni": round(math.sqrt(cov[2][2]), 3)},
         "resid_sd_ft": round(sd, 2), "loo_rmse_ft": round(rmse(loo), 2), "loo_rmse_average_ft": round(rmse(loo_clim), 2),
         "loo_note": "leave-one-out with each winter's actual ONI known, so real-time skill is lower",
+        "contest": contest,
         "fit_max_oni": fit_max["oni_djf"], "fit_max_season": fit_max["season"],
         "recent_mean_resid_ft": round(sum(recent) / len(recent), 2) if recent else None, "recent_from": 2017,
         "level_now": last_ft, "level_date": last_day.isoformat(), "forecast": fc, "scenarios": scen,
