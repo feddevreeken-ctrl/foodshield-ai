@@ -1456,6 +1456,22 @@ def main() -> int:
         }"""))
         # 2026-10-01 (round 2): the causal path stops at Trade; access and IPC remain a separate baseline.
         # Exposure keeps two same-scenario panels, now with rightward linear concern scales.
+        # 2026-10-01 (final audit): regression checks for the logic fixed this day, run on the page's own pure functions.
+        check("regression: corroboration direction, display priority with model last, lane vocabulary, price verdict vs direction, physical Movement", page.evaluate("""async () => {
+            const L = window.__ensoLogic; if (!L) return false;
+            const dir = L.cmDirectionMatch('drier', 'extended dry spells, high temperatures') && L.cmDirectionMatch('drier', 'rainfall deficits across most areas')
+                && !L.cmDirectionMatch('drier', 'flooding after heavy rain') && L.cmDirectionMatch('wetter', 'river flooding')
+                && !L.cmDirectionMatch('wetter', 'prolonged dry spells') && !L.cmDirectionMatch(null, 'drought');
+            const a = {iso: 'AAA', priority: [0,0,0,0,0,0,0,0,0,0, 1,1]}, b = {iso: 'BBB', priority: [0,0,0,0,0,0,0,0,0,1, 0,0]};
+            const prio = L.rptPriorityCompare(a, b) > 0 && L.rptPriorityCompare(b, a) < 0;
+            const lanes = (await (await fetch('data/enso_lanes.json')).json()).data.lanes;
+            const vocab = lanes.every(l => L.laneState(l) !== 'at risk');
+            const row = {placebo: {current_outside_normal_spread: false, max: 10}, excess_pct: {vs_fx_and_world: -5}, actual_index: 80, base_month: '2026-03'};
+            const price = L.priceCfVerdict(row) === 'NORMAL RANGE' && L.priceCfDirection(row).text === '↓ 20% since March';
+            const mv = L.traceFacts({iso: 'ZWE', crop: 'corn'}).ensowater;
+            const move = !/usual suppliers cover/.test(mv) && /dry bulk|Panama|no route-specific|no import need/.test(mv);
+            return dir && prio && vocab && price && move;
+        }"""))
         check("Harvests chain is one rule with five nodes and a two-column absorb bracket; exposure has two linear same-scenario panels", page.evaluate("""() => {
             const ch = document.querySelector('#enso-chain .enso-plate'), ex = document.querySelector('#enso-exabs .enso-plate');
             if (!ch || !ex) return false;

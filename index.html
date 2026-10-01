@@ -49934,7 +49934,7 @@ function showCommodityDetail(key) {
     if (ln.phase === 'la_nina') return 'La Niña side';
     var today = new Date().toISOString().slice(0, 10);
     if (((ln.live_2026 || {}).steps || []).some(function (st) { return (st.booking_from || st.effective) <= today; }) || laneVerdict(ln).level === 'restricted') return 'restricted now';
-    return ln.attribution === 'weak' ? 'weak link' : 'at risk';
+    return ln.attribution === 'weak' ? 'weak link' : 'El Niño-linked · watch';
   }
   function signedYoY(v) { return (v < 0 ? '▼ \u2212' : v > 0 ? '▲ +' : '') + Math.abs(v).toFixed(1) + '% y/y'; }
   /* 2026-09-27 (map research): the Shipping map opens on the change now. 2026-09-29 (owner: no size-scaled
@@ -50165,7 +50165,7 @@ function showCommodityDetail(key) {
   function laneCallout(ln, measured, pw, gauge, ink, state) {
     var G = (S.gauges && S.gauges.gauges) || {}, F = S.freight && S.freight.series && S.freight.series.ocean_gulf_pnw_spread;
     var out = '<span class="enso-lc-h"><b>' + esc(laneName(ln)) + '</b> <span class="enso-lc-s" style="color:' + ink + '">' + esc(state) + '</span></span>';
-    var outlook = state + '; ' + ln.attribution + ' published ' + (ln.phase === 'la_nina' ? 'La Niña' : 'El Niño') + ' link.';
+    var outlook = /linked/.test(state) ? ln.attribution + ' published El Niño link; no restriction observed.' : state + '; ' + ln.attribution + ' published ' + (ln.phase === 'la_nina' ? 'La Niña' : 'El Niño') + ' link.';
     if (ln.attribution === 'weak' && ln.attribution_caveat) outlook = firstSentence(ln.attribution_caveat);
     if (ln.id === 'panama') outlook = firstSentence(ln.food_role) + ' Volume via Panama this season not measured.';
     out += '<span class="enso-lc-r"><em>Outlook</em> ' + esc(outlook) + '</span>';
@@ -50617,6 +50617,8 @@ function showCommodityDetail(key) {
      announced and mirrored in the control. */
   function selectCountry(iso, opts) {
     S.sel = iso || null;
+    /* A map pick carries into the trace (2026-10-01 audit): the country changes, the crop being traced stays. */
+    if (iso && !(opts && opts.noTrace)) { try { setTrace(iso, S.trace ? S.trace.crop : null); } catch (e) {} }
     if (iso && S.sub !== 'ensoharvest' && ['ensolive', 'ensomoney', 'ensowater'].indexOf(S.sub) < 0 && S.mode !== 'rtfp' && S.mode !== 'asap') showTab('ensoharvest');
     syncCountrySelect(); paint();
     var st = document.getElementById('enso-status');
@@ -53187,10 +53189,7 @@ function showCommodityDetail(key) {
       var levels = [rp.crisis || 0, multiBy[iso] || 0, acted, appealed, cmr.length, (a && a.hotspot_code) || 0, rp.events.length, al.length, headlinesFor(iso).length, fewsHigh[iso] ? 1 : 0];
       var ties = [rp.fits || 0, f && f.change_kt_record < 0 ? 1 : 0];
       return { iso: iso, a: a, cm: cmr, al: al, rt: rt, f: f, priority: levels.concat(ties), shown: levels.some(function (v) { return v > 0; }) };
-    }).filter(function (r) { return r.shown; }).sort(function (x, y) {
-      for (var k = 0; k < x.priority.length; k++) if (x.priority[k] !== y.priority[k]) return y.priority[k] - x.priority[k];
-      return nameFor(x.iso).localeCompare(nameFor(y.iso));
-    });
+    }).filter(function (r) { return r.shown; }).sort(rptPriorityCompare);
     /* ASAP notes open with crop-calendar boilerplate; show the first sentence that says what is wrong. */
     var firstSentence = function (t) {
       /* Protect every dot of an abbreviation ("e.g.", "i.e."), not just the last, or the split lands mid-word. */
@@ -54256,7 +54255,7 @@ function showCommodityDetail(key) {
        row that names this crop for this country, with a driver in the expected direction, makes the pair Corroborated. */
     var asapA = A[p.iso], asapHit = reg && reg.rain === 'drier' && asapA && typeof asapA.hotspot_code === 'number' && asapA.hotspot_code >= 1 ? asapA : null;
     var cropRe = new RegExp('\\b(' + [cw, p.crop].filter(Boolean).map(function (w) { return String(w).replace(/[^a-z ]/gi, ''); }).join('|') + ')\\b', 'i');
-    var cmHit = reg ? (cm.rows || []).filter(function (r) { return r.iso === p.iso && cropRe.test(r.crop || '') && (reg.rain === 'drier' || /flood|excess|heavy|wet/i.test(r.driver || '')); })[0] : null;
+    var cmHit = reg ? (cm.rows || []).filter(function (r) { return r.iso === p.iso && cropRe.test(r.crop || '') && cmDirectionMatch(reg.rain, r.driver); })[0] : null;
     var cmLine = cmHit ? 'GEOGLAM Crop Monitor' + (cm.issue ? ' (' + esc(cm.issue) + ')' : '') + ' rates ' + esc(cmHit.crop) + ' in ' + esc(nm) + ' ' + esc(cmHit.status) + (cmHit.driver ? ': ' + esc(cmHit.driver) : '') : '';
     var asapLine = asapHit ? 'JRC ASAP flags ' + esc(nm) + ' as an agricultural-stress hotspot' + (asapHit.assessment_date ? ', assessed ' + esc(stamp(new Date(asapHit.assessment_date))) : '') + ' (country level, not crop-specific, so it does not move the state)' : '';
     if (clear && cmHit) { out.idx = 2; out.lines.corroborated = cmLine + '.' + (asapLine ? ' ' + asapLine + '.' : ''); }
@@ -54290,6 +54289,17 @@ function showCommodityDetail(key) {
      S.trace = { iso, crop } is set by the harvest trace select and the Prices country select; it carries into the other
      lenses (chain pick, absorption pick) and the line under the tabs reads each lens's own field for that country and crop.
      Every figure comes from a loaded feed; a lens with nothing for the pair says so. */
+  /* Crop Monitor corroboration must point the same way as the published expectation (2026-10-01 audit): a dry expectation
+     needs a dry driver (deficit, dry spells, drought, heat), a wet one needs a wet driver (flood, excess or heavy rain).
+     A crop rated poor for the opposite reason does not corroborate. */
+  var CM_DRY = /\bdr(y|ought)|deficit|inadequate rain|below[- ]average rain|rainfall delay|delayed rain|moisture stress|high temperature|heat/i;
+  var CM_WET = /flood|excess(ive)? rain|heavy rain|\bwet\b|above[- ]average rain|waterlog/i;
+  function cmDirectionMatch(rain, driver) { var d = String(driver || ''); return rain === 'drier' ? CM_DRY.test(d) && !CM_WET.test(d) : rain === 'wetter' ? CM_WET.test(d) : false; }
+  /* Reported display priority: level by level, model fields last (see the ledger comment). */
+  function rptPriorityCompare(x, y) {
+    for (var k = 0; k < x.priority.length; k++) if (x.priority[k] !== y.priority[k]) return y.priority[k] - x.priority[k];
+    return nameFor(x.iso).localeCompare(nameFor(y.iso));
+  }
   var TRACE_STEPS = [['elnino', 'Climate'], ['ensoharvest', 'Production'], ['ensowater', 'Movement'], ['ensomoney', 'Market'], ['ensolive', 'Reality']];
   function setTrace(iso, crop) {
     S.trace = iso ? { iso: iso, crop: crop || null } : null;
@@ -54307,7 +54317,16 @@ function showCommodityDetail(key) {
     var need = 0, usual = 0, any = false;
     ((S.repl && S.repl.pairs) || []).forEach(function (p) { if (t.crop && p.crop !== t.crop) return; (p.buyers || []).forEach(function (b) {
       if (b.iso !== t.iso || !b.cases || !b.cases.mid) return; any = true; need += b.need_kt; usual += b.cases.mid.usual.replaced_kt; }); });
-    out.ensowater = any ? 'usual suppliers cover ' + fmtKt(usual).replace(/^\+/, '') + ' of ' + fmtKt(need).replace(/^\+/, '') : 'no import need modelled';
+    /* Movement is physical (audit 2026-10-01): the gateway ports that serve this country (IMF PortWatch, dry bulk, not grain-specific)
+       and the Panama lane when the modelled replacement runs through it; supplier arithmetic stays on Prices. */
+    var nm = nameFor(t.iso), gates = ((S.ports && S.ports.ports) || []).filter(function (pt) { return pt.iso3 === t.iso || (nm && new RegExp('\\b' + nm + '\\b').test(pt.serves || '')); })
+      .filter(function (pt) { return typeof pt.vs_mean_pct === 'number'; }).slice(0, 2);
+    var viaPanama = false; ((S.repl && S.repl.pairs) || []).forEach(function (p) { if (t.crop && p.crop !== t.crop) return; (p.buyers || []).forEach(function (b) {
+      if (b.iso !== t.iso || !b.cases || !b.cases.mid) return; ['usual', 'open'].forEach(function (k) { (b.cases.mid[k].replaced || []).forEach(function (x) { if (x.route && /Panama/.test(x.route.via || '')) viaPanama = true; }); }); }); });
+    var pan = viaPanama && ((S.lanes && S.lanes.lanes) || []).filter(function (l) { return l.id === 'panama'; })[0];
+    var mv = gates.map(function (pt) { return pt.name + ' ' + (pt.vs_mean_pct > 0 ? '+' : '') + Math.round(pt.vs_mean_pct) + '% dry bulk'; });
+    if (pan) mv.push('Panama ' + laneState(pan));
+    out.ensowater = mv.length ? mv.join(', ') + (gates.length ? ' (28 days, not grain-specific)' : '') : (any ? 'no route-specific constraint identified' : 'no import need modelled');
     var re = { corn: /maize/i, wheat: /wheat/i, rice: /rice/i, sorghum: /sorghum/i }[t.crop] || /./;
     var pr = ((S.pcf && S.pcf.rows) || []).filter(function (r) { return r.iso === t.iso && re.test(r.commodity || '') && r.placebo; })[0];
     out.ensomoney = pr ? priceCfVerdict(pr).toLowerCase() + ', ' + priceCfDirection(pr).text : 'no monitored price';
@@ -54331,6 +54350,8 @@ function showCommodityDetail(key) {
     var x = el.querySelector('[data-trace-clear]'); if (x) x.onclick = function () { setTrace(null); };
   }
   window.ensoTrace = setTrace;
+  /* Read access for the regression checks in the gate (pure functions only). */
+  window.__ensoLogic = { cmDirectionMatch: cmDirectionMatch, rptPriorityCompare: rptPriorityCompare, laneState: laneState, priceCfVerdict: priceCfVerdict, priceCfDirection: priceCfDirection, traceFacts: traceFacts };
   function renderChain() {
     var el = document.getElementById('enso-chain'), O = S.outlook, D = S.dist, R = S.repl;
     if (!el) return;
