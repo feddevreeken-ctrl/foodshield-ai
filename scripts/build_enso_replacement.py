@@ -7,6 +7,9 @@ For each exposed supplier-crop pair in data/enso_outlook.json `who_pays` (the sc
 
 Pure stdlib, deterministic, about a second. Reads:
   enso_outlook.json   who_pays rows (loss, exports, buyers) and rows_all (which exporters lose their own harvest)
+  enso_distribution   forecast quantiles of each pair's harvest change (response capped at the strongest fitted winter):
+                      the same allocation is re-run at P10 / P50 / P90 of that forecast (mid headroom only), so a buyer's
+                      shortfall carries a range, not only the one record-winter number
   tm/<ISO>.json       FAOSTAT detailed trade matrix: each buyer's usual suppliers of the crop (top eight)
   usda_psd.json       exporter normal exports and ending stocks, buyer stocks and consumption
   trade_restrictions  export bans in force
@@ -169,6 +172,10 @@ def ration(demands, exporters, scope, sens, pan_factor):
 
 def main() -> int:
     O = body(load("enso_outlook.json"))
+    try:
+        DIST = {p["key"]: p for p in body(load("enso_distribution.json"))["pairs"]}
+    except Exception:
+        DIST = {}
     psd = body(load("usda_psd.json"))
     restr = body(load("trade_restrictions.json"))
     pubfx = body(load("enso_published_effects.json"))
@@ -276,6 +283,37 @@ def main() -> int:
                 got, left = ration(demands, {i: {"cap": h} for i, h in head.items()}, scope, s, pan[s["panama"]])
                 results[(s["key"], scope)] = (got, left, head)
 
+        # Forecast range: re-run the mid-headroom allocation with each supplier's loss scaled to P10 / P50 / P90 of the forecast
+        # harvest change (response capped at the strongest fitted winter), against the record-winter loss that sized the demands.
+        # lost exports = min(loss, exports); the rest of the loss is the supplier's own extra import. Named buyers scale with lost exports.
+        mid_s = [x for x in PARAMS["sensitivity"] if x["key"] == "mid"][0]
+        mid_head = results[("mid", "usual")][2]
+        rec_pct = {(r["iso"], r["crop"]): r.get("change_pct_record") for r in rows if r.get("status") == "shown"}
+        frange = {}
+        for qk in ("p10", "p50", "p90"):
+            sc = {}
+            for w in W:
+                dp = DIST.get(f"{w['iso']}/{crop}") or {}
+                q = ((dp.get("change_pct_capped") or {}).get(qk) if isinstance(dp.get("change_pct_capped"), dict) else None)
+                if q is None:
+                    q = (dp.get("change_pct") or {}).get(qk)
+                rp = rec_pct.get((w["iso"], crop))
+                if q is None or not rp or rp >= 0:
+                    sc[w["iso"]] = None
+                    continue
+                ratio = max(0.0, q / rp)
+                loss = w["loss_kt"] * ratio
+                exp_kt = float(w.get("exports_kt") or 0)
+                lost = min(loss, exp_kt)
+                sc[w["iso"]] = {"loss": loss, "named": min(1.0, lost / w["lost_exports_kt"]) if w.get("lost_exports_kt") else 0.0, "extra": loss - lost}
+            if any(v is None for v in sc.values()):
+                continue
+            dq = [dict(d, need=(d["need"] * sc[d["from"]]["named"] if d["kind"] == "buyer" else sc[d["from"]]["extra"])) for d in demands]
+            for scope in ("usual", "open"):
+                got, _left = ration(dq, {i: {"cap": h} for i, h in mid_head.items()}, scope, mid_s, pan[mid_s["panama"]])
+                for d in dq:
+                    frange.setdefault(d["id"], {}).setdefault(qk, {"need_kt": round(d["need"], 1)})[scope + "_residual_kt"] = round(max(0.0, d["need"] - sum(got[d["id"]].values())), 1)
+
         # Per-buyer output.
         by_pair = {}
         for d in demands:
@@ -311,6 +349,8 @@ def main() -> int:
             rec = {"iso": d["buyer"], "kind": d["kind"], "from": d["from"], "need_kt": d["need"], "tm_year": d["tm_year"],
                    "usual_suppliers": [{"iso": i, "t": d["usual"][i], "share_pct": d["usual_share"][i], "basis": d["usual_basis"][i]} for i in d["usual"]],
                    "stocks_kt": stocks, "consumption_kt": cons, "cases": cases}
+            if frange.get(d["id"]):
+                rec["forecast_range"] = frange[d["id"]]
             for k in ("low", "mid", "high"):
                 for scope in ("usual", "open"):
                     c = cases[k][scope]
@@ -369,6 +409,7 @@ def main() -> int:
             "Rationing: a buyer's need is split across eligible exporters in proportion to weight; an exporter asked for more than its headroom is cut back pro rata across the buyers asking it. Repeated until nothing moves. All buyers of a crop compete for the same headroom.",
             "Routes: US exports to East and Southeast Asian buyers are scaled by the Panama Canal capacity factor: booking slots in the step in force today under the newest advisory, " + str(pan.get("advisory") or "unknown") + " (mid, high cases; a step scheduled for a later date is carried as slots_next but not used), or the 2023 floor (low case), over the lower end of the stated normal 36-38 a day. Gulf ocean freight (USDA AMS, US Gulf to Japan) is carried as a cost signal with its own baseline; no freight cost is invented or used to rank suppliers. Landlocked access, port capacity and overland routes are not modelled.",
             "Residual weeks of use = uncovered tonnes over the buyer's USDA annual consumption x 52. Buyer stocks are shown, not subtracted.",
+            "Forecast range (mid headroom): the same allocation re-run with each supplier's loss scaled to the P10, P50 and P90 of its forecast harvest change (response stopped at the strongest fitted winter) over the record-winter change that sized the demands. Lost exports are min(loss, normal exports); the remainder is the supplier's own extra import. Named buyers never scale above their record-winter need, because their usual imports from the supplier already cap it, so the P10 end is understated for them. P10 is the severe end. Scenario arithmetic, not a forecast.",
             "Stretched exporters: extra tonnes above 25% of the exporter's normal exports.",
         ],
         "params": PARAMS, "panama": pan, "freight_signal": fr, "reference_date": today,
