@@ -93,7 +93,8 @@ def check_all(reader=dag.read, now: datetime | None = None) -> list[tuple[str, s
                 fail("older_than_input", f"{name} ({mine.isoformat()[:19]}) is older than its input {inp} ({its.isoformat()[:19]})")
             r = dag.parse_ts(rec.get(inp))
             if r and abs((r - its).total_seconds()) > TOL_S:
-                fail("input_rebuilt", f"{name} recorded {inp} as of {r.isoformat()[:19]} but it is now {its.isoformat()[:19]}")
+                # A hand-run build is expected to lag a cron feed that refreshes every six hours: that is a review matter, not a break.
+                (warn if hand else fail)("input_rebuilt", f"{name} recorded {inp} as of {r.isoformat()[:19]} but it is now {its.isoformat()[:19]}")
             if not dag.is_hand_kept(inp, dag.meta_of(reader(inp))):
                 cron_inputs.append((inp, its))
         if cron_inputs and not hand:
