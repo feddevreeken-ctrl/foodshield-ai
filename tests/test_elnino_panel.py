@@ -1021,7 +1021,8 @@ def main() -> int:
         # band (about 0.3k). Ocean gives up its 5250 cap by 100; Prices gains the access ledger (5 rows + fold) and keeps 5400.
         # 2026-09-30: Harvests gains the NOAA-forecast distribution plate (measured +725 px at 1440x1000: 4260 -> 4985), cap 5000 -> 5725.
         # 2026-10-01 consolidation: Harvests joins fixed-winter and distribution answers; Prices joins payer, replacement and access tables. Ceilings do not grow.
-        CEIL = {'elnino': 5350, 'ensoharvest': 5725, 'ensowater': 7300, 'ensomoney': 6400, 'ensolive': 6100}
+        # 2026-10-01 evening: Harvests grew from 2 to 5 diagrams (chain, exposure x absorption, open replay chart): ceiling 5725 -> 6450.
+        CEIL = {'elnino': 5350, 'ensoharvest': 6450, 'ensowater': 7300, 'ensomoney': 6400, 'ensolive': 6100}
         check("no lens grows past its height ceiling", all(heights.get(k, 0) <= v for k, v in CEIL.items()), str(heights))
         # 2026-09-30 (crop belt): the "Is the expected pattern showing up?" plate weights the 30-day SPI by harvested crop area
         # (data/ref/crop_area_2p5.json.gz, MIRCA2000). Weights sum to 1 per region and crop, and every status is recomputed here from the file.
@@ -1459,12 +1460,23 @@ def main() -> int:
         # 2026-10-01 consolidation: held-out performance remains a separate closed fold immediately below the one answer plate.
         page.evaluate("showTab('ensoharvest')")
         page.wait_for_selector('#subview-ensoharvest.active .enso-pf-plate', state='attached')
-        check("Harvests keeps held-out performance in a closed fold under the answer", page.evaluate("""() => {
+        check("Harvests keeps held-out performance in an open fold under the answer", page.evaluate("""() => {
             const answer = document.getElementById('enso-outlook'), hind = document.getElementById('enso-hindcast');
             const fold = hind && hind.querySelector(':scope > details.enso-fold-plate');
-            return !!answer.querySelector('.enso-hv-answer') && !!fold && !fold.open
+            return !!answer.querySelector('.enso-hv-answer') && !!fold && fold.open
                 && fold.querySelector(':scope > summary').textContent.includes('How the model has performed')
                 && answer.nextElementSibling === hind;
+        }"""))
+        # 2026-10-01 (evening): the Harvests lens has five diagrams. Chain plate: seven cells, each with an evidence tag from the fixed set;
+        # exposure plate: two panels, one mark per country per panel, no composite score.
+        check("Harvests chain plate has seven stages with evidence tags, a rail, no em dash; exposure plate has two panels and marks", page.evaluate("""() => {
+            const ch = document.querySelector('#enso-chain .enso-plate'), ex = document.querySelector('#enso-exabs .enso-plate');
+            if (!ch || !ex) return false;
+            const cells = ch.querySelectorAll('[class*="enso-chain-cell"]'), tags = [...ch.querySelectorAll('[class*="enso-chain-tag"]')].map(n => n.textContent.trim());
+            const okTags = tags.length >= 7 && tags.every(t => /^(FORECAST|MODELLED|OBSERVED|SCENARIO|NOT YET MEASURED)$/i.test(t));
+            return cells.length >= 7 && okTags && /forecast/.test(ch.textContent) && !/—/.test(ch.textContent + ex.textContent)
+                && ex.querySelectorAll('svg.enso-exabs-svg g[data-exabs-iso]').length >= 4 && /Panel A/.test(ex.textContent) && /Panel B/.test(ex.textContent)
+                ;
         }"""))
         # 2026-10-01 consolidation: the answer joins outlook baselines to forecast percentiles; the record winter is one tick.
         check("Harvests answer prints neutral, USDA and forecast percentiles with one record-winter tick per row", page.evaluate("""async () => {
@@ -1517,14 +1529,14 @@ def main() -> int:
             const fold = pl.closest('details.enso-fold-plate');
             const right = sc.filter(e => e.global.sign_right).length, alarms = sc.filter(e => e.global.predicted_kt < 0 && e.global.actual_kt > 0).length;
             const t = pl.querySelector('.enso-pf-lede').textContent.replace(/\s+/g, ' ');
-            return !!fold && !fold.open && !!fold.querySelector(':scope > .enso-rp-second .enso-pf-plate')
+            return !!fold && !!fold.querySelector(':scope > .enso-rp-second .enso-pf-plate')
                 && right === P.overall.sign_right && alarms === P.overall.false_alarms && sc.length === P.overall.events
                 && +pl.dataset.n === sc.length && +pl.dataset.right === right && +pl.dataset.alarms === alarms
                 && t.includes('Direction right in ' + right + ' of ' + sc.length + ' winters') && t.includes('False alarms: ' + alarms + ' of ' + sc.length)
                 && pl.querySelectorAll('.enso-pf-row').length === P.events.length
                 && pl.querySelectorAll('.enso-pf-row.is-hit').length === right;
         }"""))
-        # 2026-10-01: the selection-safe replay leads the closed fold; every printed count is recounted from data/enso_replay.json.
+        # 2026-10-01: the selection-safe replay leads the fold (open since 10-01 evening, dumbbell chart above its table); every printed count is recounted from data/enso_replay.json.
         check("replay fold prints the file's rows, counts and error figures", page.evaluate("""async () => {
             const R = (await (await fetch('data/enso_replay.json')).json()).data;
             const sc = R.events.filter(e => e.scored), pl = document.querySelector('.enso-rp-plate'); if (!pl) return false;
@@ -1533,7 +1545,7 @@ def main() -> int:
             const mt = k => { const a = Math.abs(k); return a >= 1000 ? (a / 1000).toFixed(1) + ' Mt' : Math.round(a) + ' kt'; };
             const rows = [...pl.querySelectorAll('tbody tr')];
             const plume = sc.filter(e => e.enso_input.kind === 'iri_plume_september').length;
-            return !!fold && !fold.open && fold.querySelector(':scope > summary').textContent.includes('direction right ' + right + ' of ' + sc.length + ' winters')
+            return !!fold && fold.open && pl.querySelectorAll('svg.enso-rp-chart g[data-winter]').length === sc.length && fold.querySelector(':scope > summary').textContent.includes('direction right ' + right + ' of ' + sc.length + ' winters')
                 && rows.length === sc.length && rows.filter(r => r.classList.contains('is-hit')).length === right
                 && rows.every((r, i) => { const e = sc.slice().sort((a, b) => b.djf_year - a.djf_year)[i]; return r.textContent.includes(e.said.issued) && r.textContent.includes(mt(e.predicted_kt)) && r.textContent.includes(mt(e.actual_kt)) && r.textContent.includes(e.said.top3[0].pair.split('/')[0]); })
                 && t.includes('Direction right in ' + right + ' of ' + sc.length + ' winters') && t.includes(mt(P.mae_kt) + ' against ' + mt(P.mae_yardstick_kt))
