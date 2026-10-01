@@ -1568,7 +1568,7 @@ def main() -> int:
                 const lab = r.querySelector('.enso-hv-track').getAttribute('aria-label');
                 return r.textContent.includes(n0(c.p50)) && lab.includes(n0(c.p05)) && lab.includes(n0(c.p95))
                     && (!!r.querySelector('.enso-hv-capped') === capped);
-            }) && plate.textContent.includes(Math.round(D.target.prob_oni_above_record * 100) + '% of forecast draws exceed ONI ' + D.target.record_oni.toFixed(1))
+            }) && plate.textContent.includes(Math.round(D.target.prob_oni_above_record * 100) + '% of forecast draws exceed ONI +' + D.target.record_oni.toFixed(1))
                 && plate.textContent.includes('extrapolation: no fitted winter here') && plate.dataset.kind !== 'observed'
                 && !!plate.querySelector('details.enso-evidence-note') && !document.querySelector('#enso-dist .enso-plate');
         }"""))
@@ -1754,7 +1754,7 @@ def main() -> int:
             const policy = document.querySelector('#enso-live .enso-policy-plate').textContent;
             return regions.length === sit.fewsnet.regions.length
                 && regions.every((r, i) => r.textContent.includes(sit.fewsnet.regions[i].region) && r.textContent.includes(sit.fewsnet.regions[i].concern))
-                && ledger >= 8 && /\\d+ days?/.test(policy);
+                && ledger >= 8 && (/\\d+ days?/.test(policy) || /No end date/.test(policy));   // a countdown while a measure with an end date is in force, else the no-end-date line
         }"""))
         check("the wire shows each story once and no raw HTML entities leak", page.evaluate("""() => {
             const t = [...document.querySelectorAll('#enso-live .enso-wire-plate .enso-news-t')].map(a => a.textContent.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\\s+/g, ' ').trim().slice(0, 70));
