@@ -1728,7 +1728,7 @@ def main() -> int:
             const R = (await (await fetch('data/enso_replacement.json')).json()).data;
             const pl = document.querySelector('#enso-whopays .enso-absorb-plate'); if (!pl) return false;
             const txt = pl.textContent, open = Object.values(R.aggregate).reduce((n, c) => n + c.mid.open.residual_kt, 0);
-            return pl.classList.contains('is-modelled') && txt.includes('CAN THE MARKET ABSORB A SUPPLY SHOCK') && txt.includes('Who absorbs the loss')
+            return pl.classList.contains('is-modelled') && txt.includes('Can the market absorb a supply shock?') && txt.includes('Who absorbs the loss')
                 && txt.includes('Usual suppliers') && txt.includes('Global export headroom') && txt.includes('usual suppliers')
                 && (open >= 1 || txt.includes('nothing short')) && /export headroom/.test(txt)
                 && !document.querySelector('#enso-replace .enso-plate') && getComputedStyle(pl).borderTopLeftRadius === '0px';
@@ -2443,7 +2443,7 @@ def main() -> int:
             const sub = document.querySelector('.enso-whopays-plate .enso-plate-sub').textContent;
             const titles = [...document.querySelectorAll('#enso-priceanalog > figure .enso-plate-t, #enso-whopays > figure .enso-plate-t, #enso-pricewatch > details.pr2-past figure .enso-plate-t')].map(x => x.textContent);
             return order.slice(0, 3).join('|') === 'enso-priceanalog|enso-whopays|enso-pricewatch'
-                && titles.join('|') === 'IS THE SHOCK IN PRICES YET|CAN THE MARKET ABSORB A SUPPLY SHOCK|Maize prices in southern Africa through the last two El Niños, and now'
+                && titles.join('|') === 'Is the shock in prices yet?|Can the market absorb a supply shock?|Maize prices in southern Africa through the last two El Niños, and now'
                 && sub.includes('FAOSTAT trade matrix') && sub.includes('FoodShield access scores') && !document.querySelector('#enso-replace .enso-plate')
                 && document.querySelector('#enso-pricewatch > details.pr2-past').open
                 && [...document.querySelectorAll('#enso-priceanalog > details, #enso-pricewatch > details:not(.pr2-past), #enso-money > details, #enso-people > details')].every(d => !d.open);
