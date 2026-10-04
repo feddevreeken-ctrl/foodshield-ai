@@ -228,6 +228,8 @@ def gather(today: date):
     for e in ((_load("enso_news.json").get("data") or {}).get("items") or []):
         t, d = e.get("title") or "", _d(e.get("published_at"))
         hz, isos = ae._hazard(t), [i for i in (e.get("countries_mentioned") or []) if i != "WLD"]
+        if not isos and e.get("outlet_iso3"):
+            isos = [e["outlet_iso3"]]   # a national outlet's report that names no place (same rule as the auto marks)
         if not d:
             dropped("wire item without a date")
         elif not hz:

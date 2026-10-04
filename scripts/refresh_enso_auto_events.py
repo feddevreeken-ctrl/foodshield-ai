@@ -139,16 +139,21 @@ MONTH = ["January", "February", "March", "April", "May", "June", "July", "August
 # Hazard words, in priority order ("Hurricane Nolo floods roads" is a cyclone).
 HAZARD_WORDS = [
     ("cyclone", r"cyclone|hurricane|typhoon|tropical storm|hurac[aá]n|ouragan|tormenta tropical"),
-    ("flood", r"flood|flooding|inundat|inondation|inundaci|heavy rains?|torrential"),
-    ("wildfire", r"wildfire|bushfire|forest fires?|peat fires?|peatland fire|incendio|feux de for[eê]t"),
-    ("heat", r"heat ?wave|extreme heat|record heat|ola de calor|canicule"),
-    ("drought", r"drought|dry spell|abnormally dry|rainfall deficit|poor rains|below[- ]average rain|parched|sequ[ií]a|s[eé]cheresse"),
+    ("flood", r"flood|flooding|inundat|inondation|inundaci|inunda[çc][ãa]o|enchente|heavy rains?|torrential"),
+    ("wildfire", r"wildfire|bushfire|forest fires?|peat fires?|peatland fire|incendio|inc[êe]ndio florestal|queimadas?|feux de for[eê]t"),
+    ("heat", r"heat ?wave|extreme heat|record heat|ola de calor|onda de calor|canicule"),
+    ("drought", r"drought|dry spell|abnormally dry|rainfall deficit|poor rains|below[- ]average rain|parched|sequ[ií]a|"
+                r"\bseca\b|estiagem|s[eé]cheresse"),
 ]
 # A headline about what may come, not what happened.
 AHEAD = re.compile(r"\b(could|may|might|will|would|threat\w*|looms?|looming|risks?|prepar\w*|ahead|forecasts?|"
                    r"outlooks?|expected|warns?|warning|explainer|what is|how will|about to|possible|potential|"
-                   r"set to|likely|anticipat\w*|plans?|brace\w*|urges?)\b", re.I)
-EL_NINO = re.compile(r"el\s+ni[nñ]o", re.I)
+                   r"set to|likely|anticipat\w*|plans?|brace\w*|urges?|"
+                   # the regional outlets write in Spanish and Portuguese too
+                   r"podr[íi]a|podr[áa]|prev[ée]|previs[ãa]o|pron[óo]stico|amenaza|amea[çc]a|riesgo|risco|alerta|"
+                   r"se espera|posible|probable|poss[íi]vel|prepar[ae]\w*)\b", re.I)
+# Case matters: Spanish "del niño" is "of the child" (refresh_enso_news.NAMED says the same).
+EL_NINO = re.compile(r"\b(?:[Ee]l|EL)\s+(?:Ni[nñ]o|NI[NÑ]O)\b")
 FEED_NAME = {"gdacs": "GDACS", "reliefweb": "ReliefWeb", "enso_news": "El Niño news"}
 GDACS_TYPE = {"DR": "drought", "FL": "flood", "TC": "cyclone", "WF": "wildfire"}
 HAZARD_WORD = {"drought": "Drought", "flood": "Flooding", "cyclone": "A tropical cyclone", "wildfire": "Wildfire",
@@ -235,8 +240,13 @@ def _candidates(today: date) -> list[dict]:
     for e in ((_load("enso_news.json").get("data") or {}).get("items") or []):
         t, d = e.get("title") or "", _d(e.get("published_at"))
         isos = [i for i in (e.get("countries_mentioned") or []) if i != "WLD"]
+        # A national outlet's hazard report that names no place is about its own country (the hazard and
+        # forward-looking tests below still apply); the place text says the country came from the outlet.
+        outlet = not isos and bool(e.get("outlet_iso3"))
+        if outlet:
+            isos = [e["outlet_iso3"]]
         if d:
-            out.append({"feed": "enso_news", "key": e.get("url") or t, "title": t, "kind": None, "iso3": isos,
+            out.append({"feed": "enso_news", "key": e.get("url") or t, "title": t, "kind": None, "iso3": isos, "outlet": outlet,
                         "start": d - timedelta(days=NEWS_SPAN - 1), "end": d, "impact": "", "located": False,
                         "source": {"title": t, "publisher": e.get("source") or "", "url": e.get("url") or "",
                                    "date": d.isoformat()}})
@@ -292,7 +302,8 @@ def build(today: date | None = None) -> tuple[dict, dict]:
                 skip("no country to place it")
                 continue
             lat, lon = cap
-            where = ", ".join(name(i) for i in keep) + (" (marked at the capital: the feed names the country only)" if not c["located"]
+            where = ", ".join(name(i) for i in keep) + (" (marked at the capital: the headline names no place; the country is the outlet's)" if c.get("outlet")
+                                                       else " (marked at the capital: the feed names the country only)" if not c["located"]
                                                        else " (marked at the capital: the feed's position is for the whole area)")
         if named:
             why = "Picked by rule from the " + FEED_NAME[c["feed"]] + " feed, not checked by a person. The headline names El Niño."

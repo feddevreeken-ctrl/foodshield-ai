@@ -38,9 +38,12 @@ import refresh_commodity_news as cn  # noqa: E402
 OUTFILE = "enso_news.json"
 DATA = Path(__file__).resolve().parent.parent / "data"
 
-NAMED = re.compile(r"el\s*ni[ñn]o|la\s*ni[ñn]a|\benso\b|southern oscillation|ni[ñn]o costero", re.I)
+# Case matters: in Spanish "la niña" is a girl and "del niño" is "of the child" (a Guatemalan "Lotería del niño" feed
+# matched 100 times). The events are written El Niño / La Niña, or in capitals.
+NAMED = re.compile(r"\b(?:[Ee]l|EL)\s*(?:Ni[ñn]o|NI[ÑN]O)\b|\b(?:[Ll]a|LA)\s*(?:Ni[ñn]a|NI[ÑN]A)\b|\bENSO\b|"
+                   r"[Ss]outhern [Oo]scillation|Ni[ñn]o [Cc]ostero")
 MAX_AGE_DAYS = 21
-MAX_ITEMS = 60
+MAX_ITEMS = 120     # 60 until the regional feeds below; at 60 the 21-day window would shrink to days
 RELIEF_SLOTS = 15   # humanitarian reports are kept even when press copies are many
 FOOD = re.compile(r"maize|corn|wheat|rice|soy|sorghum|millet|crop|harvest|food|grain|drought|famine|hunger|price|palm|sugar|monsoon|cereal|farm|livestock", re.I)
 
@@ -143,13 +146,63 @@ def reliefweb(since: datetime) -> list[dict]:
 
 
 # ── 2. Publisher RSS, by name ─────────────────────────────────────────────────
+# Outlets in the places El Niño hits (2026-10-04 audit: the 57 feeds above are global, with local press only for India
+# and South Africa). Read here only, not by the commodity wire, and filtered by name like the rest. Each was fetched and
+# parsed on 2026-10-04. Where a site's search feed for "el nino" works it is used, since a front page rolls a story off
+# within days. The third field is the outlet's home country (None for a regional outlet): it is stored as
+# outlet_iso3, never written into countries_mentioned, because national outlets also run global stories.
+REGIONAL_FEEDS = [
+    ("Antara (Indonesia)",              "https://en.antaranews.com/rss/news.xml", "IDN"),
+    ("Malay Mail (Malaysia)",           "https://www.malaymail.com/feed/rss/malaysia", "MYS"),
+    ("Post-Courier (Papua New Guinea)", "https://www.postcourier.com.pg/feed/", "PNG"),
+    ("RNZ Pacific",                     "https://www.rnz.co.nz/rss/pacific.xml", None),
+    ("Inquirer (Philippines)",          "https://newsinfo.inquirer.net/feed", "PHL"),
+    ("PhilStar (Philippines)",          "https://www.philstar.com/rss/headlines", "PHL"),
+    ("GMA News (Philippines)",          "https://data.gmanetwork.com/gno/rss/news/feed.xml", "PHL"),
+    ("Rappler (Philippines)",           "https://www.rappler.com/?s=el+nino&feed=rss2", "PHL"),
+    ("VnExpress (Vietnam)",             "https://e.vnexpress.net/rss/news.rss", "VNM"),
+    ("Bangkok Post (Thailand)",         "https://www.bangkokpost.com/rss/data/topstories.xml", "THA"),
+    ("ABC Rural (Australia)",           "https://www.abc.net.au/news/feed/2942460/rss.xml", "AUS"),
+    ("Daily Nation (Kenya)",            "https://nation.africa/kenya/rss.xml", "KEN"),
+    ("The EastAfrican",                 "https://www.theeastafrican.co.ke/rss.xml", None),
+    ("Radio Dabanga (Sudan)",           "https://www.dabangasudan.org/en/?s=el+nino&feed=rss2", "SDN"),
+    ("The Herald (Zimbabwe)",           "https://www.herald.co.zw/feed/", "ZWE"),
+    ("NewsDay (Zimbabwe)",              "https://www.newsday.co.zw/?s=el+nino&feed=rss2", "ZWE"),
+    ("Nyasa Times (Malawi)",            "https://www.nyasatimes.com/?s=el+nino&feed=rss2", "MWI"),
+    ("Malawi24",                        "https://malawi24.com/feed/", "MWI"),
+    ("Club of Mozambique",              "https://clubofmozambique.com/?s=el+nino&feed=rss2", "MOZ"),
+    ("Lusaka Times (Zambia)",           "https://www.lusakatimes.com/feed/", "ZMB"),
+    ("The Namibian",                    "https://www.namibian.com.na/feed/", "NAM"),
+    ("Daily Maverick (South Africa)",   "https://www.dailymaverick.co.za/dmrss/", "ZAF"),
+    ("allAfrica Agriculture",           "https://allafrica.com/tools/headlines/rdf/agriculture/headlines.rdf", None),
+    ("allAfrica Environment",           "https://allafrica.com/tools/headlines/rdf/environment/headlines.rdf", None),
+    ("Prensa Libre (Guatemala)",        "https://www.prensalibre.com/feed/", "GTM"),
+    ("Jamaica Gleaner",                 "https://jamaica-gleaner.com/feed/rss.xml", "JAM"),
+    ("Andina (Peru)",                   "https://andina.pe/agencia/rss/", "PER"),
+    ("El Comercio (Peru)",              "https://elcomercio.pe/arcio/rss/", "PER"),
+    ("Gestión (Peru)",                  "https://gestion.pe/arcio/rss/", "PER"),
+    ("El Universo (Ecuador)",           "https://www.eluniverso.com/arc/outboundfeeds/rss/?outputType=xml", "ECU"),
+    ("El Tiempo (Colombia)",            "https://www.eltiempo.com/rss/colombia.xml", "COL"),
+    ("Agência Brasil",                  "https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml", "BRA"),
+    ("Canal Rural (Brazil)",            "https://www.canalrural.com.br/feed/", "BRA"),
+    ("Clarín Rural (Argentina)",        "https://www.clarin.com/rss/rural/", "ARG"),
+    ("La Nación (Argentina)",           "https://www.lanacion.com.ar/arc/outboundfeeds/rss/?outputType=xml", "ARG"),
+    ("MercoPress",                      "https://en.mercopress.com/rss/", None),
+    ("EFE Agro",                        "https://efeagro.com/feed/", None),
+    ("CIIFEN",                          "https://ciifen.org/?s=el+nino&feed=rss2", None),
+    ("Columbia Climate School",         "https://news.climate.columbia.edu/?s=el+nino&feed=rss2", None),
+]
+
+
 def rss_named() -> tuple[list[dict], int, int]:
     items, ok, failed = [], 0, 0
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        futs = {ex.submit(cn.fetch_institutional_rss, label, url): (label, tier)
-                for label, url, tier in cn.ALL_FEEDS}
+    feeds = [(label, url, tier, None) for label, url, tier in cn.ALL_FEEDS] + \
+            [(label, url, "regional", home) for label, url, home in REGIONAL_FEEDS]
+    with ThreadPoolExecutor(max_workers=12) as ex:
+        futs = {ex.submit(cn.fetch_institutional_rss, label, url): (label, tier, home)
+                for label, url, tier, home in feeds}
         for fut in as_completed(futs):
-            label, tier = futs[fut]
+            label, tier, home = futs[fut]
             try:
                 raw = fut.result()
                 ok += 1
@@ -161,6 +214,8 @@ def rss_named() -> tuple[list[dict], int, int]:
                 if NAMED.search(a.get("title") or ""):
                     it = _item(a.get("title"), label, a.get("url"), a.get("published_at"),
                                "rss:" + tier, "news")
+                    if it and home:
+                        it["outlet_iso3"] = home
                     if it:
                         # Publisher-declared feed image only (media:thumbnail/content,
                         # enclosure), via cn._feed_image. GDELT's scraped socialimage stays banned.
@@ -286,9 +341,10 @@ def main() -> int:
          "window_days": MAX_AGE_DAYS, "fresh_this_run": len(fresh)},
         source="ReliefWeb reports; publisher RSS feeds; GDELT DOC 2.0",
         notes=("Headlines that name El Niño, La Niña or ENSO, from the humanitarian "
-               "reports API, the publisher feeds the commodity wire reads, and one GDELT "
-               "query. Third-party CLAIMS with links, never measured data; nothing scores "
-               "off this file. Country tags are keyword matches. Last-good items are kept "
+               "reports API, the publisher feeds the commodity wire reads, outlets in the "
+               "places El Niño hits, and one GDELT query. Third-party CLAIMS with links, never "
+               "measured data; nothing scores off this file. Country tags are keyword matches; "
+               "outlet_iso3 is a national outlet's home country, not a tag. Last-good items are kept "
                "for 21 days so a throttled or failed run does not blank the wire."),
         status="partial" if partial else "ok",
     )

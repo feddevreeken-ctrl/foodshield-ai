@@ -276,6 +276,15 @@ ALIASES = {
     "ghanaian": "GHA", "senegalese": "SEN",
     "myanmar": "MMR", "burmese": "MMR",
     "emirati": "ARE", "dubai": "ARE", "abu dhabi": "ARE",
+    # 2026-10-04: the El Niño wire reads outlets in the places El Niño hits, some in Spanish and Portuguese.
+    "zimbabwean": "ZWE", "harare": "ZWE", "malawian": "MWI", "lilongwe": "MWI", "mozambican": "MOZ", "maputo": "MOZ",
+    "zambian": "ZMB", "lusaka": "ZMB", "malagasy": "MDG", "tanzanian": "TZA", "ugandan": "UGA", "eritrean": "ERI",
+    "guatemalan": "GTM", "honduran": "HND", "tegucigalpa": "HND", "salvadoran": "SLV", "nicaraguan": "NIC",
+    "costa rican": "CRI", "panamanian": "PAN", "ecuadorian": "ECU", "guayaquil": "ECU", "bolivian": "BOL",
+    "fijian": "FJI", "timorese": "TLS", "port moresby": "PNG", "mindanao": "PHL", "luzon": "PHL", "visayas": "PHL",
+    "perú": "PER", "méxico": "MEX", "brasil": "BRA", "filipinas": "PHL", "panamá": "PAN", "haití": "HTI",
+    "república dominicana": "DOM", "sudáfrica": "ZAF", "etiopía": "ETH", "kenia": "KEN", "zimbabue": "ZWE",
+    "estados unidos": "USA",
 }
 
 # Multi-country shorthand that reporters actually use. Expanded to every

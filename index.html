@@ -50994,12 +50994,15 @@ function showCommodityDetail(key) {
     var cn = (typeof LIVE !== 'undefined' && LIVE && LIVE.commodity_news && (LIVE.commodity_news.data || LIVE.commodity_news).items) || [];
     ensoNews().map(function (r) { return r.x; }).concat(cn).forEach(function (x) {
       if (!x) return;
-      add({ title: x.title, source: x.source || '', url: x.url, t: Date.parse(x.published_at || x.date || ''), isos: (x.countries_mentioned || []).slice(), outlets: x.outlets || 1, key: x.dedup_key || x.url });
+      /* A national outlet's headline that names no country counts as reporting activity in the outlet's country
+         (outlet_iso3, data/enso_news.json); a named country always wins. */
+      var named = (x.countries_mentioned || []).slice();
+      add({ title: x.title, source: x.source || '', url: x.url, t: Date.parse(x.published_at || x.date || ''), isos: named.length ? named : x.outlet_iso3 ? [x.outlet_iso3] : [], outlets: x.outlets || 1, key: x.dedup_key || x.url });
     });
     S._hl = out.sort(function (a, b) { return (b.t || 0) - (a.t || 0); });
     return S._hl;
   }
-  /* Items placed on a country: those naming one to three countries. */
+  /* Items placed on a country: those naming one to three countries, or a national outlet's own when the headline names none. */
   function headlinesFor(iso) {
     return headlineItems().filter(function (h) { return h.isos.length >= 1 && h.isos.length <= 3 && h.isos.indexOf(iso) >= 0; })
       .sort(function (a, b) { return (b.agency ? 1 : 0) - (a.agency ? 1 : 0) || (b.t || 0) - (a.t || 0); });
@@ -53373,7 +53376,7 @@ function showCommodityDetail(key) {
     var wireLede = feed.length ? '<p class="enso-plate-lede"><b>' + feed.length + ' items</b> in the collection window: ' + stories.length + ' press headline' + (stories.length === 1 ? '' : 's') + ' and ' + rel.length + ' agency report' + (rel.length === 1 ? '' : 's') + ', food and crop stories first.</p>' +
       bulletList(['Headlines are claims; agency reports are source documents.', 'Syndicated copies count once.']) : '';
     var wirePlate = '<figure class="enso-plate is-published enso-wire-plate enso-feed-plate" data-kind="published">' +
-      plateHead('Food and humanitarian reporting', 'Press headlines naming El Niño (publisher feeds, GDELT) · agency reports from ReliefWeb', stamp(metaDate('news')), 'published') +
+      plateHead('Food and humanitarian reporting', 'Press headlines naming El Niño (publisher feeds, outlets in El Niño countries, GDELT) · agency reports from ReliefWeb', stamp(metaDate('news')), 'published') +
       '<div class="plate-body">' + wireLede + '<div class="enso-news enso-feed">' + (feed.length ? feed.slice(0, FEED_N).map(function (x) { return x.html; }).join('') : '<div class="ctr-note">No story naming El Niño in the collection window.</div>') + '</div>' +
       (feed.length > FEED_N ? '<details class="enso-ol-more"><summary><span>' + (feed.length - FEED_N) + ' more headlines and reports</span></summary><div class="enso-news enso-feed">' + feed.slice(FEED_N).map(function (x) { return x.html; }).join('') + '</div></details>' : '') +
       '</div><figcaption class="enso-log">Left out: donor notices and monsoon, cyclone and earthquake sitreps (the map carries those events).' +
