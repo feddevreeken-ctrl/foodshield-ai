@@ -17,10 +17,13 @@ import re
 from _common import http_get, write_json
 
 PAGE_URL = "https://www.fao.org/worldfoodsituation/foodpricesindex/en/"
+# FAO moves the file between document libraries (default-document-library until 2026, wfs-library since),
+# so the library folder is not pinned.
 CSV_RE = re.compile(
-    r"https://www\.fao\.org/media/docs/worldfoodsituationlibraries/default-document-library/food_price_indices_data\.csv[^\"]*download=true",
+    r"https://www\.fao\.org/media/docs/worldfoodsituationlibraries/[a-z0-9-]+/food_price_indices_data\.csv[^\"]*download=true",
     re.I,
 )
+MAX_AGE_DAYS = 120  # FAO publishes early each month; an older newest month means the live CSV was not found
 LEGACY_FALLBACK = "https://www.fao.org/fileadmin/templates/worldfood/Reports_and_docs/Food_price_indices_data.csv"
 
 
@@ -86,6 +89,9 @@ def main():
     series = best["series"]
     if not series:
         raise RuntimeError("FAO FFPI parser returned zero rows")
+    # The legacy file stops at March 2018. Raising keeps the last good file (safe_run) instead of publishing it.
+    if not best["latest_key"] or (datetime.now() - best["latest_key"]).days > MAX_AGE_DAYS:
+        raise RuntimeError(f"newest FFPI month {series[-1]['month']} from {best['url']} is stale; check the CSV link on {PAGE_URL}")
 
     series = series[-24:]
     latest = series[-1]
