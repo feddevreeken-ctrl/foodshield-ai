@@ -306,14 +306,36 @@ def _encode(field, scale: float = 1.0) -> list:
     return [None if not np.isfinite(v) else int(round(scale * v)) for v in field.ravel()]
 
 
-def build() -> dict:
+def _span() -> tuple[list, tuple[int, int], int]:
+    """ONI rows, the last ERSST month read, and the year of the latest complete El Nino winter."""
     oni = load_oni()
     j = http_get(f"{ERDDAP}/{DS}.json?time%5B(last)%5D", timeout=90, headers=UA, retries=2).json()
     last = datetime.fromisoformat(j["table"]["rows"][0][0].replace("Z", "+00:00"))
     last_year = last.year if last.month >= 2 else last.year - 1
     djf_oni = {y: v for y, m, v in oni if m == 1}
     last_year = min(last_year, max(djf_oni))
-    sst, lats, lons = load_sst(min((last.year, last.month), (last_year, 5)))
+    return oni, min((last.year, last.month), (last_year, 5)), last_year
+
+
+def _key(winters: list, end: tuple[int, int], precl_months: int) -> dict:
+    """Everything the maps depend on that can move: the winters and their classes (ONI), how far ERSST is
+    read, and PREC/L's record length. Equal keys mean a rebuild would write the same maps."""
+    return {"winters": [[w["label"], w["peak_oni"], w["djf_oni"]] for w in winters],
+            "ersst_through": "%04d-%02d" % end, "precl_months": precl_months}
+
+
+def inputs_key() -> dict:
+    """The key of what the sources serve now, from three small requests (no grids)."""
+    oni, end, last_year = _span()
+    m = re.search(r"time\s*=\s*(\d+)\]", http_get(f"{PRECL_DAP}.dds", timeout=90, headers=UA, retries=3).text)
+    if not m:
+        raise RuntimeError("PREC/L DDS has no time axis -- feed shape changed")
+    return _key([w for w in el_nino_winters(oni) if w["year"] <= last_year], end, int(m.group(1)))
+
+
+def build() -> dict:
+    oni, end, last_year = _span()
+    sst, lats, lons = load_sst(end)
     rain, rlats, rlons = load_precl()
 
     sst_clim, rain_clim = _monthly_clim(sst, "ERSST"), _monthly_clim(rain, "PREC/L")
@@ -434,6 +456,7 @@ def build() -> dict:
             f"{n['strong']} strong, {n['very_strong']} very strong), so a single unusual winter can "
             "shape a class map.",
         ],
+        "inputs_key": _key(winters, end, len(rain)),
         "_check": {w["label"]: {"djf_oni": w["djf_oni"], "nino34_c": w["nino34_c"]} for w in winters},
     }
 
@@ -458,15 +481,7 @@ def rain_checks(payload: dict, ckey: str = "very_strong") -> list[str]:
     return out
 
 
-def main() -> int:
-    if "--rain-spi-only" in sys.argv[1:]:
-        res = sst_rain_spi.add_rain_spi(DATA_DIR, load_precl()[0], SEASONS, WINTER_DIR)
-        print(f"[OK] rain_spi added to sst_composites.json and {len({k[0] for k in res['spi']})} winter files; "
-              f"cells with rain but no 3-month fit: {sum(res['gaps'].values())} over {len(res['gaps'])} maps")
-        return 0
-    payload = build()
-    check = payload.pop("_check")
-    winter_maps = payload.pop("_winter_maps")
+def _write(payload: dict) -> Path:
     path = write_json("sst_composites.json", payload,
                       source="NOAA NCEI ERSST v5 via CoastWatch ERDDAP; NOAA PSL PREC/L via PSL THREDDS; "
                              "NOAA CPC ONI",
@@ -478,6 +493,33 @@ def main() -> int:
     # Sixteen maps of three grids each are several MB at write_json's indent=2. Same
     # envelope, no whitespace (as build_trade_matrix does).
     path.write_text(json.dumps(json.loads(path.read_text()), ensure_ascii=False, separators=(",", ":")))
+    return path
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    if "--rain-spi-only" in args:
+        res = sst_rain_spi.add_rain_spi(DATA_DIR, load_precl()[0], SEASONS, WINTER_DIR)
+        print(f"[OK] rain_spi added to sst_composites.json and {len({k[0] for k in res['spi']})} winter files; "
+              f"cells with rain but no 3-month fit: {sum(res['gaps'].values())} over {len(res['gaps'])} maps")
+        return 0
+    # run_all.py calls this every six hours. The maps move only when a winter completes, ONI is revised or a
+    # source grows, so a cheap key decides: same key, re-stamp the file; new key, rebuild (about a minute).
+    if "--force" not in args:
+        try:
+            old = json.loads((DATA_DIR / "sst_composites.json").read_text()).get("data") or {}
+        except (OSError, ValueError):
+            old = {}
+        if old.get("maps") and old.get("inputs_key") and old["inputs_key"] == inputs_key():
+            _write(old)
+            k = old["inputs_key"]
+            print(f"[OK] past El Niño composites unchanged ({len(k['winters'])} winters, ERSST read to "
+                  f"{k['ersst_through']}, PREC/L {k['precl_months']} months); re-stamped")
+            return 0
+    payload = build()
+    check = payload.pop("_check")
+    winter_maps = payload.pop("_winter_maps")
+    path = _write(payload)
     wdir = path.parent / WINTER_DIR
     wdir.mkdir(exist_ok=True)
     for label, wp in winter_maps.items():

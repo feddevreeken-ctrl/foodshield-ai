@@ -39,7 +39,7 @@ SOURCES = [
     "enso_gauges.json", "enso_ports.json", "enso_freight.json", "enso_price_analogs.json",
     "usda_psd.json", "worldbank_pink_sheet.json", "asap.json", "gdacs.json",
     "rtfp.json", "reliefweb_alerts.json", "rain_anomaly.json", "ipc.json", "countries.json",
-    "hapi_food_security_adm0.json",
+    "hapi_food_security_adm0.json", "sst_composites.json",
 ]
 
 # Curated by hand (a person edits them); each has a review window in days. The page uses the same numbers (REVIEW_DAYS).

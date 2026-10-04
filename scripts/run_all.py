@@ -113,6 +113,12 @@ import build_news_interpretation
 import build_scenario_profiles
 
 
+def _sst_composites():
+    """Past El Niño composites. numpy and scipy are imported here, so a runner without them fails this step only."""
+    import build_sst_composites
+    return build_sst_composites.main([])
+
+
 # v20.32 — (label, fn, expected_output_file). The third field is what the
 # frontend fetches; safe_run writes an empty envelope there on failure.
 STEPS = [
@@ -208,6 +214,9 @@ STEPS = [
     # NMME seasonal outlook maps: a monthly upstream (~8th), so most runs only re-stamp; it runs after the observed
     # rain because the drought outlook carries the months already observed into its first forecast months.
     # On an upstream failure safe_run keeps the last-good file.
+    # Past El Niño winters by strength class (Ocean map slider; the outlook below reads its grids). A cheap
+    # check of ONI, ERSST and PREC/L re-stamps the file; a completed winter or a revision rebuilds it (~1 min).
+    ("Past El Niño composites", _sst_composites,                "sst_composites.json"),
     ("NMME seasonal outlook",  refresh_seasonal_outlook.main,   "seasonal_outlook.json"),
     ("Shipping gauges",        refresh_shipping_gauges.main,    "enso_gauges.json"),
     ("Import ports",           refresh_import_ports.main,       "enso_ports.json"),
@@ -304,7 +313,8 @@ OPTIONAL_OUTPUTS = {"commodity_interpretation.json", "commodity_article_notes.js
 # 3 × 30s backoff) with headroom; all other steps keep the 900s default.
 STEP_TIMEOUTS = {"Comtrade": 2700, "Commodity interpretation": 900, "Article notes": 900,  # ~55 model calls at 6 s spacing
                  "CPC observed rain": 450,  # CPC ~1-2 min + the CHIRPS fill's 150 s budget
-                 "Price-risk band": 600}  # ~80 s of rolling-origin quantile fits, plus the FPMA, Pink Sheet and ONI pulls
+                 "Price-risk band": 600,
+                 "Past El Niño composites": 600}  # a cold rebuild reads ~100 MB of ERSST and PREC/L  # ~80 s of rolling-origin quantile fits, plus the FPMA, Pink Sheet and ONI pulls
 
 
 # v79 — GLOBAL WALL-CLOCK BUDGET.

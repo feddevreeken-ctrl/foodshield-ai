@@ -40308,6 +40308,8 @@ async function loadDisturbanceData() {
   disturbanceEvents = events;
   // Feeds land after the first render; refresh the layer counts so the badge is not frozen at a partial load.
   try { if (typeof renderMapLayers === 'function') renderMapLayers(); } catch (e) {}
+  // The El Niño Reported marks are drawn from this list; redraw them from the new one.
+  try { if (typeof window.ensoReportedRefresh === 'function') window.ensoReportedRefresh(); } catch (e) {}
   // v34 — if BOTH runtime feeds failed (offline / blocked), don't lock the 10-min
   // cache on a baseline-only result; let the next tab entry retry immediately.
   const _liveOk = events.some(e => e.live && String(e.id||'').match(/^(gdacs|rw)_/));
@@ -45069,7 +45071,7 @@ function showCommodityDetail(key) {
       out.push({ kind: 'ol', key: q.key, label: q.label, lead: q.lead_months, v: ((mk ? O.box_means_c_months : O.box_means_c) || {})[q.key] ? ((mk ? O.box_means_c_months : O.box_means_c)[q.key].nino34) : null,
         lab: mk ? lab(q.key, false) : String(q.label).replace(/ \d{4}/g, ''), major: i === 0 || i === ol.length - 1 }); });
     if (ol.length) out.zones.push({ view: 'outlook', from: n1, n: ol.length, label: 'Forecast<i>, NMME</i>', fc: true });
-    out.forEach(function (x) { x.n = x.kind === 'ol' ? olEvents(x.key).length : recentIn(stopWin(x), x.kind === 'now').length; });
+    out.forEach(function (x) { x.n = x.kind === 'ol' ? olEvents(x.key).length : recentIn(stopWin(x)).length; });
     return out;
   }
   function scrubAt(st) {
@@ -45352,9 +45354,10 @@ function showCommodityDetail(key) {
   /* 2026-09-28 (owner: "make sure the 7 day automatically updates with new info"): the hand-checked list is joined on
      the 30-day and week stops by marks picked by rule from the Reported feeds every six hours
      (scripts/refresh_enso_auto_events.py -> data/enso_auto_events.json: GDACS, ReliefWeb, the El Niño wire), drawn
-     dim and labelled as not checked by a person. */
-  function recentIn(win, now) {
-    var E = ((S.recentev && S.recentev.events) || []).concat(now && S.autoev && S.autoev.events || []); if (!E.length || !win) return [];
+     dim and labelled as not checked by a person. 2026-10-04 (owner: "make sure theyre also shown on the ocean map"):
+     the month stops carry them too, so a report that lands in a past month's window is on that month. */
+  function recentIn(win) {
+    var E = ((S.recentev && S.recentev.events) || []).concat(S.autoev && S.autoev.events || []); if (!E.length || !win) return [];
     return E.filter(function (e) { return e.date_start <= win.end && e.date_end >= win.start && typeof e.lat === 'number' && typeof e.lon === 'number'; });
   }
   /* Official forecasts that name a place and a month of the outlook (data/enso_outlook_events.json: national met
@@ -45365,7 +45368,7 @@ function showCommodityDetail(key) {
   }
   function recentNow() {
     if (S.sub !== 'elnino' || S.mode !== 'sst' || !S.showSST) return [];
-    var st = scrubStops(), x = st[scrubAt(st)]; return x && (x.kind === 'now' || x.kind === 'mon') ? recentIn(stopWin(x), x.kind === 'now') : x && x.kind === 'ol' ? olEvents(x.key) : [];
+    var st = scrubStops(), x = st[scrubAt(st)]; return x && (x.kind === 'now' || x.kind === 'mon') ? recentIn(stopWin(x)) : x && x.kind === 'ol' ? olEvents(x.key) : [];
   }
   /* The outlook scored against the official forecasts it marks: at each forecast's point (the nearest cell with a value,
      one cell either way) and in each month it names, the month's forecast index agrees (|index| >= 0.35, same side),
@@ -45643,7 +45646,7 @@ function showCommodityDetail(key) {
       v === 'outlook' && (function () { var x = (st.roni_outlook || [])[0]; return 'CPC’s official ENSO outlook is issued in RONI' + (x && x.issued ? ' (' + esc(isoText(x.issued)) + ')' : '') + '; the ONI figures beside it are this site’s conversion.'; })(),
       past && 'Sea: NOAA ERSST v5 (2° reconstruction). Rain: NOAA PREC/L (2.5° gauge analysis) as the drought index of each season’s three months against 1991–2020; a class map averages its winters. Winters and strength classes from CPC’s ONI table, 1950 to 2024.',
       obs && E.events && E.events.length + ' checked headlines for 2026 (' + a('data/enso_recent_events.json', 'the list') + '): curated by hand, each researched, then opened and checked by a second reader; last reviewed ' + esc(stamp(metaDate('recentev'))) + '. Marks say “attributed” when the source names El Niño and “pattern-consistent, not attributed” when it does not.',
-      v === 'now' && S.autoev && S.autoev.events && 'Dim marks come from GDACS, ReliefWeb and the El Niño news wire (' + a('data/enso_auto_events.json', 'the list') + '); they are selected by rule and not checked by a person.',
+      obs && S.autoev && S.autoev.events && 'Dim marks come from GDACS, ReliefWeb and the El Niño news wire (' + a('data/enso_auto_events.json', 'the list') + '); they are selected by rule and not checked by a person.',
       v === 'now' && 'The 30-, 14- and 7-day windows end on CPC’s newest posted day. Monday-to-Sunday weeks remain stored for twelve weeks (' + a('data/rain_weeks.json', 'rain') + ', ' + a('data/sst_weeks.json', 'sea') + ').',
       past && S.pastev && S.pastev.events && S.pastev.events.length + ' hand-sourced past events (floods, droughts, fires), one source each.',
       'Observations and operational feeds refresh automatically through the day; fitted research models are versioned and rebuilt separately when inputs or methodology change, each with its own review date.'
@@ -51656,6 +51659,17 @@ function showCommodityDetail(key) {
     if (S.sub === 'ensolive') { paint(); try { renderMapRanking(); } catch (e) {} try { renderLive(); } catch (e) {} }
   }
 
+  /* Called by loadDisturbanceData() whenever the hazard list is replaced (a late feed, its self-healing retry, a refresh):
+     the Reported marks are rebuilt from the new list instead of keeping the first one they drew. */
+  window.ensoReportedRefresh = function () {
+    if (!S.ready || !S.map || S._alertsLoading) return;
+    [S.alertPins, S.responsePins, S.headlinePins, S.contextPins, S.calloutPins].forEach(function (arr) { (arr || []).forEach(function (m) { try { S.map.removeLayer(m); } catch (e) {} }); });
+    S.alertPins = []; S.responsePins = []; S.headlinePins = []; S.contextPins = []; S.calloutPins = []; S._hl = null;
+    if (S.sub !== 'ensolive') return;
+    toggleAlerts();
+    try { if (typeof renderLegend === 'function') renderLegend(); } catch (e) {}
+  };
+
   /* Jump from any live/news row to that country on the map. */
   window.ensoFocus = function (iso) {
     if (!iso) return;
@@ -53950,6 +53964,17 @@ function showCommodityDetail(key) {
   }
 
   window.ensoRetry = async function () {
+    /* The hazard list and the commodity wire live outside this module's load(); a refresh triggered by a changed feed
+       reloads them first (while the old map is still up), so new GDACS, ReliefWeb and news items reach the marks. */
+    if (S.forceFresh) {
+      try { if (typeof refreshNewsData === 'function') await refreshNewsData(); } catch (e) {}
+      try {
+        if (typeof loadDisturbanceData === 'function' && typeof DISTURBANCE_CACHE !== 'undefined') {
+          if (window._disturbancesLoadPromise) await window._disturbancesLoadPromise;
+          DISTURBANCE_CACHE.ts = 0; await loadDisturbanceData();
+        }
+      } catch (e) {}
+    }
     /* buildMap() returns immediately when S.map exists, so clearing S.drawn was
        not enough: region and lane layers built during the first buildMap kept
        whatever data the failed load had left, and the retry silently changed
@@ -53961,6 +53986,13 @@ function showCommodityDetail(key) {
     var head = document.querySelector('#enso-mapwrap > .enso-plate-h'); if (head) head.remove();
     S.map = null; S.base = null; S.layerBase = null; S.layerRegions = null;
     S.lanePins = []; S.laneLines = []; S.corridorLines = []; S.corridorLabels = []; S.corridorArrows = []; S.corridorEdges = []; S.shipPins = []; S.portPins = []; S.alertPins = []; S.importPins = []; S.sel = null;
+    /* 2026-10-04 (owner: "the reported and therefore news overlays ... doesnt seem to auto update"): the 15-minute check
+       reloaded every feed, but the Reported marks never redrew. Headline, response, context, callout and price pins
+       survived the old map, so each draw function saw a non-empty list and re-added the old markers; the headline list
+       was memoised; the zoom hooks stayed bound to the removed map. Drop all of it with the map. */
+    S.responsePins = []; S.headlinePins = []; S.contextPins = []; S.calloutPins = []; S.pricePins = []; S._pinMode = null;
+    S.pevLayer = null; S.islLayer = null; S._pevZoom = S._islZoom = S._spreadHooked = S._calloutHooked = false;
+    S._hl = null; S._rainNow = S._rainM = S._rainG = S._rainMix = S._sstG = S._teleSet = null;
     /* v84 -- the ocean layer and its hover readout were bound to the map
        instance just removed; drop them so buildMap wires fresh ones. */
     S.sstLayer = null; S.nino34 = null; S.ninoLabel = null;
@@ -54285,8 +54317,19 @@ function showCommodityDetail(key) {
     var cmHit = reg ? (cm.rows || []).filter(function (r) { return r.iso === p.iso && cropRe.test(r.crop || '') && cmDirectionMatch(reg.rain, r.driver); })[0] : null;
     var cmLine = cmHit ? 'GEOGLAM Crop Monitor' + (cm.issue ? ' (' + esc(cm.issue) + ')' : '') + ' rates ' + esc(cmHit.crop) + ' in ' + esc(nm) + ' ' + esc(cmHit.status) + (cmHit.driver ? ': ' + esc(cmHit.driver) : '') : '';
     var asapLine = asapHit ? 'JRC ASAP flags ' + esc(nm) + ' as an agricultural-stress hotspot' + (asapHit.assessment_date ? ', assessed ' + esc(stamp(new Date(asapHit.assessment_date))) : '') + ' (country level, not crop-specific, so it does not move the state)' : '';
+    /* 2026-10-04 (owner: the confirmation must move with the reports coming in): reported hazards are a third read,
+       from the event threads (GDACS, ReliefWeb, the El Niño wire and the checked list, one thread per event). They
+       count only in the region's rain window, pointing the expected way, from two or more independent publishers. */
+    var inSeason = !!(reg && cf && cf.st !== 'season'), rp = reg ? reportedFor(p.iso, reg.rain, cropRe, now) : { hit: null, one: null, crop: null };
+    var rptHit = inSeason ? rp.hit : null, rptCrop = inSeason ? rp.crop : null;
+    var rptLine = function (t) { var c = t.event_confidence || {}, a = (t.el_nino_attribution || {}).status;
+      return 'Reported: ' + esc(t.title) + ' (' + esc(nameFor((t.iso3 || [])[0] || p.iso)) + ', ' + c.n_independent + ' independent publishers, last ' + esc(isoText(t.last_reported)) + '), ' +
+        (a === 'attributed' ? 'linked to El Niño by a checked source' : 'pattern-consistent, not attributed'); };
+    if (!clear && rptHit) { out.idx = 1; out.lines.emerging = rptLine(rptHit) + '. A ' + esc(rptHit.hazard) + ' report fits the ' + (reg.rain === 'drier' ? 'drier' : 'wetter') + ' conditions the published relation expects.' + (spiLine ? ' ' + spiLine : ''); }
     if (clear && cmHit) { out.idx = 2; out.lines.corroborated = cmLine + '.' + (asapLine ? ' ' + asapLine + '.' : ''); }
-    else if (clear) out.lines.corroborated = 'No crop-specific second source yet: no Crop Monitor condition for ' + esc(cw) + ' in ' + esc(nm) + ' is loaded.' + (asapLine ? ' ' + asapLine + '.' : '');
+    else if (clear && rptCrop) { out.idx = 2; out.lines.corroborated = rptLine(rptCrop) + '. The reports name ' + esc(cw) + ', so they are a crop-specific second source beside the rain.' + (asapLine ? ' ' + asapLine + '.' : ''); }
+    else if (rptHit && cmHit) { out.idx = 2; out.lines.corroborated = cmLine + ', beside the reports.' + (asapLine ? ' ' + asapLine + '.' : ''); }
+    else if (clear || rptHit) out.lines.corroborated = 'No crop-specific second source yet: no Crop Monitor condition' + (clear ? ' or report naming ' + esc(cw) : '') + ' for ' + esc(cw) + ' in ' + esc(nm) + ' is loaded.' + (asapLine ? ' ' + asapLine + '.' : '');
     else if (cmHit || asapLine) out.lines.corroborated = [cmLine, asapLine].filter(Boolean).join('. ') + '. Observed rain is not yet clear, so this does not count.';
     /* Outcome evidence confirms direction only: the official estimate sits on the modelled side of the neutral baseline. */
     var m = /(?:^|[–-])\s*([A-Z][a-z]{2})(?:\s+(\d{4}))?\s*$/.exec(String(p.harvest || '').replace(/\s+/g, ' ')), MS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], endM = m ? MS.indexOf(m[1]) : -1, endY = m && m[2] ? +m[2] : p.harvest_year;
@@ -54297,18 +54340,37 @@ function showCommodityDetail(key) {
     if (ended && sameSide) { out.idx = 3; out.obs = 'Reached: the harvest window ended in ' + endTxt + ' and the USDA production estimate for it is ' + side + ' the neutral baseline. ' + (med != null ? 'Model median ' + num(med, 0) + '% · ' : '') + 'current estimate ' + num(est, 0) + '% · magnitude not confirmed.'; }
     else if (ended) out.obs = 'Not reached: the harvest window ended in ' + endTxt + ' but there is no USDA production estimate for this harvest ' + side + ' the neutral baseline.';
     else out.obs = 'Not reached: official production estimates for this harvest are not out yet (the harvest window ends in ' + endTxt + ').';
-    if (reg && out.idx === 0) out.next = out.next || 'To reach Emerging, the crop-belt rain has to read 0.5 or more in the expected direction while the region is in its rain window.';
-    else if (out.idx === 1) out.next = 'To reach Corroborated, a Crop Monitor condition for ' + esc(cw) + ' in ' + nm + ' has to agree; a country-level JRC ASAP hotspot is not enough.';
+    if (reg && out.idx === 0) out.next = out.next || 'To reach Emerging, while the region is in its rain window, the crop-belt rain has to read 0.5 or more in the expected direction, or two independent publishers have to report ' + (reg.rain === 'drier' ? 'drought, heat, fire or water shortage' : 'flooding') + ' in ' + nm + '.';
+    else if (out.idx === 1) out.next = 'To reach Corroborated, a Crop Monitor condition for ' + esc(cw) + ' in ' + nm + ' has to agree' + (clear ? ', or two independent publishers have to report the damage to ' + esc(cw) : '') + '; a country-level JRC ASAP hotspot is not enough.';
     else if (out.idx === 2) out.next = 'To reach Outcome evidence, the harvest window has to end and a USDA estimate for it has to sit ' + side + ' the neutral baseline.';
     /* Four yes/no reads behind the state, from the same feeds. */
     var cmLoaded = !!(cm.rows && cm.rows.length), asapLoaded = !!(S.asap && Object.keys(S.asap).length);
     out.checks = [
       { k: 'Historical El Niño signal', v: typeof f.change_pct_record === 'number' ? 'yes' : 'not in the data' },
       { k: 'Rain in season, expected direction', v: !reg ? 'no published direction' : !cf ? 'not checked' : cf.st === 'season' ? 'not in season yet' : cf.st === 'small' ? 'not checked' : clear ? 'yes' : 'no' },
+      { k: 'Reported hazard, expected direction (agencies and news)', v: !reg ? 'no published direction' : !S.evthreads ? 'not checked' : !cf ? 'not checked' : !inSeason ? 'not in season yet' : rptHit ? 'yes' : rp.one ? 'one publisher only' : 'no' },
       { k: 'Country-level stress (JRC ASAP hotspot)', v: !reg || !asapLoaded ? 'not checked' : reg.rain !== 'drier' ? 'not used for a wetter region' : asapHit ? 'yes' : 'no' },
       { k: 'Crop-specific second source (Crop Monitor, ' + cw + ')', v: !reg || !cmLoaded ? 'not checked' : cmHit ? 'yes' : 'no' }
     ];
     out.cmLine = cmLine; out.asapLine = asapLine;
+    return out;
+  }
+  /* The reported threads that bear on one pair: same country, hazard pointing the expected way, still open (not resolved or
+     stale) and reported in the last 45 days. hit and crop need two or more independent publishers; one is the best
+     single-publisher thread, shown but never counted. crop is a hit whose reports name the crop. */
+  var RPT_DRY = { drought: 1, heat: 1, wildfire: 1, water: 1 }, RPT_WET = { flood: 1 };
+  function reportedFor(iso, rain, cropRe, now, threads) {
+    var cut = now.getTime() - 45 * 864e5, out = { hit: null, one: null, crop: null };
+    var dirOk = function (t) { return rain === 'drier' ? !!RPT_DRY[t.hazard] : rain === 'wetter' ? !!RPT_WET[t.hazard] : false; };
+    var names = function (t) { return [t.title].concat((t.chain || []).map(function (c) { return c.title; })).some(function (x) { return cropRe.test(x || ''); }); };
+    (threads || (S.evthreads && S.evthreads.threads) || []).filter(function (t) {
+      return (t.iso3 || []).indexOf(iso) >= 0 && t.state !== 'resolved' && t.state !== 'stale' && Date.parse(t.last_reported || '') >= cut && (dirOk(t) || (t.hazard === 'crop' && names(t)));
+    }).sort(function (a, b) { return ((b.event_confidence || {}).n_independent || 0) - ((a.event_confidence || {}).n_independent || 0) || String(b.last_reported).localeCompare(String(a.last_reported)); })
+      .forEach(function (t) {
+        var n = (t.event_confidence || {}).n_independent || 0, c = names(t);
+        if (n >= 2) { if (!out.hit && dirOk(t)) out.hit = t; if (!out.crop && c) out.crop = t; }
+        else if (!out.one) out.one = t;
+      });
     return out;
   }
   /* The pipeline is one continuous rule: figure above, stage and one-line label below; the rule's style is the evidence state. */
@@ -54378,7 +54440,7 @@ function showCommodityDetail(key) {
   }
   window.ensoTrace = setTrace;
   /* Read access for the regression checks in the gate (pure functions only). */
-  window.__ensoLogic = { cmDirectionMatch: cmDirectionMatch, rptPriorityCompare: rptPriorityCompare, laneState: laneState, priceCfVerdict: priceCfVerdict, priceCfDirection: priceCfDirection, traceFacts: traceFacts };
+  window.__ensoLogic = { reportedFor: reportedFor, cmDirectionMatch: cmDirectionMatch, rptPriorityCompare: rptPriorityCompare, laneState: laneState, priceCfVerdict: priceCfVerdict, priceCfDirection: priceCfDirection, traceFacts: traceFacts };
   function renderChain() {
     var el = document.getElementById('enso-chain'), O = S.outlook, D = S.dist, R = S.repl;
     if (!el) return;
@@ -54466,11 +54528,11 @@ function showCommodityDetail(key) {
       (curKey === 'outcome' ? '<p class="enso-cf-now">' + nowTxt + '</p>' : '') +
       '<details class="enso-cf-fold"><summary>How the state is set</summary><div class="enso-cf-fold-body">' +
       '<p><b>Scenario</b> is the default: the relationship and the harvest are modelled. Nothing here counts as evidence yet.</p>' +
-      '<p><b>Emerging</b> needs the pair\'s published region to be in its rain window and the observed 30-day crop-belt rain index (SPI, weighted by harvested crop area) to read 0.5 or more in the direction the published relation expects. It is the same threshold the live-rain table calls "showing up".</p>' +
-      '<p><b>Corroborated</b> needs Emerging plus a crop-specific second source: a GEOGLAM Crop Monitor condition that names this crop for this country, with a driver in the expected direction. A JRC ASAP hotspot is country-level, not crop-specific; it is shown as a check but does not move the state.</p>' +
+      '<p><b>Emerging</b> needs the pair\'s published region to be in its rain window and one observed sign in the expected direction: the 30-day crop-belt rain index (SPI, weighted by harvested crop area) at 0.5 or more, the same threshold the live-rain table calls "showing up", or a reported hazard in the country (drought, heat, fire or water shortage for a drier region, flooding for a wetter one) from two or more independent publishers in the last 45 days. Reports come from GDACS, ReliefWeb and the El Niño news wire, merged into one thread per event on the Reported lens.</p>' +
+      '<p><b>Corroborated</b> needs a crop-specific second source of a different kind: a GEOGLAM Crop Monitor condition that names this crop for this country, with a driver in the expected direction, or, when the rain index already shows, reports from two or more independent publishers that name the crop. A JRC ASAP hotspot is country-level, not crop-specific; it is shown as a check but does not move the state.</p>' +
       '<p><b>Outcome evidence</b> needs the harvest window to have ended and a USDA production estimate for that harvest on the modelled side of the neutral baseline (below it for a modelled fall, above it for a rise). It confirms the direction only: the page then prints the model median beside the current estimate (USDA estimate over the neutral baseline, minus one) and says the magnitude is not confirmed.</p>' +
       '<p>For this pair: ' + ['scenario', 'emerging', 'corroborated'].map(function (k) { return st.lines[k] ? '<b>' + k.charAt(0).toUpperCase() + k.slice(1) + ':</b> ' + st.lines[k] : ''; }).filter(Boolean).join(' ') + ' <b>Outcome evidence:</b> ' + st.obs + (st.next ? ' ' + st.next : '') + '</p>' +
-      '<p>The checks under the rail: the historical El Niño signal is yes when the pair has a fitted El Niño relationship; rain counts once the region is in season and reads 0.5 or more in the expected direction; country-level stress is a JRC ASAP hotspot (drier regions only); the crop-specific source is a Crop Monitor row naming the crop. The pair\'s region comes from the named pair-to-region list in the regions file' + (rc.how === 'inferred' ? '; this pair is not on that list, so its region was inferred as the first published region for the country' : '') + '. This is a confirmation state for the crop risk, separate from the evidence type each stage shows above.</p>' +
+      '<p>The checks under the rail: the historical El Niño signal is yes when the pair has a fitted El Niño relationship; rain counts once the region is in season and reads 0.5 or more in the expected direction; a reported hazard counts in season, in the expected direction, from two or more independent publishers (one publisher is shown, not counted); country-level stress is a JRC ASAP hotspot (drier regions only); the crop-specific source is a Crop Monitor row naming the crop. The pair\'s region comes from the named pair-to-region list in the regions file' + (rc.how === 'inferred' ? '; this pair is not on that list, so its region was inferred as the first published region for the country' : '') + '. This is a confirmation state for the crop risk, separate from the evidence type each stage shows above.</p>' +
       '<p>The state is read from the loaded feeds each time the page opens. It is a category, not a score.</p></div></details></div>';
 
     var conclusion = '';

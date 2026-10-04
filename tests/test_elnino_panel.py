@@ -1458,7 +1458,7 @@ def main() -> int:
         # 2026-10-01 (round 2): the causal path stops at Trade; access and IPC remain a separate baseline.
         # Exposure keeps two same-scenario panels, now with rightward linear concern scales.
         # 2026-10-01 (final audit): regression checks for the logic fixed this day, run on the page's own pure functions.
-        check("regression: corroboration direction, display priority with model last, lane vocabulary, price verdict vs direction, physical Movement", page.evaluate("""async () => {
+        check("regression: reported-thread rule, corroboration direction, display priority with model last, lane vocabulary, price verdict vs direction, physical Movement", page.evaluate("""async () => {
             const L = window.__ensoLogic; if (!L) return false;
             const dir = L.cmDirectionMatch('drier', 'extended dry spells, high temperatures') && L.cmDirectionMatch('drier', 'rainfall deficits across most areas')
                 && !L.cmDirectionMatch('drier', 'flooding after heavy rain') && L.cmDirectionMatch('wetter', 'river flooding')
@@ -1471,7 +1471,16 @@ def main() -> int:
             const price = L.priceCfVerdict(row) === 'NORMAL RANGE' && L.priceCfDirection(row).text === '↓ 20% since March';
             const mv = L.traceFacts({iso: 'ZWE', crop: 'corn'}).ensowater;
             const move = !/usual suppliers cover/.test(mv) && /dry bulk|Panama|no route-specific|no import need/.test(mv);
-            return dir && prio && vocab && price && move;
+            // 2026-10-04: reported threads move the rail only with two independent publishers, the expected direction, open and recent.
+            const now = new Date('2026-10-04T00:00:00Z'), re = /\\b(maize|corn)\\b/i;
+            const T = (id, hz, n, st, last, title) => ({id, hazard: hz, iso3: ['ZWE'], state: st, last_reported: last, title, chain: [], event_confidence: {n_independent: n}});
+            const one = L.reportedFor('ZWE', 'drier', re, now, [T('a', 'drought', 1, 'new', '2026-10-01', 'Dry spell')]);
+            const wet = L.reportedFor('ZWE', 'drier', re, now, [T('b', 'flood', 3, 'active', '2026-10-01', 'Floods')]);
+            const old = L.reportedFor('ZWE', 'drier', re, now, [T('c', 'drought', 3, 'resolved', '2026-10-01', 'Drought'), T('d', 'drought', 3, 'active', '2026-07-01', 'Drought')]);
+            const two = L.reportedFor('ZWE', 'drier', re, now, [T('e', 'drought', 2, 'confirmed', '2026-09-30', 'Drought wilts maize')]);
+            const rpt = !one.hit && one.one && !wet.hit && !wet.one && !old.hit && !old.one && two.hit && two.hit.id === 'e' && two.crop && two.crop.id === 'e'
+                && !L.reportedFor('ZWE', 'wetter', re, now, [T('f', 'drought', 3, 'active', '2026-10-01', 'Drought')]).hit;
+            return dir && prio && vocab && price && move && rpt;
         }"""))
         check("Harvests chain is one rule with five nodes and a two-column absorb bracket; exposure has two linear same-scenario panels", page.evaluate("""() => {
             const ch = document.querySelector('#enso-chain .enso-plate'), ex = document.querySelector('#enso-exabs .enso-plate');
@@ -1528,7 +1537,7 @@ def main() -> int:
                 && /Outcome evidence.*Not reached|Reached/.test(rail.textContent) && !rail.querySelector('[data-cf-step="observed"]') && !/\\b(Observed|Realised)\\b/.test(steps.map(x => x.textContent).join())
                 && (!/Reached:/.test(rail.textContent) || /magnitude not confirmed/.test(rail.textContent))
                 && rail.querySelector('.enso-cf-title').textContent.trim() === 'Crop-risk confirmation: ' + word.textContent.trim() && word.closest('.enso-cf-title')
-                && rail.querySelectorAll('.enso-cfk > li').length === 4 && /JRC ASAP/.test(rail.querySelector('.enso-cfk').textContent) && /Crop Monitor/.test(rail.querySelector('.enso-cfk').textContent) && [...rail.querySelectorAll('.enso-cfk > li')].every(li => /^[✓✕–]$/.test(li.querySelector('.enso-cfk-g').textContent.trim()))
+                && rail.querySelectorAll('.enso-cfk > li').length === 5 && /Reported hazard/.test(rail.querySelector('.enso-cfk').textContent) && /JRC ASAP/.test(rail.querySelector('.enso-cfk').textContent) && /Crop Monitor/.test(rail.querySelector('.enso-cfk').textContent) && [...rail.querySelectorAll('.enso-cfk > li')].every(li => /^[✓✕–]$/.test(li.querySelector('.enso-cfk-g').textContent.trim()))
                 && !/(\d{1,3}\s*\/\s*100|\bscore of\b|\b\d{1,3}\s*%\s*(confidence|likely))/i.test(rail.textContent) && !/—/.test(rail.textContent) && !/as_of/.test(rail.textContent);
         }"""))
         # 2026-10-01 consolidation: the answer joins outlook baselines to forecast percentiles; the record winter is one tick.
