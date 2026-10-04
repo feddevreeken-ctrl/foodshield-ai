@@ -78,6 +78,7 @@ import re
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from html.entities import name2codepoint
 from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
 
@@ -447,16 +448,33 @@ ALL_FEEDS = ([(l, u, "trade_press") for l, u in TRADE_PRESS_FEEDS]
 
 
 
+_XML_ENTITIES = {"amp", "lt", "gt", "quot", "apos"}
+
+
+def _xml_repair(body):
+    """Make a feed that a browser would read parse as XML: HTML-only entities (&nbsp;, &rsquo;) become numeric
+    references, a bare & is escaped, and control characters XML forbids are dropped. Used only after a parse error."""
+    body = re.sub(r"&([A-Za-z][A-Za-z0-9]*);", lambda m: m.group(0) if m.group(1) in _XML_ENTITIES else
+                  (f"&#{name2codepoint[m.group(1)]};" if m.group(1) in name2codepoint else f"&amp;{m.group(1)};"), body)
+    body = re.sub(r"&(?!#\d+;|#x[0-9A-Fa-f]+;|[A-Za-z][A-Za-z0-9]*;)", "&amp;", body)
+    return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", body)
+
+
 def fetch_institutional_rss(label, url):
     """Return RAW dicts from one institutional RSS/Atom feed."""
     r = http_get(url, timeout=45, retries=2,
                  headers={"User-Agent": BROWSER_UA,
                           "Accept": "application/rss+xml, application/xml, text/xml"})
-    body = (r.text or "").strip()
+    body = (r.text or "").lstrip("\ufeff").strip()   # a byte-order mark read as "non-XML" (BusinessWorld)
     if not body.startswith("<"):
         raise RuntimeError(f"{label} returned non-XML: {body[:120]}")
+    if re.match(r"<!doctype html|<html", body, re.I):
+        raise RuntimeError(f"{label} returned a web page, not a feed (the feed URL has moved or closed)")
 
-    root = ET.fromstring(body)
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError:
+        root = ET.fromstring(_xml_repair(body))
     out = []
     # RSS <item> and Atom <entry> both appear across these five feeds.
     # Namespace-agnostic. Three shapes in play across these feeds:
@@ -487,7 +505,8 @@ def fetch_institutional_rss(label, url):
         raw_date = node.findtext("pubDate") or node.findtext("published") or ""
         if not raw_date:
             for child in node:
-                if child.tag.endswith("}published") or child.tag.endswith("}updated"):
+                # Atom published/updated; RSS 1.0 (RDF) feeds date items with dc:date.
+                if child.tag.endswith("}published") or child.tag.endswith("}updated") or child.tag.endswith("}date"):
                     raw_date = (child.text or "").strip()
                     break
         safe_link = sanitize_url(link)

@@ -241,17 +241,29 @@ def main() -> int:
             im = ((tm(d["buyer"]) or {}).get("imp") or {}).get(key) or {}
             d["tm_year"] = im.get("year")
             d["usual"], d["usual_share"], d["usual_basis"] = {}, {}, {}
+            # usual_out: the buyer's real partners that cannot step up, with the reason, so the page can say why
+            # "usual suppliers" cover nothing (Botswana's maize comes from South Africa, itself short).
+            d["usual_out"] = []
             for p in im.get("partners") or []:
-                if p["iso"] in (d["buyer"],) or p["iso"] in suppliers:
+                if p["iso"] == d["buyer"]:
                     continue
-                if p["share_pct"] < PARAMS["min_usual_share_pct"] or p["t"] < PARAMS["min_usual_t"]:
+                if p["share_pct"] < PARAMS["min_usual_share_pct"]:
+                    continue
+                out = lambda why: d["usual_out"].append({"iso": p["iso"], "share_pct": round(p["share_pct"], 1), "why": why})
+                if p["t"] < PARAMS["min_usual_t"]:
+                    out(f"it shipped {p['t'] / 1000:.1f} kt in {d['tm_year']}, under the {PARAMS['min_usual_t'] // 1000} kt a usual supplier must clear")
+                    continue
+                if p["iso"] in suppliers:
+                    out("it is itself short in this scenario")
                     continue
                 reason = why_out(p["iso"], crop, d["from"])
                 if reason:
                     excluded.setdefault((p["iso"], crop), reason)
+                    out(reason)
                     continue
                 if not balance(p["iso"], crop):
                     excluded.setdefault((p["iso"], crop), "no current USDA supply balance for it")
+                    out("no current USDA supply balance for it")
                     continue
                 d["usual"][p["iso"]] = float(p["t"])
                 d["usual_share"][p["iso"]] = p["share_pct"]
@@ -348,6 +360,7 @@ def main() -> int:
             cons, stocks = buyer_bal.get("consumption_kt"), buyer_bal.get("stocks_kt")
             rec = {"iso": d["buyer"], "kind": d["kind"], "from": d["from"], "need_kt": d["need"], "tm_year": d["tm_year"],
                    "usual_suppliers": [{"iso": i, "t": d["usual"][i], "share_pct": d["usual_share"][i], "basis": d["usual_basis"][i]} for i in d["usual"]],
+                   "usual_out": d["usual_out"],
                    "stocks_kt": stocks, "consumption_kt": cons, "cases": cases}
             if frange.get(d["id"]):
                 rec["forecast_range"] = frange[d["id"]]

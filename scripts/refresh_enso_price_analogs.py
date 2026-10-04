@@ -22,7 +22,7 @@ Output: data/enso_price_analogs.json
 """
 import statistics
 
-from _common import http_get, write_json
+from _common import http_get, keep_last_good, write_json
 
 API = "https://fpma.fao.org/giews/v4/global/price_module/api/v1"
 TOOL_URL = "https://fpma.fao.org/giews/fpmat4/"
@@ -140,6 +140,9 @@ def main():
             "n_below_base_now": sum(1 for g in got if g["last"][1] < 100),
             "last_k": max(g["last"][0] for g in got),
         }
+    # 2026-10-04: during an FPMA outage every series came back without real prices and an empty file went out.
+    if not countries:
+        keep_last_good("enso_price_analogs.json", "FPMA served no CPI-deflated prices for any analog series")
     est = add_estimates(countries, K1)
     if est:
         summary["estimate"] = {"by_path": est, "method": "This year's latest index carried along each past event's own path; a replay, not a forecast."}

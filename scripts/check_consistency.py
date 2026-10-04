@@ -85,23 +85,29 @@ def check_all(reader=dag.read, now: datetime | None = None) -> list[tuple[str, s
             fail("no_generated_at", f"{name} has no _meta.generated_at")
             continue
         cron_inputs = []
+        # 2026-10-04: a builder that refused an upstream outage leaves the last good file and says so in
+        # _meta.kept_last_good (enso_price_outlook when FPMA served no current real prices). Older than its inputs is then
+        # the honest state, reported as a warning with the reason, not a break.
+        kept = meta.get("kept_last_good")
+        lag = warn if kept else fail
+        why = f" (kept last good since {kept.get('since', '?')[:10]}: {kept.get('reason', '')})" if isinstance(kept, dict) else ""
         for inp in node.get("inputs") or []:
             its = _ts(reader, inp)
             if not its:
                 continue
             if not hand and (mine - its).total_seconds() < -TOL_S:
-                fail("older_than_input", f"{name} ({mine.isoformat()[:19]}) is older than its input {inp} ({its.isoformat()[:19]})")
+                lag("older_than_input", f"{name} ({mine.isoformat()[:19]}) is older than its input {inp} ({its.isoformat()[:19]}){why}")
             r = dag.parse_ts(rec.get(inp))
             if r and abs((r - its).total_seconds()) > TOL_S:
                 # A hand-run build is expected to lag a cron feed that refreshes every six hours: that is a review matter, not a break.
-                (warn if hand else fail)("input_rebuilt", f"{name} recorded {inp} as of {r.isoformat()[:19]} but it is now {its.isoformat()[:19]}")
+                (warn if hand or kept else fail)("input_rebuilt", f"{name} recorded {inp} as of {r.isoformat()[:19]} but it is now {its.isoformat()[:19]}{why}")
             if not dag.is_hand_kept(inp, dag.meta_of(reader(inp))):
                 cron_inputs.append((inp, its))
         if cron_inputs and not hand:
             oldest = min(cron_inputs, key=lambda x: x[1])
             gap = (mine - oldest[1]).total_seconds() / 86400
             if gap > dag.WINDOW_DAYS:
-                fail("window", f"{name} was built {gap:.1f} days after its oldest feed {oldest[0]} (window {dag.WINDOW_DAYS} days) and is not marked hand-run")
+                lag("window", f"{name} was built {gap:.1f} days after its oldest feed {oldest[0]} (window {dag.WINDOW_DAYS} days) and is not marked hand-run{why}")
     for name, days in dag.CURATED.items():
         ts = _ts(reader, name)
         if ts and (now - ts).days > days:

@@ -43,6 +43,7 @@ OUTPUT: data/rtfp.json
 import csv
 import re
 import statistics
+from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
 from _common import http_get, write_json
@@ -159,6 +160,22 @@ def main():
             errors.append(f"{url.rsplit('/', 1)[-1]}: {e}")
             print(f"  [warn] {e}")
             continue
+        if by_country and url == FALLBACK_URL:
+            # 2026-10-04 — the pinned fallback cannot silently serve an old
+            # year's final observations forever when CKAN resolution is down.
+            newest = date.fromisoformat(max(
+                observed
+                for per_date in by_country.values()
+                for observed in per_date
+            )[:10])
+            today = date.today()
+            filename_year = int(re.search(r"global_food_(20\d{2})\.csv", url).group(1))
+            if ((today - newest).days > 120
+                    or (filename_year < today.year and newest.year < today.year)):
+                raise RuntimeError(
+                    f"fallback {url.rsplit('/', 1)[-1]} is stale: newest observation "
+                    f"{newest.isoformat()}"
+                )
         if by_country:
             break
         errors.append(f"{url.rsplit('/', 1)[-1]}: parsed 0 countries")

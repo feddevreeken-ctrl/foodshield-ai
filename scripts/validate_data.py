@@ -1007,8 +1007,6 @@ def validate_comtrade_unit_prices():
             psd_row = psd_body.get(_COMTRADE_TO_PSD[cmd]) or {}
             kt = psd_row.get('imports_kt')
             usd = entry.get('total_value_usd')
-            if not isinstance(kt, (int, float)) or kt < _MIN_IMPORT_KT:
-                continue
             # Vintage guard: only compare when the PSD tonnage is from roughly the
             # same year as the Comtrade pull. Without this, pre-2020 PSD rows
             # (54 of 463, some from 1979/1990/1998) produce meaningless unit
@@ -1017,6 +1015,12 @@ def validate_comtrade_unit_prices():
             # Each pair carries the year it was pulled for (2025 where complete, else 2024).
             ct_year = entry.get('year') if isinstance(entry.get('year'), int) else _COMTRADE_YEAR
             if not isinstance(psd_year, int) or abs(psd_year - ct_year) > _MAX_YEAR_GAP:
+                continue
+            # 2026-10-04 — when Comtrade matches PSD's stored previous year, use
+            # that actual-ish quantity instead of the next marketing-year forecast.
+            if psd_row.get('_year_imports_kt_prev') == ct_year:
+                kt = psd_row.get('imports_kt_prev')
+            if not isinstance(kt, (int, float)) or kt < _MIN_IMPORT_KT:
                 continue
             # v73 — forecast-vintage guard. In July, PSD rolls its latest vintage
             # to the NEW marketing year (e.g. 2026/27), whose early-season import

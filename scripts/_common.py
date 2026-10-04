@@ -94,6 +94,20 @@ def stamp_inputs(filename):
     pipeline_dag.stamp_file(filename)
 
 
+def keep_last_good(filename, reason):
+    """An upstream outage: leave data/<filename> as it is, record why in its _meta.kept_last_good (data and
+    generated_at untouched; scripts/check_consistency.py and the page read the marker), and raise so safe_run keeps
+    the file. A later successful write_json replaces _meta and clears the marker."""
+    path = DATA_DIR / filename
+    if path.exists():
+        env = json.loads(path.read_text())
+        meta = env.setdefault("_meta", {})
+        meta["kept_last_good"] = {"since": (meta.get("kept_last_good") or {}).get("since") or datetime.now(timezone.utc).isoformat(),
+                                  "reason": reason}
+        path.write_text(json.dumps(env, ensure_ascii=False, indent=2))
+    raise RuntimeError(f"{reason}; keeping the last good {filename}")
+
+
 def write_json(filename, payload, *, source=None, notes=None, status=None):
     """Write JSON to data/<filename> with a standard envelope.
 

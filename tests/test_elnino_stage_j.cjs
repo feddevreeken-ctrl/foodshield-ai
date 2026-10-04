@@ -34,7 +34,9 @@ test('indices use published thresholds, retain source windows, and omit the week
   assert(section.includes('data-threshold="'+({oni:.5,roni:.5,bom_rel:.8,soi:-7}[r.key])+'"'));
   assert.equal((section.match(/class="enso-idx-tick"/g)||[]).length,2);
   widths[r.key]=Number(section.match(/width:([\d.]+)%/)[1]);
-  assert(Math.abs(widths[r.key]-Math.abs(r.value/r.threshold)*25)<.01);
+  // The track spans 0 to max(4, ceil(ratio)) thresholds: ONI +2.16 against 0.5 is 4.3, so its track is five long.
+  const ratio=Math.abs(r.value/r.threshold),ext=Math.max(4,Math.ceil(ratio));
+  assert(Math.abs(widths[r.key]-ratio/ext*100)<.01);
  }
  assert(widths.soi<widths.oni);assert(widths.soi<widths.bom_rel);
  assert(out.includes('not against the other indices'));

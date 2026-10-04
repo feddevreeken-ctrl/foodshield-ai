@@ -41,7 +41,7 @@ import re
 import statistics
 from datetime import date
 
-from _common import DATA_DIR, http_get, stamp_inputs, write_json
+from _common import DATA_DIR, http_get, keep_last_good, stamp_inputs, write_json
 
 API = "https://fpma.fao.org/giews/v4/global/price_module/api/v1"
 TOOL_URL = "https://fpma.fao.org/giews/fpmat4/"
@@ -663,9 +663,17 @@ def main():
                                             s.get("commodity_name"), (s.get("price_type") or "").upper()) in want]
     if not uuids:
         raise RuntimeError("FPMA series list matched none of the outlook series")
-    out = build(listing, fetch_prices(uuids), _load("enso.json")["history"], _load("enso_model.json"),
+    prices = fetch_prices(uuids)
+    # 2026-10-04: FPMA answered with real (CPI-deflated) prices ending mid-2025 for nearly every series; all were "excluded"
+    # and an empty outlook went out with status ok. An outage keeps the last good file (safe_run) and says so in its _meta,
+    # which check_consistency reads.
+    if not any(prices.get(u) for u in uuids):
+        keep_last_good("enso_price_outlook.json", f"FPMA returned no datapoints for any of the {len(uuids)} outlook series")
+    out = build(listing, prices, _load("enso.json")["history"], _load("enso_model.json"),
                 _load("enso_outlook.json"), _load("enso_regions.json")["regions"], _load("enso_published_effects.json"),
                 world=world_real())
+    if not out["rows"] and sum(e["reason"] == "no current CPI-deflated monthly series" for e in out["excluded"]) * 2 >= len(uuids):
+        keep_last_good("enso_price_outlook.json", "FPMA served no current CPI-deflated monthly prices for most outlook series")
     sk = out["skill"] or {}
     print(f"[price outlook] {len(out['rows'])} rows; model {out['model_status']}; "
           f"MAE model {sk.get('mae_model')} / no change {sk.get('mae_nochange')} / analog {sk.get('mae_analog')} "

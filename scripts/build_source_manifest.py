@@ -725,6 +725,10 @@ def infer_status(spec, envelope, count, period):
         return "setup_required", "API key rejected by upstream — re-provision the secret"
     if explicit == "degraded_fallback":
         return "degraded", "serving a fallback tier, not the primary source"
+    # 2026-10-04 — collectors may report these literal statuses; a full row
+    # count must not promote their explicitly incomplete output to healthy.
+    if explicit in ("degraded", "partial"):
+        return "degraded", "source reported degraded or partial results"
     if explicit == "degraded_feeds":
         # A multi-source feed where a large share of sources failed. The item
         # count stays healthy because the survivors fill the page, which is

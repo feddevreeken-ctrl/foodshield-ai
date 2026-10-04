@@ -16,6 +16,7 @@ already hit twice (wksst8110.for, rel_wksst9120.txt). Detected, not trusted.
 """
 from __future__ import annotations
 
+import json
 import re
 import sys
 from datetime import datetime, timezone
@@ -24,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _common import http_get, write_json  # noqa: E402
+from _common import DATA_DIR, http_get, write_json  # noqa: E402
 
 UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36"}
@@ -296,6 +297,25 @@ def main() -> int:
             "no agency bulletin reachable -- refusing to overwrite the existing file. "
             "Tried: " + ", ".join(u["key"] for u in unavailable))
 
+    # 2026-10-04: one agency's site failing for one run (ENFEN's DNS from the CI runner) marked the whole file partial
+    # and the page's source count dropped. Its last bulletin is still that agency's latest product until its cadence
+    # runs out (the stale flag below says so), so it is carried over and the miss is recorded on the item.
+    agency_of = {"cpc_monthly": "NOAA CPC", "bom_weekly": "BoM Australia", "iri_monthly": "IRI / Columbia",
+                 "jma_monthly": "JMA", "enfen_monthly": "ENFEN (Peru)", "wmo_news": "WMO"}
+    try:
+        prev = json.loads((DATA_DIR / "enso_bulletins.json").read_text()).get("data", {}).get("bulletins") or []
+    except (OSError, ValueError):
+        prev = []
+    have = {i["agency"] for i in items}
+    for u in unavailable:
+        ag = agency_of.get(u["key"])
+        if not ag or ag in have:
+            continue
+        carried = [dict(i, carried_over=True, fetch_failed=u["reason"][:120]) for i in prev if i.get("agency") == ag]
+        if carried:
+            items.extend(carried)
+            u["carried_over"] = len(carried)
+
     for it in items:
         try:
             a = age_days(it["published"])
@@ -317,7 +337,7 @@ def main() -> int:
                "NOAA Climate.gov's ENSO blog is probed every run and deliberately excluded: "
                "it returns 200 with a fresh Last-Modified while its newest post is more "
                "than a year old."),
-        status="ok" if not [u for u in unavailable if u["key"] != "climate_gov_enso_blog"] else "partial",
+        status="ok" if not [u for u in unavailable if u["key"] != "climate_gov_enso_blog" and not u.get("carried_over")] else "partial",
     )
     print(f"enso_bulletins: {len(items)} items, {len(unavailable)} unavailable")
     for i in items:

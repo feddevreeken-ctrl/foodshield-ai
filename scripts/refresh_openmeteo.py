@@ -26,8 +26,10 @@ Output: data/openmeteo.json
     }
   }
 """
-from _common import http_get, write_json, COUNTRY_COORDS
+import json
 import time
+
+from _common import http_get, write_json, COUNTRY_COORDS, DATA_DIR
 
 URL = "https://api.open-meteo.com/v1/forecast"
 
@@ -77,6 +79,7 @@ def main():
           f"in {len(batches)} batched request(s)")
 
     failed_batches = 0
+    failed_countries = []
     for bi, chunk in enumerate(batches):
         try:
             results = _fetch_batch(chunk)
@@ -84,6 +87,7 @@ def main():
             # A whole batch failing is a real outage, not a per-country quirk.
             # Say so loudly; the count is folded into _meta.notes below.
             failed_batches += 1
+            failed_countries.extend(iso3 for iso3, _coords in chunk)
             print(f"  [ERROR] batch {bi+1}/{len(batches)} "
                   f"({len(chunk)} countries) failed: {e}")
             continue
@@ -93,6 +97,7 @@ def main():
             # lengths disagree we cannot know which result belongs to which
             # country, so refuse to guess.
             failed_batches += 1
+            failed_countries.extend(iso3 for iso3, _coords in chunk)
             print(f"  [ERROR] batch {bi+1}: asked for {len(chunk)} coordinates, "
                   f"got {len(results)} results — dropping batch rather than "
                   f"mis-assigning countries")
@@ -139,6 +144,22 @@ def main():
         if bi + 1 < len(batches):
             time.sleep(0.3)
 
+    carried_rows = 0
+    if failed_batches:
+        # 2026-10-04 — a partial refresh must not erase the failed countries;
+        # their last-good weather signal is safer than an implicit zero adjustment.
+        try:
+            previous = json.loads((DATA_DIR / "openmeteo.json").read_text())
+            previous_rows = previous.get("data") or {}
+            previous_at = (previous.get("_meta") or {}).get("generated_at")
+            for iso3 in failed_countries:
+                row = previous_rows.get(iso3)
+                if iso3 not in out and isinstance(row, dict):
+                    out[iso3] = {**row, "carried_from": row.get("carried_from") or previous_at}  # keep the first date
+                    carried_rows += 1
+        except (OSError, ValueError, AttributeError) as e:
+            print(f"  [warn] could not carry failed countries from previous file: {e}")
+
     write_json(
         "openmeteo.json",
         out,
@@ -149,7 +170,8 @@ def main():
             "Flags: drought=anomaly<-50% + dry soil; wet=anomaly>+100%; heat=temp_anom>+3°C. "
             f"Covered {len(out)}/{len(COUNTRY_COORDS)} countries "
             f"in {len(batches)} batched request(s)"
-            + (f" — {failed_batches} BATCH(ES) FAILED, coverage is incomplete."
+            + (f" — {failed_batches} BATCH(ES) FAILED; {carried_rows} row(s) "
+               "carried from the previous file."
                if failed_batches else ".")
         ),
         status=("degraded" if failed_batches else None),

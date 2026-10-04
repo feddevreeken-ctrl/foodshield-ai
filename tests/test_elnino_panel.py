@@ -1540,6 +1540,19 @@ def main() -> int:
                 && rail.querySelectorAll('.enso-cfk > li').length === 5 && /Reported hazard/.test(rail.querySelector('.enso-cfk').textContent) && /JRC ASAP/.test(rail.querySelector('.enso-cfk').textContent) && /Crop Monitor/.test(rail.querySelector('.enso-cfk').textContent) && [...rail.querySelectorAll('.enso-cfk > li')].every(li => /^[✓✕–]$/.test(li.querySelector('.enso-cfk-g').textContent.trim()))
                 && !/(\d{1,3}\s*\/\s*100|\bscore of\b|\b\d{1,3}\s*%\s*(confidence|likely))/i.test(rail.textContent) && !/—/.test(rail.textContent) && !/as_of/.test(rail.textContent);
         }"""))
+        # 2026-10-04: a hand-run build is not on the cron; before its next_review_due it is never "collector has not run".
+        check("feed review line skips hand-run builds before their review date", page.evaluate("""async () => {
+            const F = {enso_model: 'Crop fit', enso_hindcast: 'Past-winter test', enso_portfolio_hindcast: 'Portfolio past-winter test', enso_forecast_skill: 'Forecast track record',
+                       'ref/access_thresholds': 'ref/access thresholds', enso_replay: 'enso replay', enso_outlook_contest: 'enso outlook contest'};
+            const t = (document.getElementById('enso-failures') || {}).textContent || '';
+            let n = 0;
+            for (const [f, label] of Object.entries(F)) {
+                const m = ((await (await fetch('data/' + f + '.json')).json())._meta) || {};
+                if (!m.hand_run || !(Date.parse(m.next_review_due) > Date.now())) continue;
+                n++; if (t.includes(label)) return false;
+            }
+            return n >= 5;
+        }"""))
         # 2026-10-01 consolidation: the answer joins outlook baselines to forecast percentiles; the record winter is one tick.
         check("Harvests answer prints neutral, USDA and forecast percentiles with one record-winter tick per row", page.evaluate("""async () => {
             const O = (await (await fetch('data/enso_outlook.json')).json()).data;
@@ -1667,7 +1680,7 @@ def main() -> int:
         page.evaluate("showTab('ensomoney')")
         page.wait_for_selector('#subview-ensomoney.active #enso-c-record', state='attached')
         # 2026-10-01 consolidation: trade loss, replacement and access are one five-row country summary; full detail stays folded.
-        check("Market absorption answers for one selected country and crop with four labelled levels (need, usual suppliers on one need-scale bar, the crop's global headroom as a number from the file, confirmed deliverable not modelled) and a Shipping link over three market columns, a five-column comparison table, the seven-column detail folded, and validated access lines", page.evaluate("""async () => {
+        check("Market absorption answers for one selected country and crop with four labelled levels (need, usual suppliers on one need-scale bar, the crop's global headroom as a number from the file, confirmed deliverable not confirmed, with delivery checks from the loaded feeds) and a Shipping link over three market columns, a five-column comparison table, the seven-column detail folded, and validated access lines", page.evaluate("""async () => {
             const R = (await (await fetch('data/enso_replacement.json')).json()).data;
             const T = (await (await fetch('data/ref/access_thresholds.json')).json()).data;
             const pl = document.querySelector('.enso-absorb-plate'); if (!pl) return false;
@@ -1686,13 +1699,16 @@ def main() -> int:
                 && (() => { const crop = (pl.querySelector('#pr2-pay-select').value || '').split('|')[1], G = R.aggregate[crop].mid.open, g = pl.querySelector('.pr2-lvl.is-global');
                     const kt = v => v >= 1000 ? (v / 1000).toFixed(1) + ' Mt' : Math.round(v) + ' kt';
                     return !!g && g.querySelector('.pr2-figure').textContent === kt(G.headroom_total_kt) && g.textContent.includes(G.headroom_exporters + ' exporters') && g.textContent.includes(kt(G.headroom_left_kt) + ' left after all buyers in the scenario'); })()
-                && pl.querySelector('.pr2-lvl.is-confirmed .pr2-figure').textContent === 'not modelled'
+                && pl.querySelector('.pr2-lvl.is-confirmed .pr2-figure').textContent === 'not confirmed'
                 && !!pl.querySelector('.pr2-absorb [data-goto-lens="ensowater"]')
                 && !/capacity ceiling|capacity exists/i.test(pl.textContent)
                 && !!pl.querySelector('.pr2-answer') && !!pl.querySelector('.pr2-verdict-line') && !!pl.querySelector('#pr2-pay-select')
                 && fold.querySelector('.enso-absorb-table') && detail.length >= want.size && detail.every(r => r.cells.length === 7 && /Usual suppliers/.test(r.cells[2].textContent) && /Drawn from global headroom/.test(r.cells[2].textContent))
                 && !pl.querySelector(':scope > .plate-body > .enso-absorb-table')
-                && pl.querySelector('.pr2-lvl.is-confirmed').textContent.includes('Contracts, inland logistics, ports, grain type and freight are not modelled.')
+                && (() => { const t = pl.querySelector('.pr2-lvl.is-confirmed').textContent;  // 2026-10-04: checks, not a blanket "not modelled"
+                    return /Port of .+ dry bulk unloaded|No gateway port for .+ is monitored here/.test(t) && /Export measure in force|No export measure on/.test(t)
+                        && (!R.freight_signal || /Grain freight, .+\/t/.test(t)) && t.includes('Not in the loaded feeds: contracts and tenders'); })()
+                && (() => { const u = pl.querySelector('.pr2-lvl.is-usual').textContent; return /From .+ \\d|usual suppliers cannot step up|No usual supplier of/.test(u); })()
                 && pl.textContent.includes('Theoretical export headroom: a ceiling on what exporters could ship, not a confirmed route: landlocked access, ports, contracts, grain type (white vs yellow maize) and freight are not modelled.')
                 && pl.textContent.includes('line ' + T.lines.economic_access.line + ' · validated')
                 && pl.textContent.includes('line ' + T.lines.ipc_phase3plus_pct.line + '% · validated')

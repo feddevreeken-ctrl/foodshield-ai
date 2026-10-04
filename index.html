@@ -14020,7 +14020,7 @@ body:has(#tab-elnino.active) #first-hint { display:none!important; }
           <div class="instr-stat"><span class="v" id="instr-stat-countries">193</span><span class="l">Countries</span></div>
           <div class="instr-stat"><span class="v" id="instr-stat-commodities">46</span><span class="l">Commodities</span></div>
           <div class="instr-stat"><span class="v" id="instr-stat-flows">4,122</span><span class="l">Cited flows</span></div>
-          <div class="instr-stat"><span class="v" id="instr-stat-pipelines">67</span><span class="l">Live pipelines</span></div>
+          <div class="instr-stat"><span class="v" id="instr-stat-pipelines">67</span><span class="l">Public pipelines</span></div>
         </div>
         <button class="instr-cta-primary instr-rev" style="--d:.23s" onclick="closeInstructions(); setTimeout(startTour, 250);">
           <span class="instr-cta-play">▶</span>
@@ -21743,7 +21743,9 @@ function calibrationAnchors(c) {
   else if (es.food_hicp_yoy_pct != null)          { food_infl = es.food_hicp_yoy_pct;  food_infl_src='Eurostat ' + (mon(es.month) || es.month || ''); food_infl_label='food HICP YoY'; }
   else if (typeof imf.food_cpi_yoy_pct === 'number' && fresh(imf.month) && String(imf.month) >= String(fs.food_cpi_latest_month || '')) { food_infl = Math.round(imf.food_cpi_yoy_pct * 10) / 10; food_infl_src='IMF ' + mon(imf.month); food_infl_label='food CPI YoY'; }
   else if (typeof fs.food_cpi_yoy_month_pct === 'number' && fs.food_cpi_yoy_month_pct !== 0 && fresh(fs.food_cpi_latest_month)) { food_infl = fs.food_cpi_yoy_month_pct; food_infl_src='FAOSTAT ' + mon(fs.food_cpi_latest_month); food_infl_label='food CPI YoY'; }
-  else if (fs.food_cpi_yoy_pct != null && (fs.year_latest || 0) >= new Date().getUTCFullYear() - 1) { food_infl = fs.food_cpi_yoy_pct; food_infl_src='FAOSTAT ' + (fs.year_latest||'') + ' annual'; food_infl_label='food CPI, annual mean'; }
+  /* 2026-10-04: same completeness test as scripts/food_inflation.py. A year with 3 months against a full prior year is a partial-year
+     artefact (Syria printed -5.46%), not an annual mean. */
+  else if (fs.food_cpi_yoy_pct != null && !(fs.months_in_latest_year > 0 && fs.months_in_latest_year < 12) && (fs.year_latest || 0) >= new Date().getUTCFullYear() - 1) { food_infl = fs.food_cpi_yoy_pct; food_infl_src='FAOSTAT ' + (fs.year_latest||'') + ' annual'; food_infl_label='food CPI, annual mean'; }
   else if (wb['FP.CPI.TOTL.ZG']?.value != null)   { food_infl = wb['FP.CPI.TOTL.ZG'].value; food_infl_src='WB ' + (wb['FP.CPI.TOTL.ZG'].year || ''); food_infl_label='all-items CPI (not food)'; }
   return {
     undernourishment_pct: wb['SN.ITK.DEFC.ZS']?.value ?? null,
@@ -44218,6 +44220,17 @@ function showCommodityDetail(key) {
        schedule is the REVIEW_DAYS test below, not a status fault. */
     if (m.stale || (m.status && ['ok', 'partial', 'success', 'preliminary', 'manual'].indexOf(m.status) < 0))
       return 'source reports ' + (m.stale ? 'stale data' : m.status);
+    /* 2026-10-04 (owner: "1 feed needs review. ref/access thresholds ... collector has not run for 4 days"): a hand-run
+       build is not on the cron, so its age is no fault. scripts/pipeline_dag.py stamps hand_run and next_review_due;
+       the file is due for review only once that date has passed. */
+    /* A builder that refused an upstream outage kept its last good file and said why (_meta.kept_last_good). */
+    var kept = m.kept_last_good;
+    if (kept && kept.since) return 'upstream outage since ' + stamp(new Date(kept.since)) + '; showing the last good build' + (kept.reason ? ' (' + kept.reason + ')' : '');
+    if (m.hand_run) {
+      var due = Date.parse(m.next_review_due || '');
+      if (!isFinite(due)) due = d.getTime() + (Number(m.review_days) || REVIEW_DAYS[key] || 30) * 864e5;
+      return Date.now() > due + 864e5 ? 'hand-run; review was due ' + stamp(new Date(due)) : '';
+    }
     var review = Number(m.review_days) > 0 ? Number(m.review_days) : REVIEW_DAYS[key];
     var limit = review || 3, days = Math.floor((Date.now() - d.getTime()) / 86400000);
     if (days > limit)
@@ -50782,10 +50795,6 @@ function showCommodityDetail(key) {
     var m = /Phase\s*(\d)/i.exec(ev.title || '') || /\((\d)\)/.exec(ev.detail || '');
     return m ? +m[1] : ev.severity === 'critical' ? 4 : 3;
   }
-  function dayMon(t) {
-    var d = new Date(t); if (!isFinite(d)) return '';
-    return d.getUTCDate() + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()];
-  }
   function verdictLine(v, ev) {
     var r = rainOf(ev.iso), cls = hazardRainClass(ev);
     var where = function (regs) { return regs.map(function (x) { return esc(x.label || x.id) + (x.damage_season ? ' (' + esc(x.damage_season) + ')' : ''); }).join('; '); };
@@ -54158,10 +54167,12 @@ function showCommodityDetail(key) {
     var ents = {}, entList = [];
     R.pairs.forEach(function (p) { p.buyers.forEach(function (b) {
       var key = b.iso + '|' + p.crop, c = b.cases[mid];
-      var q = ents[key] = ents[key] || { key: key, iso: b.iso, crop: p.crop, need: 0, ur: 0, us: 0, or: 0, os: 0, usrc: {}, row: map[b.iso], nOwn: 0, nAll: 0 };
+      var q = ents[key] = ents[key] || { key: key, iso: b.iso, crop: p.crop, need: 0, ur: 0, us: 0, or: 0, os: 0, usrc: {}, osrc: {}, uout: {}, row: map[b.iso], nOwn: 0, nAll: 0 };
       q.nAll++; if (b.kind === 'own') q.nOwn++;
       q.need += b.need_kt; q.ur += c.usual.replaced_kt; q.us += c.usual.residual_kt; q.or += c.open.replaced_kt; q.os += c.open.residual_kt;
       (c.usual.replaced || []).forEach(function (x) { q.usrc[x.from] = (q.usrc[x.from] || 0) + x.kt; });
+      (c.open.replaced || []).forEach(function (x) { q.osrc[x.from] = (q.osrc[x.from] || 0) + x.kt; });
+      (b.usual_out || []).forEach(function (x) { if (!q.uout[x.iso]) q.uout[x.iso] = x; });
     }); });
     Object.keys(ents).forEach(function (k) { entList.push(ents[k]); });
     entList.sort(function (a, b) { return b.need - a.need; });
@@ -54189,10 +54200,38 @@ function showCommodityDetail(key) {
     var gapWord = function (q) { var g = gapShare(q); return g >= .5 ? 'High' : g >= .1 ? 'Medium' : 'Low'; };
     var bufWord = function (q) { var v = q.row && q.row.c && q.row.c[7]; if (typeof v !== 'number' || !LN.acc.cal) return null; return v >= LN.acc.line ? 'WEAK BUFFERS' : 'STRONGER BUFFERS'; };
     var tradeWord = function (q) { return q.us < 1 ? 'USUAL TRADE COVERS IT' : 'USUAL TRADE SHORT'; };
+    /* "Confirmed deliverable" used to print "not modelled" for every buyer. It still cannot be confirmed (no contract,
+       tender or inland-capacity feed), but the loaded feeds can say what is known about the way in: the gateway ports'
+       observed dry-bulk imports, export measures in force by the exporters drawn on, and grain freight. */
+    var deliveryChecks = function (q, from) {
+      var P = []; var now = Date.now(), name = nm(q.iso), cn = crop(q.crop);
+      var gw = (((S.ports && S.ports.ports) || [])).filter(function (pt) { return pt.iso3 === q.iso || new RegExp('\\b' + name.replace(/[^A-Za-z ]/g, '') + '\\b').test(pt.serves || ''); });
+      if (gw.length) P.push(gw.slice(0, 2).map(function (pt) {
+        return 'Port of ' + esc(pt.name) + ' (' + esc(pt.serves || '') + '): ' + esc(kt((pt.dry_bulk_import_t || 0) / 1000)) + ' of dry bulk unloaded in the ' + (pt.window_days || 28) + ' days to ' + esc(isoText(pt.latest_date)) +
+          (typeof pt.vs_mean_pct === 'number' ? ', ' + (pt.vs_mean_pct > 0 ? '+' : pt.vs_mean_pct < 0 ? '−' : '') + Math.abs(pt.vs_mean_pct).toFixed(1) + '% against ' + esc(pt.prior_years || 'earlier years') : '') + ' (IMF PortWatch, observed).';
+      }).join(' '));
+      else P.push('No gateway port for ' + esc(name) + ' is monitored here.');
+      var rx = new RegExp(({ corn: 'maize|corn', rice: 'rice', wheat: 'wheat', sorghum: 'sorghum' })[q.crop] || cn, 'i');
+      var meas = (S.restrictions || []).filter(function (r) { return from.indexOf(r.iso) >= 0 && rx.test(r.commodity || '') && typeof restrictionState === 'function' && restrictionState(r, now); });
+      if (from.length) P.push(meas.length ? 'Export measure in force: ' + meas.map(function (r) { return esc(r.country) + ' ' + esc(String(r.commodity).toLowerCase()) + ' ' + esc(r.measure); }).join('; ') + '.'
+        : 'No export measure on ' + esc(cn) + ' by ' + from.map(function (i) { return esc(nm(i)); }).join(', ').replace(/, ([^,]*)$/, ' or $1') + ' on the trade-measures list.');
+      var fr = R.freight_signal;
+      if (fr && fr.latest && typeof fr.vs_baseline_pct === 'number') P.push('Grain freight, ' + esc(fr.series.replace(/^Ocean freight, /, '').replace(/ \(grain\)$/, '')) + ': $' + Math.round(fr.latest.value) + '/t in ' + esc(isoText(fr.latest.date).replace(/^\d+ /, '')) + ', ' + (fr.vs_baseline_pct > 0 ? '+' : '−') + Math.abs(Math.round(fr.vs_baseline_pct)) + '% against the ' + esc(fr.baseline_label) + ' (USDA, a proxy route).');
+      P.push('Not in the loaded feeds: contracts and tenders, inland road and rail capacity, and grain type' + (q.crop === 'corn' ? ' (white or yellow maize)' : '') + '.');
+      return P.map(function (t) { return '<p>' + t + '</p>'; }).join('');
+    };
     var one = function (q) {
       var pw = priceWord(q), bw = bufWord(q), f = q.row && q.row.f, cut = q.us >= 1;
       var uSrc = Object.keys(q.usrc).sort(function (a, b) { return q.usrc[b] - q.usrc[a]; }).slice(0, 3).map(function (i) { return esc(nm(i)) + ' ' + esc(kt(q.usrc[i])); }).join(', ');
       var weakB = bw === 'WEAK BUFFERS', ur = Math.min(q.ur, q.need), cn = crop(q.crop);
+      /* 2026-10-04 (owner: "this is also on 0 ... check this block and fix it or improve"): when usual suppliers cover
+         nothing, say why from the replacement file (usual_out: the buyer's partners that cannot step up, with the reason),
+         and name the exporters the open-market case draws on for this buyer. */
+      var outs = Object.keys(q.uout).map(function (i) { return q.uout[i]; }).sort(function (a, b) { return b.share_pct - a.share_pct; }).slice(0, 3);
+      var whyNone = outs.length ? 'Its usual suppliers cannot step up: ' + outs.map(function (o) { return esc(nm(o.iso)) + ' (' + Math.round(o.share_pct) + '% of its ' + esc(cn) + ' imports; ' + esc(o.why) + ')'; }).join('; ') + '.'
+        : 'No usual supplier of ' + esc(cn) + ' is on record for ' + esc(nm(q.iso)) + ' in the FAOSTAT trade matrix.';
+      var oTop = Object.keys(q.osrc).sort(function (a, b) { return q.osrc[b] - q.osrc[a]; }).slice(0, 3);
+      var oSrc = oTop.map(function (i) { return esc(nm(i)) + ' ' + esc(kt(q.osrc[i])); }).join(', ');
       /* 2026-10-01 audit (Costa Rica: "124 kt = 124 kt"): the open-market figure per buyer is what that buyer could draw,
          which always equals its need. Exporters' headroom is the crop's own total in the replacement file, shared by every
          buyer, so it is printed as a number beside the need, never drawn on the need's scale. */
@@ -54210,9 +54249,9 @@ function showCommodityDetail(key) {
       var physical = '<div class="pr2-absorb" data-need="' + q.need.toFixed(0) + '">' +
         lvl('is-need', 'Needed', esc(kt(q.need)), '<p>Potential import need under a scenario' + (nCrops[q.iso] > 1 ? ', ' + esc(cn) + ' only' : '') + '.</p>') +
         lvl('is-usual', '<i class="pr2-sw pr2-sw-use" aria-hidden="true"></i>Plausible through usual suppliers', esc(kt(ur)), barSvg +
-          '<p>' + (cut ? '<i class="pr2-sw pr2-sw-gap" aria-hidden="true"></i><b>' + esc(kt(q.us)) + '</b> uncovered. ' : 'Nothing uncovered. ') + (uSrc ? 'From ' + uSrc + '.' : 'Usual suppliers replace nothing in the scenario.') + '</p>') +
-        (hTot != null ? lvl('is-global', 'Available globally, shared by every buyer', esc(kt(hTot)), '<p>' + esc(cn.charAt(0).toUpperCase() + cn.slice(1)) + ' export headroom' + (hN ? ': ' + hN + ' exporters' : '') + (hLeft != null ? '; ' + esc(kt(hLeft)) + ' left after all buyers in the scenario' : '') + '.</p>') : '') +
-        lvl('is-confirmed', 'Confirmed deliverable', 'not modelled', '<p>Contracts, inland logistics, ports, grain type and freight are not modelled.</p>') +
+          '<p>' + (cut ? '<i class="pr2-sw pr2-sw-gap" aria-hidden="true"></i><b>' + esc(kt(q.us)) + '</b> uncovered. ' : 'Nothing uncovered. ') + (uSrc ? 'From ' + uSrc + '.' : whyNone) + '</p>') +
+        (hTot != null ? lvl('is-global', 'Available globally, shared by every buyer', esc(kt(hTot)), '<p>' + esc(cn.charAt(0).toUpperCase() + cn.slice(1)) + ' export headroom' + (hN ? ': ' + hN + ' exporters' : '') + (hLeft != null ? '; ' + esc(kt(hLeft)) + ' left after all buyers in the scenario' : '') + '.</p>' + (cut && oSrc ? '<p>For ' + esc(nm(q.iso)) + ' the scenario draws on ' + oSrc + ': spare export capacity, not a confirmed route.</p>' : '')) : '') +
+        lvl('is-confirmed', 'Confirmed deliverable', 'not confirmed', deliveryChecks(q, Object.keys(q.usrc).concat(oTop.filter(function (i) { return !q.usrc[i]; })))) +
         '<p class="pr2-absorb-go">Who could ship it and by which route: <button type="button" class="enso-inline-link" data-goto-lens="ensowater">Shipping →</button></p></div>';
       /* One pattern for all three columns: label, one figure line (number or words, same face and size), one status
          word, one detail line. */
