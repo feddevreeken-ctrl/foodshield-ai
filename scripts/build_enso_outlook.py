@@ -93,7 +93,10 @@ REGION_CROPS = {
     "india_monsoon": {"rice", "millet", "soybeans", "sorghum", "wheat"},
     "indonesia_rice": {"rice"}, "philippines_rice": {"rice"}, "sea_palm_oil": set(),
     "argentina_soy_maize": {"corn", "soybeans", "wheat", "rice"},
-    "brazil_centrewest": {"soybeans", "corn", "wheat", "rice", "sorghum", "barley"},
+    # 2026-10-05 court: Brazil's wheat, rice and barley grow in the south (Parana, Rio Grande do Sul), where El Nino
+    # usually brings more rain, not in the Centre-West drought region; data/enso_regions.json pair_regions already
+    # leaves BRA|rice and BRA|barley without a region.
+    "brazil_centrewest": {"soybeans", "corn", "sorghum"},
     "us_southern_plains": {"wheat", "sorghum"}, "us_corn_belt": {"corn", "soybeans"},
     "central_america_dry_corridor": {"corn", "rice", "sorghum", "beans"},
 }
@@ -500,6 +503,8 @@ def main() -> int:
         out_regions.append({
             "id": r["id"], "label": r["label"], "iso3": r["iso3"], "sign": r.get("sign"), "rain": r.get("rain"),
             "effect_direction": r.get("effect_direction"), "damage_season": r.get("damage_season"),
+            # None (not []) for a region with no crop list, so readers fall back to the label (Sahel · millet).
+            "crops": sorted(REGION_CROPS[r["id"]]) if r["id"] in REGION_CROPS else None,
             "lag_months": r.get("lag_months"), "confidence": r.get("confidence"),
             "precedent": r.get("quantified"), "sources": r.get("sources", [])[:3],
             "fitted": [dict(f, in_region=f["crop"] in REGION_CROPS.get(r["id"], set()))

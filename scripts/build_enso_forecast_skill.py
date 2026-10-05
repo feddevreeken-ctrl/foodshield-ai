@@ -22,9 +22,13 @@ centred base, so a few hundredths of a degree of the error can be base period.
 
 Hand-run (not in the cron): python3 scripts/build_enso_forecast_skill.py
 Writes data/enso_forecast_skill.json.
+
+Offline: python3 scripts/build_enso_forecast_skill.py --baselines-only recomputes just
+the `baselines` and `scope` blocks from the rows already in the file, with no scrape.
 """
 from __future__ import annotations
 
+import gzip
 import json
 import re
 import statistics
@@ -39,6 +43,11 @@ URL = "https://ensoforecast.iri.columbia.edu/figure4_plot/{year}/8"
 PAGE = "https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/"
 UA = {"User-Agent": "Mozilla/5.0 (FoodShield AI; public food-security dashboard)", "Accept": "*/*"}
 FIRST_YEAR = 2002  # IRI's plume starts in 2002
+ONI_CACHE = DATA_DIR / "ref" / "cpc_oni_ascii.txt.gz"  # CPC's ONI file, already on disk (enso.json history is DJF only)
+
+# 2026-10-05: what this record covers. The page read it as validating CPC's RONI outlook; it scores the IRI plume.
+SCOPE = {"forecast": "IRI/CPC plume average, issued in September", "target": "DJF ONI", "lead_months": 3,
+         "not_covered": ["NOAA CPC's RONI outlook (no archive)", "the decay seasons after DJF"]}
 
 
 def _pts(block: str) -> list[tuple[float, float]]:
@@ -98,6 +107,60 @@ def parse(svg: str, year: int) -> dict | None:
             "models": len(models), "lo": min(models), "hi": max(models)}
 
 
+def _jja_oni() -> dict[int, float]:
+    """June-August ONI by year, from the CPC file cached in data/ref (no network)."""
+    out = {}
+    for line in gzip.open(ONI_CACHE, "rt").read().splitlines()[1:]:
+        seas, yr, _, anom = line.split()
+        if seas == "JJA":
+            out[int(yr)] = float(anom)
+    return out
+
+
+def baselines(rows: list[dict]) -> dict:
+    """2026-10-05: the plume's MAE means little alone, so score three no-skill forecasts of the same 22 DJF values
+    from data already on disk: June-August persistence (the DJF forecast is that year's JJA ONI), a leave-one-out
+    straight-line fit of DJF ONI on JJA ONI (each year predicted by a line fitted without it), and zero."""
+    jja = _jja_oni()
+    ys = [int(r["issued"][:4]) for r in rows]
+    x, obs = [jja[y] for y in ys], [r["observed_oni"] for r in rows]
+    mae = lambda pred: round(statistics.mean(abs(p - o) for p, o in zip(pred, obs)), 2)  # noqa: E731
+    loo = []
+    for i in range(len(rows)):
+        xs, os_ = x[:i] + x[i + 1:], obs[:i] + obs[i + 1:]
+        b = statistics.linear_regression(xs, os_)
+        loo.append(b.intercept + b.slope * x[i])
+    # Sign is the observed value against the plume's range: above = the plume ran too cold, below = too warm.
+    misses = [{"djf": r["djf"], "observed_oni": r["observed_oni"], "model_lo": r["model_lo"], "model_hi": r["model_hi"],
+               "sign": "above_range" if r["observed_oni"] > r["model_hi"] else "below_range"}
+              for r in rows if not r["inside_range"]]
+    return {
+        "mae_plume": mae([r["forecast_avg"] for r in rows]),
+        "mae_jja_persistence": mae(x),
+        "mae_loo_regression_on_jja": mae(loo),
+        "mae_zero": mae([0.0] * len(rows)),
+        "years": len(rows),
+        "strong_years_n": sum(o >= 1.5 for o in obs),
+        "range_misses": misses,
+        "note": ("Same years, same observed DJF ONI. JJA ONI from CPC's file (data/ref). The regression is refitted "
+                 "with each year left out. A plume that cannot beat JJA persistence or the regression has no skill "
+                 "beyond what the summer already showed."),
+    }
+
+
+def baselines_only() -> int:
+    """Rewrite only `baselines` and `scope` in the existing file. _meta is left exactly as it is: nothing was
+    re-scraped, so generated_at, inputs, hand_run and next_review_due keep describing the last real rebuild."""
+    path = DATA_DIR / "enso_forecast_skill.json"
+    raw = path.read_text(encoding="utf-8")
+    doc = json.loads(raw)
+    doc["data"]["baselines"] = baselines(doc["data"]["rows"])
+    doc["data"]["scope"] = SCOPE
+    path.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + ("\n" if raw.endswith("\n") else ""), encoding="utf-8")
+    print(f"[OK] baselines + scope written to {path}")
+    return 0
+
+
 def main() -> int:
     hist = json.loads((DATA_DIR / "enso.json").read_text())["data"]["history"]
     oni = {r["year"]: r["anom"] for r in hist if r.get("season") == "DJF"}
@@ -144,7 +207,7 @@ def main() -> int:
         "strong_bias": round(statistics.mean(r["error"] for r in warm), 2) if warm else None,
     }
     write_json("enso_forecast_skill.json", {
-        "summary": summary, "current": current, "rows": rows, "skipped": skipped,
+        "summary": summary, "baselines": baselines(rows), "scope": SCOPE, "current": current, "rows": rows, "skipped": skipped,
         "lead": "Issued mid-September for the Dec–Feb season, about three months ahead",
         "source_url": PAGE, "figure_url": URL.format(year="<year>"),
     }, source="IRI ENSO prediction plume archive (mid-September issues) against NOAA CPC ONI (DJF)",
@@ -158,4 +221,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(baselines_only() if "--baselines-only" in sys.argv else main())

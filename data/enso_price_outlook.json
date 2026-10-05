@@ -1,8 +1,8 @@
 {
   "_meta": {
-    "generated_at": "2026-10-05T02:59:25.726797+00:00",
+    "generated_at": "2026-10-05T07:16:40.547385+00:00",
     "source": "FAO GIEWS FPMA Tool (domestic prices API, CPI-deflated); World Bank Pink Sheet (monthly, deflated by US CPI, FRED CPIAUCSL); FoodShield El Niño harvest model; NOAA CPC ONI",
-    "notes": "Domestic staple prices (FPMA, CPI-deflated) in countries where El Niño's harvest damage is documented, against 2015-16 and 2023-24 at the same stage. The model is published only when it passes its leave-one-event-out skill gate against no change and the analog average; see data.method.",
+    "notes": "Domestic staple prices (FPMA, CPI-deflated) in countries where El Niño's harvest damage is documented, against 2015-16 and 2023-24 at the same stage. The model is published only when it passes its leave-one-event-out skill gate against no change, the analog average and a leave-one-year-out climatology; see data.method.",
     "version": "v23",
     "status": "ok",
     "method": {
@@ -12,9 +12,9 @@
       "target": "peak real price over December..March+1 (months 0..15 from the peak) vs the origin month; at least 12 of 16 months observed.",
       "predictors": "shortfall_pct = the country's own fitted El Niño yield slope (enso_model.json, point estimate, significant or not) x the event's DJF ONI; rel_3y_pct = origin price vs the median of the 36 months before it. Import dependence (USDA PSD) left out: the file has no per-year history, so it cannot be known in advance for past events.",
       "n_specs_tried": 1,
-      "validation": "leave-one-event-out; baselines: no change (0%) and the analog average (mean of the same series' 2015-16 / 2023-24 peak rises, excluding the held-out event; pooled median if the series has none). Gate: pooled MAE below both baselines, the model beats the analog on at least half of the held-out events, at least 3 events and 10 samples. The half-of-events condition was added after the first run (pooled MAE edge over the analog of about 2 points); it makes the gate stricter, not looser. Row gate (added after the first run showed the pooled fit losing badly to no change on the managed rice markets): a row shows model numbers only if it has at least 5 held-out events of its own and its own MAE beats both baselines; its p10/p90 are its own leave-one-event-out misses around p50.",
+      "validation": "leave-one-event-out; baselines: no change (0%), the analog average (mean of the same series' 2015-16 / 2023-24 peak rises, excluding the held-out event; pooled median if the series has none) and a leave-one-year-out climatology (median of the same series' target, same origin offset and window, over every other year, El Niño or not, leaving out the held-out year and any year whose window shares a month with it; a sample with no such year is dropped from every table). Gate: pooled MAE below all three baselines, the model beats the analog on at least half of the held-out events, at least 3 events and 10 samples. The half-of-events condition was added after the first run (pooled MAE edge over the analog of about 2 points); it makes the gate stricter, not looser. The climatology baseline was added 2026-10-05 (court C4): the target is a peak rise, which drifts upward by construction, so beating no change proves little. Row gate (added after the first run showed the pooled fit losing badly to no change on the managed rice markets): a row shows model numbers only if it has at least 5 held-out events of its own and its own MAE beats all three baselines; its p10/p90 are its own leave-one-event-out misses around p50.",
       "hits": "direction = rise (>0) or not; no change always calls 'not'.",
-      "effect_replay": "The El Niño-only forward view. Taken out: general inflation (FPMA CPI-deflated prices); the normal seasonal swing (per series, the median real log change of each calendar month in non-El-Niño years, centred so a year sums to zero (no trend), cumulated from the latest month; El Niño years = every year with a DJF ONI >= 0.5 in December of it, the year after, and the current year; n years per month in normal.n_years_min/max; a series with any calendar month under 3 years gets no normal year, normal.available = false); world-market moves (per series, beta x the World Bank Pink Sheet price of the staple deflated by US CPI, beta from an OLS of the deseasonalised monthly real log change on the world real log change over non-El-Niño months, kept only with 48+ months and |t| >= 1.96, clipped to 0..1; beans and teff have no world benchmark, beta 0). Excess path of a past event = its real path minus the normal year minus beta x the world change over the same months. Forward view = latest real price x (normal year + that excess), i.e. a normal year plus the El Niño effect last time; normal.points is the normal year alone. NOT taken out: currency moves beyond what CPI captures, local policy (export bans, strategic reserve sales, price controls), conflict and other local shocks in the past event; any El Niño part of world-price moves is removed with them. The normal year is built from calendar-month steps because full 19-month windows free of El Niño years leave only 2-4 years per series. Because the normal year is calendar-based, it cancels in the total: normal year + excess = the past real path minus beta x the world change; the split says how much of that is the usual season and how much is the El Niño effect. A replay, not a forecast. Scored leave-one-event-out in replay_skill (same target and events as the model table).",
+      "effect_replay": "The El Niño-only forward view. Taken out: general inflation (FPMA CPI-deflated prices); the normal seasonal swing (per series, the median real log change of each calendar month in non-El-Niño years, centred so a year sums to zero (no trend), cumulated from the latest month; El Niño years = every year with a DJF ONI >= 0.5 in December of it, the year after, and the current year; n years per month in normal.n_years_min/max; a series with any calendar month under 3 years gets no normal year, normal.available = false); world-market moves (per series, beta x the World Bank Pink Sheet price of the staple deflated by US CPI, beta from an OLS of the deseasonalised monthly real log change on the world real log change over non-El-Niño months, kept only with 48+ months and |t| >= 1.96, clipped to 0..1; beans and teff have no world benchmark, beta 0). Excess path of a past event = its real path minus the normal year minus beta x the world change over the same months. Forward view = latest real price x (normal year + that excess), i.e. a normal year plus the El Niño effect last time; normal.points is the normal year alone. NOT taken out: currency moves beyond what CPI captures, local policy (export bans, strategic reserve sales, price controls), conflict and other local shocks in the past event; any El Niño part of world-price moves is removed with them. The normal year is built from calendar-month steps because full 19-month windows free of El Niño years leave only 2-4 years per series. Because the normal year is calendar-based, it cancels in the total: normal year + excess = the past real path minus beta x the world change; the split says how much of that is the usual season and how much is the El Niño effect. A replay, not a forecast. Scored leave-one-event-out in replay_skill (same target and events as the model table, same climatology baseline); replay_skill.beats_climatology and replay_skill.verdict say whether it beats the climatology, and the paths are shown either way.",
       "caveat": "Series in one region move together and each El Niño is one draw, so the effective sample is closer to the number of events than the number of rows."
     },
     "universe_rule": "A country x staple is in when El Niño's effect on that staple's harvest there is documented as harmful by FoodShield's harvest model (outlook row shown, negative El Niño slope), a drying region card rated high or medium confidence, or a published-effect row; AND FPMA has a CPI-deflated monthly series for that staple that runs to within 7 months of today and reaches back to March 2015 or March 2023. One series per pair: national average where FPMA has one, else the longest-running capital or benchmark market.",
@@ -49,7 +49,7 @@
     "inputs": {
       "enso.json": "2026-10-05T02:46:07.632886+00:00",
       "enso_model.json": "2026-09-30T22:40:34.979709+00:00",
-      "enso_outlook.json": "2026-10-05T02:59:16.716300+00:00",
+      "enso_outlook.json": "2026-10-05T07:12:17.319176+00:00",
       "enso_regions.json": "2026-09-26",
       "enso_published_effects.json": "2026-09-24T17:32:12+00:00"
     }
@@ -778,6 +778,8 @@
             "hits_plain": 6,
             "mae_normal": 26.5,
             "hits_normal": 6,
+            "mae_climatology": 22.7,
+            "hits_climatology": 6,
             "mae_nochange": 36.1,
             "hits_nochange": 1
           }
@@ -787,13 +789,15 @@
           "mae_model": 28.7,
           "mae_nochange": 36.1,
           "mae_analog": 40.5,
+          "mae_climatology": 22.7,
           "hits": {
             "model": 6,
             "nochange": 1,
-            "analog": 6
+            "analog": 6,
+            "climatology": 6
           },
           "n_events": 7,
-          "row_gate": "pass"
+          "row_gate": "fail"
         },
         "model": null
       },
@@ -1518,6 +1522,8 @@
             "hits_plain": 6,
             "mae_normal": 41.7,
             "hits_normal": 6,
+            "mae_climatology": 28.6,
+            "hits_climatology": 6,
             "mae_nochange": 67.2,
             "hits_nochange": 0
           }
@@ -1527,10 +1533,12 @@
           "mae_model": 34.5,
           "mae_nochange": 67.2,
           "mae_analog": 31.1,
+          "mae_climatology": 30.5,
           "hits": {
             "model": 5,
             "nochange": 0,
-            "analog": 5
+            "analog": 5,
+            "climatology": 5
           },
           "n_events": 5,
           "row_gate": "fail"
@@ -2002,10 +2010,12 @@
           "mae_model": 95.3,
           "mae_nochange": 41.4,
           "mae_analog": 20.3,
+          "mae_climatology": 73.6,
           "hits": {
             "model": 0,
             "nochange": 0,
-            "analog": 1
+            "analog": 1,
+            "climatology": 0
           },
           "n_events": 1,
           "row_gate": "fail"
@@ -2763,6 +2773,8 @@
             "hits_plain": 7,
             "mae_normal": 70.3,
             "hits_normal": 7,
+            "mae_climatology": 61.4,
+            "hits_climatology": 7,
             "mae_nochange": 79.2,
             "hits_nochange": 0
           }
@@ -2772,10 +2784,12 @@
           "mae_model": 50.2,
           "mae_nochange": 79.2,
           "mae_analog": 67.6,
+          "mae_climatology": 61.4,
           "hits": {
             "model": 7,
             "nochange": 0,
-            "analog": 7
+            "analog": 7,
+            "climatology": 7
           },
           "n_events": 7,
           "row_gate": "pass"
@@ -3503,6 +3517,8 @@
             "hits_plain": 3,
             "mae_normal": 16.2,
             "hits_normal": 3,
+            "mae_climatology": 17.4,
+            "hits_climatology": 3,
             "mae_nochange": 16.4,
             "hits_nochange": 1
           }
@@ -4322,6 +4338,8 @@
             "hits_plain": 3,
             "mae_normal": 28.6,
             "hits_normal": 3,
+            "mae_climatology": 14.2,
+            "hits_climatology": 3,
             "mae_nochange": 30.2,
             "hits_nochange": 0
           }
@@ -5081,6 +5099,8 @@
             "hits_plain": 3,
             "mae_normal": 6.4,
             "hits_normal": 3,
+            "mae_climatology": 12.3,
+            "hits_climatology": 3,
             "mae_nochange": 7.1,
             "hits_nochange": 0
           }
@@ -5810,6 +5830,8 @@
             "hits_plain": 1,
             "mae_normal": 6.9,
             "hits_normal": 2,
+            "mae_climatology": 8.1,
+            "hits_climatology": 2,
             "mae_nochange": 6.9,
             "hits_nochange": 2
           }
@@ -7027,6 +7049,8 @@
             "hits_plain": 1,
             "mae_normal": 17.6,
             "hits_normal": 5,
+            "mae_climatology": 18.3,
+            "hits_climatology": 5,
             "mae_nochange": 20.2,
             "hits_nochange": 2
           }
@@ -7036,10 +7060,12 @@
           "mae_model": 15.3,
           "mae_nochange": 20.2,
           "mae_analog": 22.3,
+          "mae_climatology": 18.3,
           "hits": {
             "model": 5,
             "nochange": 2,
-            "analog": 1
+            "analog": 1,
+            "climatology": 5
           },
           "n_events": 7,
           "row_gate": "pass"
@@ -7827,6 +7853,8 @@
             "hits_plain": 3,
             "mae_normal": 24.8,
             "hits_normal": 3,
+            "mae_climatology": 26.8,
+            "hits_climatology": 3,
             "mae_nochange": 24.1,
             "hits_nochange": 4
           }
@@ -8592,6 +8620,8 @@
             "hits_plain": 2,
             "mae_normal": 17.2,
             "hits_normal": 4,
+            "mae_climatology": 15.3,
+            "hits_climatology": 4,
             "mae_nochange": 14.9,
             "hits_nochange": 3
           }
@@ -9381,6 +9411,8 @@
             "hits_plain": 3,
             "mae_normal": 38.8,
             "hits_normal": 4,
+            "mae_climatology": 41.3,
+            "hits_climatology": 4,
             "mae_nochange": 40.0,
             "hits_nochange": 3
           }
@@ -10111,6 +10143,8 @@
             "hits_plain": 4,
             "mae_normal": 9.9,
             "hits_normal": 4,
+            "mae_climatology": 9.9,
+            "hits_climatology": 4,
             "mae_nochange": 12.2,
             "hits_nochange": 0
           }
@@ -10120,10 +10154,12 @@
           "mae_model": 19.8,
           "mae_nochange": 7.4,
           "mae_analog": 11.1,
+          "mae_climatology": 5.6,
           "hits": {
             "model": 3,
             "nochange": 0,
-            "analog": 3
+            "analog": 3,
+            "climatology": 3
           },
           "n_events": 3,
           "row_gate": "fail"
@@ -10822,6 +10858,8 @@
             "hits_plain": 3,
             "mae_normal": 5.5,
             "hits_normal": 4,
+            "mae_climatology": 5.7,
+            "hits_climatology": 4,
             "mae_nochange": 5.6,
             "hits_nochange": 3
           }
@@ -10831,10 +10869,12 @@
           "mae_model": 18.8,
           "mae_nochange": 5.6,
           "mae_analog": 6.9,
+          "mae_climatology": 5.7,
           "hits": {
             "model": 4,
             "nochange": 3,
-            "analog": 3
+            "analog": 3,
+            "climatology": 4
           },
           "n_events": 7,
           "row_gate": "fail"
@@ -11453,10 +11493,12 @@
           "mae_model": 20.0,
           "mae_nochange": 5.1,
           "mae_analog": 3.2,
+          "mae_climatology": 1.9,
           "hits": {
             "model": 2,
             "nochange": 0,
-            "analog": 2
+            "analog": 2,
+            "climatology": 2
           },
           "n_events": 2,
           "row_gate": "fail"
@@ -12154,6 +12196,8 @@
             "hits_plain": 7,
             "mae_normal": 16.2,
             "hits_normal": 7,
+            "mae_climatology": 10.0,
+            "hits_climatology": 7,
             "mae_nochange": 20.2,
             "hits_nochange": 0
           }
@@ -12163,13 +12207,15 @@
           "mae_model": 10.4,
           "mae_nochange": 20.2,
           "mae_analog": 11.8,
+          "mae_climatology": 10.0,
           "hits": {
             "model": 6,
             "nochange": 0,
-            "analog": 7
+            "analog": 7,
+            "climatology": 7
           },
           "n_events": 7,
-          "row_gate": "pass"
+          "row_gate": "fail"
         },
         "model": null
       },
@@ -12811,10 +12857,12 @@
           "mae_model": 11.1,
           "mae_nochange": 21.7,
           "mae_analog": 23.4,
+          "mae_climatology": 16.1,
           "hits": {
             "model": 2,
             "nochange": 0,
-            "analog": 2
+            "analog": 2,
+            "climatology": 2
           },
           "n_events": 2,
           "row_gate": "fail"
@@ -13333,10 +13381,12 @@
           "mae_model": 14.1,
           "mae_nochange": 47.1,
           "mae_analog": 26.0,
+          "mae_climatology": 5.4,
           "hits": {
             "model": 1,
             "nochange": 0,
-            "analog": 1
+            "analog": 1,
+            "climatology": 1
           },
           "n_events": 1,
           "row_gate": "fail"
@@ -13354,49 +13404,58 @@
       "hits_nochange": 6,
       "mae_analog": 27.2,
       "hits_analog": 38,
+      "mae_climatology": 22.7,
+      "hits_climatology": 42,
       "events_model_beats_analog": "3 of 7",
       "by_event": {
         "2002-03": {
           "n": 5,
           "mae_model": 14.2,
           "mae_nochange": 18.9,
-          "mae_analog": 41.9
+          "mae_analog": 41.9,
+          "mae_climatology": 17.7
         },
         "2004-05": {
           "n": 5,
           "mae_model": 34.8,
           "mae_nochange": 38.5,
-          "mae_analog": 17.2
+          "mae_analog": 17.2,
+          "mae_climatology": 28.1
         },
         "2006-07": {
           "n": 6,
           "mae_model": 16.1,
           "mae_nochange": 37.4,
-          "mae_analog": 39.1
+          "mae_analog": 39.1,
+          "mae_climatology": 20.5
         },
         "2009-10": {
           "n": 6,
           "mae_model": 23.6,
           "mae_nochange": 14.5,
-          "mae_analog": 38.0
+          "mae_analog": 38.0,
+          "mae_climatology": 19.8
         },
         "2015-16": {
           "n": 7,
           "mae_model": 30.0,
           "mae_nochange": 43.2,
-          "mae_analog": 20.4
+          "mae_analog": 20.4,
+          "mae_climatology": 23.9
         },
         "2018-19": {
           "n": 9,
           "mae_model": 31.9,
           "mae_nochange": 36.1,
-          "mae_analog": 23.3
+          "mae_analog": 23.3,
+          "mae_climatology": 22.9
         },
         "2023-24": {
           "n": 11,
           "mae_model": 26.2,
           "mae_nochange": 36.8,
-          "mae_analog": 20.1
+          "mae_analog": 20.1,
+          "mae_climatology": 24.2
         }
       }
     },
@@ -13409,6 +13468,8 @@
       "hits_plain": 52,
       "mae_normal": 25.1,
       "hits_normal": 61,
+      "mae_climatology": 22.5,
+      "hits_climatology": 61,
       "mae_nochange": 29.2,
       "hits_nochange": 19,
       "by_event": {
@@ -13418,6 +13479,7 @@
           "mae_adjusted": 35.1,
           "mae_plain": 33.7,
           "mae_normal": 20.2,
+          "mae_climatology": 20.4,
           "mae_nochange": 18.2
         },
         "2004-05": {
@@ -13426,6 +13488,7 @@
           "mae_adjusted": 21.1,
           "mae_plain": 19.9,
           "mae_normal": 33.1,
+          "mae_climatology": 25.9,
           "mae_nochange": 39.1
         },
         "2006-07": {
@@ -13434,6 +13497,7 @@
           "mae_adjusted": 52.9,
           "mae_plain": 51.7,
           "mae_normal": 37.2,
+          "mae_climatology": 33.3,
           "mae_nochange": 45.4
         },
         "2009-10": {
@@ -13442,6 +13506,7 @@
           "mae_adjusted": 35.5,
           "mae_plain": 35.0,
           "mae_normal": 12.8,
+          "mae_climatology": 20.3,
           "mae_nochange": 17.0
         },
         "2015-16": {
@@ -13450,6 +13515,7 @@
           "mae_adjusted": 21.1,
           "mae_plain": 20.8,
           "mae_normal": 30.3,
+          "mae_climatology": 24.1,
           "mae_nochange": 35.6
         },
         "2018-19": {
@@ -13458,6 +13524,7 @@
           "mae_adjusted": 22.2,
           "mae_plain": 21.4,
           "mae_normal": 22.6,
+          "mae_climatology": 18.2,
           "mae_nochange": 26.7
         },
         "2023-24": {
@@ -13466,10 +13533,13 @@
           "mae_adjusted": 20.0,
           "mae_plain": 20.8,
           "mae_normal": 22.8,
+          "mae_climatology": 19.3,
           "mae_nochange": 25.5
         }
       },
-      "best": "normal"
+      "best": "climatology",
+      "beats_climatology": false,
+      "verdict": "no demonstrated skill against a climatology baseline"
     },
     "nino_years_excluded": [
       1991,
@@ -13603,9 +13673,9 @@
       "target": "peak real price over December..March+1 (months 0..15 from the peak) vs the origin month; at least 12 of 16 months observed.",
       "predictors": "shortfall_pct = the country's own fitted El Niño yield slope (enso_model.json, point estimate, significant or not) x the event's DJF ONI; rel_3y_pct = origin price vs the median of the 36 months before it. Import dependence (USDA PSD) left out: the file has no per-year history, so it cannot be known in advance for past events.",
       "n_specs_tried": 1,
-      "validation": "leave-one-event-out; baselines: no change (0%) and the analog average (mean of the same series' 2015-16 / 2023-24 peak rises, excluding the held-out event; pooled median if the series has none). Gate: pooled MAE below both baselines, the model beats the analog on at least half of the held-out events, at least 3 events and 10 samples. The half-of-events condition was added after the first run (pooled MAE edge over the analog of about 2 points); it makes the gate stricter, not looser. Row gate (added after the first run showed the pooled fit losing badly to no change on the managed rice markets): a row shows model numbers only if it has at least 5 held-out events of its own and its own MAE beats both baselines; its p10/p90 are its own leave-one-event-out misses around p50.",
+      "validation": "leave-one-event-out; baselines: no change (0%), the analog average (mean of the same series' 2015-16 / 2023-24 peak rises, excluding the held-out event; pooled median if the series has none) and a leave-one-year-out climatology (median of the same series' target, same origin offset and window, over every other year, El Niño or not, leaving out the held-out year and any year whose window shares a month with it; a sample with no such year is dropped from every table). Gate: pooled MAE below all three baselines, the model beats the analog on at least half of the held-out events, at least 3 events and 10 samples. The half-of-events condition was added after the first run (pooled MAE edge over the analog of about 2 points); it makes the gate stricter, not looser. The climatology baseline was added 2026-10-05 (court C4): the target is a peak rise, which drifts upward by construction, so beating no change proves little. Row gate (added after the first run showed the pooled fit losing badly to no change on the managed rice markets): a row shows model numbers only if it has at least 5 held-out events of its own and its own MAE beats all three baselines; its p10/p90 are its own leave-one-event-out misses around p50.",
       "hits": "direction = rise (>0) or not; no change always calls 'not'.",
-      "effect_replay": "The El Niño-only forward view. Taken out: general inflation (FPMA CPI-deflated prices); the normal seasonal swing (per series, the median real log change of each calendar month in non-El-Niño years, centred so a year sums to zero (no trend), cumulated from the latest month; El Niño years = every year with a DJF ONI >= 0.5 in December of it, the year after, and the current year; n years per month in normal.n_years_min/max; a series with any calendar month under 3 years gets no normal year, normal.available = false); world-market moves (per series, beta x the World Bank Pink Sheet price of the staple deflated by US CPI, beta from an OLS of the deseasonalised monthly real log change on the world real log change over non-El-Niño months, kept only with 48+ months and |t| >= 1.96, clipped to 0..1; beans and teff have no world benchmark, beta 0). Excess path of a past event = its real path minus the normal year minus beta x the world change over the same months. Forward view = latest real price x (normal year + that excess), i.e. a normal year plus the El Niño effect last time; normal.points is the normal year alone. NOT taken out: currency moves beyond what CPI captures, local policy (export bans, strategic reserve sales, price controls), conflict and other local shocks in the past event; any El Niño part of world-price moves is removed with them. The normal year is built from calendar-month steps because full 19-month windows free of El Niño years leave only 2-4 years per series. Because the normal year is calendar-based, it cancels in the total: normal year + excess = the past real path minus beta x the world change; the split says how much of that is the usual season and how much is the El Niño effect. A replay, not a forecast. Scored leave-one-event-out in replay_skill (same target and events as the model table).",
+      "effect_replay": "The El Niño-only forward view. Taken out: general inflation (FPMA CPI-deflated prices); the normal seasonal swing (per series, the median real log change of each calendar month in non-El-Niño years, centred so a year sums to zero (no trend), cumulated from the latest month; El Niño years = every year with a DJF ONI >= 0.5 in December of it, the year after, and the current year; n years per month in normal.n_years_min/max; a series with any calendar month under 3 years gets no normal year, normal.available = false); world-market moves (per series, beta x the World Bank Pink Sheet price of the staple deflated by US CPI, beta from an OLS of the deseasonalised monthly real log change on the world real log change over non-El-Niño months, kept only with 48+ months and |t| >= 1.96, clipped to 0..1; beans and teff have no world benchmark, beta 0). Excess path of a past event = its real path minus the normal year minus beta x the world change over the same months. Forward view = latest real price x (normal year + that excess), i.e. a normal year plus the El Niño effect last time; normal.points is the normal year alone. NOT taken out: currency moves beyond what CPI captures, local policy (export bans, strategic reserve sales, price controls), conflict and other local shocks in the past event; any El Niño part of world-price moves is removed with them. The normal year is built from calendar-month steps because full 19-month windows free of El Niño years leave only 2-4 years per series. Because the normal year is calendar-based, it cancels in the total: normal year + excess = the past real path minus beta x the world change; the split says how much of that is the usual season and how much is the El Niño effect. A replay, not a forecast. Scored leave-one-event-out in replay_skill (same target and events as the model table, same climatology baseline); replay_skill.beats_climatology and replay_skill.verdict say whether it beats the climatology, and the paths are shown either way.",
       "caveat": "Series in one region move together and each El Niño is one draw, so the effective sample is closer to the number of events than the number of rows."
     },
     "tool_url": "https://fpma.fao.org/giews/fpmat4/"

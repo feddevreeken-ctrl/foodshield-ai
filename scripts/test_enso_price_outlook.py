@@ -1,5 +1,5 @@
-"""Synthetic-fixture tests for build_enso_price_outlook: event list, analog band, skill gate, seasonal normal,
-world pass-through gate, El Niño excess path, end-to-end null model."""
+"""Synthetic-fixture tests for build_enso_price_outlook: event list, analog band, skill gate, leave-one-year-out
+climatology baseline, seasonal normal, world pass-through gate, El Niño excess path, end-to-end null model."""
 import json
 import math
 import random
@@ -60,8 +60,9 @@ def samples(y_fn, analog_noise):
             x = [rng.uniform(-30, 0), rng.uniform(-30, 30)]
             ys[e] = (y_fn(x, rng), x)
         ay = {e: ys[e][0] + analog_noise(rng) for e in ("2015-16", "2023-24")}
+        clim = {yr: 20.0 for yr in range(1995, 2026)}  # a flat climatology: neither near-perfect nor useless here
         for e, (y, x) in ys.items():
-            out.append({"key": f"S{k}", "event": e, "y": y, "x": x, "analog_y": ay})
+            out.append({"key": f"S{k}", "event": e, "y": y, "x": x, "analog_y": ay, "clim_y": clim, "clim_gap": 1})
     return out
 
 
@@ -82,6 +83,48 @@ def test_gate(fails):
     few = [s for s in sig if s["event"] in ("2015-16", "2023-24")]
     if b.evaluate(few)[3] != "insufficient_data":
         fails.append("gate: two events are not enough to judge skill")
+
+
+def test_climatology(fails):
+    """2026-10-05 court C4: p_clim is leave-one-year-out, and a model that only beats no change and the analog fails."""
+    # Held-out 2015 and its window-sharing neighbours (gap 1) carry wild values; the baseline must not move with them.
+    clim = {2008: 0.0, 2010: 10.0, 2014: 900.0, 2015: 1000.0, 2016: 900.0, 2020: 20.0, 2022: 30.0}
+    s = {"event": "2015-16", "clim_y": clim, "clim_gap": 1}
+    if b.p_clim(s) != 15.0:
+        fails.append(f"p_clim: median of the other, non-overlapping years must be 15, got {b.p_clim(s)}")
+    for v in (-1e6, 0.0, 1e6):
+        if b.p_clim({**s, "clim_y": {**clim, 2015: v, 2014: v, 2016: v}}) != 15.0:
+            fails.append("p_clim: the held-out year (and its overlapping neighbours) must never enter its own baseline")
+    if b.p_clim({**s, "clim_gap": 0}) != 25.0:
+        fails.append(f"p_clim: gap 0 leaves out only the held-out year, got {b.p_clim({**s, 'clim_gap': 0})}")
+    if b.p_clim({**s, "clim_y": {2014: 1.0, 2015: 5.0, 2016: 2.0}}) is not None:
+        fails.append("p_clim: no other non-overlapping year must give no baseline")
+    # Each series sits at its own level (20..95) plus small noise; the predictors are noise. The pooled model beats no
+    # change and a noisy analog, but the series' own climatology is near perfect: the gate must say no_skill.
+    rng = random.Random(5)
+    events = ["2002-03", "2006-07", "2009-10", "2015-16", "2023-24"]
+    rows = []
+    for k in range(6):
+        lvl = 20.0 + 15 * k
+        ys = {e: lvl + rng.gauss(0, 2) for e in events}
+        ay = {e: ys[e] + rng.gauss(0, 80) for e in ("2015-16", "2023-24")}
+        clim = {yr: lvl + rng.gauss(0, 2) for yr in range(1995, 2026)}
+        clim.update({int(e[:4]): ys[e] for e in events})  # an event's own year is its sample's target
+        for e in events:
+            rows.append({"key": f"S{k}", "event": e, "y": ys[e], "x": [rng.uniform(-30, 0), rng.uniform(-30, 30)],
+                         "analog_y": ay, "clim_y": clim, "clim_gap": 1})
+    pooled, _pk, _res, status = b.evaluate(rows)
+    wins, of = (int(t) for t in pooled["events_model_beats_analog"].split(" of "))
+    if not (pooled["mae_climatology"] < pooled["mae_model"] < min(pooled["mae_nochange"], pooled["mae_analog"]) and 2 * wins >= of):
+        fails.append(f"gate fixture: the model must pass every old condition and lose only to climatology: {pooled}")
+    if status != "no_skill":
+        fails.append(f"gate: a model that loses to the climatology must be no_skill, got {status}")
+    # Same fixture through the replay table: the El Niño-effect replay (= the noisy analog) loses to climatology.
+    for r in rows:
+        r.update(adj_y=r["analog_y"], normal_y=0.0)
+    rp, _ = b.evaluate_replay(rows)
+    if rp["best"] != "climatology" or rp["beats_climatology"] or rp["verdict"] != b.REPLAY_NO_SKILL:
+        fails.append(f"replay: losing to climatology must be labelled: best {rp['best']}, beats {rp['beats_climatology']}, {rp['verdict']}")
 
 
 SEASON = [0.04, 0.03, -0.02, -0.06, -0.05, -0.02, 0.0, 0.01, 0.02, 0.02, 0.01, 0.02]  # log step into each month
@@ -202,8 +245,9 @@ def test_build_null_model(fails):
         a = dict(er["normal"]["points"])[v["peak_month"]]
         if round(a - 100, 1) != v["normal_at_peak_pct"]:
             fails.append(f"build: normal_at_peak_pct must be the normal path at the replay's peak month ({lab})")
-    if not out.get("replay_skill") or "mae_adjusted" not in out["replay_skill"]:
-        fails.append("build: pooled replay skill must be published")
+    rs = out.get("replay_skill") or {}
+    if not all(k in rs for k in ("mae_adjusted", "mae_climatology", "beats_climatology", "verdict")):
+        fails.append(f"build: pooled replay skill must be published with its climatology verdict: {sorted(rs)}")
     # With beta 0 the normal year cancels: normal + excess must equal the plain real replay.
     for lab, v in (er.get("paths") or {}).items():
         plain = dict(r["analog"]["paths"][lab]["points"])
@@ -213,7 +257,8 @@ def test_build_null_model(fails):
 
 def main():
     fails = []
-    for t in (test_events, test_analog_band, test_gate, test_seasonal_normal, test_beta_gate, test_build_null_model):
+    for t in (test_events, test_analog_band, test_gate, test_climatology, test_seasonal_normal, test_beta_gate,
+              test_build_null_model):
         t(fails)
     for f in fails:
         print("FAIL", f)

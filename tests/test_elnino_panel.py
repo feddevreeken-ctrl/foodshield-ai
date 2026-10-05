@@ -438,7 +438,8 @@ def main() -> int:
             const shown = O.rows_all.filter(r => r.status === 'shown' && typeof r.change_pct_record === 'number');
             const isos = [...new Set(shown.map(r => r.iso))];
             const dirOf = iso => { const rs = shown.filter(r => r.iso === iso).sort((a, b) => Math.abs(b.change_kt_record || 0) - Math.abs(a.change_kt_record || 0) || Math.abs(b.change_pct_record) - Math.abs(a.change_pct_record)); return rs[0].change_pct_record < 0 ? 'fall' : 'rise'; };
-            const rows = O.rows_all.filter(r => r.status === 'shown' && !r.in_season && typeof r.change_kt_record === 'number' && Math.abs(r.change_kt_record) >= 150);
+            // 2026-10-05 court (C3): exploratory rows are not headline figures, so they get no callout.
+            const rows = O.rows_all.filter(r => r.status === 'shown' && !(r.model_quality && r.model_quality.tier === 'exploratory') && !r.in_season && typeof r.change_kt_record === 'number' && Math.abs(r.change_kt_record) >= 150);
             const calls = [...document.querySelectorAll('#enso-map .enso-hcall')], map = document.getElementById('enso-map').getBoundingClientRect(), boxes = calls.map(c => c.getBoundingClientRect());
             const overlap = boxes.some((a, i) => boxes.some((b, j) => j > i && Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1));
             const inside = boxes.every(b => b.width > 0 && b.left >= map.left - 1 && b.right <= map.right + 1 && b.top >= map.top - 1 && b.bottom <= map.bottom + 1);
@@ -1058,7 +1059,7 @@ def main() -> int:
         check("the food-security frame leads the lens with the readout and fold only; all five tabs carry live figures and evidence titles",
               bool(band) and band['noRail'] and band['only'] and band['fold'] and band['strip'] and band['before']
               and len(band['figures']) == 5 and all(band['figures']) and str(abs(band['pct'])) in band['figures'][1].replace('\u2212', '')
-              and band['figures'][4] == band['wfp'] and all('. · ' in t for t in band['titles'])
+              and band['figures'][4].startswith(band['wfp']) and all('. · ' in t for t in band['titles'])
               and 'Scenario, not a forecast' in band['all'], str(band)[:400])
         check("the tonnage copy never says grain has to be found elsewhere, and east-based is east-weighted", page.evaluate("""() => !/to find from other exporters|Grain to find|east-based/i.test(document.getElementById('tab-elnino').innerText)"""))
         # 2026-09-24: the Ocean lens leads with a dated calendar joined from the other lenses' data.
@@ -2882,7 +2883,7 @@ def main() -> int:
         # The Reported tab figure is WFP's projection from enso_situation.json, not a static descriptor.
         _wfp_added = _pjson.load(open(ROOT / 'data' / 'enso_situation.json'))['data']['wfp_projection']['added_m']
         check("the Reported tab prints WFP's live projection",
-              page.locator('#viewbtn-ensolive .enso-view-desc').inner_text().strip() == f'{_wfp_added} m')
+              page.locator('#viewbtn-ensolive .enso-view-desc').inner_text().strip().startswith(f'{_wfp_added} m'))  # 2026-10-05: plus a short caption
 
         # 2026-09-30 court verdict: the price-risk file obeys its own frozen rule, and the forecast log is append-only and dated.
         _rk = _pjson.load(open(ROOT / 'data' / 'enso_price_risk.json'))['data']

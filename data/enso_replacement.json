@@ -1,10 +1,10 @@
 {
  "_meta": {
-  "generated_at": "2026-10-05T02:59:17.589514+00:00",
+  "generated_at": "2026-10-05T07:16:33.673076+00:00",
   "source": "Derived: enso_outlook who_pays (shortfall, buyers), FAOSTAT Detailed Trade Matrix (data/tm), USDA PSD, trade_restrictions, enso_lanes (Panama Canal Authority advisories), enso_freight (USDA AMS)",
   "version": "v1",
   "status": "ok",
-  "notes": "Scenario arithmetic, not a forecast. Potential import need met by other exporters, or left uncovered. On the cron after the outlook: stdlib only, about a second. Panama state read from enso_lanes live_2026.latest_advisory (A-36-2026) and its dated steps: 32 slots in force on 2026-10-05, next step 33 from 2026-10-15.",
+  "notes": "Scenario arithmetic, not a forecast. Potential import need met by other exporters, or left uncovered. On the cron after the outlook: stdlib only, about a second. Panama state read from enso_lanes live_2026.latest_advisory (A-36-2026) and its dated steps: 32 slots in force on 2026-10-05, next step 33 from 2026-10-15. Buyers that sit in a published El Niño drought region for the crop (Botswana, Mozambique, Namibia, Eswatini for maize) are asked only to replace lost imports, not their own harvest shortfall, so their residuals are a floor (residual_is_floor).",
   "assumptions": [
    "Demand: each named buyer's lost-export tonnes from who_pays (already capped at the buyer's usual imports), plus the short supplier's own shortfall beyond its exports (its own import need). Tonnes come from the who_pays row fields, so the rule follows whatever production baseline the outlook uses. 'Other buyers' (past the five named) are not routed and are listed as unrouted.",
    "Candidate exporters, scope 'usual': the buyer's own usual suppliers of the crop in the FAOSTAT trade matrix (top eight partners, at least 1% of the buyer's imports and 10 kt). Each can ship at most 3x its normal volume to that buyer. Weights: normal tonnes.",
@@ -14,7 +14,7 @@
    "Rationing: a buyer's need is split across eligible exporters in proportion to weight; an exporter asked for more than its headroom is cut back pro rata across the buyers asking it. Repeated until nothing moves. All buyers of a crop compete for the same headroom.",
    "Routes: US exports to East and Southeast Asian buyers are scaled by the Panama Canal capacity factor: booking slots in the step in force today under the newest advisory, A-36-2026 (mid, high cases; a step scheduled for a later date is carried as slots_next but not used), or the 2023 floor (low case), over the lower end of the stated normal 36-38 a day. Gulf ocean freight (USDA AMS, US Gulf to Japan) is carried as a cost signal with its own baseline; no freight cost is invented or used to rank suppliers. Landlocked access, port capacity and overland routes are not modelled.",
    "Residual weeks of use = uncovered tonnes over the buyer's USDA annual consumption x 52. Buyer stocks are shown, not subtracted.",
-   "Forecast range (mid headroom): the same allocation re-run with each supplier's loss scaled to the P10, P50 and P90 of its forecast harvest change (response stopped at the strongest fitted winter) over the record-winter change that sized the demands. Lost exports are min(loss, normal exports); the remainder is the supplier's own extra import. Named buyers never scale above their record-winter need, because their usual imports from the supplier already cap it, so the P10 end is understated for them. P10 is the severe end. Scenario arithmetic, not a forecast.",
+   "Forecast range (mid headroom): the same allocation re-run with each supplier's loss scaled to the P10, P50 and P90 of its forecast harvest change (response stopped at the strongest fitted winter) over the record-winter change that sized the demands. Lost exports are min(loss, normal exports); the remainder is the supplier's own extra import. Each named buyer keeps its record-winter share of the lost exports, capped at its USDA imports, so a loss beyond the record reaches it; what the caps remove goes to unrouted other buyers. P10 is the severe end. Scenario arithmetic, not a forecast.",
    "Global export headroom (headroom_total_kt): the summed headroom of every eligible exporter in the case, before buyers draw on it; headroom_left_kt is what remains after all buyers in the scenario. A ceiling shared by every buyer, not a delivered quantity.",
    "Stretched exporters: extra tonnes above 25% of the exporter's normal exports."
   ],
@@ -91,7 +91,7 @@
    "VNM"
   ],
   "inputs": {
-   "enso_outlook.json": "2026-10-05T02:59:16.716300+00:00",
+   "enso_outlook.json": "2026-10-05T07:12:17.319176+00:00",
    "usda_psd.json": "2026-10-05T02:46:04.755444+00:00",
    "trade_restrictions.json": "2026-09-24T01:30:00+00:00",
    "enso_published_effects.json": "2026-09-24T17:32:12+00:00",
@@ -191,61 +191,55 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 402.9,
+           "kt": 476.0,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.5
-          },
-          {
-           "from": "BRA",
-           "kt": 107.4,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
+           "of_its_normal_exports_pct": 0.6
           },
           {
            "from": "UKR",
-           "kt": 55.3,
+           "kt": 65.3,
            "tier": "new",
            "of_its_normal_exports_pct": 0.3
           },
           {
            "from": "EU27",
-           "kt": 51.1,
+           "kt": 60.4,
            "tier": "new",
-           "of_its_normal_exports_pct": 3.2
+           "of_its_normal_exports_pct": 3.8
           },
           {
            "from": "IND",
-           "kt": 42.0,
+           "kt": 49.6,
            "tier": "new",
-           "of_its_normal_exports_pct": 2.8
+           "of_its_normal_exports_pct": 3.3
           },
           {
            "from": "CAN",
-           "kt": 21.3,
+           "kt": 25.1,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.7
+           "of_its_normal_exports_pct": 0.8
           },
           {
            "from": "RUS",
-           "kt": 13.2,
+           "kt": 15.6,
            "tier": "new",
            "of_its_normal_exports_pct": 0.4
           },
           {
            "from": "SRB",
-           "kt": 3.3,
+           "kt": 3.9,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.3
+           "of_its_normal_exports_pct": 0.4
           },
           {
            "from": "PRY",
-           "kt": 1.8,
+           "kt": 2.1,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "MMR",
-           "kt": 1.7,
+           "kt": 2.0,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           }
@@ -266,69 +260,63 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 393.6,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.5
-          },
-          {
-           "from": "BRA",
-           "kt": 133.9,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          },
-          {
-           "from": "UKR",
-           "kt": 68.8,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          },
-          {
-           "from": "EU27",
-           "kt": 22.3,
-           "tier": "new",
-           "of_its_normal_exports_pct": 1.4
-          },
-          {
-           "from": "IND",
-           "kt": 20.9,
-           "tier": "new",
-           "of_its_normal_exports_pct": 1.4
-          },
-          {
-           "from": "CAN",
-           "kt": 18.8,
+           "kt": 486.6,
            "tier": "new",
            "of_its_normal_exports_pct": 0.6
           },
           {
-           "from": "RUS",
-           "kt": 14.3,
+           "from": "UKR",
+           "kt": 85.0,
            "tier": "new",
            "of_its_normal_exports_pct": 0.4
           },
           {
+           "from": "EU27",
+           "kt": 27.6,
+           "tier": "new",
+           "of_its_normal_exports_pct": 1.7
+          },
+          {
+           "from": "IND",
+           "kt": 25.9,
+           "tier": "new",
+           "of_its_normal_exports_pct": 1.7
+          },
+          {
+           "from": "CAN",
+           "kt": 23.3,
+           "tier": "new",
+           "of_its_normal_exports_pct": 0.8
+          },
+          {
+           "from": "RUS",
+           "kt": 17.7,
+           "tier": "new",
+           "of_its_normal_exports_pct": 0.5
+          },
+          {
            "from": "ARG",
-           "kt": 14.2,
+           "kt": 17.6,
            "tier": "new",
            "of_its_normal_exports_pct": 0.0
           },
           {
            "from": "PRY",
-           "kt": 5.0,
+           "kt": 6.2,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "MMR",
-           "kt": 4.5,
+           "kt": 5.6,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "SRB",
-           "kt": 3.7,
+           "kt": 4.5,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.4
+           "of_its_normal_exports_pct": 0.5
           }
          ],
          "replaced_kt": 700.0,
@@ -347,67 +335,61 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 387.2,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.5
-          },
-          {
-           "from": "BRA",
-           "kt": 131.7,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          },
-          {
-           "from": "UKR",
-           "kt": 67.6,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          },
-          {
-           "from": "ARG",
-           "kt": 46.8,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
-          },
-          {
-           "from": "CAN",
-           "kt": 18.5,
+           "kt": 476.8,
            "tier": "new",
            "of_its_normal_exports_pct": 0.6
           },
           {
-           "from": "RUS",
-           "kt": 14.0,
+           "from": "UKR",
+           "kt": 83.3,
            "tier": "new",
            "of_its_normal_exports_pct": 0.4
           },
           {
-           "from": "EU27",
-           "kt": 11.0,
+           "from": "ARG",
+           "kt": 57.7,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.7
+           "of_its_normal_exports_pct": 0.2
+          },
+          {
+           "from": "CAN",
+           "kt": 22.8,
+           "tier": "new",
+           "of_its_normal_exports_pct": 0.8
+          },
+          {
+           "from": "RUS",
+           "kt": 17.3,
+           "tier": "new",
+           "of_its_normal_exports_pct": 0.5
+          },
+          {
+           "from": "EU27",
+           "kt": 13.5,
+           "tier": "new",
+           "of_its_normal_exports_pct": 0.8
           },
           {
            "from": "IND",
-           "kt": 10.3,
+           "kt": 12.7,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.7
+           "of_its_normal_exports_pct": 0.8
           },
           {
            "from": "PRY",
-           "kt": 4.9,
+           "kt": 6.0,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "MMR",
-           "kt": 4.4,
+           "kt": 5.4,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "SRB",
-           "kt": 3.6,
+           "kt": 4.5,
            "tier": "new",
            "of_its_normal_exports_pct": 0.4
           }
@@ -418,6 +400,7 @@
         }
        }
       },
+      "tm_coverage": 2.42,
       "forecast_range": {
        "p10": {
         "need_kt": 700.0,
@@ -464,61 +447,55 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 158.2,
+           "kt": 187.1,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
-           "from": "BRA",
-           "kt": 42.2,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
-          },
-          {
            "from": "UKR",
-           "kt": 21.7,
+           "kt": 25.6,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "EU27",
-           "kt": 20.1,
+           "kt": 23.7,
+           "tier": "new",
+           "of_its_normal_exports_pct": 1.5
+          },
+          {
+           "from": "IND",
+           "kt": 19.5,
            "tier": "new",
            "of_its_normal_exports_pct": 1.3
           },
           {
-           "from": "IND",
-           "kt": 16.5,
-           "tier": "new",
-           "of_its_normal_exports_pct": 1.1
-          },
-          {
            "from": "CAN",
-           "kt": 8.4,
+           "kt": 9.9,
            "tier": "new",
            "of_its_normal_exports_pct": 0.3
           },
           {
            "from": "RUS",
-           "kt": 5.2,
+           "kt": 6.1,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.1
+           "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "SRB",
-           "kt": 1.3,
+           "kt": 1.5,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.1
+           "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "PRY",
-           "kt": 0.7,
+           "kt": 0.8,
            "tier": "new",
            "of_its_normal_exports_pct": 0.0
           },
           {
            "from": "MMR",
-           "kt": 0.7,
+           "kt": 0.8,
            "tier": "new",
            "of_its_normal_exports_pct": 0.0
           }
@@ -539,69 +516,63 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 154.6,
+           "kt": 191.2,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "BRA",
-           "kt": 52.6,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "UKR",
-           "kt": 27.0,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
-          },
-          {
-           "from": "EU27",
-           "kt": 8.8,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.5
-          },
-          {
-           "from": "IND",
-           "kt": 8.2,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.5
-          },
-          {
-           "from": "CAN",
-           "kt": 7.4,
+           "kt": 33.4,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
+           "from": "EU27",
+           "kt": 10.8,
+           "tier": "new",
+           "of_its_normal_exports_pct": 0.7
+          },
+          {
+           "from": "IND",
+           "kt": 10.2,
+           "tier": "new",
+           "of_its_normal_exports_pct": 0.7
+          },
+          {
+           "from": "CAN",
+           "kt": 9.2,
+           "tier": "new",
+           "of_its_normal_exports_pct": 0.3
+          },
+          {
            "from": "RUS",
-           "kt": 5.6,
+           "kt": 6.9,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "ARG",
-           "kt": 5.6,
+           "kt": 6.9,
            "tier": "new",
            "of_its_normal_exports_pct": 0.0
           },
           {
            "from": "PRY",
-           "kt": 2.0,
+           "kt": 2.4,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "MMR",
-           "kt": 1.8,
+           "kt": 2.2,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "SRB",
-           "kt": 1.4,
+           "kt": 1.8,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.1
+           "of_its_normal_exports_pct": 0.2
           }
          ],
          "replaced_kt": 275.0,
@@ -620,69 +591,63 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 152.2,
+           "kt": 187.3,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
-           "from": "BRA",
-           "kt": 51.7,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
-          },
-          {
            "from": "UKR",
-           "kt": 26.6,
+           "kt": 32.7,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "ARG",
-           "kt": 18.4,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.0
-          },
-          {
-           "from": "CAN",
-           "kt": 7.3,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "RUS",
-           "kt": 5.5,
+           "kt": 22.7,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
+           "from": "CAN",
+           "kt": 9.0,
+           "tier": "new",
+           "of_its_normal_exports_pct": 0.3
+          },
+          {
+           "from": "RUS",
+           "kt": 6.8,
+           "tier": "new",
+           "of_its_normal_exports_pct": 0.2
+          },
+          {
            "from": "EU27",
-           "kt": 4.3,
+           "kt": 5.3,
            "tier": "new",
            "of_its_normal_exports_pct": 0.3
           },
           {
            "from": "IND",
-           "kt": 4.0,
+           "kt": 5.0,
            "tier": "new",
            "of_its_normal_exports_pct": 0.3
           },
           {
            "from": "PRY",
-           "kt": 1.9,
+           "kt": 2.4,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "MMR",
-           "kt": 1.7,
+           "kt": 2.1,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "SRB",
-           "kt": 1.4,
+           "kt": 1.7,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.1
+           "of_its_normal_exports_pct": 0.2
           }
          ],
          "replaced_kt": 275.0,
@@ -691,6 +656,8 @@
         }
        }
       },
+      "tm_coverage": 1.15,
+      "residual_is_floor": true,
       "forecast_range": {
        "p10": {
         "need_kt": 275.0,
@@ -752,61 +719,55 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 143.9,
+           "kt": 170.0,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
-           "from": "BRA",
-           "kt": 38.4,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
-          },
-          {
            "from": "UKR",
-           "kt": 19.7,
+           "kt": 23.3,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "EU27",
-           "kt": 18.3,
+           "kt": 21.6,
            "tier": "new",
-           "of_its_normal_exports_pct": 1.1
+           "of_its_normal_exports_pct": 1.3
           },
           {
            "from": "IND",
-           "kt": 15.0,
+           "kt": 17.7,
            "tier": "new",
-           "of_its_normal_exports_pct": 1.0
+           "of_its_normal_exports_pct": 1.2
           },
           {
            "from": "CAN",
-           "kt": 7.6,
+           "kt": 9.0,
            "tier": "new",
            "of_its_normal_exports_pct": 0.3
           },
           {
            "from": "RUS",
-           "kt": 4.7,
+           "kt": 5.6,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.1
+           "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "SRB",
-           "kt": 1.2,
+           "kt": 1.4,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "PRY",
-           "kt": 0.6,
+           "kt": 0.7,
            "tier": "new",
            "of_its_normal_exports_pct": 0.0
           },
           {
            "from": "MMR",
-           "kt": 0.6,
+           "kt": 0.7,
            "tier": "new",
            "of_its_normal_exports_pct": 0.0
           }
@@ -827,69 +788,63 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 140.5,
+           "kt": 173.8,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
-           "from": "BRA",
-           "kt": 47.8,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
-          },
-          {
            "from": "UKR",
-           "kt": 24.6,
+           "kt": 30.4,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "EU27",
-           "kt": 8.0,
+           "kt": 9.9,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.5
+           "of_its_normal_exports_pct": 0.6
           },
           {
            "from": "IND",
-           "kt": 7.5,
+           "kt": 9.2,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.5
+           "of_its_normal_exports_pct": 0.6
           },
           {
            "from": "CAN",
-           "kt": 6.7,
+           "kt": 8.3,
+           "tier": "new",
+           "of_its_normal_exports_pct": 0.3
+          },
+          {
+           "from": "RUS",
+           "kt": 6.3,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
-           "from": "RUS",
-           "kt": 5.1,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
-          },
-          {
            "from": "ARG",
-           "kt": 5.1,
+           "kt": 6.3,
            "tier": "new",
            "of_its_normal_exports_pct": 0.0
           },
           {
            "from": "PRY",
-           "kt": 1.8,
+           "kt": 2.2,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "MMR",
-           "kt": 1.6,
+           "kt": 2.0,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "SRB",
-           "kt": 1.3,
+           "kt": 1.6,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.1
+           "of_its_normal_exports_pct": 0.2
           }
          ],
          "replaced_kt": 250.0,
@@ -908,69 +863,63 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 138.3,
+           "kt": 170.3,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
-           "from": "BRA",
-           "kt": 47.0,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
-          },
-          {
            "from": "UKR",
-           "kt": 24.1,
+           "kt": 29.7,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "ARG",
-           "kt": 16.7,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.0
-          },
-          {
-           "from": "CAN",
-           "kt": 6.6,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "RUS",
-           "kt": 5.0,
+           "kt": 20.6,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
-           "from": "EU27",
-           "kt": 3.9,
+           "from": "CAN",
+           "kt": 8.2,
+           "tier": "new",
+           "of_its_normal_exports_pct": 0.3
+          },
+          {
+           "from": "RUS",
+           "kt": 6.2,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
+          },
+          {
+           "from": "EU27",
+           "kt": 4.8,
+           "tier": "new",
+           "of_its_normal_exports_pct": 0.3
           },
           {
            "from": "IND",
-           "kt": 3.7,
+           "kt": 4.5,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.2
+           "of_its_normal_exports_pct": 0.3
           },
           {
            "from": "PRY",
-           "kt": 1.8,
+           "kt": 2.2,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "MMR",
-           "kt": 1.6,
+           "kt": 1.9,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "SRB",
-           "kt": 1.3,
+           "kt": 1.6,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.1
+           "of_its_normal_exports_pct": 0.2
           }
          ],
          "replaced_kt": 250.0,
@@ -979,6 +928,8 @@
         }
        }
       },
+      "tm_coverage": 0.9,
+      "residual_is_floor": true,
       "forecast_range": {
        "p10": {
         "need_kt": 250.0,
@@ -1025,61 +976,55 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 115.1,
+           "kt": 135.8,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.1
-          },
-          {
-           "from": "BRA",
-           "kt": 30.7,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
+           "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "UKR",
-           "kt": 15.8,
+           "kt": 18.7,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "EU27",
-           "kt": 14.6,
+           "kt": 17.3,
+           "tier": "new",
+           "of_its_normal_exports_pct": 1.1
+          },
+          {
+           "from": "IND",
+           "kt": 14.2,
            "tier": "new",
            "of_its_normal_exports_pct": 0.9
           },
           {
-           "from": "IND",
-           "kt": 12.0,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.8
-          },
-          {
            "from": "CAN",
-           "kt": 6.1,
+           "kt": 7.2,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "RUS",
-           "kt": 3.8,
+           "kt": 4.5,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "SRB",
-           "kt": 0.9,
+           "kt": 1.1,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "PRY",
-           "kt": 0.5,
+           "kt": 0.6,
            "tier": "new",
            "of_its_normal_exports_pct": 0.0
           },
           {
            "from": "MMR",
-           "kt": 0.5,
+           "kt": 0.6,
            "tier": "new",
            "of_its_normal_exports_pct": 0.0
           }
@@ -1100,67 +1045,61 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 112.3,
+           "kt": 139.0,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.1
-          },
-          {
-           "from": "BRA",
-           "kt": 38.3,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
+           "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "UKR",
-           "kt": 19.6,
+           "kt": 24.3,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "EU27",
-           "kt": 6.4,
+           "kt": 7.9,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.4
+           "of_its_normal_exports_pct": 0.5
           },
           {
            "from": "IND",
-           "kt": 6.0,
+           "kt": 7.4,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.4
+           "of_its_normal_exports_pct": 0.5
           },
           {
            "from": "CAN",
-           "kt": 5.4,
+           "kt": 6.7,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "RUS",
-           "kt": 4.1,
+           "kt": 5.0,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "ARG",
-           "kt": 4.1,
+           "kt": 5.0,
            "tier": "new",
            "of_its_normal_exports_pct": 0.0
           },
           {
            "from": "PRY",
-           "kt": 1.4,
+           "kt": 1.8,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "MMR",
-           "kt": 1.3,
+           "kt": 1.6,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "SRB",
-           "kt": 1.1,
+           "kt": 1.3,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           }
@@ -1181,67 +1120,61 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 110.7,
+           "kt": 136.2,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.1
-          },
-          {
-           "from": "BRA",
-           "kt": 37.6,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
+           "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "UKR",
-           "kt": 19.3,
+           "kt": 23.8,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "ARG",
-           "kt": 13.4,
+           "kt": 16.5,
            "tier": "new",
            "of_its_normal_exports_pct": 0.0
           },
           {
            "from": "CAN",
-           "kt": 5.3,
+           "kt": 6.5,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "RUS",
-           "kt": 4.0,
+           "kt": 4.9,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "EU27",
-           "kt": 3.1,
+           "kt": 3.9,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "IND",
-           "kt": 2.9,
+           "kt": 3.6,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "PRY",
-           "kt": 1.4,
+           "kt": 1.7,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "MMR",
-           "kt": 1.3,
+           "kt": 1.6,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "SRB",
-           "kt": 1.0,
+           "kt": 1.3,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           }
@@ -1252,6 +1185,8 @@
         }
        }
       },
+      "tm_coverage": 1.73,
+      "residual_is_floor": true,
       "forecast_range": {
        "p10": {
         "need_kt": 200.0,
@@ -1298,55 +1233,49 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 92.1,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
-          },
-          {
-           "from": "BRA",
-           "kt": 24.5,
+           "kt": 108.9,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "UKR",
-           "kt": 12.6,
+           "kt": 14.9,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "EU27",
-           "kt": 11.7,
+           "kt": 13.8,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.7
+           "of_its_normal_exports_pct": 0.9
           },
           {
            "from": "IND",
-           "kt": 9.6,
+           "kt": 11.3,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.6
+           "of_its_normal_exports_pct": 0.8
           },
           {
            "from": "CAN",
-           "kt": 4.9,
+           "kt": 5.7,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "RUS",
-           "kt": 3.0,
+           "kt": 3.6,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "SRB",
-           "kt": 0.8,
+           "kt": 0.9,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "PRY",
-           "kt": 0.4,
+           "kt": 0.5,
            "tier": "new",
            "of_its_normal_exports_pct": 0.0
           },
@@ -1373,67 +1302,61 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 90.0,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
-          },
-          {
-           "from": "BRA",
-           "kt": 30.6,
+           "kt": 111.4,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "UKR",
-           "kt": 15.7,
+           "kt": 19.4,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "EU27",
-           "kt": 5.1,
+           "kt": 6.3,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.3
+           "of_its_normal_exports_pct": 0.4
           },
           {
            "from": "IND",
-           "kt": 4.8,
+           "kt": 5.9,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.3
+           "of_its_normal_exports_pct": 0.4
           },
           {
            "from": "CAN",
-           "kt": 4.3,
+           "kt": 5.3,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.1
+           "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "RUS",
-           "kt": 3.3,
+           "kt": 4.0,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "ARG",
-           "kt": 3.3,
+           "kt": 4.0,
            "tier": "new",
            "of_its_normal_exports_pct": 0.0
           },
           {
            "from": "PRY",
-           "kt": 1.1,
+           "kt": 1.4,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.0
+           "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "MMR",
-           "kt": 1.0,
+           "kt": 1.3,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.0
+           "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "SRB",
-           "kt": 0.8,
+           "kt": 1.0,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           }
@@ -1454,67 +1377,61 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 88.5,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
-          },
-          {
-           "from": "BRA",
-           "kt": 30.1,
+           "kt": 109.0,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "UKR",
-           "kt": 15.5,
+           "kt": 19.0,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "ARG",
-           "kt": 10.7,
+           "kt": 13.2,
            "tier": "new",
            "of_its_normal_exports_pct": 0.0
           },
           {
            "from": "CAN",
-           "kt": 4.2,
+           "kt": 5.2,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.1
+           "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "RUS",
-           "kt": 3.2,
+           "kt": 4.0,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "EU27",
-           "kt": 2.5,
+           "kt": 3.1,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "IND",
-           "kt": 2.4,
+           "kt": 2.9,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "PRY",
-           "kt": 1.1,
+           "kt": 1.4,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.0
+           "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "MMR",
-           "kt": 1.0,
+           "kt": 1.2,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.0
+           "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "SRB",
-           "kt": 0.8,
+           "kt": 1.0,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           }
@@ -1525,6 +1442,8 @@
         }
        }
       },
+      "tm_coverage": 1.05,
+      "residual_is_floor": true,
       "forecast_range": {
        "p10": {
         "need_kt": 160.0,
@@ -1596,9 +1515,9 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 2177.1,
+           "kt": 2571.7,
            "tier": "new",
-           "of_its_normal_exports_pct": 2.6
+           "of_its_normal_exports_pct": 3.1
           },
           {
            "from": "ARG",
@@ -1608,56 +1527,50 @@
            "usual_share_pct": 60.1
           },
           {
-           "from": "BRA",
-           "kt": 580.2,
-           "tier": "new",
-           "of_its_normal_exports_pct": 1.3
-          },
-          {
            "from": "UKR",
-           "kt": 298.6,
+           "kt": 352.7,
            "tier": "new",
-           "of_its_normal_exports_pct": 1.4
+           "of_its_normal_exports_pct": 1.6
           },
           {
            "from": "EU27",
-           "kt": 276.2,
+           "kt": 326.3,
            "tier": "new",
-           "of_its_normal_exports_pct": 17.3
+           "of_its_normal_exports_pct": 20.4
           },
           {
            "from": "IND",
-           "kt": 226.9,
+           "kt": 268.0,
            "tier": "new",
-           "of_its_normal_exports_pct": 15.1
+           "of_its_normal_exports_pct": 17.9
           },
           {
            "from": "CAN",
-           "kt": 114.9,
+           "kt": 135.8,
            "tier": "new",
-           "of_its_normal_exports_pct": 3.8
+           "of_its_normal_exports_pct": 4.5
           },
           {
            "from": "RUS",
-           "kt": 71.6,
+           "kt": 84.5,
            "tier": "new",
-           "of_its_normal_exports_pct": 1.9
+           "of_its_normal_exports_pct": 2.3
           },
           {
            "from": "SRB",
-           "kt": 17.9,
+           "kt": 21.1,
            "tier": "new",
-           "of_its_normal_exports_pct": 1.8
+           "of_its_normal_exports_pct": 2.1
           },
           {
            "from": "PRY",
-           "kt": 9.6,
+           "kt": 11.3,
            "tier": "new",
            "of_its_normal_exports_pct": 0.4
           },
           {
            "from": "MMR",
-           "kt": 9.0,
+           "kt": 10.6,
            "tier": "new",
            "of_its_normal_exports_pct": 0.4
           }
@@ -1728,6 +1641,7 @@
         }
        }
       },
+      "tm_coverage": null,
       "forecast_range": {
        "p10": {
         "need_kt": 7278.4,
@@ -1786,63 +1700,57 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 289.5,
+           "kt": 342.1,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          },
-          {
-           "from": "BRA",
-           "kt": 77.2,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
+           "of_its_normal_exports_pct": 0.4
           },
           {
            "from": "UKR",
-           "kt": 39.7,
+           "kt": 46.9,
            "tier": "new",
            "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "EU27",
-           "kt": 36.7,
+           "kt": 43.4,
            "tier": "new",
-           "of_its_normal_exports_pct": 2.3
+           "of_its_normal_exports_pct": 2.7
           },
           {
            "from": "IND",
-           "kt": 30.2,
+           "kt": 35.6,
            "tier": "new",
-           "of_its_normal_exports_pct": 2.0
+           "of_its_normal_exports_pct": 2.4
           },
           {
            "from": "CAN",
-           "kt": 15.3,
+           "kt": 18.1,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.5
+           "of_its_normal_exports_pct": 0.6
           },
           {
            "from": "RUS",
-           "kt": 9.5,
+           "kt": 11.2,
            "tier": "new",
            "of_its_normal_exports_pct": 0.3
           },
           {
            "from": "SRB",
-           "kt": 2.4,
+           "kt": 2.8,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.2
+           "of_its_normal_exports_pct": 0.3
           },
           {
            "from": "PRY",
-           "kt": 1.3,
+           "kt": 1.5,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.0
+           "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "MMR",
-           "kt": 1.2,
+           "kt": 1.4,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.0
+           "of_its_normal_exports_pct": 0.1
           }
          ],
          "replaced_kt": 503.0,
@@ -1861,67 +1769,61 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 283.0,
+           "kt": 349.7,
+           "tier": "new",
+           "of_its_normal_exports_pct": 0.4
+          },
+          {
+           "from": "UKR",
+           "kt": 61.1,
            "tier": "new",
            "of_its_normal_exports_pct": 0.3
           },
           {
-           "from": "BRA",
-           "kt": 96.2,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "UKR",
-           "kt": 49.4,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
            "from": "EU27",
-           "kt": 16.0,
+           "kt": 19.8,
            "tier": "new",
-           "of_its_normal_exports_pct": 1.0
+           "of_its_normal_exports_pct": 1.2
           },
           {
            "from": "IND",
-           "kt": 15.0,
+           "kt": 18.6,
            "tier": "new",
-           "of_its_normal_exports_pct": 1.0
+           "of_its_normal_exports_pct": 1.2
           },
           {
            "from": "CAN",
-           "kt": 13.5,
+           "kt": 16.7,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.5
+           "of_its_normal_exports_pct": 0.6
           },
           {
            "from": "RUS",
-           "kt": 10.3,
+           "kt": 12.7,
            "tier": "new",
            "of_its_normal_exports_pct": 0.3
           },
           {
            "from": "ARG",
-           "kt": 10.2,
+           "kt": 12.7,
            "tier": "new",
            "of_its_normal_exports_pct": 0.0
           },
           {
            "from": "PRY",
-           "kt": 3.6,
+           "kt": 4.4,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.1
+           "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "MMR",
-           "kt": 3.2,
+           "kt": 4.0,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.1
+           "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "SRB",
-           "kt": 2.6,
+           "kt": 3.3,
            "tier": "new",
            "of_its_normal_exports_pct": 0.3
           }
@@ -1942,67 +1844,61 @@
          "replaced": [
           {
            "from": "USA",
-           "kt": 278.1,
+           "kt": 342.8,
+           "tier": "new",
+           "of_its_normal_exports_pct": 0.4
+          },
+          {
+           "from": "UKR",
+           "kt": 59.8,
            "tier": "new",
            "of_its_normal_exports_pct": 0.3
           },
           {
-           "from": "BRA",
-           "kt": 94.7,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "UKR",
-           "kt": 48.6,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
            "from": "ARG",
-           "kt": 33.6,
+           "kt": 41.4,
            "tier": "new",
            "of_its_normal_exports_pct": 0.1
           },
           {
            "from": "CAN",
-           "kt": 13.3,
+           "kt": 16.4,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.4
+           "of_its_normal_exports_pct": 0.5
           },
           {
            "from": "RUS",
-           "kt": 10.1,
+           "kt": 12.4,
            "tier": "new",
            "of_its_normal_exports_pct": 0.3
           },
           {
            "from": "EU27",
-           "kt": 7.9,
+           "kt": 9.7,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.5
+           "of_its_normal_exports_pct": 0.6
           },
           {
            "from": "IND",
-           "kt": 7.4,
+           "kt": 9.1,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.5
+           "of_its_normal_exports_pct": 0.6
           },
           {
            "from": "PRY",
-           "kt": 3.5,
+           "kt": 4.3,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.1
+           "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "MMR",
-           "kt": 3.2,
+           "kt": 3.9,
            "tier": "new",
-           "of_its_normal_exports_pct": 0.1
+           "of_its_normal_exports_pct": 0.2
           },
           {
            "from": "SRB",
-           "kt": 2.6,
+           "kt": 3.2,
            "tier": "new",
            "of_its_normal_exports_pct": 0.3
           }
@@ -2013,1168 +1909,21 @@
         }
        }
       },
+      "tm_coverage": 2.42,
       "forecast_range": {
        "p10": {
-        "need_kt": 679.4,
-        "usual_residual_kt": 679.4,
+        "need_kt": 678.4,
+        "usual_residual_kt": 678.4,
         "open_residual_kt": 0.0
        },
        "p50": {
-        "need_kt": 471.8,
-        "usual_residual_kt": 471.8,
+        "need_kt": 470.7,
+        "usual_residual_kt": 470.7,
         "open_residual_kt": 0.0
        },
        "p90": {
         "need_kt": 210.7,
         "usual_residual_kt": 210.7,
-        "open_residual_kt": 0.0
-       }
-      }
-     }
-    ]
-   },
-   {
-    "iso": "BRA",
-    "crop": "rice",
-    "harvest": "Feb–May 2027",
-    "loss_kt": 697,
-    "lost_exports_kt": 697,
-    "own_import_kt": 0,
-    "unrouted_other_buyers_kt": 237,
-    "named_buyers_kt": 460,
-    "buyers": [
-     {
-      "iso": "SEN",
-      "kind": "buyer",
-      "from": "BRA",
-      "need_kt": 130.0,
-      "tm_year": 2024,
-      "usual_suppliers": [
-       {
-        "iso": "PAK",
-        "t": 257690.0,
-        "share_pct": 18.6,
-        "basis": "reported"
-       },
-       {
-        "iso": "MMR",
-        "t": 44300.0,
-        "share_pct": 3.2,
-        "basis": "reported"
-       },
-       {
-        "iso": "ARG",
-        "t": 43850.0,
-        "share_pct": 3.2,
-        "basis": "reported"
-       },
-       {
-        "iso": "USA",
-        "t": 35275.0,
-        "share_pct": 2.5,
-        "basis": "reported"
-       }
-      ],
-      "usual_out": [
-       {
-        "iso": "IND",
-        "share_pct": 28.8,
-        "why": "in a published El Niño drought region for the crop"
-       },
-       {
-        "iso": "THA",
-        "share_pct": 28.1,
-        "why": "a published study finds its harvest falls in El Niño"
-       },
-       {
-        "iso": "BRA",
-        "share_pct": 14.0,
-        "why": "it is itself short in this scenario"
-       },
-       {
-        "iso": "URY",
-        "share_pct": 1.1,
-        "why": "no current USDA supply balance for it"
-       }
-      ],
-      "stocks_kt": 175.0,
-      "consumption_kt": 2025.0,
-      "cases": {
-       "low": {
-        "usual": {
-         "replaced": [
-          {
-           "from": "PAK",
-           "kt": 87.9,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 1.8,
-           "usual_share_pct": 18.6
-          },
-          {
-           "from": "MMR",
-           "kt": 15.1,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 0.7,
-           "usual_share_pct": 3.2
-          },
-          {
-           "from": "ARG",
-           "kt": 15.0,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 5.4,
-           "usual_share_pct": 3.2
-          },
-          {
-           "from": "USA",
-           "kt": 12.0,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 0.5,
-           "usual_share_pct": 2.5
-          }
-         ],
-         "replaced_kt": 130.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        },
-        "open": {
-         "replaced": [
-          {
-           "from": "PAK",
-           "kt": 87.9,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 1.8,
-           "usual_share_pct": 18.6
-          },
-          {
-           "from": "MMR",
-           "kt": 15.1,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 0.7,
-           "usual_share_pct": 3.2
-          },
-          {
-           "from": "ARG",
-           "kt": 15.0,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 5.4,
-           "usual_share_pct": 3.2
-          },
-          {
-           "from": "USA",
-           "kt": 12.0,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 0.5,
-           "usual_share_pct": 2.5
-          }
-         ],
-         "replaced_kt": 130.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        }
-       },
-       "mid": {
-        "usual": {
-         "replaced": [
-          {
-           "from": "PAK",
-           "kt": 87.9,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 1.8,
-           "usual_share_pct": 18.6
-          },
-          {
-           "from": "MMR",
-           "kt": 15.1,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 0.7,
-           "usual_share_pct": 3.2
-          },
-          {
-           "from": "ARG",
-           "kt": 15.0,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 5.4,
-           "usual_share_pct": 3.2
-          },
-          {
-           "from": "USA",
-           "kt": 12.0,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 0.5,
-           "usual_share_pct": 2.5
-          }
-         ],
-         "replaced_kt": 130.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        },
-        "open": {
-         "replaced": [
-          {
-           "from": "PAK",
-           "kt": 87.9,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 1.8,
-           "usual_share_pct": 18.6
-          },
-          {
-           "from": "MMR",
-           "kt": 15.1,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 0.7,
-           "usual_share_pct": 3.2
-          },
-          {
-           "from": "ARG",
-           "kt": 15.0,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 5.4,
-           "usual_share_pct": 3.2
-          },
-          {
-           "from": "USA",
-           "kt": 12.0,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 0.5,
-           "usual_share_pct": 2.5
-          }
-         ],
-         "replaced_kt": 130.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        }
-       },
-       "high": {
-        "usual": {
-         "replaced": [
-          {
-           "from": "PAK",
-           "kt": 87.9,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 1.8,
-           "usual_share_pct": 18.6
-          },
-          {
-           "from": "MMR",
-           "kt": 15.1,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 0.7,
-           "usual_share_pct": 3.2
-          },
-          {
-           "from": "ARG",
-           "kt": 15.0,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 5.4,
-           "usual_share_pct": 3.2
-          },
-          {
-           "from": "USA",
-           "kt": 12.0,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 0.5,
-           "usual_share_pct": 2.5
-          }
-         ],
-         "replaced_kt": 130.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        },
-        "open": {
-         "replaced": [
-          {
-           "from": "PAK",
-           "kt": 87.9,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 1.8,
-           "usual_share_pct": 18.6
-          },
-          {
-           "from": "MMR",
-           "kt": 15.1,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 0.7,
-           "usual_share_pct": 3.2
-          },
-          {
-           "from": "ARG",
-           "kt": 15.0,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 5.4,
-           "usual_share_pct": 3.2
-          },
-          {
-           "from": "USA",
-           "kt": 12.0,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 0.5,
-           "usual_share_pct": 2.5
-          }
-         ],
-         "replaced_kt": 130.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        }
-       }
-      },
-      "forecast_range": {
-       "p10": {
-        "need_kt": 130.0,
-        "usual_residual_kt": 0.0,
-        "open_residual_kt": 0.0
-       },
-       "p50": {
-        "need_kt": 120.2,
-        "usual_residual_kt": 0.0,
-        "open_residual_kt": 0.0
-       },
-       "p90": {
-        "need_kt": 35.8,
-        "usual_residual_kt": 0.0,
-        "open_residual_kt": 0.0
-       }
-      }
-     },
-     {
-      "iso": "CRI",
-      "kind": "buyer",
-      "from": "BRA",
-      "need_kt": 124.0,
-      "tm_year": 2024,
-      "usual_suppliers": [],
-      "usual_out": [
-       {
-        "iso": "URY",
-        "share_pct": 33.6,
-        "why": "it shipped 9.2 kt in 2024, under the 10 kt a usual supplier must clear"
-       },
-       {
-        "iso": "PRY",
-        "share_pct": 25.0,
-        "why": "it shipped 6.9 kt in 2024, under the 10 kt a usual supplier must clear"
-       },
-       {
-        "iso": "ARG",
-        "share_pct": 18.0,
-        "why": "it shipped 4.9 kt in 2024, under the 10 kt a usual supplier must clear"
-       },
-       {
-        "iso": "BRA",
-        "share_pct": 14.2,
-        "why": "it shipped 3.9 kt in 2024, under the 10 kt a usual supplier must clear"
-       },
-       {
-        "iso": "USA",
-        "share_pct": 4.1,
-        "why": "it shipped 1.1 kt in 2024, under the 10 kt a usual supplier must clear"
-       },
-       {
-        "iso": "THA",
-        "share_pct": 2.2,
-        "why": "it shipped 0.6 kt in 2024, under the 10 kt a usual supplier must clear"
-       }
-      ],
-      "stocks_kt": 70.0,
-      "consumption_kt": 270.0,
-      "cases": {
-       "low": {
-        "usual": {
-         "replaced": [],
-         "replaced_kt": 0,
-         "residual_kt": 124.0,
-         "residual_weeks_of_use": 23.9
-        },
-        "open": {
-         "replaced": [
-          {
-           "from": "CHN",
-           "kt": 67.3,
-           "tier": "new",
-           "of_its_normal_exports_pct": 3.1
-          },
-          {
-           "from": "PAK",
-           "kt": 14.8,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          },
-          {
-           "from": "VNM",
-           "kt": 13.7,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "USA",
-           "kt": 9.4,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.4
-          },
-          {
-           "from": "KHM",
-           "kt": 9.1,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          },
-          {
-           "from": "MMR",
-           "kt": 8.7,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.4
-          },
-          {
-           "from": "ARG",
-           "kt": 1.0,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.4
-          }
-         ],
-         "replaced_kt": 124.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        }
-       },
-       "mid": {
-        "usual": {
-         "replaced": [],
-         "replaced_kt": 0,
-         "residual_kt": 124.0,
-         "residual_weeks_of_use": 23.9
-        },
-        "open": {
-         "replaced": [
-          {
-           "from": "CHN",
-           "kt": 32.9,
-           "tier": "new",
-           "of_its_normal_exports_pct": 1.5
-          },
-          {
-           "from": "VNM",
-           "kt": 25.6,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          },
-          {
-           "from": "PAK",
-           "kt": 24.4,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.5
-          },
-          {
-           "from": "KHM",
-           "kt": 14.3,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.4
-          },
-          {
-           "from": "USA",
-           "kt": 13.2,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.5
-          },
-          {
-           "from": "MMR",
-           "kt": 12.0,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.6
-          },
-          {
-           "from": "ARG",
-           "kt": 1.6,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.6
-          }
-         ],
-         "replaced_kt": 124.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        }
-       },
-       "high": {
-        "usual": {
-         "replaced": [],
-         "replaced_kt": 0,
-         "residual_kt": 124.0,
-         "residual_weeks_of_use": 23.9
-        },
-        "open": {
-         "replaced": [
-          {
-           "from": "VNM",
-           "kt": 29.0,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.4
-          },
-          {
-           "from": "PAK",
-           "kt": 29.1,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.6
-          },
-          {
-           "from": "CHN",
-           "kt": 18.8,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.9
-          },
-          {
-           "from": "KHM",
-           "kt": 16.3,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.5
-          },
-          {
-           "from": "USA",
-           "kt": 15.1,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.6
-          },
-          {
-           "from": "MMR",
-           "kt": 13.7,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.7
-          },
-          {
-           "from": "ARG",
-           "kt": 2.0,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.7
-          }
-         ],
-         "replaced_kt": 124.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        }
-       }
-      },
-      "forecast_range": {
-       "p10": {
-        "need_kt": 124.0,
-        "usual_residual_kt": 124.0,
-        "open_residual_kt": 0.0
-       },
-       "p50": {
-        "need_kt": 114.7,
-        "usual_residual_kt": 114.7,
-        "open_residual_kt": 0.0
-       },
-       "p90": {
-        "need_kt": 34.1,
-        "usual_residual_kt": 34.1,
-        "open_residual_kt": 0.0
-       }
-      }
-     },
-     {
-      "iso": "VEN",
-      "kind": "buyer",
-      "from": "BRA",
-      "need_kt": 77.0,
-      "tm_year": 2024,
-      "usual_suppliers": [],
-      "usual_out": [
-       {
-        "iso": "BRA",
-        "share_pct": 72.7,
-        "why": "it shipped 2.2 kt in 2024, under the 10 kt a usual supplier must clear"
-       },
-       {
-        "iso": "USA",
-        "share_pct": 19.1,
-        "why": "it shipped 0.6 kt in 2024, under the 10 kt a usual supplier must clear"
-       },
-       {
-        "iso": "ITA",
-        "share_pct": 2.3,
-        "why": "it shipped 0.1 kt in 2024, under the 10 kt a usual supplier must clear"
-       },
-       {
-        "iso": "CHL",
-        "share_pct": 2.3,
-        "why": "it shipped 0.1 kt in 2024, under the 10 kt a usual supplier must clear"
-       },
-       {
-        "iso": "IND",
-        "share_pct": 2.1,
-        "why": "it shipped 0.1 kt in 2024, under the 10 kt a usual supplier must clear"
-       },
-       {
-        "iso": "LBN",
-        "share_pct": 1.4,
-        "why": "it shipped 0.0 kt in 2024, under the 10 kt a usual supplier must clear"
-       }
-      ],
-      "stocks_kt": 143.0,
-      "consumption_kt": 740.0,
-      "cases": {
-       "low": {
-        "usual": {
-         "replaced": [],
-         "replaced_kt": 0,
-         "residual_kt": 77.0,
-         "residual_weeks_of_use": 5.4
-        },
-        "open": {
-         "replaced": [
-          {
-           "from": "CHN",
-           "kt": 41.8,
-           "tier": "new",
-           "of_its_normal_exports_pct": 1.9
-          },
-          {
-           "from": "PAK",
-           "kt": 9.2,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "VNM",
-           "kt": 8.5,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
-          },
-          {
-           "from": "USA",
-           "kt": 5.9,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "KHM",
-           "kt": 5.6,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "MMR",
-           "kt": 5.4,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          },
-          {
-           "from": "ARG",
-           "kt": 0.6,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          }
-         ],
-         "replaced_kt": 77.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        }
-       },
-       "mid": {
-        "usual": {
-         "replaced": [],
-         "replaced_kt": 0,
-         "residual_kt": 77.0,
-         "residual_weeks_of_use": 5.4
-        },
-        "open": {
-         "replaced": [
-          {
-           "from": "CHN",
-           "kt": 20.5,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.9
-          },
-          {
-           "from": "VNM",
-           "kt": 15.9,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "PAK",
-           "kt": 15.1,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          },
-          {
-           "from": "KHM",
-           "kt": 8.9,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "USA",
-           "kt": 8.2,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          },
-          {
-           "from": "MMR",
-           "kt": 7.4,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.4
-          },
-          {
-           "from": "ARG",
-           "kt": 1.0,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.4
-          }
-         ],
-         "replaced_kt": 77.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        }
-       },
-       "high": {
-        "usual": {
-         "replaced": [],
-         "replaced_kt": 0,
-         "residual_kt": 77.0,
-         "residual_weeks_of_use": 5.4
-        },
-        "open": {
-         "replaced": [
-          {
-           "from": "VNM",
-           "kt": 18.1,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "PAK",
-           "kt": 18.0,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.4
-          },
-          {
-           "from": "CHN",
-           "kt": 11.7,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.5
-          },
-          {
-           "from": "KHM",
-           "kt": 10.1,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          },
-          {
-           "from": "USA",
-           "kt": 9.4,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.4
-          },
-          {
-           "from": "MMR",
-           "kt": 8.5,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.4
-          },
-          {
-           "from": "ARG",
-           "kt": 1.2,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.4
-          }
-         ],
-         "replaced_kt": 77.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        }
-       }
-      },
-      "forecast_range": {
-       "p10": {
-        "need_kt": 77.0,
-        "usual_residual_kt": 77.0,
-        "open_residual_kt": 0.0
-       },
-       "p50": {
-        "need_kt": 71.2,
-        "usual_residual_kt": 71.2,
-        "open_residual_kt": 0.0
-       },
-       "p90": {
-        "need_kt": 21.2,
-        "usual_residual_kt": 21.2,
-        "open_residual_kt": 0.0
-       }
-      }
-     },
-     {
-      "iso": "GMB",
-      "kind": "buyer",
-      "from": "BRA",
-      "need_kt": 69.0,
-      "tm_year": 2024,
-      "usual_suppliers": [
-       {
-        "iso": "PAK",
-        "t": 33588.0,
-        "share_pct": 13.7,
-        "basis": "reported"
-       }
-      ],
-      "usual_out": [
-       {
-        "iso": "BRA",
-        "share_pct": 45.2,
-        "why": "it is itself short in this scenario"
-       },
-       {
-        "iso": "IND",
-        "share_pct": 26.1,
-        "why": "in a published El Niño drought region for the crop"
-       },
-       {
-        "iso": "URY",
-        "share_pct": 3.6,
-        "why": "it shipped 8.8 kt in 2024, under the 10 kt a usual supplier must clear"
-       },
-       {
-        "iso": "THA",
-        "share_pct": 3.4,
-        "why": "it shipped 8.3 kt in 2024, under the 10 kt a usual supplier must clear"
-       },
-       {
-        "iso": "PRY",
-        "share_pct": 2.7,
-        "why": "it shipped 6.6 kt in 2024, under the 10 kt a usual supplier must clear"
-       },
-       {
-        "iso": "SEN",
-        "share_pct": 2.4,
-        "why": "it shipped 5.8 kt in 2024, under the 10 kt a usual supplier must clear"
-       }
-      ],
-      "stocks_kt": 33.0,
-      "consumption_kt": 405.0,
-      "cases": {
-       "low": {
-        "usual": {
-         "replaced": [
-          {
-           "from": "PAK",
-           "kt": 69.0,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 1.4,
-           "usual_share_pct": 13.7
-          }
-         ],
-         "replaced_kt": 69.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        },
-        "open": {
-         "replaced": [
-          {
-           "from": "PAK",
-           "kt": 69.0,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 1.4,
-           "usual_share_pct": 13.7
-          }
-         ],
-         "replaced_kt": 69.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        }
-       },
-       "mid": {
-        "usual": {
-         "replaced": [
-          {
-           "from": "PAK",
-           "kt": 69.0,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 1.4,
-           "usual_share_pct": 13.7
-          }
-         ],
-         "replaced_kt": 69.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        },
-        "open": {
-         "replaced": [
-          {
-           "from": "PAK",
-           "kt": 69.0,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 1.4,
-           "usual_share_pct": 13.7
-          }
-         ],
-         "replaced_kt": 69.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        }
-       },
-       "high": {
-        "usual": {
-         "replaced": [
-          {
-           "from": "PAK",
-           "kt": 69.0,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 1.4,
-           "usual_share_pct": 13.7
-          }
-         ],
-         "replaced_kt": 69.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        },
-        "open": {
-         "replaced": [
-          {
-           "from": "PAK",
-           "kt": 69.0,
-           "tier": "usual",
-           "of_its_normal_exports_pct": 1.4,
-           "usual_share_pct": 13.7
-          }
-         ],
-         "replaced_kt": 69.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        }
-       }
-      },
-      "forecast_range": {
-       "p10": {
-        "need_kt": 69.0,
-        "usual_residual_kt": 0.0,
-        "open_residual_kt": 0.0
-       },
-       "p50": {
-        "need_kt": 63.8,
-        "usual_residual_kt": 0.0,
-        "open_residual_kt": 0.0
-       },
-       "p90": {
-        "need_kt": 19.0,
-        "usual_residual_kt": 0.0,
-        "open_residual_kt": 0.0
-       }
-      }
-     },
-     {
-      "iso": "PER",
-      "kind": "buyer",
-      "from": "BRA",
-      "need_kt": 60.0,
-      "tm_year": 2024,
-      "usual_suppliers": [],
-      "usual_out": [
-       {
-        "iso": "URY",
-        "share_pct": 53.4,
-        "why": "no current USDA supply balance for it"
-       },
-       {
-        "iso": "BRA",
-        "share_pct": 39.8,
-        "why": "it is itself short in this scenario"
-       },
-       {
-        "iso": "PRY",
-        "share_pct": 3.4,
-        "why": "it shipped 5.0 kt in 2024, under the 10 kt a usual supplier must clear"
-       },
-       {
-        "iso": "THA",
-        "share_pct": 2.9,
-        "why": "it shipped 4.2 kt in 2024, under the 10 kt a usual supplier must clear"
-       }
-      ],
-      "stocks_kt": 165.0,
-      "consumption_kt": 2575.0,
-      "cases": {
-       "low": {
-        "usual": {
-         "replaced": [],
-         "replaced_kt": 0,
-         "residual_kt": 60.0,
-         "residual_weeks_of_use": 1.2
-        },
-        "open": {
-         "replaced": [
-          {
-           "from": "CHN",
-           "kt": 32.5,
-           "tier": "new",
-           "of_its_normal_exports_pct": 1.5
-          },
-          {
-           "from": "PAK",
-           "kt": 7.2,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
-          },
-          {
-           "from": "VNM",
-           "kt": 6.6,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
-          },
-          {
-           "from": "USA",
-           "kt": 4.6,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "KHM",
-           "kt": 4.4,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.1
-          },
-          {
-           "from": "MMR",
-           "kt": 4.2,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "ARG",
-           "kt": 0.5,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          }
-         ],
-         "replaced_kt": 60.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        }
-       },
-       "mid": {
-        "usual": {
-         "replaced": [],
-         "replaced_kt": 0,
-         "residual_kt": 60.0,
-         "residual_weeks_of_use": 1.2
-        },
-        "open": {
-         "replaced": [
-          {
-           "from": "CHN",
-           "kt": 15.9,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.7
-          },
-          {
-           "from": "VNM",
-           "kt": 12.4,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "PAK",
-           "kt": 11.8,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "KHM",
-           "kt": 6.9,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "USA",
-           "kt": 6.4,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          },
-          {
-           "from": "MMR",
-           "kt": 5.8,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          },
-          {
-           "from": "ARG",
-           "kt": 0.8,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          }
-         ],
-         "replaced_kt": 60.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        }
-       },
-       "high": {
-        "usual": {
-         "replaced": [],
-         "replaced_kt": 0,
-         "residual_kt": 60.0,
-         "residual_weeks_of_use": 1.2
-        },
-        "open": {
-         "replaced": [
-          {
-           "from": "VNM",
-           "kt": 14.1,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "PAK",
-           "kt": 14.1,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          },
-          {
-           "from": "CHN",
-           "kt": 9.1,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.4
-          },
-          {
-           "from": "KHM",
-           "kt": 7.9,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.2
-          },
-          {
-           "from": "USA",
-           "kt": 7.3,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          },
-          {
-           "from": "MMR",
-           "kt": 6.6,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          },
-          {
-           "from": "ARG",
-           "kt": 0.9,
-           "tier": "new",
-           "of_its_normal_exports_pct": 0.3
-          }
-         ],
-         "replaced_kt": 60.0,
-         "residual_kt": 0.0,
-         "residual_weeks_of_use": 0.0
-        }
-       }
-      },
-      "forecast_range": {
-       "p10": {
-        "need_kt": 60.0,
-        "usual_residual_kt": 60.0,
-        "open_residual_kt": 0.0
-       },
-       "p50": {
-        "need_kt": 55.5,
-        "usual_residual_kt": 55.5,
-        "open_residual_kt": 0.0
-       },
-       "p90": {
-        "need_kt": 16.5,
-        "usual_residual_kt": 16.5,
         "open_residual_kt": 0.0
        }
       }
@@ -3188,65 +1937,61 @@
      "open": {
       "need_kt": 6873.0,
       "replaced_kt": 6873.0,
-      "headroom_total_kt": 106839.8,
-      "headroom_left_kt": 99966.8,
-      "headroom_exporters": 11,
+      "headroom_total_kt": 87635.8,
+      "headroom_left_kt": 80762.8,
+      "headroom_exporters": 10,
       "residual_kt": 0,
       "short_countries": [],
       "stretched": [],
       "suppliers": [
        {
         "iso": "ARG",
-        "kt": 4924.7
+        "kt": 4957.1
        },
        {
         "iso": "USA",
-        "kt": 1154.6
-       },
-       {
-        "iso": "BRA",
-        "kt": 392.9
+        "kt": 1422.2
        },
        {
         "iso": "UKR",
-        "kt": 201.7
+        "kt": 248.4
        },
        {
         "iso": "CAN",
-        "kt": 55.3
+        "kt": 68.1
        },
        {
         "iso": "RUS",
-        "kt": 41.9
+        "kt": 51.6
        },
        {
         "iso": "EU27",
-        "kt": 32.7
+        "kt": 40.3
        },
        {
         "iso": "IND",
-        "kt": 30.7
+        "kt": 37.8
        },
        {
         "iso": "PRY",
-        "kt": 14.6
+        "kt": 18.0
        },
        {
         "iso": "MMR",
-        "kt": 13.2
+        "kt": 16.2
        },
        {
         "iso": "SRB",
-        "kt": 10.8
+        "kt": 13.3
        }
       ]
      },
      "usual": {
       "need_kt": 6873.0,
       "replaced_kt": 37.4,
-      "headroom_total_kt": 106839.8,
-      "headroom_left_kt": 106802.4,
-      "headroom_exporters": 11,
+      "headroom_total_kt": 87635.8,
+      "headroom_left_kt": 87598.4,
+      "headroom_exporters": 10,
       "residual_kt": 6835.6,
       "short_countries": [
        {
@@ -3287,70 +2032,70 @@
      "open": {
       "need_kt": 6873.0,
       "replaced_kt": 6873.0,
-      "headroom_total_kt": 18284.5,
-      "headroom_left_kt": 11411.5,
-      "headroom_exporters": 11,
+      "headroom_total_kt": 15633.5,
+      "headroom_left_kt": 8760.5,
+      "headroom_exporters": 10,
       "residual_kt": 0,
       "short_countries": [],
       "stretched": [
        {
         "iso": "EU27",
-        "extra_pct_of_normal_exports": 26.8
+        "extra_pct_of_normal_exports": 31.7
+       },
+       {
+        "iso": "IND",
+        "extra_pct_of_normal_exports": 27.7
        }
       ],
       "suppliers": [
        {
         "iso": "USA",
-        "kt": 3379.1
+        "kt": 3991.4
        },
        {
         "iso": "ARG",
         "kt": 1003.0
        },
        {
-        "iso": "BRA",
-        "kt": 900.5
-       },
-       {
         "iso": "UKR",
-        "kt": 463.5
+        "kt": 547.5
        },
        {
         "iso": "EU27",
-        "kt": 428.7
+        "kt": 506.4
        },
        {
         "iso": "IND",
-        "kt": 352.2
+        "kt": 416.0
        },
        {
         "iso": "CAN",
-        "kt": 178.4
+        "kt": 210.7
        },
        {
         "iso": "RUS",
-        "kt": 111.1
+        "kt": 131.2
        },
        {
         "iso": "SRB",
-        "kt": 27.8
+        "kt": 32.8
        },
        {
         "iso": "PRY",
-        "kt": 14.9
+        "kt": 17.6
        },
        {
         "iso": "MMR",
-        "kt": 13.9
+        "kt": 16.4
        }
       ]
      },
      "usual": {
       "need_kt": 6873.0,
       "replaced_kt": 37.4,
-      "headroom_total_kt": 18284.5,
-      "headroom_left_kt": 18247.1,
-      "headroom_exporters": 11,
+      "headroom_total_kt": 15633.5,
+      "headroom_left_kt": 15596.1,
+      "headroom_exporters": 10,
       "residual_kt": 6835.6,
       "short_countries": [
        {
@@ -3391,65 +2136,61 @@
      "open": {
       "need_kt": 6873.0,
       "replaced_kt": 6873.0,
-      "headroom_total_kt": 54969.9,
-      "headroom_left_kt": 48096.9,
-      "headroom_exporters": 11,
+      "headroom_total_kt": 45367.9,
+      "headroom_left_kt": 38494.9,
+      "headroom_exporters": 10,
       "residual_kt": 0,
       "short_countries": [],
       "stretched": [],
       "suppliers": [
        {
         "iso": "ARG",
-        "kt": 4827.5
+        "kt": 4837.5
        },
        {
         "iso": "USA",
-        "kt": 1173.9
-       },
-       {
-        "iso": "BRA",
-        "kt": 399.5
+        "kt": 1451.7
        },
        {
         "iso": "UKR",
-        "kt": 205.1
+        "kt": 253.6
        },
        {
         "iso": "EU27",
-        "kt": 66.6
+        "kt": 82.3
        },
        {
         "iso": "IND",
-        "kt": 62.4
+        "kt": 77.2
        },
        {
         "iso": "CAN",
-        "kt": 56.2
+        "kt": 69.5
        },
        {
         "iso": "RUS",
-        "kt": 42.6
+        "kt": 52.7
        },
        {
         "iso": "PRY",
-        "kt": 14.9
+        "kt": 18.4
        },
        {
         "iso": "MMR",
-        "kt": 13.4
+        "kt": 16.6
        },
        {
         "iso": "SRB",
-        "kt": 11.0
+        "kt": 13.6
        }
       ]
      },
      "usual": {
       "need_kt": 6873.0,
       "replaced_kt": 37.4,
-      "headroom_total_kt": 54969.9,
-      "headroom_left_kt": 54932.5,
-      "headroom_exporters": 11,
+      "headroom_total_kt": 45367.9,
+      "headroom_left_kt": 45330.5,
+      "headroom_exporters": 10,
       "residual_kt": 6835.6,
       "short_countries": [
        {
@@ -3482,257 +2223,6 @@
        {
         "iso": "ARG",
         "kt": 37.4
-       }
-      ]
-     }
-    }
-   },
-   "rice": {
-    "high": {
-     "open": {
-      "need_kt": 460.0,
-      "replaced_kt": 460.0,
-      "headroom_total_kt": 14732.4,
-      "headroom_left_kt": 14272.4,
-      "headroom_exporters": 7,
-      "residual_kt": 0,
-      "short_countries": [],
-      "stretched": [],
-      "suppliers": [
-       {
-        "iso": "PAK",
-        "kt": 218.1
-       },
-       {
-        "iso": "VNM",
-        "kt": 61.4
-       },
-       {
-        "iso": "MMR",
-        "kt": 44.0
-       },
-       {
-        "iso": "USA",
-        "kt": 43.8
-       },
-       {
-        "iso": "CHN",
-        "kt": 39.5
-       },
-       {
-        "iso": "KHM",
-        "kt": 34.2
-       },
-       {
-        "iso": "ARG",
-        "kt": 19.1
-       }
-      ]
-     },
-     "usual": {
-      "need_kt": 460.0,
-      "replaced_kt": 199.0,
-      "headroom_total_kt": 14732.4,
-      "headroom_left_kt": 14533.4,
-      "headroom_exporters": 7,
-      "residual_kt": 261.0,
-      "short_countries": [
-       {
-        "iso": "CRI",
-        "residual_kt": 124.0
-       },
-       {
-        "iso": "VEN",
-        "residual_kt": 77.0
-       },
-       {
-        "iso": "PER",
-        "residual_kt": 60.0
-       }
-      ],
-      "stretched": [],
-      "suppliers": [
-       {
-        "iso": "PAK",
-        "kt": 156.9
-       },
-       {
-        "iso": "MMR",
-        "kt": 15.1
-       },
-       {
-        "iso": "ARG",
-        "kt": 15.0
-       },
-       {
-        "iso": "USA",
-        "kt": 12.0
-       }
-      ]
-     }
-    },
-    "low": {
-     "open": {
-      "need_kt": 460.0,
-      "replaced_kt": 460.0,
-      "headroom_total_kt": 4255.5,
-      "headroom_left_kt": 3795.5,
-      "headroom_exporters": 7,
-      "residual_kt": 0,
-      "short_countries": [],
-      "stretched": [],
-      "suppliers": [
-       {
-        "iso": "PAK",
-        "kt": 188.0
-       },
-       {
-        "iso": "CHN",
-        "kt": 141.6
-       },
-       {
-        "iso": "MMR",
-        "kt": 33.5
-       },
-       {
-        "iso": "USA",
-        "kt": 31.9
-       },
-       {
-        "iso": "VNM",
-        "kt": 28.9
-       },
-       {
-        "iso": "KHM",
-        "kt": 19.1
-       },
-       {
-        "iso": "ARG",
-        "kt": 17.0
-       }
-      ]
-     },
-     "usual": {
-      "need_kt": 460.0,
-      "replaced_kt": 199.0,
-      "headroom_total_kt": 4255.5,
-      "headroom_left_kt": 4056.5,
-      "headroom_exporters": 7,
-      "residual_kt": 261.0,
-      "short_countries": [
-       {
-        "iso": "CRI",
-        "residual_kt": 124.0
-       },
-       {
-        "iso": "VEN",
-        "residual_kt": 77.0
-       },
-       {
-        "iso": "PER",
-        "residual_kt": 60.0
-       }
-      ],
-      "stretched": [],
-      "suppliers": [
-       {
-        "iso": "PAK",
-        "kt": 156.9
-       },
-       {
-        "iso": "MMR",
-        "kt": 15.1
-       },
-       {
-        "iso": "ARG",
-        "kt": 15.0
-       },
-       {
-        "iso": "USA",
-        "kt": 12.0
-       }
-      ]
-     }
-    },
-    "mid": {
-     "open": {
-      "need_kt": 460.0,
-      "replaced_kt": 460.0,
-      "headroom_total_kt": 8466.2,
-      "headroom_left_kt": 8006.2,
-      "headroom_exporters": 7,
-      "residual_kt": 0,
-      "short_countries": [],
-      "stretched": [],
-      "suppliers": [
-       {
-        "iso": "PAK",
-        "kt": 208.2
-       },
-       {
-        "iso": "CHN",
-        "kt": 69.5
-       },
-       {
-        "iso": "VNM",
-        "kt": 53.9
-       },
-       {
-        "iso": "MMR",
-        "kt": 40.3
-       },
-       {
-        "iso": "USA",
-        "kt": 39.7
-       },
-       {
-        "iso": "KHM",
-        "kt": 30.1
-       },
-       {
-        "iso": "ARG",
-        "kt": 18.3
-       }
-      ]
-     },
-     "usual": {
-      "need_kt": 460.0,
-      "replaced_kt": 199.0,
-      "headroom_total_kt": 8466.2,
-      "headroom_left_kt": 8267.2,
-      "headroom_exporters": 7,
-      "residual_kt": 261.0,
-      "short_countries": [
-       {
-        "iso": "CRI",
-        "residual_kt": 124.0
-       },
-       {
-        "iso": "VEN",
-        "residual_kt": 77.0
-       },
-       {
-        "iso": "PER",
-        "residual_kt": 60.0
-       }
-      ],
-      "stretched": [],
-      "suppliers": [
-       {
-        "iso": "PAK",
-        "kt": 156.9
-       },
-       {
-        "iso": "MMR",
-        "kt": 15.1
-       },
-       {
-        "iso": "ARG",
-        "kt": 15.0
-       },
-       {
-        "iso": "USA",
-        "kt": 12.0
        }
       ]
      }
@@ -3748,7 +2238,7 @@
     "cases": {
      "high_open": {
       "headroom_kt": 11612.0,
-      "used_kt": 4924.7
+      "used_kt": 4957.1
      },
      "high_usual": {
       "headroom_kt": 11612.0,
@@ -3764,31 +2254,11 @@
      },
      "mid_open": {
       "headroom_kt": 5806.0,
-      "used_kt": 4827.5
+      "used_kt": 4837.5
      },
      "mid_usual": {
       "headroom_kt": 5806.0,
       "used_kt": 37.4
-     }
-    }
-   },
-   {
-    "iso": "BRA",
-    "crop": "corn",
-    "normal_exports_kt": 43000.0,
-    "stocks_kt": 10604.0,
-    "cases": {
-     "high_open": {
-      "headroom_kt": 19204.0,
-      "used_kt": 392.9
-     },
-     "low_open": {
-      "headroom_kt": 2651.0,
-      "used_kt": 900.5
-     },
-     "mid_open": {
-      "headroom_kt": 9602.0,
-      "used_kt": 399.5
      }
     }
    },
@@ -3800,15 +2270,15 @@
     "cases": {
      "high_open": {
       "headroom_kt": 2701.0,
-      "used_kt": 55.3
+      "used_kt": 68.1
      },
      "low_open": {
       "headroom_kt": 525.2,
-      "used_kt": 178.4
+      "used_kt": 210.7
      },
      "mid_open": {
       "headroom_kt": 1350.5,
-      "used_kt": 56.2
+      "used_kt": 69.5
      }
     }
    },
@@ -3820,15 +2290,15 @@
     "cases": {
      "high_open": {
       "headroom_kt": 1600.0,
-      "used_kt": 32.7
+      "used_kt": 40.3
      },
      "low_open": {
       "headroom_kt": 1262.2,
-      "used_kt": 428.7
+      "used_kt": 506.4
      },
      "mid_open": {
       "headroom_kt": 1600.0,
-      "used_kt": 66.6
+      "used_kt": 82.3
      }
     }
    },
@@ -3840,15 +2310,15 @@
     "cases": {
      "high_open": {
       "headroom_kt": 1500.0,
-      "used_kt": 30.7
+      "used_kt": 37.8
      },
      "low_open": {
       "headroom_kt": 1036.8,
-      "used_kt": 352.2
+      "used_kt": 416.0
      },
      "mid_open": {
       "headroom_kt": 1500.0,
-      "used_kt": 62.4
+      "used_kt": 77.2
      }
     }
    },
@@ -3860,15 +2330,15 @@
     "cases": {
      "high_open": {
       "headroom_kt": 644.0,
-      "used_kt": 13.2
+      "used_kt": 16.2
      },
      "low_open": {
       "headroom_kt": 41.0,
-      "used_kt": 13.9
+      "used_kt": 16.4
      },
      "mid_open": {
       "headroom_kt": 322.0,
-      "used_kt": 13.4
+      "used_kt": 16.6
      }
     }
    },
@@ -3880,15 +2350,15 @@
     "cases": {
      "high_open": {
       "headroom_kt": 715.0,
-      "used_kt": 14.6
+      "used_kt": 18.0
      },
      "low_open": {
       "headroom_kt": 43.8,
-      "used_kt": 14.9
+      "used_kt": 17.6
      },
      "mid_open": {
       "headroom_kt": 357.5,
-      "used_kt": 14.9
+      "used_kt": 18.4
      }
     }
    },
@@ -3900,15 +2370,15 @@
     "cases": {
      "high_open": {
       "headroom_kt": 2048.0,
-      "used_kt": 41.9
+      "used_kt": 51.6
      },
      "low_open": {
       "headroom_kt": 327.0,
-      "used_kt": 111.1
+      "used_kt": 131.2
      },
      "mid_open": {
       "headroom_kt": 1024.0,
-      "used_kt": 42.6
+      "used_kt": 52.7
      }
     }
    },
@@ -3920,15 +2390,15 @@
     "cases": {
      "high_open": {
       "headroom_kt": 527.0,
-      "used_kt": 10.8
+      "used_kt": 13.3
      },
      "low_open": {
       "headroom_kt": 81.8,
-      "used_kt": 27.8
+      "used_kt": 32.8
      },
      "mid_open": {
       "headroom_kt": 263.5,
-      "used_kt": 11.0
+      "used_kt": 13.6
      }
     }
    },
@@ -3940,15 +2410,15 @@
     "cases": {
      "high_open": {
       "headroom_kt": 9858.0,
-      "used_kt": 201.7
+      "used_kt": 248.4
      },
      "low_open": {
       "headroom_kt": 1364.5,
-      "used_kt": 463.5
+      "used_kt": 547.5
      },
      "mid_open": {
       "headroom_kt": 4929.0,
-      "used_kt": 205.1
+      "used_kt": 253.6
      }
     }
    },
@@ -3960,203 +2430,15 @@
     "cases": {
      "high_open": {
       "headroom_kt": 56430.8,
-      "used_kt": 1154.6
+      "used_kt": 1422.2
      },
      "low_open": {
       "headroom_kt": 9948.2,
-      "used_kt": 3379.1
+      "used_kt": 3991.4
      },
      "mid_open": {
       "headroom_kt": 28215.4,
-      "used_kt": 1173.9
-     }
-    }
-   },
-   {
-    "iso": "ARG",
-    "crop": "rice",
-    "normal_exports_kt": 275.0,
-    "stocks_kt": 189.0,
-    "cases": {
-     "high_open": {
-      "headroom_kt": 244.0,
-      "used_kt": 19.1
-     },
-     "high_usual": {
-      "headroom_kt": 244.0,
-      "used_kt": 15.0
-     },
-     "low_open": {
-      "headroom_kt": 47.2,
-      "used_kt": 17.0
-     },
-     "low_usual": {
-      "headroom_kt": 47.2,
-      "used_kt": 15.0
-     },
-     "mid_open": {
-      "headroom_kt": 122.0,
-      "used_kt": 18.3
-     },
-     "mid_usual": {
-      "headroom_kt": 122.0,
-      "used_kt": 15.0
-     }
-    }
-   },
-   {
-    "iso": "CHN",
-    "crop": "rice",
-    "normal_exports_kt": 2200.0,
-    "stocks_kt": 107000.0,
-    "cases": {
-     "high_open": {
-      "headroom_kt": 2200.0,
-      "used_kt": 39.5
-     },
-     "low_open": {
-      "headroom_kt": 2200.0,
-      "used_kt": 141.6
-     },
-     "mid_open": {
-      "headroom_kt": 2200.0,
-      "used_kt": 69.5
-     }
-    }
-   },
-   {
-    "iso": "KHM",
-    "crop": "rice",
-    "normal_exports_kt": 3600.0,
-    "stocks_kt": 1185.0,
-    "cases": {
-     "high_open": {
-      "headroom_kt": 1905.0,
-      "used_kt": 34.2
-     },
-     "low_open": {
-      "headroom_kt": 296.2,
-      "used_kt": 19.1
-     },
-     "mid_open": {
-      "headroom_kt": 952.5,
-      "used_kt": 30.1
-     }
-    }
-   },
-   {
-    "iso": "MMR",
-    "crop": "rice",
-    "normal_exports_kt": 2100.0,
-    "stocks_kt": 1205.0,
-    "cases": {
-     "high_open": {
-      "headroom_kt": 1625.0,
-      "used_kt": 44.0
-     },
-     "high_usual": {
-      "headroom_kt": 1625.0,
-      "used_kt": 15.1
-     },
-     "low_open": {
-      "headroom_kt": 301.2,
-      "used_kt": 33.5
-     },
-     "low_usual": {
-      "headroom_kt": 301.2,
-      "used_kt": 15.1
-     },
-     "mid_open": {
-      "headroom_kt": 812.5,
-      "used_kt": 40.3
-     },
-     "mid_usual": {
-      "headroom_kt": 812.5,
-      "used_kt": 15.1
-     }
-    }
-   },
-   {
-    "iso": "PAK",
-    "crop": "rice",
-    "normal_exports_kt": 5000.0,
-    "stocks_kt": 2563.0,
-    "cases": {
-     "high_open": {
-      "headroom_kt": 3563.0,
-      "used_kt": 218.1
-     },
-     "high_usual": {
-      "headroom_kt": 3563.0,
-      "used_kt": 156.9
-     },
-     "low_open": {
-      "headroom_kt": 640.8,
-      "used_kt": 188.0
-     },
-     "low_usual": {
-      "headroom_kt": 640.8,
-      "used_kt": 156.9
-     },
-     "mid_open": {
-      "headroom_kt": 1781.5,
-      "used_kt": 208.2
-     },
-     "mid_usual": {
-      "headroom_kt": 1781.5,
-      "used_kt": 156.9
-     }
-    }
-   },
-   {
-    "iso": "USA",
-    "crop": "rice",
-    "normal_exports_kt": 2477.0,
-    "stocks_kt": 1283.0,
-    "cases": {
-     "high_open": {
-      "headroom_kt": 1778.4,
-      "used_kt": 43.8
-     },
-     "high_usual": {
-      "headroom_kt": 1778.4,
-      "used_kt": 12.0
-     },
-     "low_open": {
-      "headroom_kt": 320.8,
-      "used_kt": 31.9
-     },
-     "low_usual": {
-      "headroom_kt": 320.8,
-      "used_kt": 12.0
-     },
-     "mid_open": {
-      "headroom_kt": 889.2,
-      "used_kt": 39.7
-     },
-     "mid_usual": {
-      "headroom_kt": 889.2,
-      "used_kt": 12.0
-     }
-    }
-   },
-   {
-    "iso": "VNM",
-    "crop": "rice",
-    "normal_exports_kt": 8100.0,
-    "stocks_kt": 1797.0,
-    "cases": {
-     "high_open": {
-      "headroom_kt": 3417.0,
-      "used_kt": 61.4
-     },
-     "low_open": {
-      "headroom_kt": 449.2,
-      "used_kt": 28.9
-     },
-     "mid_open": {
-      "headroom_kt": 1708.5,
-      "used_kt": 53.9
+      "used_kt": 1451.7
      }
     }
    }
@@ -4164,23 +2446,8 @@
   "excluded": [
    {
     "iso": "BRA",
-    "crop": "rice",
-    "why": "it is itself short in this scenario"
-   },
-   {
-    "iso": "IND",
-    "crop": "rice",
+    "crop": "corn",
     "why": "in a published El Niño drought region for the crop"
-   },
-   {
-    "iso": "THA",
-    "crop": "rice",
-    "why": "a published study finds its harvest falls in El Niño"
-   },
-   {
-    "iso": "URY",
-    "crop": "rice",
-    "why": "no current USDA supply balance for it"
    },
    {
     "iso": "ZAF",

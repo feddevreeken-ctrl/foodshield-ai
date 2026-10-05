@@ -194,6 +194,14 @@ def main() -> int:
             tm_cache[iso] = body(json.loads(p.read_text())) if p.exists() else None
         return tm_cache[iso]
 
+    def in_drought_region(iso, crop):
+        # 2026-10-05 court: test the region's own `crops` list (build_enso_outlook REGION_CROPS). Labels such as
+        # "Brazil · Centre-West, North & Northeast" name no crop, so the label test kept Brazilian corn in the pool
+        # and missed southern African sorghum and millet. The label test stays only for an outlook without the list.
+        return any(g.get("effect_direction", 0) < 0 and iso in (g.get("iso3") or [])
+                   and (crop in g["crops"] if g.get("crops") is not None else crop_match(crop, g.get("label")))
+                   for g in O.get("regions") or [])
+
     def why_out(iso, crop, supplier):
         """Why an exporter cannot be counted on, or None. Same tests as the Harvests map."""
         if iso == supplier:
@@ -201,9 +209,8 @@ def main() -> int:
         if any(r["iso"] == iso and r["crop"] == crop and r.get("status") == "shown" and (r.get("change_pct_record") or 0) < 0
                for r in rows):
             return "its own harvest falls in the fit"
-        for g in O.get("regions") or []:
-            if g.get("effect_direction", 0) < 0 and iso in (g.get("iso3") or []) and crop_match(crop, g.get("label")):
-                return "in a published El Niño drought region for the crop"
+        if in_drought_region(iso, crop):
+            return "in a published El Niño drought region for the crop"
         for e in pubfx if isinstance(pubfx, list) else []:
             if e.get("iso") == iso and crop_match(crop, e.get("crop")):
                 hi = e.get("effect_high_pct")
@@ -225,6 +232,7 @@ def main() -> int:
     pairs_out, exporters_used, excluded = [], {}, {}
     crops = sorted({w["crop"] for w in O.get("who_pays") or [] if w.get("balance") != "not pulled"})
     aggregate = {}
+    floor_buyers = {}    # crop (trade-matrix name) -> buyers whose residual is a floor, named in _meta notes
 
     for crop in crops:
         W = [w for w in O["who_pays"] if w["crop"] == crop and w.get("balance") != "not pulled"]
@@ -240,6 +248,11 @@ def main() -> int:
         for d in demands:
             im = ((tm(d["buyer"]) or {}).get("imp") or {}).get(key) or {}
             d["tm_year"] = im.get("year")
+            # 2026-10-05 court: FAOSTAT can record a small part of what USDA says a buyer imports (Costa Rica's and
+            # Venezuela's rice), so its usual suppliers are under-counted; the share is carried so the page can say so.
+            imp_kt = ((psd.get(d["buyer"]) or {}).get(PSD_KEY.get(crop, crop)) or {}).get("imports_kt")
+            tm_t = im.get("t") or sum(p["t"] for p in im.get("partners") or [])
+            d["tm_coverage"] = tm_t / (imp_kt * 1000) if imp_kt and tm(d["buyer"]) else None
             d["usual"], d["usual_share"], d["usual_basis"] = {}, {}, {}
             # usual_out: the buyer's real partners that cannot step up, with the reason, so the page can say why
             # "usual suppliers" cover nothing (Botswana's maize comes from South Africa, itself short).
@@ -298,6 +311,8 @@ def main() -> int:
         # Forecast range: re-run the mid-headroom allocation with each supplier's loss scaled to P10 / P50 / P90 of the forecast
         # harvest change (response capped at the strongest fitted winter), against the record-winter loss that sized the demands.
         # lost exports = min(loss, exports); the rest of the loss is the supplier's own extra import. Named buyers scale with lost exports.
+        # 2026-10-05 court: no longer held at the record need. Each keeps its record share of the lost exports, capped at its
+        # USDA imports, so a P10 loss beyond the record (Brazilian rice) reaches the buyers instead of P10 = record.
         mid_s = [x for x in PARAMS["sensitivity"] if x["key"] == "mid"][0]
         mid_head = results[("mid", "usual")][2]
         rec_pct = {(r["iso"], r["crop"]): r.get("change_pct_record") for r in rows if r.get("status") == "shown"}
@@ -317,10 +332,15 @@ def main() -> int:
                 loss = w["loss_kt"] * ratio
                 exp_kt = float(w.get("exports_kt") or 0)
                 lost = min(loss, exp_kt)
-                sc[w["iso"]] = {"loss": loss, "named": min(1.0, lost / w["lost_exports_kt"]) if w.get("lost_exports_kt") else 0.0, "extra": loss - lost}
+                sc[w["iso"]] = {"loss": loss, "named": lost / w["lost_exports_kt"] if w.get("lost_exports_kt") else 0.0, "extra": loss - lost}
             if any(v is None for v in sc.values()):
                 continue
-            dq = [dict(d, need=(d["need"] * sc[d["from"]]["named"] if d["kind"] == "buyer" else sc[d["from"]]["extra"])) for d in demands]
+
+            def imports_cap(iso):
+                c = ((psd.get(iso) or {}).get(PSD_KEY.get(crop, crop)) or {}).get("imports_kt")
+                return c if isinstance(c, (int, float)) and c > 0 else float("inf")
+            dq = [dict(d, need=(min(d["need"] * sc[d["from"]]["named"], imports_cap(d["buyer"])) if d["kind"] == "buyer"
+                                else sc[d["from"]]["extra"])) for d in demands]
             for scope in ("usual", "open"):
                 got, _left = ration(dq, {i: {"cap": h} for i, h in mid_head.items()}, scope, mid_s, pan[mid_s["panama"]])
                 for d in dq:
@@ -362,6 +382,15 @@ def main() -> int:
                    "usual_suppliers": [{"iso": i, "t": d["usual"][i], "share_pct": d["usual_share"][i], "basis": d["usual_basis"][i]} for i in d["usual"]],
                    "usual_out": d["usual_out"],
                    "stocks_kt": stocks, "consumption_kt": cons, "cases": cases}
+            cov = d["tm_coverage"]
+            rec["tm_coverage"] = round(cov, 2) if cov is not None else None
+            if cov is not None and cov < 0.5:
+                rec["tm_coverage_flag"] = f"FAOSTAT records only {cov * 100:.0f}% of USDA imports, so usual suppliers are under-counted"
+            # 2026-10-05 court: a buyer in a published drought region for the crop (Mozambique's maize) loses its own harvest
+            # too, but no fitted row asks for it, so its residual is a floor. Suppliers' own shortfall is already a demand line.
+            if d["kind"] == "buyer" and d["buyer"] not in suppliers and in_drought_region(d["buyer"], crop):
+                rec["residual_is_floor"] = True
+                floor_buyers.setdefault(TM_KEY.get(crop, crop), []).append(buyer_bal.get("country") or d["buyer"])
             if frange.get(d["id"]):
                 rec["forecast_range"] = frange[d["id"]]
             for k in ("low", "mid", "high"):
@@ -415,7 +444,10 @@ def main() -> int:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "source": "Derived: enso_outlook who_pays (shortfall, buyers), FAOSTAT Detailed Trade Matrix (data/tm), USDA PSD, trade_restrictions, enso_lanes (Panama Canal Authority advisories), enso_freight (USDA AMS)",
         "version": "v1", "status": "ok",
-        "notes": "Scenario arithmetic, not a forecast. Potential import need met by other exporters, or left uncovered. On the cron after the outlook: stdlib only, about a second. Panama state read from enso_lanes live_2026.latest_advisory (" + str(pan.get("advisory")) + ") and its dated steps: " + str((pan.get("step_in_force") or {}).get("total")) + " slots in force on " + today + ", next step " + str(pan.get("slots_next")) + " from " + str(pan.get("next_from")) + ".",
+        "notes": "Scenario arithmetic, not a forecast. Potential import need met by other exporters, or left uncovered. On the cron after the outlook: stdlib only, about a second. Panama state read from enso_lanes live_2026.latest_advisory (" + str(pan.get("advisory")) + ") and its dated steps: " + str((pan.get("step_in_force") or {}).get("total")) + " slots in force on " + today + ", next step " + str(pan.get("slots_next")) + " from " + str(pan.get("next_from")) + "."
+                 + " Buyers that sit in a published El Niño drought region for the crop"
+                 + (" (" + "; ".join(", ".join(v) + " for " + c for c, v in floor_buyers.items()) + ")" if floor_buyers else "")
+                 + " are asked only to replace lost imports, not their own harvest shortfall, so their residuals are a floor (residual_is_floor).",
         "assumptions": [
             "Demand: each named buyer's lost-export tonnes from who_pays (already capped at the buyer's usual imports), plus the short supplier's own shortfall beyond its exports (its own import need). Tonnes come from the who_pays row fields, so the rule follows whatever production baseline the outlook uses. 'Other buyers' (past the five named) are not routed and are listed as unrouted.",
             "Candidate exporters, scope 'usual': the buyer's own usual suppliers of the crop in the FAOSTAT trade matrix (top eight partners, at least 1% of the buyer's imports and 10 kt). Each can ship at most 3x its normal volume to that buyer. Weights: normal tonnes.",
@@ -425,7 +457,7 @@ def main() -> int:
             "Rationing: a buyer's need is split across eligible exporters in proportion to weight; an exporter asked for more than its headroom is cut back pro rata across the buyers asking it. Repeated until nothing moves. All buyers of a crop compete for the same headroom.",
             "Routes: US exports to East and Southeast Asian buyers are scaled by the Panama Canal capacity factor: booking slots in the step in force today under the newest advisory, " + str(pan.get("advisory") or "unknown") + " (mid, high cases; a step scheduled for a later date is carried as slots_next but not used), or the 2023 floor (low case), over the lower end of the stated normal 36-38 a day. Gulf ocean freight (USDA AMS, US Gulf to Japan) is carried as a cost signal with its own baseline; no freight cost is invented or used to rank suppliers. Landlocked access, port capacity and overland routes are not modelled.",
             "Residual weeks of use = uncovered tonnes over the buyer's USDA annual consumption x 52. Buyer stocks are shown, not subtracted.",
-            "Forecast range (mid headroom): the same allocation re-run with each supplier's loss scaled to the P10, P50 and P90 of its forecast harvest change (response stopped at the strongest fitted winter) over the record-winter change that sized the demands. Lost exports are min(loss, normal exports); the remainder is the supplier's own extra import. Named buyers never scale above their record-winter need, because their usual imports from the supplier already cap it, so the P10 end is understated for them. P10 is the severe end. Scenario arithmetic, not a forecast.",
+            "Forecast range (mid headroom): the same allocation re-run with each supplier's loss scaled to the P10, P50 and P90 of its forecast harvest change (response stopped at the strongest fitted winter) over the record-winter change that sized the demands. Lost exports are min(loss, normal exports); the remainder is the supplier's own extra import. Each named buyer keeps its record-winter share of the lost exports, capped at its USDA imports, so a loss beyond the record reaches it; what the caps remove goes to unrouted other buyers. P10 is the severe end. Scenario arithmetic, not a forecast.",
             "Global export headroom (headroom_total_kt): the summed headroom of every eligible exporter in the case, before buyers draw on it; headroom_left_kt is what remains after all buyers in the scenario. A ceiling shared by every buyer, not a delivered quantity.",
             "Stretched exporters: extra tonnes above 25% of the exporter's normal exports.",
         ],

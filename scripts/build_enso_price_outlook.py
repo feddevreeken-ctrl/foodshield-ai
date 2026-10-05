@@ -25,13 +25,15 @@ Per row, all in real (CPI-deflated) terms:
              change per calendar month in non-El-Niño years) minus the series' world-market pass-through (beta x the
              World Bank Pink Sheet price, deflated by US CPI; beta fitted on non-El-Niño months, kept only if
              significant on 48+ months, clipped to 0..1). Forward view = a normal year + that excess. Scored
-             leave-one-event-out against no change, the plain replay and the normal year alone; published regardless.
+             leave-one-event-out against no change, a leave-one-year-out climatology, the plain replay and the
+             normal year alone; the paths are published either way, and replay_skill.verdict says so when the
+             replay does not beat the climatology.
   model      peak real-price rise from the latest month over the 16 months December..March+1, from a pooled
              OLS on two predictors fixed before fitting (n_specs_tried = 1): the country's own fitted El Niño
              yield slope x the event's DJF ONI, and the price at the origin month vs its own 3-year median.
-             Scored leave-one-event-out against no change and the analog average. It is published only if its
-             pooled MAE beats both and it beats the analog on at least half of the held-out events; otherwise
-             model_status = "no_skill" and every model field is null.
+             Scored leave-one-event-out against no change, the analog average and a leave-one-year-out
+             climatology. It is published only if its pooled MAE beats all three and it beats the analog on at
+             least half of the held-out events; otherwise model_status = "no_skill" and every model field is null.
 
 Output: data/enso_price_outlook.json
 """
@@ -106,6 +108,11 @@ BETA_MIN_MONTHS, BETA_T = 48, 1.96
 # months are dropped from the map fill and from the price-risk band (build_price_risk_band.py reads this).
 TAIL_TRIM = {"MDG": 3, "ETH": 3}
 GAP_MIN_MONTHS = 12          # a run of missing months this long inside a series is flagged in series.gap
+# 2026-10-05 court C4: the target is a peak rise, so it drifts upward by construction and "no change" is a strawman.
+# The fair yardstick is the series' own climatology; fewer other years than this and the sample has none (dropped).
+# One year is thin, but a higher floor dropped MWI 2023-24, the model's worst miss, from every table (model MAE 25.9 -> 24.4).
+CLIM_MIN_YEARS = 1
+REPLAY_NO_SKILL = "no demonstrated skill against a climatology baseline"
 
 
 def mi(iso):
@@ -153,6 +160,26 @@ def peak_rise(real, p, k0):
     base = real.get(p + k0)
     win = [real[p + k] for k in range(0, K_END + 1) if (p + k) in real]
     return pct(max(win), base) if base and len(win) >= MIN_WINDOW else None
+
+
+def year_targets(real, k0):
+    """{year: peak_rise} with December of every year in the series as the peak: the target of every year, El Niño
+    or not, from the same origin offset. A sample for an event is its own year's entry."""
+    out = {}
+    for yr in range(min(real) // 12, max(real) // 12 + 1):
+        v = peak_rise(real, yr * 12 + 11, k0)
+        if v is not None:
+            out[yr] = v
+    return out
+
+
+def p_clim(s):
+    """Leave-one-year-out climatology for one held-out sample: the median of the same series' target over the other
+    years. Years within s["clim_gap"] of the event year are left out too: 2026-10-05, the windows run up to 25 months,
+    so a neighbour's window can hold the held-out event's own spike. None with under CLIM_MIN_YEARS years left."""
+    yr = int(s["event"][:4])
+    other = [v for y, v in (s.get("clim_y") or {}).items() if abs(y - yr) > s.get("clim_gap", 0)]
+    return statistics.median(other) if len(other) >= CLIM_MIN_YEARS else None
 
 
 def aftermath(real, p, k0):
@@ -313,17 +340,19 @@ def effect_replay(real, world, pt, med, n_years, latest_m, k0, peaks, bench):
 
 def evaluate_replay(samples):
     """Leave-one-event-out score of the replays, same target and samples as the model table: each held-out event's
-    peak rise vs no change, the plain replay (mean of the series' other analog events' real peak rises), the normal
-    year alone, and the El Niño-effect replay (normal year + mean excess of the other analog events)."""
+    peak rise vs no change, the leave-one-year-out climatology (p_clim), the plain replay (mean of the series' other
+    analog events' real peak rises), the normal year alone, and the El Niño-effect replay (normal year + mean excess
+    of the other analog events)."""
     rows = []
     for s in samples:
         plain = [v for lab, v in s["analog_y"].items() if lab != s["event"]]
         adj = [v for lab, v in (s.get("adj_y") or {}).items() if lab != s["event"]]
-        if not plain or not adj or s.get("normal_y") is None:
+        c = p_clim(s)
+        if not plain or not adj or s.get("normal_y") is None or c is None:
             continue
-        rows.append({**s, "p_nochange": 0.0, "p_plain": statistics.mean(plain), "p_normal": s["normal_y"],
-                     "p_adjusted": statistics.mean(adj)})
-    kinds = ("adjusted", "plain", "normal", "nochange")
+        rows.append({**s, "p_nochange": 0.0, "p_climatology": c, "p_plain": statistics.mean(plain),
+                     "p_normal": s["normal_y"], "p_adjusted": statistics.mean(adj)})
+    kinds = ("adjusted", "plain", "normal", "climatology", "nochange")
 
     def score(rs):
         if not rs:
@@ -339,6 +368,10 @@ def evaluate_replay(samples):
         pooled["by_event"] = {e: {k: v for k, v in score([r for r in rows if r["event"] == e]).items() if k.startswith(("n", "mae"))}
                               for e in sorted({r["event"] for r in rows})}
         pooled["best"] = min(kinds, key=lambda k: pooled[f"mae_{k}"])
+        # 2026-10-05 court C4: the paths stay on the page, but a replay that loses to the series' own climatology is
+        # labelled, not presented as a forecast.
+        pooled["beats_climatology"] = pooled["mae_adjusted"] < pooled["mae_climatology"]
+        pooled["verdict"] = None if pooled["beats_climatology"] else REPLAY_NO_SKILL
     return pooled, {k: score([r for r in rows if r["key"] == k]) for k in {r["key"] for r in rows}}
 
 
@@ -364,9 +397,10 @@ def predict(beta, x):
 
 
 def evaluate(samples):
-    """Leave-one-event-out skill. samples: dicts {key, event, y, x (list or None), analog_y {label: y}}.
-    Returns (pooled skill, per-key skill, LOEO residuals per key, status). Gate: pooled MAE below both baselines
-    and the model beats the analog on at least half of the held-out events."""
+    """Leave-one-event-out skill. samples: dicts {key, event, y, x (list or None), analog_y {label: y},
+    clim_y {year: y}, clim_gap}. Returns (pooled skill, per-key skill, LOEO residuals per key, status). Gate: pooled
+    MAE below all three baselines (no change, analog, climatology) and the model beats the analog on at least half
+    of the held-out events."""
     usable = [s for s in samples if s["x"] is not None]
     events = sorted({s["event"] for s in usable})
     scored = []
@@ -379,15 +413,16 @@ def evaluate(samples):
                 continue
             own = [v for lab, v in s["analog_y"].items() if lab != e]
             a = statistics.mean(own) if own else (statistics.median(pool) if pool else None)
-            if a is None:
+            c = p_clim(s)
+            if a is None or c is None:
                 continue
-            scored.append({**s, "p_model": predict(beta, s["x"]), "p_nochange": 0.0, "p_analog": a})
+            scored.append({**s, "p_model": predict(beta, s["x"]), "p_nochange": 0.0, "p_analog": a, "p_climatology": c})
 
     def score(rows):
         if not rows:
             return None
         out = {"n": len(rows), "n_events": len({r["event"] for r in rows})}
-        for k in ("model", "nochange", "analog"):
+        for k in ("model", "nochange", "analog", "climatology"):
             out[f"mae_{k}"] = round(statistics.mean(abs(r[f"p_{k}"] - r["y"]) for r in rows), 1)
             out[f"hits_{k}"] = sum((r[f"p_{k}"] > 0) == (r["y"] > 0) for r in rows)
         return out
@@ -402,11 +437,12 @@ def evaluate(samples):
     wins = sum(v["mae_model"] < v["mae_analog"] for v in by_event.values())
     if pooled:
         pooled["events_model_beats_analog"] = f"{wins} of {len(by_event)}"
-        pooled["by_event"] = {e: {k: v[k] for k in ("n", "mae_model", "mae_nochange", "mae_analog")} for e, v in by_event.items()}
+        pooled["by_event"] = {e: {k: v[k] for k in ("n", "mae_model", "mae_nochange", "mae_analog", "mae_climatology")}
+                              for e, v in by_event.items()}
     if not pooled or pooled["n"] < MIN_SAMPLES or pooled["n_events"] < MIN_EVENTS:
         status = "insufficient_data"
     elif (pooled["mae_model"] < pooled["mae_nochange"] and pooled["mae_model"] < pooled["mae_analog"]
-          and 2 * wins >= len(by_event)):
+          and pooled["mae_model"] < pooled["mae_climatology"] and 2 * wins >= len(by_event)):
         status = "ok"
     else:
         status = "no_skill"
@@ -500,6 +536,8 @@ def build(listing, datapoints, enso_hist, model, outlook, regions, effects, toda
         key = f"{iso}:{commodity}"
         fit = (model.get(iso) or {}).get(MODEL_CROP.get(staple, ""), {})
         slope = fit.get("yield_pct_per_oni_nino") if isinstance(fit, dict) else None
+        # Climatology: every year's target; windows d years apart share months while 12d <= K_END - k0.
+        clim_y, clim_gap = year_targets(real, k0), (K_END - k0) // 12
         for e in events:
             p = peaks[e["label"]]
             y = peak_rise(real, p, k0)
@@ -507,7 +545,8 @@ def build(listing, datapoints, enso_hist, model, outlook, regions, effects, toda
                 continue
             rel = rel_3y(real, p + k0)
             x = [round(slope * e["oni"], 2), rel] if slope is not None and rel is not None else None
-            samples.append({"key": key, "event": e["label"], "y": y, "x": x, "analog_y": {}})
+            samples.append({"key": key, "event": e["label"], "y": y, "x": x, "analog_y": {},
+                            "clim_y": clim_y, "clim_gap": clim_gap})
         ay = {smp["event"]: smp["y"] for smp in samples if smp["key"] == key and smp["event"] in ANALOGS}
         wr = (world or {}).get(staple)
         med, n_years = seasonal_normal(real, bad)
@@ -557,10 +596,12 @@ def build(listing, datapoints, enso_hist, model, outlook, regions, effects, toda
         x = r.pop("_x_now")
         sk = per_key.get(key)
         r["skill"] = ({"mae_model": sk["mae_model"], "mae_nochange": sk["mae_nochange"], "mae_analog": sk["mae_analog"],
-                       "hits": {"model": sk["hits_model"], "nochange": sk["hits_nochange"], "analog": sk["hits_analog"]},
+                       "mae_climatology": sk["mae_climatology"],
+                       "hits": {"model": sk["hits_model"], "nochange": sk["hits_nochange"], "analog": sk["hits_analog"],
+                                "climatology": sk["hits_climatology"]},
                        "n_events": sk["n_events"]} if sk else None)
         row_ok = bool(sk and sk["n_events"] >= ROW_MIN_EVENTS and sk["mae_model"] < sk["mae_nochange"]
-                      and sk["mae_model"] < sk["mae_analog"])
+                      and sk["mae_model"] < sk["mae_analog"] and sk["mae_model"] < sk["mae_climatology"])
         if r["skill"]:
             r["skill"]["row_gate"] = "pass" if row_ok else "fail"
         if beta and x is not None and row_ok:
@@ -589,7 +630,7 @@ def build(listing, datapoints, enso_hist, model, outlook, regions, effects, toda
             "target": "peak real price over December..March+1 (months 0..15 from the peak) vs the origin month; at least 12 of 16 months observed.",
             "predictors": "shortfall_pct = the country's own fitted El Niño yield slope (enso_model.json, point estimate, significant or not) x the event's DJF ONI; rel_3y_pct = origin price vs the median of the 36 months before it. Import dependence (USDA PSD) left out: the file has no per-year history, so it cannot be known in advance for past events.",
             "n_specs_tried": 1,
-            "validation": "leave-one-event-out; baselines: no change (0%) and the analog average (mean of the same series' 2015-16 / 2023-24 peak rises, excluding the held-out event; pooled median if the series has none). Gate: pooled MAE below both baselines, the model beats the analog on at least half of the held-out events, at least 3 events and 10 samples. The half-of-events condition was added after the first run (pooled MAE edge over the analog of about 2 points); it makes the gate stricter, not looser. Row gate (added after the first run showed the pooled fit losing badly to no change on the managed rice markets): a row shows model numbers only if it has at least 5 held-out events of its own and its own MAE beats both baselines; its p10/p90 are its own leave-one-event-out misses around p50.",
+            "validation": "leave-one-event-out; baselines: no change (0%), the analog average (mean of the same series' 2015-16 / 2023-24 peak rises, excluding the held-out event; pooled median if the series has none) and a leave-one-year-out climatology (median of the same series' target, same origin offset and window, over every other year, El Niño or not, leaving out the held-out year and any year whose window shares a month with it; a sample with no such year is dropped from every table). Gate: pooled MAE below all three baselines, the model beats the analog on at least half of the held-out events, at least 3 events and 10 samples. The half-of-events condition was added after the first run (pooled MAE edge over the analog of about 2 points); it makes the gate stricter, not looser. The climatology baseline was added 2026-10-05 (court C4): the target is a peak rise, which drifts upward by construction, so beating no change proves little. Row gate (added after the first run showed the pooled fit losing badly to no change on the managed rice markets): a row shows model numbers only if it has at least 5 held-out events of its own and its own MAE beats all three baselines; its p10/p90 are its own leave-one-event-out misses around p50.",
             "hits": "direction = rise (>0) or not; no change always calls 'not'.",
             "effect_replay": ("The El Niño-only forward view. Taken out: general inflation (FPMA CPI-deflated prices); the "
                               "normal seasonal swing (per series, the median real log change of each calendar month in "
@@ -611,7 +652,9 @@ def build(listing, datapoints, enso_hist, model, outlook, regions, effects, toda
                               "it cancels in the total: normal year + excess = the past real path minus beta x the world "
                               "change; the split says how much of that is the usual season and how much is the El Niño "
                               "effect. A replay, not a forecast. Scored "
-                              "leave-one-event-out in replay_skill (same target and events as the model table)."),
+                              "leave-one-event-out in replay_skill (same target and events as the model table, same "
+                              "climatology baseline); replay_skill.beats_climatology and replay_skill.verdict say "
+                              "whether it beats the climatology, and the paths are shown either way."),
             "caveat": "Series in one region move together and each El Niño is one draw, so the effective sample is closer to the number of events than the number of rows.",
         },
         "tool_url": TOOL_URL,
@@ -677,16 +720,18 @@ def main():
     sk = out["skill"] or {}
     print(f"[price outlook] {len(out['rows'])} rows; model {out['model_status']}; "
           f"MAE model {sk.get('mae_model')} / no change {sk.get('mae_nochange')} / analog {sk.get('mae_analog')} "
-          f"on {sk.get('n')} samples, {sk.get('n_events')} events")
+          f"/ climatology {sk.get('mae_climatology')} on {sk.get('n')} samples, {sk.get('n_events')} events")
     rs = out["replay_skill"] or {}
     print(f"[price outlook] replay MAE El Niño-effect {rs.get('mae_adjusted')} / plain {rs.get('mae_plain')} / "
-          f"normal year {rs.get('mae_normal')} / no change {rs.get('mae_nochange')} on {rs.get('n')} samples")
+          f"normal year {rs.get('mae_normal')} / climatology {rs.get('mae_climatology')} / no change "
+          f"{rs.get('mae_nochange')} on {rs.get('n')} samples; best {rs.get('best')}; verdict {rs.get('verdict')}")
     # _meta.status is feed health (the page flags anything but "ok"); the model's own verdict
     # (ok / no_skill / insufficient_data) lives in data.model_status, which the page and validate_data read.
     path = write_json("enso_price_outlook.json", out, source=SOURCE, status="ok",
                notes=("Domestic staple prices (FPMA, CPI-deflated) in countries where El Niño's harvest damage is "
                       "documented, against 2015-16 and 2023-24 at the same stage. The model is published only when "
-                      "it passes its leave-one-event-out skill gate against no change and the analog average; see data.method."))
+                      "it passes its leave-one-event-out skill gate against no change, the analog average and a "
+                      "leave-one-year-out climatology; see data.method."))
     env = json.loads(path.read_text())
     env["_meta"].update({"method": out["method"], "universe_rule": UNIVERSE_RULE, "sources": [
         {"name": "FAO GIEWS FPMA Tool", "url": TOOL_URL, "api": API},
