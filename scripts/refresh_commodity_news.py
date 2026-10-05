@@ -436,7 +436,9 @@ WIRE_FEEDS = [
 # Tier 3 — institutional. Low cadence, high citability.
 INSTITUTIONAL_FEEDS = [
     ("FAO Newsroom",        "https://www.fao.org/feeds/fao-newsroom-rss"),
-    ("ReliefWeb",           "https://reliefweb.int/updates/rss.xml?view=headlines"),
+    # 2026-10-05 audit: the ReliefWeb RSS page refused the CI runner on every run since at least 5 Sep (one dead
+    # feed marks all nine commodities "partial"); the same headlines come from the ReliefWeb API (fetch_reliefweb_api).
+    ("ReliefWeb",           "https://api.reliefweb.int/v2/reports"),
     ("European Commission", "https://ec.europa.eu/commission/presscorner/api/rss?language=en"),
     # v9-07 — Copernicus C3S: monthly climate bulletins, verified live 7 Sep 2026.
     ("Copernicus C3S",      "https://climate.copernicus.eu/rss.xml"),
@@ -521,6 +523,36 @@ def fetch_institutional_rss(label, url):
             "url": safe_link,
             "published_at": _parse_rss_date(raw_date),
             "image": safe_img or None,
+        })
+    return out
+
+
+def fetch_reliefweb_api(url):
+    """Newest ReliefWeb reports from its API, in the same item shape as fetch_institutional_rss.
+
+    The appname is the one refresh_enso_news.py uses (RELIEFWEB_APPNAME, approved). Relevance is decided later by the
+    same local commodity filter as every other feed, so no query is sent.
+    """
+    import os
+    params = [("appname", os.environ.get("RELIEFWEB_APPNAME", "vreeken-foodshield-7k3n")), ("limit", 100),
+              ("sort[]", "date:desc"), ("fields[include][]", "title"), ("fields[include][]", "date.original"),
+              ("fields[include][]", "url_alias")]
+    r = http_get(url, params=params, timeout=45, retries=2)
+    rows = r.json().get("data") or []
+    if not rows:
+        raise RuntimeError("ReliefWeb API returned no reports")
+    out = []
+    for row in rows:
+        f = row.get("fields") or {}
+        link = sanitize_url(f.get("url_alias") or "")
+        if not link or not f.get("title"):
+            continue
+        out.append({
+            "title": sanitize_title(f.get("title")),
+            "domain": _domain_of(link),
+            "url": link,
+            "published_at": _parse_rss_date((f.get("date") or {}).get("original") or ""),
+            "image": None,
         })
     return out
 
@@ -789,7 +821,7 @@ def main():
     feed_ok = feed_failed = 0
     for label, url, tier in ALL_FEEDS:
         try:
-            items = fetch_institutional_rss(label, url)
+            items = fetch_reliefweb_api(url) if label == "ReliefWeb" else fetch_institutional_rss(label, url)
             commodity_status[f"_feed:{label}"] = "ok"
             feed_ok += 1
             print(f"  [{tier[:5]}] {label}: {len(items)} raw items (filtered locally)")

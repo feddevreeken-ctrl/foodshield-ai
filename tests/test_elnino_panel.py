@@ -1492,18 +1492,18 @@ def main() -> int:
                 const s = c.querySelectorAll(':scope .enso-cp-state');
                 return s.length === 1 ? s[0].textContent.trim().toUpperCase() : 'INVALID';
             });
-            const fixed = /^(SCENARIO|PUBLISHED|MODELLED|OBSERVED|BEYOND FITTED RANGE|NOT YET MEASURED)$/;
+            const fixed = /^(SCENARIO|PUBLISHED|MODELLED|OBSERVED|BEYOND PAST WINTERS|NOT YET MEASURED)$/;
             const answerBullets = document.querySelectorAll('#enso-outlook .enso-hv-answer .enso-ol-lead .enso-bullets > li');
             const ownMarks = [...ex.querySelectorAll('[data-exabs-panel="own"]')];
             const gapMarks = [...ex.querySelectorAll('[data-exabs-panel="gap"]')];
             const key = ch.querySelector('.enso-cp-key'), absorb = ch.querySelector('.enso-cp-absorb');
             return shock.length === 5 && baseline.length === 2 && states.every(s => fixed.test(s))
-                && states[0] === 'SCENARIO' && states[1] === 'PUBLISHED' && /^(MODELLED|BEYOND FITTED RANGE)$/.test(states[2]) && states[3] === 'SCENARIO'
+                && states[0] === 'SCENARIO' && states[1] === 'PUBLISHED' && /^(MODELLED|BEYOND PAST WINTERS)$/.test(states[2]) && states[3] === 'SCENARIO'
                 && /^(SCENARIO|NOT YET MEASURED)$/.test(states[4]) && states[5] === 'MODELLED' && states[6] === 'OBSERVED'
                 && shock.every(n => n.querySelectorAll('.enso-cp-value').length === 1 && n.querySelectorAll('.enso-cp-dot').length === 1)
                 && ch.querySelectorAll('.enso-cp-flow > .enso-cp-node .enso-cp-segment').length === 4
                 && !!key && (() => { const cls = el => [...el.classList].find(c => /^is-/.test(c)), used = new Set([...ch.querySelectorAll('.enso-cp-flow .enso-cp-segment')].map(cls)), keyed = [...key.querySelectorAll('svg')].map(cls);
-                    const NAME = {'is-observed': 'Observed', 'is-published': 'Published', 'is-modelled': 'Modelled', 'is-scenario': 'Scenario', 'is-extrapolated': 'Beyond the fitted range', 'is-unmeasured': 'Not yet measured'};
+                    const NAME = {'is-observed': 'Observed', 'is-published': 'Published', 'is-modelled': 'Modelled', 'is-scenario': 'Scenario', 'is-extrapolated': 'Beyond past winters', 'is-unmeasured': 'Not yet measured'};
                     return used.size > 0 && keyed.length === used.size && [...used].every(c => keyed.includes(c) && key.textContent.includes(NAME[c])) && !/Modelled, published or scenario/.test(key.textContent); })()
                 && !!absorb && /Ability to absorb \(existing vulnerability, not the scenario's impact\)/.test(absorb.textContent)
                 && !ch.querySelector('.enso-chain-card, .enso-chain-shock, .enso-chain-baseline')
@@ -1654,7 +1654,7 @@ def main() -> int:
                 const lab = r.querySelector('.enso-hv-track').getAttribute('aria-label');
                 return r.textContent.includes(n0(c.p50)) && lab.includes(n0(c.p05)) && lab.includes(n0(c.p95))
                     && (!!r.querySelector('.enso-hv-capped') === capped);
-            }) && plate.textContent.includes(Math.round(D.target.prob_oni_above_record * 100) + '% of forecast draws exceed ONI +' + D.target.record_oni.toFixed(1))
+            }) && plate.textContent.includes(Math.round(D.target.prob_oni_above_record * 100) + '% of simulated winters exceed ONI +' + D.target.record_oni.toFixed(1))
                 && plate.textContent.includes('extrapolation: no fitted winter here') && plate.dataset.kind !== 'observed'
                 && !!plate.querySelector('details.enso-evidence-note') && !document.querySelector('#enso-dist .enso-plate');
         }"""))
@@ -1833,7 +1833,7 @@ def main() -> int:
             const hi = T.threads.filter(t => t.event_confidence.n_independent >= 2);
             const confRows = [...plate.querySelectorAll('.plate-body .enso-th-row')];
             const rows = [...confRows, ...early.querySelectorAll('.plate-body .enso-th-row')], top = T.threads.filter(t => t.event_confidence.n_independent >= 2 || t.material);   // confirmed by independent publishers, plus material early signals
-            const ATT = { attributed: 'Attributed', pattern_consistent: 'Pattern-consistent, not attributed', not_assessed: 'Not assessed' };
+            const ATT = { attributed: 'Source names El Niño', pattern_consistent: 'Pattern-consistent, not attributed', not_assessed: 'Not assessed' };
             const st = T.stats, lede = plate.querySelector('.enso-plate-lede').textContent;
             return rows.length >= 4 && rows.every(r => {
                 const t = top.find(x => x.id === r.dataset.thread); if (!t) return false; const c = t.event_confidence;
@@ -2035,7 +2035,7 @@ def main() -> int:
                     // Response holds every country the Responses chip marks for the appeal and anticipatory action.
                     const T = (await (await fetch('data/enso_event_threads.json')).json()).data;
                     const sit = (await (await fetch('data/enso_situation.json')).json()).data;
-                    const ATT = { attributed: 'Attributed', pattern_consistent: 'Pattern-consistent, not attributed', not_assessed: 'Not assessed' };
+                    const ATT = { attributed: 'Source names El Niño', pattern_consistent: 'Pattern-consistent, not attributed', not_assessed: 'Not assessed' };
                     const open = T.threads.filter(t => t.state !== 'resolved' && t.state !== 'stale' && t.iso3.length);
                     const want = { confirmed: open.filter(t => t.event_confidence.n_independent >= 2), early: open.filter(t => t.event_confidence.n_independent < 2 && t.material) };
                     const sec = k => document.querySelector('#enso-map-ranking [data-rq="' + k + '"]');
@@ -2054,8 +2054,8 @@ def main() -> int:
                     const respIsos = [...(sit.fao_wfp_appeal || {}).priority_iso3 || [], ...((sit.wfp_projection || {}).aa_triggered || {}).iso3 || []];
                     const respOk = !!rs && +rs.querySelector('.enso-rq-h i').textContent === rrows.length
                         && respIsos.every(i => rrows.some(r => r.dataset.mapCountry === i))
-                        && rrows.every(r => ['Attributed', 'Not assessed'].includes(r.querySelector('.enso-rq-att').textContent)
-                            && (!/FAO and WFP joint/.test(r.querySelector('.enso-rq-what').textContent) || r.querySelector('.enso-rq-att').textContent === 'Attributed'));
+                        && rrows.every(r => ['Source names El Niño', 'Not assessed'].includes(r.querySelector('.enso-rq-att').textContent)
+                            && (!/FAO and WFP joint/.test(r.querySelector('.enso-rq-what').textContent) || r.querySelector('.enso-rq-att').textContent === 'Source names El Niño'));
                     const m = document.getElementById('enso-map').getBoundingClientRect();
                     const a = document.getElementById('enso-map-ranking').getBoundingClientRect();
                     const title = document.querySelector('#enso-map-ranking .enso-legend-t').textContent;
@@ -2531,7 +2531,7 @@ def main() -> int:
                 return r.placebo.current_percentile === pc && r.placebo.current_outside_normal_spread === out && n === r.normal_years.n && n >= 3 && n <= 8
                     && rows.some(x => x.querySelector('.enso-cf-pct') && x.querySelector('.enso-cf-pct').textContent.includes(out ? 'outside the benchmark-year spread' : 'inside the benchmark-year spread')
                         && x.querySelector('.enso-cf-pct').textContent.includes(n + ' comparable non-El-Niño years')
-                        && (out || x.querySelector('.enso-cf-pct').textContent.includes(ord(pc) + ' percentile')));
+                        && (out || x.querySelector('.enso-cf-pct').textContent.includes('higher than ' + y.filter(v => v < ex).length + ' of ' + n)));
             }) && C.rows.some(r => !r.placebo.current_outside_normal_spread);
         }"""))
 
@@ -2554,10 +2554,10 @@ def main() -> int:
             return rowsEl.length === included.length && included.every(r => rowsEl.some(b => b.dataset.priceCf === r.iso && b.textContent.includes(verdict(r))))
                 && rowsEl[0].dataset.priceCf === 'ZAF' && rowsEl[1].dataset.priceCf === 'ZMB'
                 && !!hero.querySelector('.pr2-strip-legend') && !!hero.querySelector('.pr2-strip-scale') && /Other monitored markets/.test(txt) && /Falling prices after harvest are normal/.test(txt)
-                && za.textContent.includes('South Africa') && za.textContent.includes('WHOLESALE') && za.textContent.includes('NORMAL RANGE') && za.textContent.includes('+5.0% vs benchmark') && za.textContent.includes(dir(selected)) && za.textContent.includes('63rd percentile of 8 normal years')
+                && za.textContent.includes('South Africa') && za.textContent.includes('WHOLESALE') && za.textContent.includes('NORMAL RANGE') && za.textContent.includes('+5.0% vs benchmark') && za.textContent.includes(dir(selected)) && za.textContent.includes('higher than ' + Object.values(selected.placebo.by_year).filter(v => v < selected.excess_pct.vs_fx_and_world).length + ' of ' + selected.placebo.n + ' normal years')
                 && zm.textContent.includes('Zambia') && zm.textContent.includes('RETAIL') && zm.textContent.includes(verdict(C.rows.find(r => r.iso === 'ZMB'))) && zm.textContent.includes(dir(C.rows.find(r => r.iso === 'ZMB')))
                 && !/PRICES FALLING|NOT YET UNUSUAL/.test(hero.textContent)
-                && (above === 0 ? head.startsWith('No unusual price pressure in any of ' + included.length + ' monitored markets') : above * 2 >= included.length ? head.startsWith('Broad unusual price pressure: ' + above + ' of ' + included.length) : head.startsWith('Unusual price pressure is visible in ' + above + ' of ' + included.length))
+                && (above === 0 ? head.startsWith('No unusual price pressure in any of ' + included.length + ' markets with a normal-year benchmark') : above * 2 >= included.length ? head.startsWith('Broad unusual price pressure: ' + above + ' of ' + included.length) : head.startsWith('Unusual price pressure is visible in ' + above + ' of ' + included.length))
                 && !/El Niño/.test(head)
                 && (!thinRows.length || (!!thin && thinRows.every(r => thin.textContent.includes(r.normal_years.n + ' normal years')) && !thin.open))
                 && (() => { const f = hero.querySelector('.pr2-fwd'); return !!f && f.querySelector('.pr2-label').textContent === 'Forward price forecast' && f.querySelector('.pr2-fwd-v').textContent === 'Not published'

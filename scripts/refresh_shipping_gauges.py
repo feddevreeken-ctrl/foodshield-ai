@@ -484,7 +484,7 @@ def manaus(today: date) -> dict:
 
 
 def acp_advisories(today: date) -> dict:
-    """Newest Advisories to Shipping listed by the Panama Canal Authority this year.
+    """Newest Advisories to Shipping listed by the Panama Canal Authority this year (or last, in January).
 
     Headers only: the page lists number, title and PDF link, never a date. The El Niño shipping plate compares the
     newest number with the advisory a person last read (data/enso_lanes.json live_2026.latest_advisory) and says so
@@ -494,11 +494,14 @@ def acp_advisories(today: date) -> dict:
     rows = []
     for url, ident, title in re.findall(r'<a href="([^"]+\.pdf)"[^>]*>.*?<h3>(A-\d+-\d{4})</h3><div class="d_des">(.*?)</div>', html, re.S | re.I):
         m = re.match(r"A-(\d+)-(\d{4})$", ident)
-        if m and int(m.group(2)) == today.year:
-            rows.append({"id": ident, "number": int(m.group(1)), "title": re.sub(r"\s+", " ", title).strip(), "url": url})
+        # 2026-10-05 audit: last year's advisories count too, or the first January run finds none and the gauge goes
+        # partial until the Canal issues A-1 of the new year. Newest = latest year, then highest number.
+        if m and int(m.group(2)) in (today.year, today.year - 1):
+            rows.append({"id": ident, "number": int(m.group(1)), "year": int(m.group(2)),
+                         "title": re.sub(r"\s+", " ", title).strip(), "url": url})
     if not rows:
-        raise RuntimeError("ACP advisory listing parsed no advisories for this year")
-    rows.sort(key=lambda r: -r["number"])
+        raise RuntimeError("ACP advisory listing parsed no advisories for this year or last")
+    rows.sort(key=lambda r: (-r["year"], -r["number"]))
     # Operational fields for the newest two only. Failure here must never lose the listing.
     for r in rows[:2]:
         try:
