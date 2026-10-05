@@ -81,7 +81,7 @@ test('shipping opens with the lane board (linked rows, the rest folded), then Pa
  assert.equal((out.match(/data-board-lane=/g)||[]).length,9);
  const pan=S.lanes.lanes.find(l=>l.id==='panama');const todayIso=new Date().toISOString().slice(0,10);assert(out.includes(pan.live_2026.steps.filter(x=>(x.booking_from||x.effective)<=todayIso).at(-1).total+' slots/day for transits from'));
  for (const id of ['amazon','rhine','mississippi']) { const row=out.match(new RegExp('data-board-lane="'+id+'"[\\s\\S]*?(?=data-board-lane=|</figure>)'))[0]; assert(row.includes('2026'),id+' has a dated September observation'); }
- assert(out.includes('Booking slots a day, from the Canal’s advisories'));assert(out.includes('Advisories and operating context'));assert(out.includes('Sep 2025'));assert(out.includes('Sep 2026'));
+ assert(out.includes('Booking slots a day')&&out.includes('class="enso-pan-strip"')&&out.includes('The dated advisories'));assert(out.includes('Advisories and operating context'));assert(out.includes('Sep 2025'));assert(out.includes('Sep 2026'));
  assert.equal((out.match(/data-lane=/g)||[]).length,S.lanes.lanes.length);
  for(const l of S.lanes.lanes){if(l.counter_evidence) assert(out.includes(l.counter_evidence.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')));}
 });
