@@ -137,7 +137,8 @@ def main():
             "median_peak_pct": round(statistics.median(g["peak_index"] for g in got) - 100, 1),
             "median_peak_k": statistics.median_low(sorted(g["peak_k"] for g in got)),
             "range_peak_pct": [round(min(g["peak_index"] for g in got) - 100, 1), round(max(g["peak_index"] for g in got) - 100, 1)],
-            "n_below_base_now": sum(1 for g in got if g["last"][1] < 100),
+            # 2026-10-05: the same +-3% flat band the page's tables use ("unchanged"), so the counts agree.
+            "n_below_base_now": sum(1 for g in got if g["last"][1] < 97),
             "last_k": max(g["last"][0] for g in got),
         }
     # 2026-10-04: during an FPMA outage every series came back without real prices and an empty file went out.

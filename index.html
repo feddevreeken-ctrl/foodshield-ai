@@ -44299,7 +44299,7 @@ function showCommodityDetail(key) {
     S.explicitScenario = q.level != null && publishedLevels().some(function (l) { return l[1] === q.level; });
     S.oni = q.level != null && publishedLevels().some(function (l) { return l[1] === q.level; })
       ? q.level : S.oniLive != null ? keyFor(S.oniLive)[1] : 1.5;
-    var valid = MODES_MODELLED.concat(MODES_LIVE, ['none', 'harvest27']).indexOf(q.mode) >= 0;
+    var valid = MODES_MODELLED.concat(MODES_LIVE, ['none', 'harvest27', 'rain']).indexOf(q.mode) >= 0;  /* 'rain': the Reported rain pattern (2026-10-05 bug hunt) */
     S.mode = (honourLinkMode !== false && valid) ? q.mode : (LENS_DEFAULT[S.sub] || 'sst');
     if (honourLinkMode === false) S.linkMode = null;
   };
@@ -44431,7 +44431,9 @@ function showCommodityDetail(key) {
      ledger on the same lens says -39%. */
   function cropEffect(c) {
     var b = cropSlope(c);
-    return (typeof b !== 'number' || !isFinite(b) || !modelInterval()) ? null : (Math.exp(b / 100 * modelOni()) - 1) * 100;
+    /* Held at the end rung past the fitted range, like the exposure levels (2026-10-05 bug hunt: map and ledger disagreed). */
+    var band = modelInterval();
+    return (typeof b !== 'number' || !isFinite(b) || !band) ? null : (Math.exp(b / 100 * (band.clamped ? band.oni : modelOni())) - 1) * 100;
   }
   /* A pair paints only if the slope of the phase in view passes its own false-discovery test across every
      fitted pair (build_enso_model.py: nino_signal / nina_signal). The joint signal let pairs through that the
@@ -45135,7 +45137,7 @@ function showCommodityDetail(key) {
         '<em class="sc-c">' + (x.n ? x.n : '') + '</em><i class="sc-b"></i><b class="sc-l">' + esc(x.lab) + '</b></span>';
     }).join('');
     var zones = past ? (function () { var fc = sstFcRange(), now = S.oniLive; return '<span class="sc-zone-t" style="grid-column:1/-1">Past El Niños, observed · bar = peak ONI (NOAA’s El Niño index)' +
-        (typeof now === 'number' ? ' · <b>line: 2026 so far, ONI ' + num(now, 1) + ((S.enso && S.enso.latest && S.enso.latest.season) ? ' (' + esc(seasonName(S.enso.latest.season)) + ')' : '') + '</b>' : '') +
+        (typeof now === 'number' ? ' · <b>line: ' + ((S.enso && S.enso.latest && S.enso.latest.year) || new Date().getUTCFullYear()) + ' so far, ONI ' + num(now, 1) + ((S.enso && S.enso.latest && S.enso.latest.season) ? ' (' + esc(seasonName(S.enso.latest.season)) + ')' : '') + '</b>' : '') +
         (fc ? ' · <b class="is-fc">dashed: Dec–Feb forecast, about ONI ' + num(fc.m, 1) + '</b>' : '') + ' · number = mapped events</span>'; })()
       : st.zones.map(function (z) { return '<button type="button" class="sc-zone' + (z.fc ? ' is-fc' : '') + '" data-sst-view="' + z.view + '" tabindex="-1" style="grid-column:' + (z.from + 1) + ' / span ' + z.n + '">' + z.label + '</button>'; }).join('') +
         (function () { var z = st.zones.filter(function (q) { return q.view === 'now'; })[0]; return z ? '<i class="sc-band" style="grid-column:' + (z.from + 1) + ' / span ' + z.n + '"></i>' : ''; })();
@@ -46592,8 +46594,10 @@ function showCommodityDetail(key) {
     var oddsText = (function () {
       var ss = (S.strengths && S.strengths.seasons) || [];
       var mn = function (x) { var m = String(x.months || '').split(' '); return m.length === 3 ? m[0] + '–' + m[2] : x.season; };
-      var hi = ss.filter(function (x) { return ['SON', 'OND', 'NDJ'].indexOf(x.season) >= 0 && x.classes['very strong El Niño'] >= 90; });
-      var djf = ss.filter(function (x) { return x.season === 'DJF'; })[0];
+      /* 2026-10-05 bug hunt: the first run of seasons at 90% or more, whatever they are, then the season after it. */
+      var v = function (x) { return x.classes['very strong El Niño'] || 0; }, i0 = ss.findIndex(function (x) { return v(x) >= 90; }), hi = [];
+      for (var i = i0; i0 >= 0 && i < ss.length && v(ss[i]) >= 90; i++) hi.push(ss[i]);
+      var djf = i0 >= 0 ? ss[i0 + hi.length] : null;
       if (!hi.length) return null;
       return '<span title="' + hi.map(function (x) { return mn(x) + ' ' + x.classes['very strong El Niño'] + '%'; }).join(', ') + '">more than 90%</span> for a very strong event (RONI ≥ +2.0 °C) from ' + mn(hi[0]) + ' through ' + mn(hi[hi.length - 1]) +
         (djf ? ', <span class="enso-num">' + djf.classes['very strong El Niño'] + '%</span> for ' + mn(djf) : '');
@@ -46824,13 +46828,18 @@ function showCommodityDetail(key) {
     var add = function (win, when, text, kind, tab, label, row) { if (!win || win.end < t0 || win.start > t1) return; items.push({ s: Math.max(win.start, t0), e: win.end, when: when, text: text, kind: kind, tab: tab, label: label, row: row || label }); };
     /* CPC: the peak seasons and when neutral becomes likeliest. */
     var ss = (S.strengths && S.strengths.seasons) || [], yr = now.getUTCFullYear();
+    /* 2026-10-05 bug hunt: each season's year comes from CPC's issue year and the season order, not today's calendar year
+       (a DJF peak or a January visit dated the bars a year off, and add() dropped them). */
+    var issY = +((String((S.strengths || {}).issued || '').match(/(\d{4})/) || [])[1]) || yr, sy = {};
+    (function () { var y = issY, prev = -1; ss.forEach(function (x) { var m = String(x.months || '').split(' '), a = MON3.indexOf(m[0]), b = MON3.indexOf(m[m.length - 1]);
+      if (prev >= 0 && a < prev) y++; prev = a; sy[x.season] = { a: m[0] + ' ' + y, b: m[m.length - 1] + ' ' + (b < a ? y + 1 : y) }; }); })();
     var peak = ss.filter(function (x) { return (x.classes['very strong El Niño'] || 0) >= 90; });
     if (peak.length) {
-      var p0 = peak[0], p1 = peak[peak.length - 1], w0 = parseWindow(p0.months.split(' ')[0] + ' ' + yr), w1 = parseWindow(p1.months.split(' ').slice(-1)[0] + ' ' + (p1.season === 'NDJ' ? yr + 1 : yr));
+      var p0 = peak[0], p1 = peak[peak.length - 1], w0 = sy[p0.season] && parseWindow(sy[p0.season].a), w1 = sy[p1.season] && parseWindow(sy[p1.season].b);
       if (w0 && w1) add({ start: w0.start, end: w1.end }, span(w0.start, w1.end) + ' (' + p0.season + '–' + p1.season + ')', 'The event peaks: CPC puts a very strong El Niño at ' + peak.map(function (x) { return x.classes['very strong El Niño'] + '% ' + x.season; }).join(', ') + ' (RONI ≥ +2.0 °C).', 'forecast', 'elnino', 'Very strong peak (CPC)');
     }
     var neu = ss.filter(function (x) { var c = x.classes, best = Object.keys(c).sort(function (a, b) { return c[b] - c[a]; })[0]; return best === 'neutral'; })[0];
-    if (neu) { var nw = parseWindow(neu.months.split(' ')[0] + ' ' + (yr + 1)); if (nw) add({ start: nw.start, end: nw.start + 90 * 864e5 }, span(nw.start, nw.start + 85 * 864e5) + ' (' + neu.season + ')', 'The event fades: CPC makes neutral the likeliest state (' + neu.classes.neutral + '%).', 'forecast', 'elnino', 'Neutral likeliest (CPC)'); }
+    if (neu) { var nw = sy[neu.season] && parseWindow(sy[neu.season].a); if (nw) add({ start: nw.start, end: nw.start + 90 * 864e5 }, span(nw.start, nw.start + 85 * 864e5) + ' (' + neu.season + ')', 'The event fades: CPC makes neutral the likeliest state (' + neu.classes.neutral + '%).', 'forecast', 'elnino', 'Neutral likeliest (CPC)'); }
     /* Regions: FEWS NET's El Niño windows, the official seasonal outlooks the map marks, IPC famine-risk lines and the
        map's modelled rain lean, one row per region. */
     var regOf = function (lat, lon) { return N12_REG.filter(function (r) { return lat >= r.box[0] && lat <= r.box[1] && lon >= r.box[2] && lon <= r.box[3]; })[0] || null; };
@@ -47393,11 +47402,18 @@ function showCommodityDetail(key) {
       ['convection', '180°', 'Rain · 160°E–180°, now east of 180°', {normal:[5,5,42,38],elnino:[42,7,80,37],lanina:[3,5,32,38]}],
       ['upwelling', '80°W', 'Upwelling · 80°W', {normal:[78,36,92,60],elnino:[78,36,92,52],lanina:[78,38,92,62]}]
     ];
+    /* 2026-10-05 bug hunt: the readings and their dates come from the mechanism file (hand-kept, dated), never typed here,
+       so the plate does not keep saying "10 Sept" after CPC's next update. */
+    var mchain = M.chain || [], mDate = stamp(metaDate('mech'));
+    var mNow = function (id, fb) { var c = mchain.filter(function (x) { return x.id === id; })[0] || {}, t = String(c.now || ''), m = t.match(/^.*?\.(?=\s|$)/); return (m ? m[0] : t) || fb; };
+    var mSoi = (function () { var c = mchain.filter(function (x) { return x.id === 'soi'; })[0] || {}, mon = (String(c.unit || '').match(/(January|February|March|April|May|June|July|August|September|October|November|December)/) || [])[1];
+      return typeof c.metric === 'number' ? (mon ? mon + ' ' : '') + 'Troup SOI ' + (c.metric < 0 ? '−' : '+') + Math.abs(c.metric).toFixed(1) : mNow('soi', 'The SOI is strongly negative'); })();
     var copy = {
-      trades: ['Trade winds', 'Easterly winds push warm surface water toward Indonesia.', 'Westerly anomalies have persisted since mid-March 2026.', 'CPC, 10 Sept 2026 · low-level winds'],
-      soi: ['Darwin and Tahiti pressure', 'The pressure difference drives the easterly trades.', 'July Troup SOI −29.1' + (soiLive ? '; ' + soiLive : '') + '.', 'BoM' + (soiEnd ? ', ' + soiEnd : '') + ' · Troup SOI'],
-      convection: ['Rainfall shifts east', 'Convection concentrates rain over the Maritime Continent.', 'Rain is enhanced in the central and eastern Pacific and suppressed over Indonesia.', 'CPC, 10 Sept 2026 · convection and rainfall'],
-      warm_water: ['Warm water crosses the date line', 'The thermocline is deep in the west and shallow off South America.', 'The eastern thermocline has deepened, with anomalies above +10.0 °C at depth.', 'CPC, 10 Sept 2026 · subsurface temperatures'],
+      trades: ['Trade winds', 'Easterly winds push warm surface water toward Indonesia.', 'Westerly wind anomalies persist.', 'Mechanism snapshot, read ' + mDate + ' · low-level winds'],
+      soi: ['Darwin and Tahiti pressure', 'The pressure difference drives the easterly trades.', mSoi + (soiLive ? '; ' + soiLive : '') + '.', 'BoM' + (soiEnd ? ', ' + soiEnd : '') + ' · Troup SOI'],
+      convection: ['Rainfall shifts east', 'Convection concentrates rain over the Maritime Continent.', 'Rain is enhanced in the central and eastern Pacific and suppressed over Indonesia.', 'Mechanism snapshot, read ' + mDate + ' · convection and rainfall'],
+      warm_water: ['Warm water crosses the date line', 'The thermocline is deep in the west and shallow off South America.', 'The eastern thermocline has deepened' + (function () { var c = mchain.filter(function (x) { return x.id === 'warm_water'; })[0] || {};
+        return typeof c.metric === 'number' ? ', with anomalies near ' + (c.metric < 0 ? '−' : '+') + Math.abs(c.metric).toFixed(0) + ' °C at depth.' : '.'; })(), 'Mechanism snapshot, read ' + mDate + ' · subsurface temperatures'],
       upwelling: ['Upwelling off Peru', 'Cold, nutrient-rich water supplies the anchoveta fishery.', 'A warm coastal layer caps the upwelling.',
         'CPC, ' + weeklyDate(weekly.date) + ' · Niño 1+2 ' + num(weekly.nino12_anom, 1) + ' °C']
     };
@@ -47637,8 +47653,8 @@ function showCommodityDetail(key) {
           (didFail
             ? 'Agency indices could not be loaded. ' +
               'Retry to load the comparison.'
-            : 'No index rows were published in the last collector run, so there is ' +
-              'awaiting the next agency update.') +
+            : 'No index rows were published in the last collector run; ' +
+              'the comparison returns with the next agency update.') +
         '</div>';
       return;
     }
@@ -48104,6 +48120,8 @@ function showCommodityDetail(key) {
     var snap = scenarioSnap(), band = modelInterval();
     if (snap) return 'Explicit scenario: ' + snap.label + ', ONI ' + num(snap.centre, 1);
     if (!band) return 'Observed ONI outside the published same-phase rungs; modelled values unavailable';
+    /* 2026-10-05 bug hunt: past the strongest rung the band holds the end rung; say the observed value and that it is held. */
+    if (band.clamped) return intervalBand(band.oniRaw) + ' at the observed ' + num(band.oniRaw, 2) + ', beyond the strongest fitted winter; modelled values held at ' + num(band.oni, 1);
     if (band.lo === band.hi) return intervalBand(band.oni) + ' at the observed ' + num(band.oni, 2) + ', on a published rung';
     return intervalBand(band.oni) + ' by ONI' + roniClassNote() + ', interpolated between the ' + num(band.lo[1], 1) + ' and ' + num(band.hi[1], 1) + ' rungs at the observed ' + num(band.oni, 2);
   }
@@ -48737,7 +48755,10 @@ function showCommodityDetail(key) {
   function acpPending() {
     var L = S.gauges && S.gauges.acp_advisories && S.gauges.acp_advisories.latest, pan = ((S.lanes && S.lanes.lanes) || []).filter(function (l) { return l.id === 'panama'; })[0];
     var seen = pan && pan.live_2026 && pan.live_2026.latest_advisory && String(pan.live_2026.latest_advisory.advisory || '').match(/^A-(\d+)-(\d{4})$/);
-    if (!L || !seen || L.number <= +seen[1]) return '';
+    /* 2026-10-05 bug hunt: compare year first, so A-1-2027 counts as newer than A-36-2026. */
+    if (!L || !seen) return '';
+    var ly = +(L.year || (String(L.id || '').match(/-(\d{4})$/) || [])[1]) || 0;
+    if (ly < +seen[2] || (ly === +seen[2] && L.number <= +seen[1])) return '';
     return '<b>New official advisory, not yet reviewed:</b> <a href="' + esc(safeUrl(L.url)) + '" target="_blank" rel="noopener">' + esc(L.id) + '</a>, ' + esc(L.title) + ' (Panama Canal Authority). The Panama figures here are as of ' + esc(pan.live_2026.latest_advisory.advisory) + '.';
   }
   /* One data adapter for the five tab figures and their evidence titles. */
@@ -49104,7 +49125,8 @@ function showCommodityDetail(key) {
     var op = document.querySelector && document.querySelector('button[data-op="0"]'); if (op && /^Map · /.test(op.textContent || '') && m && m.title) op.textContent = 'Map · ' + m.title;
     var frame = document.getElementById('enso-mapwrap');
     if (frame) { frame.classList.toggle('is-modelled', m.kind === 'modelled' || m.kind === 'estimated'); frame.classList.toggle('is-published', m.kind === 'published'); frame.dataset.kind = m.kind; }
-    var marks = {impact:'Land colour: fitted production change at ONI ' + num(modelOni(), 1) + ', direction only', crop:'Land colour: strongest fitted crop response',
+    var mb = modelInterval(), mOni = mb && mb.clamped ? mb.oni : modelOni();
+    var marks = {impact:'Land colour: fitted production change at ONI ' + num(mOni, 1) + (mb && mb.clamped ? ' (held at the strongest fitted winter; observed ' + num(mb.oniRaw, 1) + ')' : '') + ', direction only', crop:'Land colour: strongest fitted crop response',
       coverage:'Land colour: production covered by the fit', asap:'Land colour: JRC ASAP hotspot class',
       gdacs:'Land colour: reported drought and flood severity', ipc:'Land colour: population in IPC phase 3+',
       sst:'Sea: °C against the 1971–2000 average'};
@@ -52447,7 +52469,7 @@ function showCommodityDetail(key) {
           (pw ? '<p class="enso-meta">Baseline ' + esc(pwWindow(pw.baseline_window)) + ' · IMF PortWatch, read ' + esc(stamp(metaDate('portwatch'))) + '</p>' : ln.portwatch_key ? '<p>AIS data unavailable; awaiting the next PortWatch update.</p>' : '') +
           (ln.sources || []).map(function (src) { return '<p><a href="' + esc(safeUrl(src.url)) + '" target="_blank" rel="noopener">' + esc(src.label) + '</a></p>'; }).join('') + '</div></div></details></td></tr>';
       }).join('') + '</tbody></table>' + (lanes.length > 3 ? '</details>' : '') + '</div><figcaption class="enso-log">Attribution describes each lane’s mechanism; today’s transit changes have several causes.</figcaption></figure></details>';
-    el.innerHTML = laneBoard(lanes, readOn) + out;
+    el.innerHTML = (lanes.length ? laneBoard(lanes, readOn) : '<p class="enso-meta">No lanes in the loaded feed (' + esc(stamp(metaDate('lanes'))) + ').</p>') + out;
     /* 2026-09-29 audit (Fedde: "Promote this under map"): the gateway ports lead, straight under the map, then the lanes. */
     var portsP = el.querySelector('.enso-ports-plate'), boardP = el.querySelector('.enso-lane-board'); if (portsP && boardP) boardP.before(portsP);
     /* 2026-09-30 (Fedde: "in shipping the gutan block should be promoted up"): the Gatún outlook leads, then the ports. */
@@ -52582,7 +52604,9 @@ function showCommodityDetail(key) {
     var cfLede = function () {
       if (!cfRows.length) return '';
       var hi = cfRows.filter(function (r) { return r.excess_pct.range_fx_and_world[0] > 0; }), lo = cfRows.filter(function (r) { return r.excess_pct.range_fx_and_world[1] < 0; });
-      return '<b>Against the normal-season benchmark:</b> below its band in ' + lo.length + ' of ' + cfRows.length + ' markets' + (lo.length ? ' (' + lo.map(function (r) { return esc(nameFor(r.iso)); }).join(', ') + ')' : '') + ', above it in ' + hi.length + '. FoodShield tests seasonality, currency and world-price movements; adjustments are kept only where the historical relationship is supported. Not an El Niño effect. ' + cfRows.filter(function (r) { return !r.placebo.current_outside_normal_spread; }).length + ' of ' + cfRows.length + ' differences sit inside the spread of the same calculation run on normal years (' + Math.min.apply(null, cfRows.map(function (r) { return r.placebo.n; })) + ' to ' + Math.max.apply(null, cfRows.map(function (r) { return r.placebo.n; })) + ' normal years per market).';
+      /* 2026-10-05 bug hunt: the test is "the whole range of the excess sits below (above) zero", not "below the band" the
+         plate prints beside each market, so say what is tested. */
+      return '<b>Against the normal-season benchmark:</b> clearly below it in ' + lo.length + ' of ' + cfRows.length + ' markets (the whole excess range under zero)' + (lo.length ? ': ' + lo.map(function (r) { return esc(nameFor(r.iso)); }).join(', ') : '') + '; clearly above it in ' + hi.length + '. FoodShield tests seasonality, currency and world-price movements; adjustments are kept only where the historical relationship is supported. Not an El Niño effect. ' + cfRows.filter(function (r) { return !r.placebo.current_outside_normal_spread; }).length + ' of ' + cfRows.length + ' differences sit inside the spread of the same calculation run on normal years (' + Math.min.apply(null, cfRows.map(function (r) { return r.placebo.n; })) + ' to ' + Math.max.apply(null, cfRows.map(function (r) { return r.placebo.n; })) + ' normal years per market).';
     };
     var cfMethod = function () { var M = (S.pcf && S.pcf.method) || {}, n = cfRows.map(function (r) { return r.normal_years.n; }), used = cfRows.filter(function (r) { return r.regression.used_fx || r.regression.used_world; }).length;
       return cfRows.length ? '<b>Normal-season benchmark:</b> ' + esc(M.expected_seasonal || '') + ' ' + esc(M.regression || '') + ' Here ' + used + ' of ' + cfRows.length + ' series retain a currency or world-price coefficient (fit R² ' + cfRows.map(function (r) { return r.regression.r2; }).filter(function (x) { return x != null; }).sort(function (a, b) { return a - b; }).map(function (x) { return x.toFixed(2); }).filter(function (x, i, a) { return i === 0 || i === a.length - 1; }).join(' to ') + ', ' + Math.min.apply(null, n) + ' to ' + Math.max.apply(null, n) + ' normal years). ' + esc(M.caveat || '') + ' Years left out: ' + esc((S.pcf.excluded_years_rule || '')) : ''; };
@@ -52602,7 +52626,7 @@ function showCommodityDetail(key) {
     var dc = cfBlock ? '<details class="enso-evidence-note enso-cf-fold"><summary>Difference by market from the normal-season benchmark</summary>' + cfBlock + '</details>' : '';
     var lede = bulletList([
       s15 && s23 ? '<b>Past:</b> after inflation, a median ' + pct(100 + s15.median_peak_pct) + ' in 2015-16 (' + s15.n + ' countries), peaking around ' + esc(monthAt('2015-16', s15.median_peak_k)) + '; ' + pct(100 + s23.median_peak_pct) + ' in 2023-24, a year after the peak, by ' + esc(monthAt('2023-24', s23.median_peak_k)) + '.' : '',
-      s26 ? '<b>This year:</b> below the March level in ' + s26.n_below_base_now + ' of ' + s26.n + ' countries (latest month, up to ' + esc(monthAt('2026-27', s26.last_k)) + '); no El Niño rise shows yet.' : '',
+      s26 ? '<b>This year:</b> more than 3% below the March level in ' + s26.n_below_base_now + ' of ' + s26.n + ' countries (latest month, up to ' + esc(monthAt('2026-27', s26.last_k)) + '); no El Niño rise shows yet.' : '',
       cfLede(),
     ]);
     var history = '<figure class="enso-plate enso-pa-plate" data-kind="observed">' +
@@ -53478,7 +53502,8 @@ function showCommodityDetail(key) {
        (two or more independent publishers, plus the crisis classifications in force) and Early signals (one source, but
        material). The queue is the index; these plates carry each thread's confidence class, attribution and source chain. */
     var threadPlates = (function () {
-      var T = S.evthreads; if (!T || !T.threads || !T.threads.length || !T.stats) return { confirmed: '', early: '' };
+      /* 2026-10-05 bug hunt: an empty thread file said nothing; it now says so in place of the two plates. */
+      var T = S.evthreads; if (!T || !T.threads || !T.threads.length || !T.stats) return { confirmed: T ? '<p class="enso-meta">No reported events in the loaded feed (' + esc(stamp(metaDate('evthreads'))) + ').</p>' : '', early: '' };
       var st = T.stats;
       /* Default Reported view: confirmed threads have at least two independent publishers;
          material single-source rows are early signals. Everything else is one fold away. */
@@ -53486,7 +53511,10 @@ function showCommodityDetail(key) {
           restT = T.threads.filter(function (t) { return t.event_confidence.n_independent < 2 && !t.material; });
       /* Material single-source threads: most reasons first, then newest; five open, the rest in a fold. */
       var OPEN_EARLY = 5, hiT = shownT.filter(function (t) { return t.event_confidence.n_independent >= 2; }),
-          matT = shownT.filter(function (t) { return t.event_confidence.n_independent < 2; }).sort(function (a, b) { return b.material_because.length - a.material_because.length || (a.last_dated_report < b.last_dated_report ? 1 : -1); });
+          /* 2026-10-05 bug hunt: the lede counts open threads only, the same rule as the status rail (a stale Ecuador thread,
+             silent 196 days, was counted); stale and resolved ones sort last, into the fold, and stay listed. */
+          isOpen = function (t) { return t.state !== 'stale' && t.state !== 'resolved'; },
+          matT = shownT.filter(function (t) { return t.event_confidence.n_independent < 2; }).sort(function (a, b) { return ((isOpen(b) ? 1 : 0) - (isOpen(a) ? 1 : 0)) || b.material_because.length - a.material_because.length || (a.last_dated_report < b.last_dated_report ? 1 : -1); });
       var ATT = { attributed: 'Attributed', pattern_consistent: 'Pattern-consistent, not attributed', not_assessed: 'Not assessed' };
       var ATT_T = { attributed: 'A person has checked that the cited source ties this event to El Niño.', pattern_consistent: 'Fits the known El Niño pattern for this place and season; the source does not name El Niño.', not_assessed: 'Nobody has assessed a link to El Niño.' };
       var CONF = { low: 'One source', medium: 'Corroborated', high: 'Cross-checked' };
@@ -53548,7 +53576,8 @@ function showCommodityDetail(key) {
       var restFold = restT.length ? '<details class="enso-evidence-note enso-th-rest"><summary><span>Show ' + restT.length + ' single-source reports</span></summary><div class="enso-th-list" role="table" aria-label="Single-source reports without a people count">' + restT.map(row).join('') + '</div></details>' : '';
       var early = '<figure class="enso-plate is-published enso-rq-early-plate" data-kind="published">' +
         plateHead('Early signals', SRC, stamp(metaDate('evthreads')), 'published') +
-        '<div class="plate-body"><p class="enso-plate-lede"><b>' + matT.length + ' events have one source, but it is material:</b> people counted, an IPC or FEWS NET link, or an export measure. One publisher is not yet corroboration.</p>' +
+        '<div class="plate-body"><p class="enso-plate-lede"><b>' + matT.filter(isOpen).length + ' open events have one source, but it is material:</b> people counted, an IPC or FEWS NET link, or an export measure. One publisher is not yet corroboration.' +
+          (matT.length > matT.filter(isOpen).length ? ' ' + (matT.length - matT.filter(isOpen).length) + ' more are no longer active (stale or resolved) and sit last in the fold.' : '') + '</p>' +
         '<div class="enso-th-list" role="table" aria-label="Material early signals">' + matT.slice(0, OPEN_EARLY).map(row).join('') + '</div></div>' +
         '<figcaption class="enso-log">' + shownT.length + ' of ' + st.threads + ' threads are shown by default; ' + restT.length + ' single-source reports with no people count, IPC or FEWS link or export measure are in the last fold.</figcaption>' +
         matFold + restFold + '</figure>';
@@ -54053,7 +54082,7 @@ function showCommodityDetail(key) {
        survived the old map, so each draw function saw a non-empty list and re-added the old markers; the headline list
        was memoised; the zoom hooks stayed bound to the removed map. Drop all of it with the map. */
     S.responsePins = []; S.headlinePins = []; S.contextPins = []; S.calloutPins = []; S.pricePins = []; S._pinMode = null;
-    S.pevLayer = null; S.islLayer = null; S._pevZoom = S._islZoom = S._spreadHooked = S._calloutHooked = false;
+    S.pevLayer = null; S.islLayer = null; S._pevZoom = S._islZoom = S._spreadHooked = S._calloutHooked = S._pchipHook = false;
     S._hl = null; S._rainNow = S._rainM = S._rainG = S._rainMix = S._sstG = S._teleSet = null;
     /* v84 -- the ocean layer and its hover readout were bound to the map
        instance just removed; drop them so buildMap wires fresh ones. */
@@ -54601,7 +54630,9 @@ function showCommodityDetail(key) {
       node(1, false, 'Weather', 'published', 'Published', reg ? (reg.rain === 'drier' ? 'Drier' : 'Wetter') : 'n/a', reg ? esc(reg.label) + (reg.damage_season ? ', ' + esc(reg.damage_season) : '') : 'No published direction', [rainLine, rc.how === 'inferred' && reg ? 'Region inferred: first published region for ' + esc(nameFor(p.iso)) : reg && !rc.cropListed ? 'Region matched on season; ' + esc(cw) + ' is not in its crop list' : ''], 'modelled'),
       node(2, false, 'Crop', after, beyondMajor ? 'Beyond fitted range' : 'Modelled', typeof f.change_pct_record === 'number' ? num(f.change_pct_record, 0) + '%' : 'n/a', esc(nameFor(p.iso)) + ' ' + esc(cw) + (p.harvest ? ', ' + esc(p.harvest) : ''), [band.length === 2 ? '90% range: ' + num(band[0], 0) + '% to ' + num(band[1], 0) + '%' : '', risk], beyondMajor ? 'extrapolated' : 'scenario'),
       node(3, false, 'Supply', 'scenario', 'Scenario', kt(f.scenario_kt), 'scenario harvest', supply, tr ? (beyondMajor ? 'extrapolated' : 'scenario') : 'unmeasured'),
-      node(4, true, 'Trade', tr ? 'scenario' : 'unmeasured', tr ? 'Scenario' : 'Not yet measured', tr ? kt(tr.need) : 'n/a', tr ? 'potential import need under a scenario' : 'No trade scenario for this harvest', tradeEv, '')
+      /* 2026-10-05 bug hunt: this is the harvest's whole trade gap (its own shortfall plus its customers' lost imports), so
+         it is larger than the country's own need in the absorption plate; say whose it is. */
+      node(4, true, 'Trade', tr ? 'scenario' : 'unmeasured', tr ? 'Scenario' : 'Not yet measured', tr ? kt(tr.need) : 'n/a', tr ? 'potential import need under a scenario' + (rp.buyers.some(function (b) { return b.kind === 'buyer'; }) ? ', ' + esc(nameFor(p.iso)) + ' and its customers' : '') : 'No trade scenario for this harvest', tradeEv, '')
     ];
     /* The trade node's own rule is dotted grey when nothing is measured; the segment into it follows the node before it. */
     var iso = top ? top.iso : p.iso, who = iso === 'EU27' ? 'EU-27' : nameFor(iso), co = CO.filter(function (x) { return x.iso === iso; })[0], acc = co && co.c ? co.c[7] : null;
