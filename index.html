@@ -8621,6 +8621,7 @@ body::before {
 .enso-pchip-h > .enso-pchip-n { color:#c9c6bd; }
 .enso-pchip-h > b { color:#ebe9e2; font:500 11.5px/1.2 'Geist Mono',monospace; }
 .enso-pchip-h > b.enso-pchip-v { font:600 13px/1.25 'Geist Mono',monospace; padding:0 4px; }
+.enso-pchip-h > .enso-pchip-to { font:11px/1.25 'Geist',sans-serif; color:var(--t3); margin-left:4px; }
 .enso-pchip > .enso-pchip-p { display:flex; gap:8px; align-items:center; margin-top:1px; color:#8b8980; font:9.5px/1.3 'Geist Mono',monospace; }
 .enso-pchip-p > span > i { display:inline-block; width:6px; height:6px; margin-right:3px; vertical-align:0; }
 .enso-pchip-p > .is-none { opacity:.7; }
@@ -45647,6 +45648,9 @@ function showCommodityDetail(key) {
     var v = sc.view, obs = v === 'now' || v === 'month', past = v === 'class' || v === 'winter', rw = (v === 'now' && rainNowWin(30)) || R.window || {}, wk = (v === 'now' && S.rainWin !== 30 && rainNowWin(S.rainWin)) || R.week || {}, sq = seaNow();
     var shows = [
       v === 'now' && 'Sea: the ' + sq.days + '-day mean ' + dayRange(sq.start, sq.end) + ', °C against 1971–2000.',
+      /* 2026-10-05 court: rebasing to 1991-2020 moves the tropics by about 0.1 °C (six-date check against PSL's 1991-2020
+         daily climatology), so the base stays and the difference is said once. */
+      (v === 'now' || v === 'month') && 'CPC’s weekly Niño figures use 1991–2020; across the tropics that base reads about 0.1 °C cooler than this one (FoodShield’s check on six dates), so the warm tropics here are the event and real warmth, not the base.',
       v === 'now' && 'Rain on land: the drought index for the 30 days ' + dayRange(rw.start, rw.end) + (S.rainWin !== 30 ? '; the last ' + S.rainWin + ' days (' + dayRange(wk.start, wk.end) + ') darken it where they alone were dry or wet' : '') + '.',
       v === 'month' && esc(sc.season) + ': the month’s sea mean against 1971–2000 and its rain as the drought index against 1991–2020.',
       v === 'outlook' && 'A forecast for ' + esc(sc.season) + ': the sea anomaly from six North American models, and ' + (RM.method ? 'the month’s forecast rain as a drought index; the hover adds the rain already fallen where the months before it are observed.' : 'the odds of a dry or wet month.'),
@@ -48340,7 +48344,9 @@ function showCommodityDetail(key) {
   function poutTag() {
     var st = poutStage(), ms = poutRows().map(function (r) { var a = r.aftermath && r.aftermath[st]; return a && a.to; }).filter(Boolean).sort();
     var yr = st === 'now' ? poutNowYear() : st.slice(0, 4), m1 = ms[ms.length - 1];
-    return 'Observed, after inflation, Mar' + (m1 ? '–' + MON3[monIdx(m1) % 12] : '') + ' ' + yr + '. Labels compare with ' + pastEv() + ' at the same stage.';
+    /* 2026-10-05 court: the windows do not end together (Madagascar April, Thai rice September), so say so. */
+    var m0 = ms[0];
+    return 'Observed, after inflation, March to each market’s latest month' + (m0 && m1 && m0 !== m1 ? ' (' + MON3[monIdx(m0) % 12] + ' to ' + MON3[monIdx(m1) % 12] + ' ' + yr + ')' : m1 ? ' (' + MON3[monIdx(m1) % 12] + ' ' + yr + ')' : '') + '. Labels compare with ' + pastEv() + ' at the same stage.';
   }
   function riskRows() { return (S.prisk && S.prisk.series) || []; }
   function riskOf(r) { var k = r.iso3 + ':' + r.commodity; return riskRows().filter(function (e) { return e.key === k; })[0] || null; }
@@ -49704,8 +49710,8 @@ function showCommodityDetail(key) {
      the same stage. Nothing forward. */
   function chipNow(r, v, big) {
     var ev = pastEv(), a = (r.aftermath || {})[ev], col = STAPLE_COLS[stapleClass(v)], dark = ['#d9b27c', '#dd8a45', '#8fb1cf'].indexOf(col) >= 0;
-    var name = nameFor(r.iso3);
-    return '<i class="enso-pchip-s" style="background:' + col + '"></i><span class="enso-pchip-h"><span class="enso-pchip-n">' + esc(name) + '</span><b class="enso-pchip-v" style="background:' + col + ';color:' + (dark ? '#0b1017' : '#f2efe6') + '">' + esc(poutPct(v)) + '</b></span>' +
+    var name = nameFor(r.iso3), nw = (r.aftermath || {})[poutStage()], toM = nw && nw.to && monIdx(nw.to) != null ? MON3[monIdx(nw.to) % 12] : '';
+    return '<i class="enso-pchip-s" style="background:' + col + '"></i><span class="enso-pchip-h"><span class="enso-pchip-n">' + esc(name) + '</span><b class="enso-pchip-v" style="background:' + col + ';color:' + (dark ? '#0b1017' : '#f2efe6') + '">' + esc(poutPct(v)) + '</b>' + (toM ? '<span class="enso-pchip-to">to ' + toM + '</span>' : '') + '</span>' +
       (big ? '<span class="enso-pchip-p"><span>' + esc(poutName(r)) + ' · last El Niño, same stage: ' + (a && typeof a.pct === 'number' ? esc(ev + ' ' + poutPct(a.pct)) : esc(ev + ' no series')) + '</span></span>' : '');
   }
   function chipPay(o) {
@@ -54311,7 +54317,9 @@ function showCommodityDetail(key) {
          nothing, say why from the replacement file (usual_out: the buyer's partners that cannot step up, with the reason),
          and name the exporters the open-market case draws on for this buyer. */
       var outs = Object.keys(q.uout).map(function (i) { return q.uout[i]; }).sort(function (a, b) { return b.share_pct - a.share_pct; }).slice(0, 3);
-      var whyNone = outs.length ? 'Its usual suppliers cannot step up: ' + outs.map(function (o) { return esc(nm(o.iso)) + ' (' + Math.round(o.share_pct) + '% of its ' + esc(cn) + ' imports; ' + esc(o.why) + ')'; }).join('; ') + '.'
+      /* 2026-10-05 (owner: "text here can be in bulletpoint format"): one supplier per bullet, its share first. */
+      var whyOf = function (w) { var m = String(w || '').match(/^it shipped ([\d.]+ kt) in (\d{4}), under the (\d+ kt)/); return m ? 'only ' + m[1] + ' in ' + m[2] + ', below the ' + m[3] + ' a usual supplier needs' : String(w || '').replace(/^it is /, ''); };
+      var whyNone = outs.length ? 'Its usual suppliers cannot step up:' + bulletList(outs.map(function (o) { return '<b>' + esc(nm(o.iso)) + '</b>, ' + Math.round(o.share_pct) + '% of its ' + esc(cn) + ' imports: ' + esc(whyOf(o.why)); }))
         : 'No usual supplier of ' + esc(cn) + ' is on record for ' + esc(nm(q.iso)) + ' in the FAOSTAT trade matrix.';
       var oTop = Object.keys(q.osrc).sort(function (a, b) { return q.osrc[b] - q.osrc[a]; }).slice(0, 3);
       var oSrc = oTop.map(function (i) { return esc(nm(i)) + ' ' + esc(kt(q.osrc[i])); }).join(', ');
@@ -54336,7 +54344,7 @@ function showCommodityDetail(key) {
           (q.floor ? ' At least this: ' + esc(nm(q.iso)) + '’s own harvest sits in the same published drought region, and that loss is not counted here.' : '') + '</p>' +
           (q.covFlag ? '<p>' + esc(q.covFlag) + '.</p>' : '')) +
         lvl('is-usual', '<i class="pr2-sw pr2-sw-use" aria-hidden="true"></i>Plausible through usual suppliers', esc(kt(ur)), barSvg +
-          '<p>' + (cut ? '<i class="pr2-sw pr2-sw-gap" aria-hidden="true"></i><b>' + esc(kt(q.us)) + '</b> uncovered. ' : 'Nothing uncovered. ') + (uSrc ? 'From ' + uSrc + '.' : whyNone) + '</p>') +
+          '<p>' + (cut ? '<i class="pr2-sw pr2-sw-gap" aria-hidden="true"></i><b>' + esc(kt(q.us)) + '</b> uncovered. ' : 'Nothing uncovered. ') + (uSrc ? 'From ' + uSrc + '.' : '') + '</p>' + (uSrc ? '' : '<div class="pr2-why">' + whyNone + '</div>')) +
         (hTot != null ? lvl('is-global', 'Available globally, shared by every buyer', esc(kt(hTot)), '<p>' + esc(cn.charAt(0).toUpperCase() + cn.slice(1)) + ' export headroom' + (hN ? ': ' + hN + ' exporters' : '') + (hLeft != null ? '; ' + esc(kt(hLeft)) + ' left after all buyers in the scenario' : '') + '.</p>' + (cut && oSrc ? '<p>For ' + esc(nm(q.iso)) + ' the scenario draws on ' + oSrc + ': spare export capacity, not a confirmed route.</p>' : '')) : '') +
         lvl('is-confirmed', 'Confirmed deliverable', 'not confirmed', deliveryChecks(q, Object.keys(q.usrc).concat(oTop.filter(function (i) { return !q.usrc[i]; })))) +
         '<p class="pr2-absorb-go">Who could ship it and by which route: <button type="button" class="enso-inline-link" data-goto-lens="ensowater">Shipping →</button></p></div>';
@@ -54597,17 +54605,19 @@ function showCommodityDetail(key) {
     };
     var L = S.enso && S.enso.latest, ro = ((S.strengths || {}).roni_outlook || []).filter(function (r) { return r.season === T.season; })[0], rng = ro ? cpcOniRange(ro) : null;
     var scenarioOni = R && typeof R.oni === 'number' ? R.oni : O.cases && O.cases.record && O.cases.record.oni, pacific = [];
-    if (L && typeof L.anom === 'number') pacific.push('Now: ' + num(L.anom, 1) + ', observed');
-    if (rng) pacific.push('NOAA outlook: ' + (rng.bridge && rng.roni ? 'RONI ' + num(rng.roni.median, 1) + '; ONI ' + num(rng.lo, 1) + ' to ' + num(rng.hi, 1) + ' converted' : num(rng.lo, 1) + ' to ' + num(rng.hi, 1)) + ', forecast');
+    /* 2026-10-05 (owner: "improve the way this text is written"): plain words, the season named, the index named once. */
+    if (L && typeof L.anom === 'number') pacific.push('Now: ' + num(L.anom, 1) + ' in ' + esc(seasonName(L.season)) + ', observed');
+    if (rng) pacific.push('NOAA forecast: ' + (rng.bridge && rng.roni ? num(rng.roni.median, 1) + ' on its own index (RONI), about ' + num(rng.lo, 1) + ' to ' + num(rng.hi, 1) + ' on this scale' : num(rng.lo, 1) + ' to ' + num(rng.hi, 1)));
 
     var rc = chainRegion(p, cw), reg = rc.reg, cf = rc.cf;
-    var rainLine = !reg ? 'Rain: no published direction' : !cf ? 'Rain: not loaded' : cf.st === 'season' ? 'Rain: not in season yet' : cf.st === 'small' ? 'Rain: coverage too small to test' : 'Rain now: SPI ' + spiFmt(cf.rr.med) + ', ' + esc(spiWord(cf.rr.med).replace(' for the time of year', '')) + ', observed';
+    var rwf = reg ? rainWindowFact(reg, new Date()) : null, rwm = rwf && String(rwf.text).match(/in ([A-Z][a-z]+ \d{4})/);
+    var rainLine = !reg ? 'Rain: no published direction' : !cf ? 'Rain: not loaded' : cf.st === 'season' ? (rwm ? 'Rain: first tested in ' + rwm[1] + ', when the season opens' : 'Rain: not tested until the season opens') : cf.st === 'small' ? 'Rain: coverage too small to test' : 'Rain now: SPI ' + spiFmt(cf.rr.med) + ', ' + esc(spiWord(cf.rr.med).replace(' for the time of year', '')) + ', observed';
     var band = f.change_pct_record_90 || [], beyondP = typeof T.prob_oni_above_record === 'number' ? T.prob_oni_above_record : null, beyondMajor = beyondP != null && beyondP >= 0.5;
     var hatchSw = '<svg class="enso-cp-hsw" viewBox="0 0 10 10" aria-hidden="true" focusable="false"><path d="M0 10L10 0M-2.5 2.5L2.5 -2.5M7.5 12.5L12.5 7.5" stroke="#c9773a" stroke-width="1.2"/></svg>';
-    var risk = beyondP != null ? hatchSw + Math.round(beyondP * 100) + '% of model draws beyond the fitted range' : '';
+    var risk = beyondP != null ? hatchSw + Math.round(beyondP * 100) + '% of model runs go past the strongest winter on record' : '';
     var supply = [];
-    if (typeof f.neutral_kt === 'number') supply.push('Neutral baseline: ' + kt(f.neutral_kt));
-    if (typeof f.usda_kt === 'number') supply.push('USDA now: ' + kt(f.usda_kt));
+    if (typeof f.neutral_kt === 'number') supply.push('Normal year: ' + kt(f.neutral_kt));
+    if (typeof f.usda_kt === 'number') supply.push('USDA’s latest: ' + kt(f.usda_kt) + (f.usda_same_harvest ? '' : ' (' + esc(f.usda_harvest || 'an earlier') + ' crop)'));
 
     var rp = R && R.pairs ? R.pairs.filter(function (q) { return q.iso === p.iso && q.crop === p.crop; })[0] : null, tr = null, top = null;
     if (rp && rp.buyers && rp.buyers.length) {
@@ -54622,17 +54632,17 @@ function showCommodityDetail(key) {
     }
     /* Global availability is the crop's export headroom across all exporters (aggregate mid case, open market), shared by every buyer; tr.open is only the need it would fill. */
     var agg = R && R.aggregate && R.aggregate[p.crop] && R.aggregate[p.crop].mid && R.aggregate[p.crop].mid.open, headTot = agg && typeof agg.headroom_total_kt === 'number' ? agg.headroom_total_kt : null;
-    var tradeEv = tr ? ['Usual suppliers: ' + kt(tr.usual) + '. ' + (tr.short >= 1 ? 'Usual network leaves ' + kt(tr.short) + ' short; delivery not modelled.' : 'Usual network covers it; delivery not modelled.'),
-      headTot != null ? 'Available globally, shared by all buyers: ' + kt(headTot) + (typeof agg.headroom_exporters === 'number' ? ' (' + agg.headroom_exporters + ' exporters)' : '') : ''] : [];
+    var tradeEv = tr ? [tr.short >= 1 ? 'Usual suppliers cover ' + kt(tr.usual) + ', leaving ' + kt(tr.short) + ' uncovered' : 'Usual suppliers cover it',
+      headTot != null ? 'Spare exports worldwide: ' + kt(headTot) + (typeof agg.headroom_exporters === 'number' ? ' across ' + agg.headroom_exporters + ' countries' : '') + ', shared by every buyer' : ''] : [];
     var after = beyondMajor ? 'extrapolated' : 'modelled';
     var nodes = [
-      node(0, false, 'Pacific', 'modelled', 'Scenario', typeof scenarioOni === 'number' ? num(scenarioOni, 1) : 'n/a', 'ONI' + (R && R.harvest_winter ? ', ' + esc(R.harvest_winter) : ''), pacific, 'published'),
-      node(1, false, 'Weather', 'published', 'Published', reg ? (reg.rain === 'drier' ? 'Drier' : 'Wetter') : 'n/a', reg ? esc(reg.label) + (reg.damage_season ? ', ' + esc(reg.damage_season) : '') : 'No published direction', [rainLine, rc.how === 'inferred' && reg ? 'Region inferred: first published region for ' + esc(nameFor(p.iso)) : reg && !rc.cropListed ? 'Region matched on season; ' + esc(cw) + ' is not in its crop list' : ''], 'modelled'),
-      node(2, false, 'Crop', after, beyondMajor ? 'Beyond fitted range' : 'Modelled', typeof f.change_pct_record === 'number' ? num(f.change_pct_record, 0) + '%' : 'n/a', esc(nameFor(p.iso)) + ' ' + esc(cw) + (p.harvest ? ', ' + esc(p.harvest) : ''), [band.length === 2 ? '90% range: ' + num(band[0], 0) + '% to ' + num(band[1], 0) + '%' : '', risk], beyondMajor ? 'extrapolated' : 'scenario'),
-      node(3, false, 'Supply', 'scenario', 'Scenario', kt(f.scenario_kt), 'scenario harvest', supply, tr ? (beyondMajor ? 'extrapolated' : 'scenario') : 'unmeasured'),
+      node(0, false, 'Pacific', 'modelled', 'Scenario', typeof scenarioOni === 'number' ? num(scenarioOni, 1) : 'n/a', 'ONI at the ' + (R && R.harvest_winter ? esc(String(R.harvest_winter).replace(/^DJF\s*/, 'Dec–Feb ')) + ' ' : '') + 'peak', pacific, 'published'),
+      node(1, false, 'Weather', 'published', 'Published', reg ? (reg.rain === 'drier' ? 'Drier' : 'Wetter') : 'n/a', reg ? esc(reg.label) + (reg.damage_season ? ': ' + esc(String(reg.damage_season).replace(/\bDJF\b/g, 'Dec–Feb').replace(/\bJJAS\b/g, 'Jun–Sep').replace(/\bOND\b/g, 'Oct–Dec').replace(/\bMAM\b/g, 'Mar–May')) : '') : 'No published direction', [rainLine, rc.how === 'inferred' && reg ? 'Region inferred: first published region for ' + esc(nameFor(p.iso)) : reg && !rc.cropListed ? 'Region matched on season; ' + esc(cw) + ' is not in its crop list' : ''], 'modelled'),
+      node(2, false, 'Crop', after, beyondMajor ? 'Beyond fitted range' : 'Modelled', typeof f.change_pct_record === 'number' ? num(f.change_pct_record, 0) + '%' : 'n/a', esc(nameFor(p.iso)) + ' ' + esc(cw) + (p.harvest ? ', harvest ' + esc(p.harvest) : ''), [band.length === 2 ? '90% likely between ' + num(band[0], 0) + '% and ' + num(band[1], 0) + '%' : '', risk], beyondMajor ? 'extrapolated' : 'scenario'),
+      node(3, false, 'Supply', 'scenario', 'Scenario', kt(f.scenario_kt), 'harvest in this scenario', supply, tr ? (beyondMajor ? 'extrapolated' : 'scenario') : 'unmeasured'),
       /* 2026-10-05 bug hunt: this is the harvest's whole trade gap (its own shortfall plus its customers' lost imports), so
          it is larger than the country's own need in the absorption plate; say whose it is. */
-      node(4, true, 'Trade', tr ? 'scenario' : 'unmeasured', tr ? 'Scenario' : 'Not yet measured', tr ? kt(tr.need) : 'n/a', tr ? 'potential import need under a scenario' + (rp.buyers.some(function (b) { return b.kind === 'buyer'; }) ? ', ' + esc(nameFor(p.iso)) + ' and its customers' : '') : 'No trade scenario for this harvest', tradeEv, '')
+      node(4, true, 'Trade', tr ? 'scenario' : 'unmeasured', tr ? 'Scenario' : 'Not yet measured', tr ? kt(tr.need) : 'n/a', tr ? 'potential import need under a scenario, for ' + (rp.buyers.some(function (b) { return b.kind === 'buyer'; }) ? esc(nameFor(p.iso)) + ' and its customers' : esc(nameFor(p.iso))) : 'No trade scenario for this harvest', tradeEv, '')
     ];
     /* The trade node's own rule is dotted grey when nothing is measured; the segment into it follows the node before it. */
     var iso = top ? top.iso : p.iso, who = iso === 'EU27' ? 'EU-27' : nameFor(iso), co = CO.filter(function (x) { return x.iso === iso; })[0], acc = co && co.c ? co.c[7] : null;
@@ -54666,13 +54676,13 @@ function showCommodityDetail(key) {
       '<p>The checks under the rail: the historical El Niño signal is yes when the pair has a fitted El Niño relationship; rain counts once the region is in season and reads 0.5 or more in the expected direction; a reported hazard counts in season, in the expected direction, from two or more independent publishers (one publisher is shown, not counted); country-level stress is a JRC ASAP hotspot (drier regions only); the crop-specific source is a Crop Monitor row naming the crop. The pair\'s region comes from the named pair-to-region list in the regions file' + (rc.how === 'inferred' ? '; this pair is not on that list, so its region was inferred as the first published region for the country' : '') + '. This is a confirmation state for the crop risk, separate from the evidence type each stage shows above.</p>' +
       '<p>The state is read from the loaded feeds each time the page opens. It is a category, not a score.</p></div></details></div>';
 
-    var conclusion = '';
-    if (typeof f.change_pct_record === 'number' && tr) conclusion = 'A modelled ' + num(f.change_pct_record, 0) + '% ' + esc(cw) + ' harvest implies ' + kt(tr.need) + ' of potential import need under the scenario';
-    else if (tr) conclusion = 'This harvest implies ' + kt(tr.need) + ' of potential import need under the scenario';
-    else if (typeof f.change_pct_record === 'number') conclusion = 'The fitted ' + esc(cw) + ' harvest change is ' + num(f.change_pct_record, 0) + '%';
-    if (typeof acc === 'number' && typeof LN.acc.line === 'number') conclusion += (conclusion ? '; ' : '') + esc(who) + ' already has ' + (acc >= LN.acc.line ? 'weak' : 'stronger') + ' economic buffers';
-    if (ip && typeof ip.phase3plus_count === 'number') conclusion += (conclusion ? ' and ' : '') + ipcM(ip.phase3plus_count) + ' people in IPC Phase 3+';
-    conclusion += '.';
+    /* 2026-10-05 (owner: "improve the way this text is written"): one fact per line, the scenario named first. */
+    var cl = [], nmP = esc(nameFor(p.iso)), byCust = rp && rp.buyers.some(function (b) { return b.kind === 'buyer'; });
+    if (typeof f.change_pct_record === 'number') cl.push((typeof scenarioOni === 'number' ? 'If the winter reaches ONI ' + num(scenarioOni, 1) + ', the' : 'The') + ' model ' + (f.change_pct_record < 0 ? 'cuts ' : 'raises ') + nmP + '’s ' + esc(cw) + ' harvest by ' + Math.abs(Math.round(f.change_pct_record)) + '%.');
+    if (tr) cl.push('That is ' + kt(tr.need) + ' of potential import need' + (byCust ? ' for ' + nmP + ' and its customers' : '') + (tr.short >= 1 ? ', ' + kt(tr.short) + ' of it beyond what usual suppliers can send' : '') + '.');
+    if (typeof acc === 'number' && typeof LN.acc.line === 'number') cl.push(esc(who) + '’s economic buffers are ' + (acc >= LN.acc.line ? 'weak' : 'on the stronger side') + (ip && typeof ip.phase3plus_count === 'number' ? '; ' + ipcM(ip.phase3plus_count) + ' people are already in IPC Phase 3 or worse' : '') + '.');
+    else if (ip && typeof ip.phase3plus_count === 'number') cl.push(ipcM(ip.phase3plus_count) + ' people in ' + esc(who) + ' are already in IPC Phase 3 or worse.');
+    var conclusion = bulletList(cl);
     var question = 'What would a ' + (typeof f.change_pct_record === 'number' ? num(f.change_pct_record, 0) + '% ' : '') + esc(nameFor(p.iso)) + ' ' + esc(cw) + ' harvest mean for supply, trade and the ability to absorb it?';
     var options = rows.map(function (x) { return '<option value="' + esc(x.p.key) + '"' + (x.p.key === p.key ? ' selected' : '') + '>' + esc(nameFor(x.p.iso)) + ' ' + esc(payCrop(x.p.crop)) + '</option>'; }).join('');
     var details = '<p><b>Pacific:</b> replacement scenario and NOAA CPC outlook. <b>Weather:</b> published El Niño regions and crop-belt rain.</p>' +
@@ -54687,7 +54697,7 @@ function showCommodityDetail(key) {
     el.innerHTML = '<figure class="enso-plate enso-chain-plate is-modelled" data-kind="modelled">' + plateHead('From the Pacific to the plate', 'NOAA CPC outlook · published El Niño regions · FoodShield crop fit and replacement scenario · access score · IPC/CH', stamp(metaDate('dist')), 'modelled') + key +
       '<div class="plate-body"><div class="enso-cp-ask"><p class="enso-cp-question">' + question + '</p><label class="enso-cp-picker">Trace <select data-chain-pick aria-label="Choose a harvest">' + options + '</select></label></div>' +
       '<div class="enso-cp-scroll" tabindex="0" aria-label="Harvest shock path and ability to absorb"><ol class="enso-cp-flow">' + nodes.join('') + '</ol><div class="enso-cp-lower">' + confirm + absorb + '</div></div>' +
-      '<p class="enso-cp-conclusion">' + conclusion + '</p><details class="enso-cp-details"><summary>Details by stage</summary><div class="enso-cp-details-body">' + details + '</div></details></div><figcaption class="enso-log">Scenario arithmetic stops at Trade. Economic access and IPC describe the baseline.</figcaption></figure>';
+      '<div class="enso-cp-conclusion">' + conclusion + '</div><details class="enso-cp-details"><summary>Details by stage</summary><div class="enso-cp-details-body">' + details + '</div></details></div><figcaption class="enso-log">Scenario arithmetic stops at Trade. Economic access and IPC describe the baseline.</figcaption></figure>';
     var select = el.querySelector('[data-chain-pick]');
     if (select) select.onchange = function () { S.chainPick = select.value; setTrace(select.value.split('/')[0], select.value.split('/')[1]); renderChain(); var next = el.querySelector('[data-chain-pick]'); if (next && next.focus) next.focus(); };
   }
