@@ -6,7 +6,7 @@ December–February El Niño peak been?
 For every year IRI's archive has a mid-September plume ("CCSR/IRI Model
 Predictions of ENSO from Sep <year>"), this reads the forecast for the coming
 Dec–Feb (DJF) season from the plume figure IRI serves at
-ensoforecast.iri.columbia.edu/figure4_plot/<year>/8 (month index 8 = September):
+ensoforecast.iri.columbia.edu/figure4_plot/<year>/9 (month index 9 = September):
 
 - the plume's model average ("COMBINED AVG", the heavy dark-blue line), and
 - every single model's DJF value, whose lowest and highest make the range.
@@ -39,7 +39,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import DATA_DIR, http_get, stamp_inputs, write_json  # noqa: E402
 
-URL = "https://ensoforecast.iri.columbia.edu/figure4_plot/{year}/8"
+# 2026-11-10: IRI renumbered the month index (8 now serves the August plume). parse() checks the figure title, so a
+# further shift reads nothing instead of the wrong month.
+URL = "https://ensoforecast.iri.columbia.edu/figure4_plot/{year}/9"
 PAGE = "https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/"
 UA = {"User-Agent": "Mozilla/5.0 (FoodShield AI; public food-security dashboard)", "Accept": "*/*"}
 FIRST_YEAR = 2002  # IRI's plume starts in 2002
