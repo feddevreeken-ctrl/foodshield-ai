@@ -50,7 +50,7 @@ import statistics
 import sys
 from datetime import date
 
-from _common import DATA_DIR, http_get, stamp_inputs, write_json
+from _common import DATA_DIR, http_get, keep_last_good, stamp_inputs, write_json
 import build_enso_price_outlook as po
 
 API = po.API
@@ -356,8 +356,8 @@ def main():
     except Exception:  # noqa: BLE001
         prev = []
     if len(out["rows"]) < len(prev):
-        print(f"[counterfactual] run kept {len(out['rows'])} of {len(prev)} committed series: keeping the last good file")
-        return 0
+        keep_last_good("enso_price_counterfactual.json",
+                       f"FPMA served real prices for {len(out['rows'])} of the {len(prev)} committed series")
     for r in out["rows"]:
         e = r["excess_pct"]
         print(f"[counterfactual] {r['iso']} {r['price_type']}: vs season {e['vs_seasonal']:+}%, fx {e['vs_fx_adjusted']:+}%, "

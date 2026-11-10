@@ -293,7 +293,7 @@ def mk(key, text, direction, food, pressure, mat, conf, link, source):
     mat = max(0.0, min(1.0, mat))
     return {"key": key, "text": text, "direction": direction, "food_link": food, "food_pressure": pressure,
             "materiality": round(mat, 2), "confidence": CONF[conf], "relevance": rel,
-            "score": round(mat * CONF[conf] * rel, 3), "lens": link, "source": source}
+            "score": round(round(mat, 2) * CONF[conf] * rel, 3), "lens": link, "source": source}
 
 
 def compare(prev: dict, cur: dict, names: dict) -> list:

@@ -9943,6 +9943,7 @@ table.enso-tbl thead th:first-child { z-index:3; }
 #tab-elnino .enso-log > span { display:block; margin-top:8px; }
 #tab-elnino .enso-log .enso-feed-note { display:inline; }
 #tab-elnino .enso-log .enso-feed-note + .enso-feed-note::before { content:' · '; }
+#tab-elnino .enso-gate .enso-feed-note + .enso-feed-note::before { content:' · '; }
 #tab-elnino .enso-subview-meta { margin:0; }
 #tab-elnino .enso-oni-title { display:flex; gap:16px; align-items:center; min-width:0; }
 
@@ -19486,7 +19487,7 @@ function chartSourceFooter(sourceLabel, refreshedTime, kind) {
   const wcol = isModeled ? '#c9a957' : '#e58a78';
   return `<div class="prov-line">`
     + `<span class="prov-kind" style="color:${wcol}">${word}</span>`
-    + `<span class="prov-dash">—</span>`
+    + `<span class="prov-dash">·</span>`
     + `<span class="prov-body">${sourceLabel}${ago ? ` · updated ${ago}` : ''}</span>`
     + `</div>`;
 }
@@ -30854,7 +30855,9 @@ async function fsAskContext(qRaw){
   };
   if (commodity) ctx.commodity = fsAskCommodityPacket(commodity);
   const isBan = /\b(ban|bans|banned|embargo|restrict|restricts|cuts?\s*off|stops?\s*export|halts?|blockade)\b/.test(q);
-  if (isBan && commodity && countries.length && typeof restrictionExposure === 'function'){
+  /* "Which countries depend on Russian wheat?" asks for the same importer list as a ban does. */
+  const isWhoRelies = /\b(who|which (countries|importers|nations))\b/.test(q) && /\b(depend\w*|rel(y|ies|iant|iance)|imports?|buys?|exposed)\b/.test(q);
+  if ((isBan || isWhoRelies) && commodity && countries.length && typeof restrictionExposure === 'function'){
     ctx.if_exports_stopped = { exporter: countries[0].name, commodity, modelled: true,
       method: 'importers ranked by the share of their imports of this commodity that come from the exporter, times their own FDRS',
       most_exposed_importers: restrictionExposure(countries[0].iso, commodity, 10).map(e => ({ name: e.name, share_from_exporter_pct: e.share_pct, fdrs: e.fdrs })) };
@@ -32304,7 +32307,7 @@ function renderCountryTab() {
     <p class="ctr-lead">
       ${c.name} runs a net agri-food ${isExporter ? 'surplus' : 'deficit'} of
       <span class="num" style="color:${netCol}" title="${provenanceTooltip(c, 'net')}">${_ctrMoney(c.net)} USD</span>
-      ${provenanceBadge(fieldProvenance(c, 'net')?.quality_flag || 'legacy_curated')} —
+      ${provenanceBadge(fieldProvenance(c, 'net')?.quality_flag || 'legacy_curated')},
       <b>${isExporter ? 'a net food exporter' : 'a net food importer'}</b>.
       The tables below are in tonnes, not dollars.
     </p>
@@ -32404,7 +32407,7 @@ function renderCountryTab() {
           Removed until a sourced series exists. */''}
     <div style="margin-top:14px;">
       <button type="button" class="ctr-link" onclick="ctrOpenWorldAtlas()">
-        Open the whole-world flow atlas <span class="sub">— every tracked corridor, not just ${c.name}</span>
+        Open the whole-world flow atlas <span class="sub">every tracked corridor, not just ${c.name}</span>
       </button>
     </div>
 
@@ -34839,7 +34842,7 @@ function _scnCertificateHTML(iso) {
       ${_scnAnalystNote(bp, c)}
       <div class="prov-line">
         <span class="prov-kind" style="color:#e58a78">Source</span>
-        <span class="prov-dash">—</span>
+        <span class="prov-dash">·</span>
         <span class="prov-body">USDA PSD ${bp.year || ''} supply balance${
           bp.priceMonth ? ` · World Bank Pink Sheet ${bp.priceMonth}` : ''}. ${
           ctx.commodity && ctx.commodity.assumed
@@ -36342,7 +36345,7 @@ function renderAboutTab() {
 
     <!-- v35 — Data licenses & attribution: an auditable site models its own sourcing -->
     <div class="card" style="margin-bottom:16px;padding:20px 22px;">
-      <details><summary class="card-title" style="margin-bottom:0;cursor:pointer;list-style:none;"><span class="card-marker"></span> Data licenses &amp; attribution <span style="font-size:10px;color:var(--t3);font-weight:400;font-family:'Geist Mono',monospace;">— 30 main sources ▾</span></summary>
+      <details><summary class="card-title" style="margin-bottom:0;cursor:pointer;list-style:none;"><span class="card-marker"></span> Data licenses &amp; attribution <span style="font-size:10px;color:var(--t3);font-weight:400;font-family:'Geist Mono',monospace;">· 30 main sources ▾</span></summary>
       <div style="font-size:var(--fs-prose);color:var(--t2);line-height:1.7;margin:12px 0 10px;">
         FoodShield is built entirely on public data. Each source below retains its own license and attribution terms;
         per-figure provenance (source, year, method, quality flag) is shown next to every number in the app.
@@ -38888,8 +38891,8 @@ function renderSignal(){
         : `Wheat supplies <b style="color:var(--t1)">${avgWheat}%</b> of dietary calories across tracked countries (FAOSTAT Food Balance Sheets). ${worst.name} leads global vulnerability at FDRS <b style="color:#c44b3c">${worst.fdrs}</b>.`
     },
     {
-      head: `${rising} countries projected to deteriorate by 2030.`,
-      detail: `The 2030 model puts <b style="color:var(--t1)">${rising}</b> countries 5+ points above today’s structural score. <b style="color:var(--t1)">${watchlist}</b> sit on the Dependent→Vulnerable boundary.`
+      head: `${rising} ${rising === 1 ? 'country' : 'countries'} projected to deteriorate by 2030.`,
+      detail: `The 2030 model puts <b style="color:var(--t1)">${rising}</b> ${rising === 1 ? 'country' : 'countries'} 5+ points above today’s structural score. <b style="color:var(--t1)">${watchlist}</b> sit on the Dependent→Vulnerable boundary.`
     },
     {
       head: `${acute} countries at Vulnerable or worse on today’s score.`,
@@ -54172,7 +54175,7 @@ function showCommodityDetail(key) {
       '</div>' : '') + (issues.length ?
       '<div class="enso-gate" role="status"><b>' + issues.length + (issues.length === 1 ? ' feed needs' : ' feeds need') + ' review.</b> ' +
         issues.map(function (k) {
-          return feedStamp(k, FEED_LABELS[k] || String(S.feedNames[k] || k).replace(/_/g, ' ')) + (!hasRows(k) ? '<span>No rows in the loaded feed.</span>' : '');
+          return feedStamp(k, FEED_LABELS[k] || String(S.feedNames[k] || k).replace(/_/g, ' ').replace(/^enso /, '').replace(/^./, function (ch) { return ch.toUpperCase(); })) + (!hasRows(k) ? '<span>No rows in the loaded feed.</span>' : '');
         }).join('') + '</div>' : '');
   }
   function renderSubviewMeta() {

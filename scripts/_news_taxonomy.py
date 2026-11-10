@@ -638,6 +638,8 @@ EXTRA_NEGATIVE = {
     "tea":      ["tea party", "spill the tea"],
     "grapes":   ["sour grapes"],
     "beef":     ["beef with", "beefing"],
+    # Sweet potato is a different crop with its own trade flows.
+    "potatoes": ["sweet potato", "sweet potatoes"],
 }
 
 # Union used by the news classifier only.

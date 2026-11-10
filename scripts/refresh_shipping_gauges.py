@@ -525,7 +525,8 @@ _DATE = r"((?:January|February|March|April|May|June|July|August|September|Octobe
 
 def _iso(text: str) -> str | None:
     m = re.match(r"([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})$", text.strip())
-    return f"{m.group(3)}-{_MONTHS[m.group(1)]:02d}-{int(m.group(2)):02d}" if m and m.group(1) in _MONTHS else None
+    mon = m.group(1).title() if m else ""
+    return f"{m.group(3)}-{_MONTHS[mon]:02d}-{int(m.group(2)):02d}" if mon in _MONTHS else None
 
 
 def _num(tok: str) -> int | None:
@@ -613,7 +614,7 @@ def extract_advisory(adv: dict, max_no: int = 0) -> dict:
         return ("... " if a > 0 else "") + src[a:b].strip() + (" ..." if b < len(src) else "")
 
     # Advisory date: the PDF dates itself; the news item only has its publication day.
-    m = re.search(r"Advisory to Shipping No\. [A-Z]-\d+-\d{4}\s+" + _DATE, flat)
+    m = re.search(r"Advisory to Shipping No\. [A-Z]-\d+-\d{4}\s+" + _DATE, flat, re.I)
     if m and _iso(m.group(1)):
         put("advisory_date", _iso(m.group(1)), m.group(0))
     elif pub:
@@ -645,10 +646,13 @@ def extract_advisory(adv: dict, max_no: int = 0) -> dict:
         n = _num(m.group(m.lastindex if m.lastindex == 2 and _num(m.group(2)) else 1))
         if n:
             put("neopanamax_slots", n, around(flat, m, 120, 60))
-    m = re.search(r"total (?:daily )?capacity to (\d{2}) (?:transit )?slots", flat) or re.search(r"total of (\d{2}) daily slots", flat)
+    m = (re.search(r"total (?:daily )?capacity to (\d{2}) (?:transit )?slots", flat) or re.search(r"total of (\d{2}) daily slots", flat)
+         or re.search(r"total daily capacity will increase to (\d{2}) (?:transit )?slots", flat))
     if m:
         put("total_slots", int(m.group(1)), around(flat, m, 120, 60))
-    m = re.search(r"booking dates beginning " + _DATE, flat) or re.search(r"slots[^.]{0,80}beginning " + _DATE, flat)
+    # An advisory can name several booking dates (one per booking period): the earliest is when the change starts.
+    starts = [x for x in re.finditer(r"booking dates beginning " + _DATE, flat) if _iso(x.group(1))]
+    m = min(starts, key=lambda x: _iso(x.group(1))) if starts else re.search(r"slots[^.]{0,80}beginning " + _DATE, flat)
     if m and _iso(m.group(1)):
         put("first_booking_date", _iso(m.group(1)), around(flat, m, 120, 40))
     m = re.search(r"effective (?:on )?" + _DATE, flat)

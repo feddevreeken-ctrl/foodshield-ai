@@ -444,7 +444,7 @@ def main() -> int:
             const overlap = boxes.some((a, i) => boxes.some((b, j) => j > i && Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1));
             const inside = boxes.every(b => b.width > 0 && b.left >= map.left - 1 && b.right <= map.right + 1 && b.top >= map.top - 1 && b.bottom <= map.bottom + 1);
             const newest = Object.values(A).map(a => a.assessment_date).sort().at(-1);
-            const date = new Date(newest + 'T12:00:00Z').toLocaleDateString('en-GB', {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'});
+            const date = new Date(newest + 'T12:00:00Z').toLocaleDateString('en-GB', {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'}).replace('Sept ', 'Sep ');   // newer ICU prints Sept; the page prints Sep
             const hot = Object.keys(A).filter(k => A[k].hotspot_code >= 1 && !isos.includes(k)).length;
             const now = (document.querySelector('#enso-map .enso-now') || {}).textContent || '';
             const live = R.filter(m => m.status !== 'historical' && (!m.ends_date || Date.parse(m.ends_date + 'T23:59:59Z') >= Date.now())).length;
@@ -456,7 +456,7 @@ def main() -> int:
                     calls: calls.length, want: rows.length, click: document.querySelectorAll('#enso-map .enso-flab.is-call').length, overlap, inside,
                     plateNums: rows.every(r => calls.some(c => c.textContent.includes(fk(r.change_kt_record)) && c.textContent.includes(r.harvest))),
                     lines: document.querySelectorAll('#enso-map path.enso-flow').length, pressed: document.querySelectorAll('#enso-map .enso-follow [aria-pressed="true"]').length,
-                    tag: document.getElementById('enso-maptag').textContent, tagOni: ('ONI +' + wcOni.toFixed(1)), otherOni: wrap.includes('ONI +' + obs.toFixed(1)) && obs !== wcOni,
+                    tag: document.getElementById('enso-maptag').textContent, tagOni: ('ONI +' + wcOni.toFixed(1)), otherOni: wrap.includes('ONI +' + obs.toFixed(1)) && obs.toFixed(1) !== wcOni.toFixed(1),
                     onceInMap: (document.getElementById('enso-map').textContent.match(/ONI/g) || []).length,
                     now, wantNow: ['JRC ASAP', date, hot + ' elsewhere', 'not attributed to El Niño'], nowMarks: document.querySelectorAll('#enso-map .enso-nowmk').length, wantMarks: live + under,
                     asapOff: !document.getElementById('enso-tog-asapout').checked,
@@ -2554,7 +2554,7 @@ def main() -> int:
             return rowsEl.length === included.length && included.every(r => rowsEl.some(b => b.dataset.priceCf === r.iso && b.textContent.includes(verdict(r))))
                 && rowsEl[0].dataset.priceCf === 'ZAF' && rowsEl[1].dataset.priceCf === 'ZMB'
                 && !!hero.querySelector('.pr2-strip-legend') && !!hero.querySelector('.pr2-strip-scale') && /Other monitored markets/.test(txt) && /Falling prices after harvest are normal/.test(txt)
-                && za.textContent.includes('South Africa') && za.textContent.includes('WHOLESALE') && za.textContent.includes('NORMAL RANGE') && za.textContent.includes('+5.0% vs benchmark') && za.textContent.includes(dir(selected)) && za.textContent.includes('higher than ' + Object.values(selected.placebo.by_year).filter(v => v < selected.excess_pct.vs_fx_and_world).length + ' of ' + selected.placebo.n + ' normal years')
+                && za.textContent.includes('South Africa') && za.textContent.includes('WHOLESALE') && za.textContent.includes('NORMAL RANGE') && za.textContent.includes(Math.abs(selected.excess_pct.vs_fx_and_world).toFixed(1) + '% vs benchmark') && za.textContent.includes(dir(selected)) && za.textContent.includes('higher than ' + Object.values(selected.placebo.by_year).filter(v => v < selected.excess_pct.vs_fx_and_world).length + ' of ' + selected.placebo.n + ' normal years')
                 && zm.textContent.includes('Zambia') && zm.textContent.includes('RETAIL') && zm.textContent.includes(verdict(C.rows.find(r => r.iso === 'ZMB'))) && zm.textContent.includes(dir(C.rows.find(r => r.iso === 'ZMB')))
                 && !/PRICES FALLING|NOT YET UNUSUAL/.test(hero.textContent)
                 && (above === 0 ? head.startsWith('No unusual price pressure in any of ' + included.length + ' markets with a normal-year benchmark') : above * 2 >= included.length ? head.startsWith('Broad unusual price pressure: ' + above + ' of ' + included.length) : head.startsWith('Unusual price pressure is visible in ' + above + ' of ' + included.length))
@@ -2926,7 +2926,7 @@ def main() -> int:
                                             and _xf['first_booking_date']['value'] == '2026-10-15' and _xf['advisory_date']['value'] == '2026-09-28')
         check("ACP advisory: the newest one is read into draft, slots and booking date with the source sentence; marked pending review; the curated live_2026 draft is untouched",
               _a36 and _gx['extracted']['status'] == 'automated extraction, pending review' and all(v['snippet'] for k, v in _xf.items() if v['value'] is not None)
-              and bool(intel and intel['x'] and 'pending review' in intel['xh'] and intel['x']['curated_draft_ft'] == 49.0), str(intel and intel['xh'][:160]))
+              and bool(intel and intel['x'] and 'pending review' in intel['xh'] and intel['x']['curated_draft_ft'] == float(__import__('re').search(r'\((\d{2}(?:\.\d)?)\s*ft\)', next(l for l in _pjson.load(open(ROOT / 'data' / 'enso_lanes.json'))['data']['lanes'] if l['id'] == 'panama')['live_2026']['draft']).group(1))), str(intel and intel['xh'][:160]))
         check("evidence cards: five claims, each with the same seven checks and a High, Moderate or Low word from the written rule, no em dash",
               bool(intel) and set(intel['cards']) == {'panama', 'nino_forecast', 'zimbabwe_maize', 'pattern_sa', 'food_access'}
               and all(c and c['rating'] in ('High', 'Moderate', 'Low') and c['n'] == 7 and c['kinds'] == 'source,age,validation,coverage,fvo,attr,confirm' and not c['dash']

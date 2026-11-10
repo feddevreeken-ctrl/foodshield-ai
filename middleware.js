@@ -133,6 +133,16 @@ export function rewriteHead(html, h) {
 
 const MARK = '<script type="application/ld+json">';
 
+/* A path whose first segment is not a tab gets the home page with a 404 status, so
+   crawlers do not index typos as copies of the home page. */
+export function knownPath(url) {
+  const seg = url.pathname.split('/').filter(Boolean)[0];
+  if (!seg) return true;
+  let a;
+  try { a = decodeURIComponent(seg).toLowerCase(); } catch (e) { return false; }
+  return !!seo.tabs[SLUG_TAB[a] || a];
+}
+
 export default async function middleware(request) {
   if (request.method !== 'GET' && request.method !== 'HEAD') return;
   const url = new URL(request.url);
@@ -169,5 +179,5 @@ export default async function middleware(request) {
   const headers = new Headers(up.headers);
   for (const k of ['content-length', 'content-encoding', 'etag', 'age', 'x-vercel-cache', 'content-disposition']) headers.delete(k);
   headers.set('content-type', 'text/html; charset=utf-8');
-  return new Response(request.method === 'HEAD' ? null : body, { status: 200, headers });
+  return new Response(request.method === 'HEAD' ? null : body, { status: knownPath(url) ? 200 : 404, headers });
 }
