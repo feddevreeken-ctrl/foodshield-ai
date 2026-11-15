@@ -5,7 +5,10 @@
    Slack) and most AI crawlers do not run JS, so without this they all saw the home
    page's head. This Vercel Routing Middleware streams index.html and rewrites only the
    head tags before the JSON-LD block, from seo.json (the same table TAB_SEO is generated
-   from; see scripts/build_seo.py). Every user agent gets the same response.
+   from; see scripts/build_seo.py). Every user agent gets the same head. Link-preview
+   scrapers (PREVIEW_BOT) get only that head: index.html is ~3.9 MB and LinkedIn refuses
+   any page over 3 MB ("larger than our threshold"), so it showed no preview at all.
+   Search crawlers are not in the list and still get the full page.
 
    The path rules mirror pathState()/buildPath()/countrySlug() in index.html. If the
    fetch of index.html fails, the middleware steps aside and vercel.json serves the
@@ -132,6 +135,7 @@ export function rewriteHead(html, h) {
 }
 
 const MARK = '<script type="application/ld+json">';
+export const PREVIEW_BOT = /LinkedInBot|facebookexternalhit|Facebot|Twitterbot|Slackbot|WhatsApp|Discordbot|TelegramBot|SkypeUriPreview|redditbot|Pinterestbot|Embedly|Iframely/i;
 
 /* A path whose first segment is not a tab gets the home page with a 404 status, so
    crawlers do not index typos as copies of the home page. */
@@ -154,6 +158,7 @@ export default async function middleware(request) {
   } catch (e) { return; }
   if (!up.ok || !up.body) return;
   const h = headFor(url);
+  const headOnly = PREVIEW_BOT.test(request.headers.get('user-agent') || '');
 
   const dec = new TextDecoder(), enc = new TextEncoder();
   let buf = '', done = false;
@@ -165,6 +170,11 @@ export default async function middleware(request) {
       const i = buf.indexOf(MARK);
       if (i >= 0 || buf.length > 262144) {
         const cut = i >= 0 ? i : buf.length;
+        if (headOnly) {
+          ctl.enqueue(enc.encode(rewriteHead(buf.slice(0, cut), h) + '</head><body></body></html>\n'));
+          ctl.terminate();
+          return;
+        }
         ctl.enqueue(enc.encode(rewriteHead(buf.slice(0, cut), h) + buf.slice(cut)));
         buf = ''; done = true;
       }
@@ -179,5 +189,6 @@ export default async function middleware(request) {
   const headers = new Headers(up.headers);
   for (const k of ['content-length', 'content-encoding', 'etag', 'age', 'x-vercel-cache', 'content-disposition']) headers.delete(k);
   headers.set('content-type', 'text/html; charset=utf-8');
+  headers.set('vary', 'User-Agent');
   return new Response(request.method === 'HEAD' ? null : body, { status: knownPath(url) ? 200 : 404, headers });
 }
