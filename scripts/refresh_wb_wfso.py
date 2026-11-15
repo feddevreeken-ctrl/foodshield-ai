@@ -53,7 +53,7 @@ Output: data/wb_wfso.json
 """
 import time
 
-from _common import http_get, write_json
+from _common import http_get, keep_last_good, write_json
 
 URL = "https://microdata.worldbank.org/api/tables/data/fcv/wfso"
 PAGE_SIZE = 1000
@@ -78,15 +78,15 @@ def main():
     try:
         head_r = http_get(URL, params={"limit": 1, "offset": 0, "format": "json"}, timeout=30)
     except Exception as e:
-        write_json("wb_wfso.json", {}, source="World Bank WFSO", notes=f"Initial probe failed: {e}")
-        return
+        keep_last_good("wb_wfso.json", f"WFSO probe failed: {e}")
 
     head_j = head_r.json() or {}
     total = head_j.get("total") or head_j.get("found") or 0
     if not total:
-        write_json("wb_wfso.json", {}, source="World Bank WFSO",
-                   notes=f"No rows reported by API (response keys: {list(head_j.keys())})")
-        return
+        # 2026-11-10: microdata.worldbank.org answers 503 {"status":"failed","message":
+        # "The API is not available."}. Writing {} here shipped an empty feed, tripped
+        # the wb_wfso coverage floor and blocked every cron commit; keep last good instead.
+        keep_last_good("wb_wfso.json", f"WFSO API reported no rows ({head_j.get('message') or list(head_j.keys())})")
 
     print(f"[INFO] WFSO total rows: {total}; paginating at {PAGE_SIZE}/call")
 
@@ -184,6 +184,9 @@ def main():
                                              "Historical model estimate")]
             ind_slot["series"] = observed[-SERIES_KEEP:]
             ind_slot["series_trimmed"] = SERIES_KEEP
+
+    if not by_country:
+        keep_last_good("wb_wfso.json", f"WFSO returned {len(all_rows)} rows but no usable country rows")
 
     write_json(
         "wb_wfso.json",
